@@ -1,3 +1,32 @@
+interface ChatResponse {
+  response: string;
+}
+
+interface UploadResponse {
+  base64Image: string;
+}
+
+interface Tool {
+  name: string;
+  description: string;
+  parameters: any;
+}
+
+interface CustomTool {
+  name: string;
+  endpoint: string;
+  method: string;
+  parameters: any;
+}
+
+interface ToolsResponse {
+  tools: Tool[];
+}
+
+interface CustomToolsResponse {
+  custom_tools: CustomTool[];
+}
+
 const messageInput = document.getElementById('message-input') as HTMLInputElement;
 if (!messageInput) throw new Error('Message input not found');
 const imageInput = document.getElementById('image-input') as HTMLInputElement;
@@ -12,8 +41,11 @@ const toolsList = document.getElementById('tools-list') as HTMLDivElement;
 if (!toolsList) throw new Error('Tools list not found');
 const customToolsList = document.getElementById('custom-tools-list') as HTMLDivElement;
 if (!customToolsList) throw new Error('Custom tools list not found');
+const clearButton = document.getElementById('clear-button') as HTMLButtonElement;
+if (!clearButton) throw new Error('Clear button not found');
 
 sendButton.addEventListener('click', sendMessage);
+clearButton.addEventListener('click', clearChat);
 messageInput.addEventListener('keypress', (e: KeyboardEvent) => {
   if (e.key === 'Enter') sendMessage();
 });
@@ -83,9 +115,16 @@ async function uploadImage(file: File): Promise<string> {
 function displayMessage(content: string, sender: 'user' | 'assistant'): void {
   const messageDiv = document.createElement('div');
   messageDiv.className = `message ${sender}-message`;
-  messageDiv.innerHTML = content;
+
+  const timestamp = new Date().toLocaleTimeString();
+  messageDiv.innerHTML = `<div class="message-content">${content}</div><div class="timestamp">${timestamp}</div>`;
+
   messagesDiv.appendChild(messageDiv);
   messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+function clearChat(): void {
+  messagesDiv.innerHTML = '';
 }
 
 // Load and display available tools
@@ -94,7 +133,7 @@ async function loadTools(): Promise<void> {
     const response = await fetch('/tools');
     if (!response.ok) throw new Error('Failed to load tools');
 
-    const data: { tools: any[] } = await response.json();
+    const data: ToolsResponse = await response.json();
     displayTools(data.tools, toolsList);
   } catch (error) {
     console.error('Error loading tools:', error);
@@ -108,7 +147,7 @@ async function loadCustomTools(): Promise<void> {
     const response = await fetch('/custom-tools');
     if (!response.ok) throw new Error('Failed to load custom tools');
 
-    const data: { custom_tools: any[] } = await response.json();
+    const data: CustomToolsResponse = await response.json();
     displayCustomTools(data.custom_tools, customToolsList);
   } catch (error) {
     console.error('Error loading custom tools:', error);
@@ -116,7 +155,7 @@ async function loadCustomTools(): Promise<void> {
   }
 }
 
-function displayTools(tools: any[], container: HTMLDivElement): void {
+function displayTools(tools: Tool[], container: HTMLDivElement): void {
   container.innerHTML = '';
   if (tools.length === 0) {
     container.innerHTML = '<p>No tools available</p>';
@@ -134,7 +173,7 @@ function displayTools(tools: any[], container: HTMLDivElement): void {
   });
 }
 
-function displayCustomTools(customTools: any[], container: HTMLDivElement): void {
+function displayCustomTools(customTools: CustomTool[], container: HTMLDivElement): void {
   container.innerHTML = '';
   if (customTools.length === 0) {
     container.innerHTML = '<p>No custom tools registered</p>';

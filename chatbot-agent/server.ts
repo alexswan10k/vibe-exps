@@ -5,6 +5,78 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 
+// Type definitions
+interface Message {
+  role: 'user' | 'assistant' | 'tool';
+  content: string | MessageContent[];
+  tool_calls?: ToolCall[];
+  tool_call_id?: string;
+}
+
+interface MessageContent {
+  type: 'text' | 'image_url';
+  text?: string;
+  image_url?: { url: string };
+}
+
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface Tool {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+    };
+  };
+}
+
+interface CustomToolConfig {
+  endpoint: string;
+  method: string;
+  parameters: Record<string, any>;
+}
+
+interface ChatRequest {
+  message: string;
+  base64Image?: string;
+}
+
+interface ChatResponse {
+  response: string;
+}
+
+interface UploadResponse {
+  base64Image: string;
+}
+
+interface ToolsResponse {
+  tools: {
+    name: string;
+    description: string;
+    parameters: any;
+  }[];
+}
+
+interface CustomToolsResponse {
+  custom_tools: {
+    name: string;
+    endpoint: string;
+    method: string;
+    parameters: any;
+  }[];
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -24,10 +96,10 @@ const upload = multer({
 const LMSTUDIO_URL = 'http://localhost:1234/v1/chat/completions'; // Adjust if different
 
 // Context storage (in-memory for simplicity)
-let conversationHistory: any[] = [];
+let conversationHistory: Message[] = [];
 
 // Tool definitions
-const tools: any[] = [
+const tools: Tool[] = [
   {
     type: 'function',
     function: {
@@ -95,7 +167,7 @@ const tools: any[] = [
 ];
 
 // Storage for registered custom tools
-const customTools: Map<string, any> = new Map();
+const customTools: Map<string, CustomToolConfig> = new Map();
 
 // Function to call LMStudio
 async function callLMStudio(messages: any[], tools?: any[]): Promise<any> {
@@ -172,7 +244,7 @@ async function executeTool(toolCall: any): Promise<any> {
     try {
       const { name: toolName, description, endpoint, method = 'GET', parameters = {} } = args;
 
-      const newTool = {
+      const newTool: Tool = {
         type: 'function',
         function: {
           name: toolName,
@@ -203,6 +275,7 @@ async function executeTool(toolCall: any): Promise<any> {
   if (customTools.has(name)) {
     try {
       const toolConfig = customTools.get(name);
+      if (!toolConfig) return { error: 'Tool not found' };
       const { method, endpoint } = toolConfig;
       const config: any = { method, url: endpoint };
 
