@@ -4,31 +4,7 @@ import axios from 'axios';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
-import { z } from 'zod';
-
-// UTCP Type definitions
-const UTCPEndpointSchema = z.object({
-  type: z.literal('http'),
-  endpoint: z.string().url(),
-  method: z.string(),
-  headers: z.record(z.string(), z.string()).optional(),
-  parameters: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    required: z.boolean(),
-    description: z.string(),
-  })).optional(),
-});
-
-const UTCPToolSchema = z.object({
-  toolId: z.string(),
-  name: z.string(),
-  description: z.string(),
-  provider: UTCPEndpointSchema,
-});
-
-type UTCPEndpoint = z.infer<typeof UTCPEndpointSchema>;
-type UTCPTool = z.infer<typeof UTCPToolSchema>;
+import { utcpTools, executeTool as executeToolFromTools, UTCPEndpoint, UTCPTool } from './tools';
 
 // Type definitions
 interface Message {
@@ -126,70 +102,6 @@ const LMSTUDIO_URL = 'http://localhost:1234/v1/chat/completions'; // Adjust if d
 // Context storage (in-memory for simplicity)
 let conversationHistory: Message[] = [];
 
-// UTCP Tool definitions
-const utcpTools: UTCPTool[] = [
-  {
-    toolId: 'make_rest_call',
-    name: 'make_rest_call',
-    description: 'Make a generic REST API call',
-    provider: {
-      type: 'http',
-      endpoint: 'https://httpbin.org/anything', // Placeholder, will be overridden
-      method: 'POST',
-      parameters: [
-        { name: 'method', type: 'string', required: true, description: 'HTTP method' },
-        { name: 'url', type: 'string', required: true, description: 'URL' },
-        { name: 'headers', type: 'object', required: false, description: 'Headers' },
-        { name: 'body', type: 'object', required: false, description: 'Body' }
-      ]
-    }
-  },
-  {
-    toolId: 'search_web',
-    name: 'search_web',
-    description: 'Search the web for information using a search engine API',
-    provider: {
-      type: 'http',
-      endpoint: 'https://api.duckduckgo.com/',
-      method: 'GET',
-      parameters: [
-        { name: 'query', type: 'string', required: true, description: 'The search query' },
-        { name: 'engine', type: 'string', required: false, description: 'Search engine' }
-      ]
-    }
-  },
-  {
-    toolId: 'get_weather',
-    name: 'get_weather',
-    description: 'Get current weather information for a location',
-    provider: {
-      type: 'http',
-      endpoint: 'https://api.openweathermap.org/data/2.5/weather',
-      method: 'GET',
-      parameters: [
-        { name: 'location', type: 'string', required: true, description: 'City name' }
-      ]
-    }
-  },
-  {
-    toolId: 'register_tool',
-    name: 'register_tool',
-    description: 'Register a new custom tool with REST endpoint capabilities',
-    provider: {
-      type: 'http',
-      endpoint: 'http://localhost:3000/register', // Internal endpoint
-      method: 'POST',
-      parameters: [
-        { name: 'name', type: 'string', required: true, description: 'Tool name' },
-        { name: 'description', type: 'string', required: true, description: 'Description' },
-        { name: 'endpoint', type: 'string', required: true, description: 'REST endpoint' },
-        { name: 'method', type: 'string', required: false, description: 'HTTP method' },
-        { name: 'parameters', type: 'object', required: false, description: 'Parameters' }
-      ]
-    }
-  }
-];
-
 // Function to convert UTCP tool to LMStudio tool format
 function convertUTCPToLMStudio(utcpTool: UTCPTool): Tool {
   const properties: Record<string, any> = {};
@@ -261,50 +173,13 @@ async function callLMStudio(messages: any[], tools?: any[], stream: boolean = fa
   }
 }
 
-// Function to execute UTCP tool
-async function executeUTCPCall(utcpTool: UTCPTool, args: any): Promise<any> {
-  try {
-    let { endpoint, method, headers = {} } = utcpTool.provider;
-
-    // Special handling for make_rest_call: use dynamic URL
-    if (utcpTool.name === 'make_rest_call') {
-      method = args.method || 'GET';
-      endpoint = args.url;
-      headers = args.headers || {};
-    }
-
-    const config: any = { method, url: endpoint, headers };
-
-    if (method === 'GET' && args) {
-      // Add query parameters for GET requests
-      const params = new URLSearchParams();
-      Object.entries(args).forEach(([key, value]) => {
-        if (key !== 'method' && key !== 'url' && key !== 'headers' && key !== 'body') {
-          params.append(key, String(value));
-        }
-      });
-      if (params.toString()) config.url += `?${params.toString()}`;
-    } else if (['POST', 'PUT', 'PATCH'].includes(method) && args) {
-      config.data = args.body || args;
-      config.headers = { ...config.headers, 'Content-Type': 'application/json' };
-    }
-
-    const response = await axios(config);
-    return response.data;
-  } catch (error) {
-    return { error: (error as Error).message };
-  }
-}
-
 // Function to execute tool
 async function executeTool(toolCall: any): Promise<any> {
   const { name, arguments: args } = toolCall;
 
-  // Find the UTCP tool
-  let utcpTool = utcpTools.find(t => t.name === name) || customUTCPTools.get(name);
-
-  if (utcpTool) {
-    return await executeUTCPCall(utcpTool, JSON.parse(args));
+  // Use the executeTool from tools.ts for most tools
+  if (['search_web', 'todo_list', 'get_weather'].includes(name)) {
+    return await executeToolFromTools(name, JSON.parse(args));
   }
 
   // Special handling for register_tool
@@ -621,6 +496,12 @@ app.get('/custom-tools', (req: express.Request, res: express.Response) => {
     parameters: utcpTool.provider.parameters
   }));
   res.json({ custom_tools: customToolList });
+});
+
+// Todo endpoint for internal use
+app.post('/todo', (req: express.Request, res: express.Response) => {
+  // This endpoint is handled by the executeToolFromTools function
+  res.status(404).json({ error: 'Todo operations should be called through the chat interface' });
 });
 
 app.listen(PORT, () => {
