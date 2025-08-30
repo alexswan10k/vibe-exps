@@ -27,7 +27,7 @@ const LMSTUDIO_URL = 'http://localhost:1234/v1/chat/completions'; // Adjust if d
 let conversationHistory: any[] = [];
 
 // Tool definitions
-const tools = [
+const tools: any[] = [
   {
     type: 'function',
     function: {
@@ -44,8 +44,58 @@ const tools = [
         required: ['method', 'url']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'search_web',
+      description: 'Search the web for information using a search engine API',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The search query' },
+          engine: { type: 'string', enum: ['google', 'bing', 'duckduckgo'], default: 'duckduckgo' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: 'Get current weather information for a location',
+      parameters: {
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'City name or coordinates' }
+        },
+        required: ['location']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'register_tool',
+      description: 'Register a new custom tool with REST endpoint capabilities',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Tool name' },
+          description: { type: 'string', description: 'Tool description' },
+          endpoint: { type: 'string', description: 'REST endpoint URL' },
+          method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET' },
+          parameters: { type: 'object', description: 'Tool parameters schema' }
+        },
+        required: ['name', 'description', 'endpoint']
+      }
+    }
   }
 ];
+
+// Storage for registered custom tools
+const customTools: Map<string, any> = new Map();
 
 // Function to call LMStudio
 async function callLMStudio(messages: any[], tools?: any[]): Promise<any> {
@@ -69,6 +119,7 @@ async function callLMStudio(messages: any[], tools?: any[]): Promise<any> {
 // Function to execute tool
 async function executeTool(toolCall: any): Promise<any> {
   const { name, arguments: args } = toolCall;
+
   if (name === 'make_rest_call') {
     try {
       const { method, url, headers = {}, body } = args;
@@ -80,6 +131,100 @@ async function executeTool(toolCall: any): Promise<any> {
       return { error: (error as Error).message };
     }
   }
+
+  if (name === 'search_web') {
+    try {
+      const { query, engine = 'duckduckgo' } = args;
+      // Using DuckDuckGo instant answer API as a simple search
+      const searchUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+      const response = await axios.get(searchUrl);
+      return {
+        query,
+        engine,
+        results: response.data.AbstractText ? [response.data.AbstractText] : [],
+        related_topics: response.data.RelatedTopics?.slice(0, 3) || []
+      };
+    } catch (error) {
+      return { error: (error as Error).message };
+    }
+  }
+
+  if (name === 'get_weather') {
+    try {
+      const { location } = args;
+      // Using OpenWeatherMap API (you'll need to add your API key)
+      const apiKey = process.env.OPENWEATHER_API_KEY || 'demo';
+      const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(location)}&appid=${apiKey}&units=metric`;
+      const response = await axios.get(weatherUrl);
+      return {
+        location: response.data.name,
+        temperature: response.data.main.temp,
+        description: response.data.weather[0].description,
+        humidity: response.data.main.humidity,
+        wind_speed: response.data.wind.speed
+      };
+    } catch (error) {
+      return { error: (error as Error).message };
+    }
+  }
+
+  if (name === 'register_tool') {
+    try {
+      const { name: toolName, description, endpoint, method = 'GET', parameters = {} } = args;
+
+      const newTool = {
+        type: 'function',
+        function: {
+          name: toolName,
+          description,
+          parameters: {
+            type: 'object',
+            properties: parameters,
+            required: Object.keys(parameters).filter(key => parameters[key].required)
+          }
+        }
+      };
+
+      // Store the custom tool configuration
+      customTools.set(toolName, { endpoint, method, parameters });
+
+      // Add to tools array if not already present
+      if (!tools.find(t => t.function.name === toolName)) {
+        tools.push(newTool);
+      }
+
+      return { success: true, tool: toolName, message: 'Tool registered successfully' };
+    } catch (error) {
+      return { error: (error as Error).message };
+    }
+  }
+
+  // Check if it's a custom registered tool
+  if (customTools.has(name)) {
+    try {
+      const toolConfig = customTools.get(name);
+      const { method, endpoint } = toolConfig;
+      const config: any = { method, url: endpoint };
+
+      if (method === 'GET' && args) {
+        // Add query parameters for GET requests
+        const params = new URLSearchParams();
+        Object.entries(args).forEach(([key, value]) => {
+          params.append(key, String(value));
+        });
+        config.url += `?${params.toString()}`;
+      } else if (['POST', 'PUT', 'PATCH'].includes(method) && args) {
+        config.data = args;
+        config.headers = { 'Content-Type': 'application/json' };
+      }
+
+      const response = await axios(config);
+      return response.data;
+    } catch (error) {
+      return { error: (error as Error).message };
+    }
+  }
+
   return { error: 'Unknown tool' };
 }
 
@@ -140,6 +285,27 @@ app.post('/upload', upload.single('image'), (req: express.Request, res: express.
 
 // Serve uploaded images
 app.use('/uploads', express.static('uploads'));
+
+// Endpoint to list available tools
+app.get('/tools', (req: express.Request, res: express.Response) => {
+  const toolList = tools.map(tool => ({
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: tool.function.parameters
+  }));
+  res.json({ tools: toolList });
+});
+
+// Endpoint to get registered custom tools
+app.get('/custom-tools', (req: express.Request, res: express.Response) => {
+  const customToolList = Array.from(customTools.entries()).map(([name, config]) => ({
+    name,
+    endpoint: config.endpoint,
+    method: config.method,
+    parameters: config.parameters
+  }));
+  res.json({ custom_tools: customToolList });
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
