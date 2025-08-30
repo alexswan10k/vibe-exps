@@ -27,6 +27,12 @@ interface CustomToolsResponse {
   custom_tools: CustomTool[];
 }
 
+interface StreamToken {
+  token?: string;
+  done?: boolean;
+  error?: string;
+}
+
 const messageInput = document.getElementById('message-input') as HTMLInputElement;
 if (!messageInput) throw new Error('Message input not found');
 const imageInput = document.getElementById('image-input') as HTMLInputElement;
@@ -43,7 +49,8 @@ const customToolsList = document.getElementById('custom-tools-list') as HTMLDivE
 if (!customToolsList) throw new Error('Custom tools list not found');
 const clearButton = document.getElementById('clear-button') as HTMLButtonElement;
 if (!clearButton) throw new Error('Clear button not found');
-
+const streamToggle = document.getElementById('stream-toggle') as HTMLInputElement;
+if (!streamToggle) throw new Error('Stream toggle not found');
 sendButton.addEventListener('click', sendMessage);
 clearButton.addEventListener('click', clearChat);
 messageInput.addEventListener('keypress', (e: KeyboardEvent) => {
@@ -53,6 +60,7 @@ messageInput.addEventListener('keypress', (e: KeyboardEvent) => {
 async function sendMessage(): Promise<void> {
   const message = messageInput.value.trim();
   const imageFile = imageInput.files?.[0];
+  const useStreaming = streamToggle.checked;
 
   if (!message && !imageFile) return;
 
@@ -70,7 +78,22 @@ async function sendMessage(): Promise<void> {
   spinner.style.display = 'block';
   sendButton.disabled = true;
 
-  // Send to server
+  if (useStreaming) {
+    await sendStreamingMessage(message, base64Image);
+  } else {
+    await sendRegularMessage(message, base64Image);
+  }
+
+  // Hide spinner
+  spinner.style.display = 'none';
+  sendButton.disabled = false;
+
+  // Clear inputs
+  messageInput.value = '';
+  imageInput.value = '';
+}
+
+async function sendRegularMessage(message: string, base64Image: string | null): Promise<void> {
   try {
     const response = await fetch('/chat', {
       method: 'POST',
@@ -87,14 +110,111 @@ async function sendMessage(): Promise<void> {
   } catch (error) {
     displayMessage('Error: ' + (error as Error).message, 'assistant');
   }
+}
 
-  // Hide spinner
-  spinner.style.display = 'none';
-  sendButton.disabled = false;
+async function sendStreamingMessage(message: string, base64Image: string | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('message', message);
+      if (base64Image) {
+        params.append('base64Image', base64Image);
+      }
 
-  // Clear inputs
-  messageInput.value = '';
-  imageInput.value = '';
+      const streamUrl = `/chat/stream?${params.toString()}`;
+      console.log('Connecting to streaming URL:', streamUrl);
+
+      const eventSource = new EventSource(streamUrl);
+
+      let currentMessageDiv: HTMLDivElement | null = null;
+      let messageContent = '';
+
+      eventSource.onopen = () => {
+        console.log('EventSource connection opened');
+        // Hide spinner when connection is established
+        spinner.style.display = 'none';
+      };
+
+      eventSource.onmessage = (event) => {
+        console.log('Received streaming data:', event.data);
+        try {
+          const data: StreamToken = JSON.parse(event.data);
+
+          if (data.error) {
+            console.error('Streaming error:', data.error);
+            displayMessage('Error: ' + data.error, 'assistant');
+            eventSource.close();
+            resolve();
+            return;
+          }
+
+          if (data.token) {
+            console.log('Received token:', data.token);
+            messageContent += data.token;
+
+            if (!currentMessageDiv) {
+              currentMessageDiv = createStreamingMessageDiv();
+            }
+
+            updateStreamingMessage(currentMessageDiv, messageContent);
+          }
+
+          if (data.done) {
+            console.log('Streaming done');
+            eventSource.close();
+            resolve();
+          }
+        } catch (e) {
+          console.error('Error parsing stream data:', e, 'Raw data:', event.data);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('EventSource error:', error);
+        console.error('EventSource readyState:', eventSource.readyState);
+        displayMessage('Error: Streaming connection failed', 'assistant');
+        eventSource.close();
+        resolve();
+      };
+
+      // Add timeout for connection
+      setTimeout(() => {
+        if (eventSource.readyState === EventSource.CONNECTING) {
+          console.error('EventSource connection timeout');
+          eventSource.close();
+          displayMessage('Error: Streaming connection timeout', 'assistant');
+          resolve();
+        }
+      }, 5000);
+
+    } catch (error) {
+      console.error('Error creating EventSource:', error);
+      displayMessage('Error: ' + (error as Error).message, 'assistant');
+      resolve();
+    }
+  });
+}
+
+function createStreamingMessageDiv(): HTMLDivElement {
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'message assistant-message streaming';
+
+  const timestamp = new Date().toLocaleTimeString();
+  messageDiv.innerHTML = `<div class="message-content"></div><div class="timestamp">${timestamp}</div>`;
+
+  messagesDiv.appendChild(messageDiv);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  return messageDiv;
+}
+
+function updateStreamingMessage(messageDiv: HTMLDivElement, content: string): void {
+  const contentDiv = messageDiv.querySelector('.message-content') as HTMLDivElement;
+  if (contentDiv) {
+    contentDiv.textContent = content;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
 }
 
 async function uploadImage(file: File): Promise<string> {
@@ -126,6 +246,8 @@ function displayMessage(content: string, sender: 'user' | 'assistant'): void {
 function clearChat(): void {
   messagesDiv.innerHTML = '';
 }
+
+
 
 // Load and display available tools
 async function loadTools(): Promise<void> {
