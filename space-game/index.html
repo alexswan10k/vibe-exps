@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stellar Frontier - Space Trading Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Courier New', monospace;
+            color: #00ff00;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #game-canvas {
+            display: block;
+            background: #000;
+        }
+
+        #ui-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 10px;
+            font-size: 12px;
+            max-width: 300px;
+        }
+
+        #trade-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 10px;
+            font-size: 12px;
+            max-width: 300px;
+            display: none;
+        }
+
+        .button {
+            background: #00ff00;
+            color: #000;
+            border: none;
+            padding: 5px 10px;
+            margin: 2px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+        }
+
+        .button:hover {
+            background: #00cc00;
+        }
+
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #00ff00;
+            padding: 10px;
+            font-size: 12px;
+            max-width: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div id="ui-panel">
+            <div>Fuel: <span id="fuel">100</span></div>
+            <div>Credits: <span id="credits">1000</span></div>
+            <div>Location: <span id="location">Earth</span></div>
+            <div>Velocity: <span id="velocity">0</span></div>
+            <br>
+            <div>WASD: Thrust | Mouse: Aim | Space: Brake</div>
+        </div>
+
+        <div id="trade-panel">
+            <h3>Trade at <span id="station-name">Station</span></h3>
+            <div id="trade-goods"></div>
+            <button class="button" onclick="closeTrade()">Close</button>
+        </div>
+
+        <div id="instructions">
+            <strong>Controls:</strong><br>
+            WASD: Apply thrust<br>
+            Mouse: Aim ship<br>
+            Space: Brake<br>
+            Click planets to land<br>
+            Visit stations to trade
+        </div>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
