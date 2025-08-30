@@ -41,6 +41,8 @@ const sendButton = document.getElementById('send-button') as HTMLButtonElement;
 if (!sendButton) throw new Error('Send button not found');
 const messagesDiv = document.getElementById('messages') as HTMLDivElement;
 if (!messagesDiv) throw new Error('Messages div not found');
+const chatWindow = document.getElementById('chat-window') as HTMLDivElement;
+if (!chatWindow) throw new Error('Chat window not found');
 const spinner = document.getElementById('spinner') as HTMLDivElement;
 if (!spinner) throw new Error('Spinner not found');
 const toolsList = document.getElementById('tools-list') as HTMLDivElement;
@@ -57,12 +59,21 @@ messageInput.addEventListener('keypress', (e: KeyboardEvent) => {
   if (e.key === 'Enter') sendMessage();
 });
 
+function isAtBottom(): boolean {
+  return messagesDiv.scrollTop + messagesDiv.clientHeight >= messagesDiv.scrollHeight - 10;
+}
+
 async function sendMessage(): Promise<void> {
   const message = messageInput.value.trim();
   const imageFile = imageInput.files?.[0];
   const useStreaming = streamToggle.checked;
 
   if (!message && !imageFile) return;
+
+  // Scroll to bottom when sending message
+  setTimeout(() => {
+    chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+  }, 10);
 
   // Display user message
   displayMessage(message, 'user');
@@ -204,7 +215,11 @@ function createStreamingMessageDiv(): HTMLDivElement {
   messageDiv.innerHTML = `<div class="message-content"></div><div class="timestamp">${timestamp}</div>`;
 
   messagesDiv.appendChild(messageDiv);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  // Ensure scroll happens after DOM update
+  setTimeout(() => {
+    chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+  }, 10);
 
   return messageDiv;
 }
@@ -213,7 +228,11 @@ function updateStreamingMessage(messageDiv: HTMLDivElement, content: string): vo
   const contentDiv = messageDiv.querySelector('.message-content') as HTMLDivElement;
   if (contentDiv) {
     contentDiv.textContent = content;
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+    // Ensure scroll happens after DOM update
+    setTimeout(() => {
+      chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+    }, 10);
   }
 }
 
@@ -240,7 +259,11 @@ function displayMessage(content: string, sender: 'user' | 'assistant'): void {
   messageDiv.innerHTML = `<div class="message-content">${content}</div><div class="timestamp">${timestamp}</div>`;
 
   messagesDiv.appendChild(messageDiv);
-  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  // Ensure scroll happens after DOM update
+  setTimeout(() => {
+    chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+  }, 10);
 }
 
 function clearChat(): void {
