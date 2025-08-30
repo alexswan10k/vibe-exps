@@ -197,7 +197,7 @@ async function sendStreamingMessage(message: string, base64Image: string | null)
           displayMessage('Error: Streaming connection timeout', 'assistant');
           resolve();
         }
-      }, 5000);
+      }, 15000); // Increased timeout to 15 seconds
 
     } catch (error) {
       console.error('Error creating EventSource:', error);

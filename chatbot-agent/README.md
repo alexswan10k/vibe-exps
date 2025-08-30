@@ -10,6 +10,9 @@ A web-based chatbot agent with an extensible tool system that allows registering
 - **get_weather**: Get weather information (requires OpenWeatherMap API key)
 - **register_tool**: Register new custom tools with REST endpoints
 
+### UTCP Support
+The chatbot now supports the Universal Tool Calling Protocol (UTCP) for defining and executing tools. Tools are defined using UTCP JSON schemas and executed via direct REST API calls, providing a standardized and interoperable tool system.
+
 ### Custom Tool Registration
 You can dynamically register new tools by asking the chatbot to use the `register_tool` function. For example:
 - "Register a tool called 'github_user' that gets user info from GitHub API"

@@ -4,6 +4,31 @@ import axios from 'axios';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import { z } from 'zod';
+
+// UTCP Type definitions
+const UTCPEndpointSchema = z.object({
+  type: z.literal('http'),
+  endpoint: z.string().url(),
+  method: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
+  parameters: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    required: z.boolean(),
+    description: z.string(),
+  })).optional(),
+});
+
+const UTCPToolSchema = z.object({
+  toolId: z.string(),
+  name: z.string(),
+  description: z.string(),
+  provider: UTCPEndpointSchema,
+});
+
+type UTCPEndpoint = z.infer<typeof UTCPEndpointSchema>;
+type UTCPTool = z.infer<typeof UTCPToolSchema>;
 
 // Type definitions
 interface Message {
@@ -46,6 +71,9 @@ interface CustomToolConfig {
   method: string;
   parameters: Record<string, any>;
 }
+
+// Storage for registered custom UTCP tools
+const customUTCPTools: Map<string, UTCPTool> = new Map();
 
 interface ChatRequest {
   message: string;
@@ -98,73 +126,101 @@ const LMSTUDIO_URL = 'http://localhost:1234/v1/chat/completions'; // Adjust if d
 // Context storage (in-memory for simplicity)
 let conversationHistory: Message[] = [];
 
-// Tool definitions
-const tools: Tool[] = [
+// UTCP Tool definitions
+const utcpTools: UTCPTool[] = [
   {
-    type: 'function',
-    function: {
-      name: 'make_rest_call',
-      description: 'Make a generic REST API call',
-      parameters: {
-        type: 'object',
-        properties: {
-          method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'] },
-          url: { type: 'string' },
-          headers: { type: 'object' },
-          body: { type: 'object' }
-        },
-        required: ['method', 'url']
-      }
+    toolId: 'make_rest_call',
+    name: 'make_rest_call',
+    description: 'Make a generic REST API call',
+    provider: {
+      type: 'http',
+      endpoint: 'https://httpbin.org/anything', // Placeholder, will be overridden
+      method: 'POST',
+      parameters: [
+        { name: 'method', type: 'string', required: true, description: 'HTTP method' },
+        { name: 'url', type: 'string', required: true, description: 'URL' },
+        { name: 'headers', type: 'object', required: false, description: 'Headers' },
+        { name: 'body', type: 'object', required: false, description: 'Body' }
+      ]
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'search_web',
-      description: 'Search the web for information using a search engine API',
-      parameters: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'The search query' },
-          engine: { type: 'string', enum: ['google', 'bing', 'duckduckgo'], default: 'duckduckgo' }
-        },
-        required: ['query']
-      }
+    toolId: 'search_web',
+    name: 'search_web',
+    description: 'Search the web for information using a search engine API',
+    provider: {
+      type: 'http',
+      endpoint: 'https://api.duckduckgo.com/',
+      method: 'GET',
+      parameters: [
+        { name: 'query', type: 'string', required: true, description: 'The search query' },
+        { name: 'engine', type: 'string', required: false, description: 'Search engine' }
+      ]
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_weather',
-      description: 'Get current weather information for a location',
-      parameters: {
-        type: 'object',
-        properties: {
-          location: { type: 'string', description: 'City name or coordinates' }
-        },
-        required: ['location']
-      }
+    toolId: 'get_weather',
+    name: 'get_weather',
+    description: 'Get current weather information for a location',
+    provider: {
+      type: 'http',
+      endpoint: 'https://api.openweathermap.org/data/2.5/weather',
+      method: 'GET',
+      parameters: [
+        { name: 'location', type: 'string', required: true, description: 'City name' }
+      ]
     }
   },
   {
-    type: 'function',
-    function: {
-      name: 'register_tool',
-      description: 'Register a new custom tool with REST endpoint capabilities',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Tool name' },
-          description: { type: 'string', description: 'Tool description' },
-          endpoint: { type: 'string', description: 'REST endpoint URL' },
-          method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE'], default: 'GET' },
-          parameters: { type: 'object', description: 'Tool parameters schema' }
-        },
-        required: ['name', 'description', 'endpoint']
-      }
+    toolId: 'register_tool',
+    name: 'register_tool',
+    description: 'Register a new custom tool with REST endpoint capabilities',
+    provider: {
+      type: 'http',
+      endpoint: 'http://localhost:3000/register', // Internal endpoint
+      method: 'POST',
+      parameters: [
+        { name: 'name', type: 'string', required: true, description: 'Tool name' },
+        { name: 'description', type: 'string', required: true, description: 'Description' },
+        { name: 'endpoint', type: 'string', required: true, description: 'REST endpoint' },
+        { name: 'method', type: 'string', required: false, description: 'HTTP method' },
+        { name: 'parameters', type: 'object', required: false, description: 'Parameters' }
+      ]
     }
   }
 ];
+
+// Function to convert UTCP tool to LMStudio tool format
+function convertUTCPToLMStudio(utcpTool: UTCPTool): Tool {
+  const properties: Record<string, any> = {};
+  const required: string[] = [];
+
+  if (utcpTool.provider.parameters) {
+    utcpTool.provider.parameters.forEach(param => {
+      properties[param.name] = {
+        type: param.type,
+        description: param.description
+      };
+      if (param.required) required.push(param.name);
+    });
+  }
+
+  return {
+    type: 'function',
+    function: {
+      name: utcpTool.name,
+      description: utcpTool.description,
+      parameters: {
+        type: 'object',
+        properties,
+        required
+      }
+    }
+  };
+}
+
+// Tool definitions (converted from UTCP)
+const tools: Tool[] = utcpTools.map(convertUTCPToLMStudio);
 
 // Storage for registered custom tools
 const customTools: Map<string, CustomToolConfig> = new Map();
@@ -186,7 +242,7 @@ async function callLMStudio(messages: any[], tools?: any[], stream: boolean = fa
 
     const response = await axios.post(LMSTUDIO_URL, payload, {
       responseType: stream ? 'stream' : 'json',
-      timeout: 30000 // 30 second timeout
+      timeout: 60000 // 60 second timeout for streaming
     });
 
     console.log('LMStudio response status:', response.status);
@@ -205,111 +261,85 @@ async function callLMStudio(messages: any[], tools?: any[], stream: boolean = fa
   }
 }
 
+// Function to execute UTCP tool
+async function executeUTCPCall(utcpTool: UTCPTool, args: any): Promise<any> {
+  try {
+    let { endpoint, method, headers = {} } = utcpTool.provider;
+
+    // Special handling for make_rest_call: use dynamic URL
+    if (utcpTool.name === 'make_rest_call') {
+      method = args.method || 'GET';
+      endpoint = args.url;
+      headers = args.headers || {};
+    }
+
+    const config: any = { method, url: endpoint, headers };
+
+    if (method === 'GET' && args) {
+      // Add query parameters for GET requests
+      const params = new URLSearchParams();
+      Object.entries(args).forEach(([key, value]) => {
+        if (key !== 'method' && key !== 'url' && key !== 'headers' && key !== 'body') {
+          params.append(key, String(value));
+        }
+      });
+      if (params.toString()) config.url += `?${params.toString()}`;
+    } else if (['POST', 'PUT', 'PATCH'].includes(method) && args) {
+      config.data = args.body || args;
+      config.headers = { ...config.headers, 'Content-Type': 'application/json' };
+    }
+
+    const response = await axios(config);
+    return response.data;
+  } catch (error) {
+    return { error: (error as Error).message };
+  }
+}
+
 // Function to execute tool
 async function executeTool(toolCall: any): Promise<any> {
   const { name, arguments: args } = toolCall;
 
-  if (name === 'make_rest_call') {
-    try {
-      const { method, url, headers = {}, body } = args;
-      const config: any = { method, url, headers };
-      if (body) config.data = body;
-      const response = await axios(config);
-      return response.data;
-    } catch (error) {
-      return { error: (error as Error).message };
-    }
+  // Find the UTCP tool
+  let utcpTool = utcpTools.find(t => t.name === name) || customUTCPTools.get(name);
+
+  if (utcpTool) {
+    return await executeUTCPCall(utcpTool, JSON.parse(args));
   }
 
-  if (name === 'search_web') {
-    try {
-      const { query, engine = 'duckduckgo' } = args;
-      // Using DuckDuckGo instant answer API as a simple search
-      const searchUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
-      const response = await axios.get(searchUrl);
-      return {
-        query,
-        engine,
-        results: response.data.AbstractText ? [response.data.AbstractText] : [],
-        related_topics: response.data.RelatedTopics?.slice(0, 3) || []
-      };
-    } catch (error) {
-      return { error: (error as Error).message };
-    }
-  }
-
-  if (name === 'get_weather') {
-    try {
-      const { location } = args;
-      // Using OpenWeatherMap API (you'll need to add your API key)
-      const apiKey = process.env.OPENWEATHER_API_KEY || 'demo';
-      const weatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(location)}&appid=${apiKey}&units=metric`;
-      const response = await axios.get(weatherUrl);
-      return {
-        location: response.data.name,
-        temperature: response.data.main.temp,
-        description: response.data.weather[0].description,
-        humidity: response.data.main.humidity,
-        wind_speed: response.data.wind.speed
-      };
-    } catch (error) {
-      return { error: (error as Error).message };
-    }
-  }
-
+  // Special handling for register_tool
   if (name === 'register_tool') {
     try {
-      const { name: toolName, description, endpoint, method = 'GET', parameters = {} } = args;
+      const { name: toolName, description, endpoint, method = 'GET', parameters = {} } = JSON.parse(args);
 
-      const newTool: Tool = {
-        type: 'function',
-        function: {
-          name: toolName,
-          description,
-          parameters: {
-            type: 'object',
-            properties: parameters,
-            required: Object.keys(parameters).filter(key => parameters[key].required)
-          }
+      // Create UTCP tool
+      const newUTCPTool: UTCPTool = {
+        toolId: toolName,
+        name: toolName,
+        description,
+        provider: {
+          type: 'http',
+          endpoint,
+          method,
+          parameters: Object.entries(parameters).map(([key, value]: [string, any]) => ({
+            name: key,
+            type: value.type || 'string',
+            required: value.required || false,
+            description: value.description || ''
+          }))
         }
       };
 
-      // Store the custom tool configuration
-      customTools.set(toolName, { endpoint, method, parameters });
+      // Store the custom UTCP tool
+      customUTCPTools.set(toolName, newUTCPTool);
 
-      // Add to tools array if not already present
+      // Convert to LMStudio format and add to tools
+      const newTool = convertUTCPToLMStudio(newUTCPTool);
       if (!tools.find(t => t.function.name === toolName)) {
         tools.push(newTool);
       }
 
       return { success: true, tool: toolName, message: 'Tool registered successfully' };
-    } catch (error) {
-      return { error: (error as Error).message };
-    }
-  }
-
-  // Check if it's a custom registered tool
-  if (customTools.has(name)) {
-    try {
-      const toolConfig = customTools.get(name);
-      if (!toolConfig) return { error: 'Tool not found' };
-      const { method, endpoint } = toolConfig;
-      const config: any = { method, url: endpoint };
-
-      if (method === 'GET' && args) {
-        // Add query parameters for GET requests
-        const params = new URLSearchParams();
-        Object.entries(args).forEach(([key, value]) => {
-          params.append(key, String(value));
-        });
-        config.url += `?${params.toString()}`;
-      } else if (['POST', 'PUT', 'PATCH'].includes(method) && args) {
-        config.data = args;
-        config.headers = { 'Content-Type': 'application/json' };
-      }
-
-      const response = await axios(config);
-      return response.data;
     } catch (error) {
       return { error: (error as Error).message };
     }
@@ -370,6 +400,8 @@ app.get('/chat/stream', async (req: express.Request, res: express.Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.flushHeaders(); // Flush headers immediately
 
   // Add user message to history
   if (base64Image) {
@@ -582,11 +614,11 @@ app.get('/tools', (req: express.Request, res: express.Response) => {
 
 // Endpoint to get registered custom tools
 app.get('/custom-tools', (req: express.Request, res: express.Response) => {
-  const customToolList = Array.from(customTools.entries()).map(([name, config]) => ({
-    name,
-    endpoint: config.endpoint,
-    method: config.method,
-    parameters: config.parameters
+  const customToolList = Array.from(customUTCPTools.entries()).map(([name, utcpTool]) => ({
+    name: utcpTool.name,
+    endpoint: utcpTool.provider.endpoint,
+    method: utcpTool.provider.method,
+    parameters: utcpTool.provider.parameters
   }));
   res.json({ custom_tools: customToolList });
 });
