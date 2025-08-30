@@ -1,0 +1,88 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f0f0;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  text-align: center;
+  color: #333;
+}
+
+#chat-window {
+  height: 400px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  overflow-y: auto;
+  background-color: white;
+  margin-bottom: 20px;
+}
+
+.message {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+}
+
+.user-message {
+  background-color: #007bff;
+  color: white;
+  text-align: right;
+}
+
+.assistant-message {
+  background-color: #e9ecef;
+  color: #333;
+}
+
+.input-area {
+  display: flex;
+  gap: 10px;
+}
+
+#message-input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+#image-input {
+  padding: 10px;
+}
+
+#send-button {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#send-button:hover {
+  background-color: #0056b3;
+}
+
+.spinner {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #007bff;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  animation: spin 1s linear infinite;
+  margin: 10px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
