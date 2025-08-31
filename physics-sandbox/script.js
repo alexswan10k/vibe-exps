@@ -79,6 +79,30 @@ function addCircle() {
     Matter.World.add(world, circle);
 }
 
+// Function to add water particles
+function addWater() {
+    const particleCount = 75; // Increased number of water particles for more fluid effect
+    const baseX = Math.random() * (canvas.width - 100) + 50;
+    const baseY = 50;
+
+    for (let i = 0; i < particleCount; i++) {
+        const radius = Math.random() * 3 + 2; // Small particles
+        const x = baseX + (Math.random() - 0.5) * 60; // Wider spread for more natural distribution
+        const y = baseY + (Math.random() - 0.5) * 30;
+
+        const waterParticle = Matter.Bodies.circle(x, y, radius, {
+            density: 0.001, // Low density for water-like behavior
+            friction: 0.1,
+            frictionAir: 0.01,
+            restitution: 0.3,
+            render: {
+                fillStyle: '#4FC3F7' // Blue color for water
+            }
+        });
+        Matter.World.add(world, waterParticle);
+    }
+}
+
 // Function to clear all bodies
 function clearAll() {
     const bodies = Matter.Composite.allBodies(world);
