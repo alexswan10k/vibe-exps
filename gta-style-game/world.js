@@ -1,63 +1,39 @@
 // World generation and representation module
 
 class World {
-    constructor(width = 20, height = 20) {
-        this.width = width;
-        this.height = height;
-        this.grid = [];
+    constructor(grid) {
+        this.grid = grid;
+        this.height = grid.length;
+        this.width = grid[0].length;
         this.roads = [];
+        this.horizontalRoads = [];
+        this.verticalRoads = [];
+        this.crossroads = [];
         this.buildings = [];
         this.trafficLights = [];
-        this.generate();
+        this.convertToObjects();
     }
 
-    generate() {
-        // Initialize empty grid
-        this.grid = Array(this.height).fill().map(() => Array(this.width).fill('E'));
+    static loadFromEmbedded() {
+        const lines = WORLD_DATA.trim().split('\n');
+        const grid = lines.map(line => line.trim().split(/\s+/));
+        return new World(grid);
+    }
 
-        // Generate roads (horizontal and vertical)
-        const roadSpacing = Math.floor(this.width / 4);
-        for (let y = roadSpacing; y < this.height; y += roadSpacing) {
-            for (let x = 0; x < this.width; x++) {
-                this.grid[y][x] = 'R';
-            }
-        }
-        for (let x = roadSpacing; x < this.width; x += roadSpacing) {
-            for (let y = 0; y < this.height; y++) {
-                this.grid[y][x] = 'R';
-            }
-        }
-
-        // Generate buildings
-        const numBuildings = Math.floor((this.width * this.height) * 0.3);
-        for (let i = 0; i < numBuildings; i++) {
-            let x, y;
-            let attempts = 0;
-            do {
-                x = Math.floor(Math.random() * this.width);
-                y = Math.floor(Math.random() * this.height);
-                attempts++;
-            } while (this.grid[y][x] !== 'E' && attempts < 50);
-
-            if (attempts < 50) {
-                this.grid[y][x] = 'B';
-            }
-        }
-
-        // Generate traffic lights at intersections
-        for (let x = roadSpacing; x < this.width; x += roadSpacing) {
-            for (let y = roadSpacing; y < this.height; y += roadSpacing) {
-                this.grid[y][x] = 'T';
-            }
-        }
-
-        // Convert grid to objects for game use
-        this.convertToObjects();
+    static async loadFromFile(filePath) {
+        const response = await fetch(filePath);
+        const text = await response.text();
+        const lines = text.trim().split('\n');
+        const grid = lines.map(line => line.trim().split(/\s+/));
+        return new World(grid);
     }
 
     convertToObjects() {
         const cellSize = 96; // Each cell represents 96x96 pixels in game world
         this.roads = [];
+        this.horizontalRoads = [];
+        this.verticalRoads = [];
+        this.crossroads = [];
         this.buildings = [];
         this.trafficLights = [];
 
@@ -69,6 +45,30 @@ class World {
                 switch (this.grid[y][x]) {
                     case 'R':
                         this.roads.push({
+                            x: gameX,
+                            y: gameY,
+                            width: cellSize,
+                            height: cellSize
+                        });
+                        break;
+                    case 'H':
+                        this.horizontalRoads.push({
+                            x: gameX,
+                            y: gameY,
+                            width: cellSize,
+                            height: cellSize
+                        });
+                        break;
+                    case 'V':
+                        this.verticalRoads.push({
+                            x: gameX,
+                            y: gameY,
+                            width: cellSize,
+                            height: cellSize
+                        });
+                        break;
+                    case 'C':
+                        this.crossroads.push({
                             x: gameX,
                             y: gameY,
                             width: cellSize,

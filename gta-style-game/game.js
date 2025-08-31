@@ -22,8 +22,8 @@ function init() {
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
 
-    // Create world
-    world = new World(20, 20);
+    // Load world from embedded data
+    world = World.loadFromEmbedded();
     console.log(world.toString()); // Display the world map in console
 
     // Create player
@@ -46,8 +46,16 @@ function createCars() {
     const worldSize = world.getWorldSize();
     const carColors = ['#0000FF', '#00FF00', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080'];
 
+    // Combine all road types for car placement
+    const allRoads = [
+        ...world.roads,
+        ...world.horizontalRoads,
+        ...world.verticalRoads,
+        ...world.crossroads
+    ];
+
     // Player's car - place on road
-    let playerRoad = world.roads[Math.floor(Math.random() * world.roads.length)];
+    let playerRoad = allRoads[Math.floor(Math.random() * allRoads.length)];
     cars.push(new Car(
         playerRoad.x + playerRoad.width / 2 - 25,
         playerRoad.y + playerRoad.height / 2 - 12,
@@ -58,7 +66,7 @@ function createCars() {
 
     // Other cars - place on roads
     for (let i = 0; i < 15; i++) {
-        let road = world.roads[Math.floor(Math.random() * world.roads.length)];
+        let road = allRoads[Math.floor(Math.random() * allRoads.length)];
         let x, y, angle;
 
         // Determine if it's a horizontal or vertical road and position accordingly
@@ -95,8 +103,14 @@ function update() {
 
     // Update cars
     const worldSize = world.getWorldSize();
+    const allRoads = [
+        ...world.roads,
+        ...world.horizontalRoads,
+        ...world.verticalRoads,
+        ...world.crossroads
+    ];
     for (let car of cars) {
-        car.update(keys, world.buildings, cars, world.roads, world.trafficLights, worldSize);
+        car.update(keys, world.buildings, cars, allRoads, world.trafficLights, worldSize);
     }
 
     // Update camera
@@ -146,9 +160,16 @@ function draw() {
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Draw roads
+    // Draw all road types
     ctx.fillStyle = '#333';
-    for (let road of world.roads) {
+    const allRoads = [
+        ...world.roads,
+        ...world.horizontalRoads,
+        ...world.verticalRoads,
+        ...world.crossroads
+    ];
+
+    for (let road of allRoads) {
         ctx.fillRect(road.x, road.y, road.width, road.height);
     }
 
@@ -156,7 +177,7 @@ function draw() {
     ctx.strokeStyle = '#FFF';
     ctx.lineWidth = 2;
     ctx.setLineDash([10, 10]);
-    for (let road of world.roads) {
+    for (let road of allRoads) {
         ctx.beginPath();
         if (road.width > road.height) {
             // Horizontal road
