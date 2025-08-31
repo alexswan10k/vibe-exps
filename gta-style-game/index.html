@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GTA Style Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui">
+            <div id="controls">
+                <h3>Controls:</h3>
+                <p>WASD - Move (on foot) / Drive (in car)</p>
+                <p>E - Enter/Exit vehicle</p>
+                <p>Space - Brake (in car)</p>
+            </div>
+            <div id="status">
+                <p id="player-status">On Foot</p>
+                <p id="speed">Speed: 0</p>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
