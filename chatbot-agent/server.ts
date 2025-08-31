@@ -224,8 +224,16 @@ async function executeTool(toolCall: any): Promise<any> {
 }
 
 // Chat endpoint (non-streaming)
-app.post('/chat', async (req: express.Request, res: express.Response) => {
-  const { message, base64Image } = req.body;
+app.post('/chat', upload.single('image'), async (req: express.Request, res: express.Response) => {
+  const { message } = req.body;
+  let base64Image: string | null = null;
+
+  if (req.file) {
+    // Convert uploaded file to base64
+    const imageBuffer = fs.readFileSync(req.file.path);
+    base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
+    fs.unlinkSync(req.file.path); // Clean up
+  }
 
   // Add user message to history
   if (base64Image) {
@@ -263,9 +271,16 @@ app.post('/chat', async (req: express.Request, res: express.Response) => {
 
 
 // Streaming chat endpoint
-app.get('/chat/stream', async (req: express.Request, res: express.Response) => {
-  const message = req.query.message as string;
-  const base64Image = req.query.base64Image as string;
+app.post('/chat/stream', upload.single('image'), async (req: express.Request, res: express.Response) => {
+  const { message } = req.body;
+  let base64Image: string | null = null;
+
+  if (req.file) {
+    // Convert uploaded file to base64
+    const imageBuffer = fs.readFileSync(req.file.path);
+    base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
+    fs.unlinkSync(req.file.path); // Clean up
+  }
 
   console.log('Streaming endpoint called with message:', message);
 
@@ -274,8 +289,8 @@ app.get('/chat/stream', async (req: express.Request, res: express.Response) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET');
   res.flushHeaders(); // Flush headers immediately
 
   // Add user message to history

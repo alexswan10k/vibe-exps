@@ -65,7 +65,7 @@ function isAtBottom(): boolean {
 
 async function sendMessage(): Promise<void> {
   const message = messageInput.value.trim();
-  const imageFile = imageInput.files?.[0];
+  const imageFile = imageInput.files?.[0] || null;
   const useStreaming = streamToggle.checked;
 
   if (!message && !imageFile) return;
@@ -78,10 +78,8 @@ async function sendMessage(): Promise<void> {
   // Display user message
   displayMessage(message, 'user');
 
-  let base64Image: string | null = null;
   if (imageFile) {
-    base64Image = await uploadImage(imageFile);
-    const imageDataUrl = "data:" + imageFile.type + ";base64," + base64Image;
+    const imageDataUrl = URL.createObjectURL(imageFile);
     displayMessage(`<img src="${imageDataUrl}" alt="Uploaded image" style="max-width: 200px;">`, 'user');
   }
 
@@ -90,9 +88,9 @@ async function sendMessage(): Promise<void> {
   sendButton.disabled = true;
 
   if (useStreaming) {
-    await sendStreamingMessage(message, base64Image);
+    await sendStreamingMessage(message, imageFile);
   } else {
-    await sendRegularMessage(message, base64Image);
+    await sendRegularMessage(message, imageFile);
   }
 
   // Hide spinner
@@ -104,15 +102,26 @@ async function sendMessage(): Promise<void> {
   imageInput.value = '';
 }
 
-async function sendRegularMessage(message: string, base64Image: string | null): Promise<void> {
+async function sendRegularMessage(message: string, imageFile: File | null): Promise<void> {
   try {
-    const response = await fetch('/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ message, base64Image }),
-    });
+    let response: Response;
+    if (imageFile) {
+      const formData = new FormData();
+      formData.append('message', message);
+      formData.append('image', imageFile);
+      response = await fetch('/chat', {
+        method: 'POST',
+        body: formData,
+      });
+    } else {
+      response = await fetch('/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message }),
+      });
+    }
 
     if (!response.ok) throw new Error('Failed to send message');
 
@@ -123,84 +132,115 @@ async function sendRegularMessage(message: string, base64Image: string | null): 
   }
 }
 
-async function sendStreamingMessage(message: string, base64Image: string | null): Promise<void> {
+async function sendStreamingMessage(message: string, imageFile: File | null): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append('message', message);
-      if (base64Image) {
-        params.append('base64Image', base64Image);
+      console.log('Sending streaming request with POST');
+
+      let fetchPromise: Promise<Response>;
+      if (imageFile) {
+        const formData = new FormData();
+        formData.append('message', message);
+        formData.append('image', imageFile);
+        fetchPromise = fetch('/chat/stream', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        fetchPromise = fetch('/chat/stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ message }),
+        });
       }
 
-      const streamUrl = `/chat/stream?${params.toString()}`;
-      console.log('Connecting to streaming URL:', streamUrl);
+      fetchPromise
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
-      const eventSource = new EventSource(streamUrl);
-
-      let currentMessageDiv: HTMLDivElement | null = null;
-      let messageContent = '';
-
-      eventSource.onopen = () => {
-        console.log('EventSource connection opened');
         // Hide spinner when connection is established
         spinner.style.display = 'none';
-      };
 
-      eventSource.onmessage = (event) => {
-        console.log('Received streaming data:', event.data);
-        try {
-          const data: StreamToken = JSON.parse(event.data);
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let currentMessageDiv: HTMLDivElement | null = null;
+        let messageContent = '';
+        let buffer = '';
 
-          if (data.error) {
-            console.error('Streaming error:', data.error);
-            displayMessage('Error: ' + data.error, 'assistant');
-            eventSource.close();
-            resolve();
-            return;
-          }
-
-          if (data.token) {
-            console.log('Received token:', data.token);
-            messageContent += data.token;
-
-            if (!currentMessageDiv) {
-              currentMessageDiv = createStreamingMessageDiv();
+        const readStream = () => {
+          reader?.read().then(({ done, value }) => {
+            if (done) {
+              console.log('Stream finished');
+              resolve();
+              return;
             }
 
-            updateStreamingMessage(currentMessageDiv, messageContent);
-          }
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
 
-          if (data.done) {
-            console.log('Streaming done');
-            eventSource.close();
+            // Keep the last incomplete line in buffer
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              const trimmedLine = line.trim();
+              if (trimmedLine.startsWith('data: ')) {
+                const data = trimmedLine.slice(6);
+                console.log('Received streaming data:', data);
+
+                try {
+                  const parsed: StreamToken = JSON.parse(data);
+
+                  if (parsed.error) {
+                    console.error('Streaming error:', parsed.error);
+                    displayMessage('Error: ' + parsed.error, 'assistant');
+                    resolve();
+                    return;
+                  }
+
+                  if (parsed.token) {
+                    console.log('Received token:', parsed.token);
+                    messageContent += parsed.token;
+
+                    if (!currentMessageDiv) {
+                      currentMessageDiv = createStreamingMessageDiv();
+                    }
+
+                    updateStreamingMessage(currentMessageDiv, messageContent);
+                  }
+
+                  if (parsed.done) {
+                    console.log('Streaming done');
+                    resolve();
+                    return;
+                  }
+                } catch (e) {
+                  console.error('Error parsing stream data:', e, 'Raw data:', data);
+                }
+              }
+            }
+
+            readStream();
+          }).catch(error => {
+            console.error('Stream reading error:', error);
+            displayMessage('Error: Streaming connection failed', 'assistant');
             resolve();
-          }
-        } catch (e) {
-          console.error('Error parsing stream data:', e, 'Raw data:', event.data);
-        }
-      };
+          });
+        };
 
-      eventSource.onerror = (error) => {
-        console.error('EventSource error:', error);
-        console.error('EventSource readyState:', eventSource.readyState);
-        displayMessage('Error: Streaming connection failed', 'assistant');
-        eventSource.close();
+        readStream();
+      })
+      .catch(error => {
+        console.error('Fetch error:', error);
+        displayMessage('Error: ' + error.message, 'assistant');
         resolve();
-      };
-
-      // Add timeout for connection
-      setTimeout(() => {
-        if (eventSource.readyState === EventSource.CONNECTING) {
-          console.error('EventSource connection timeout');
-          eventSource.close();
-          displayMessage('Error: Streaming connection timeout', 'assistant');
-          resolve();
-        }
-      }, 15000); // Increased timeout to 15 seconds
+      });
 
     } catch (error) {
-      console.error('Error creating EventSource:', error);
+      console.error('Error creating streaming request:', error);
       displayMessage('Error: ' + (error as Error).message, 'assistant');
       resolve();
     }
