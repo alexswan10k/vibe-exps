@@ -11,9 +11,15 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
-// Create Matter.js engine
+// Create Matter.js engine with performance optimizations
 const engine = Matter.Engine.create();
 const world = engine.world;
+
+// Performance optimizations
+engine.world.gravity.y = 1; // Standard gravity
+engine.constraintIterations = 2; // Reduce constraint iterations
+engine.positionIterations = 6; // Reduce position iterations
+engine.velocityIterations = 4; // Reduce velocity iterations
 
 // Create renderer
 const render = Matter.Render.create({
@@ -164,7 +170,7 @@ function startWind() {
     if (windInterval) return;
     windInterval = setInterval(() => {
         applyWind(currentMousePos.x, currentMousePos.y);
-    }, 50); // Apply every 50ms
+    }, 100); // Apply every 100ms for better performance
 }
 
 // Stop wind
@@ -180,7 +186,7 @@ function startVacuum() {
     if (vacuumInterval) return;
     vacuumInterval = setInterval(() => {
         applyVacuum(currentMousePos.x, currentMousePos.y);
-    }, 50); // Apply every 50ms
+    }, 100); // Apply every 100ms for better performance
 }
 
 // Stop vacuum
@@ -194,14 +200,24 @@ function stopVacuum() {
 // Apply wind force away from mouse point
 function applyWind(mouseX, mouseY) {
     const bodies = Matter.Composite.allBodies(world).filter(body => !body.isStatic);
+    const maxDistance = 300; // Only affect bodies within 300px for performance
+
     bodies.forEach(body => {
         const dx = body.position.x - mouseX;
         const dy = body.position.y - mouseY;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance > 0) {
-            const forceMagnitude = 0.005; // Adjust for wind strength
-            const forceX = (dx / distance) * forceMagnitude;
-            const forceY = (dy / distance) * forceMagnitude;
+
+        if (distance > 0 && distance < maxDistance) {
+            // Reduce force for water particles (identified by blue color)
+            const isWater = body.render.fillStyle === '#4FC3F7';
+            const forceMagnitude = isWater ? 0.003 : 0.005; // Weaker force for water
+
+            // Falloff based on distance
+            const falloff = 1 - (distance / maxDistance);
+            const adjustedMagnitude = forceMagnitude * falloff;
+
+            const forceX = (dx / distance) * adjustedMagnitude;
+            const forceY = (dy / distance) * adjustedMagnitude;
             Matter.Body.applyForce(body, body.position, { x: forceX, y: forceY });
         }
     });
@@ -210,14 +226,24 @@ function applyWind(mouseX, mouseY) {
 // Apply vacuum force towards mouse point
 function applyVacuum(mouseX, mouseY) {
     const bodies = Matter.Composite.allBodies(world).filter(body => !body.isStatic);
+    const maxDistance = 300; // Only affect bodies within 300px for performance
+
     bodies.forEach(body => {
         const dx = mouseX - body.position.x;
         const dy = mouseY - body.position.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance > 0) {
-            const forceMagnitude = 0.005; // Adjust for vacuum strength
-            const forceX = (dx / distance) * forceMagnitude;
-            const forceY = (dy / distance) * forceMagnitude;
+
+        if (distance > 0 && distance < maxDistance) {
+            // Reduce force for water particles (identified by blue color)
+            const isWater = body.render.fillStyle === '#4FC3F7';
+            const forceMagnitude = isWater ? 0.003 : 0.005; // Weaker force for water
+
+            // Falloff based on distance
+            const falloff = 1 - (distance / maxDistance);
+            const adjustedMagnitude = forceMagnitude * falloff;
+
+            const forceX = (dx / distance) * adjustedMagnitude;
+            const forceY = (dy / distance) * adjustedMagnitude;
             Matter.Body.applyForce(body, body.position, { x: forceX, y: forceY });
         }
     });
