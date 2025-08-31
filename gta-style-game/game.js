@@ -1,8 +1,8 @@
 // Game constants
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
-const WORLD_WIDTH = 2400;
-const WORLD_HEIGHT = 1800;
+const WORLD_WIDTH = 4800;
+const WORLD_HEIGHT = 3600;
 const PLAYER_SPEED = 3;
 const CAR_SPEED = 5;
 const BRAKE_FORCE = 0.9;
@@ -31,6 +31,7 @@ let player = {
 let cars = [];
 let buildings = [];
 let roads = [];
+let trafficLights = [];
 
 // Initialize game
 function init() {
@@ -73,7 +74,7 @@ function generateCity() {
 
     // Create buildings
     buildings = [];
-    const numBuildings = 80; // More buildings for larger map
+    const numBuildings = 200; // Many more buildings for larger map
     for (let i = 0; i < numBuildings; i++) {
         let x, y, width, height;
         let attempts = 0;
@@ -87,6 +88,14 @@ function generateCity() {
 
         if (attempts < 50) {
             buildings.push({ x, y, width, height });
+        }
+    }
+
+    // Create traffic lights at intersections
+    trafficLights = [];
+    for (let x = 300; x < WORLD_WIDTH; x += 300) {
+        for (let y = 300; y < WORLD_HEIGHT; y += 300) {
+            trafficLights.push({ x: x, y: y, state: 'red', timer: 0 });
         }
     }
 }
@@ -124,7 +133,7 @@ function createCars() {
 
     // Other cars - place on roads
     const carColors = ['#0000FF', '#00FF00', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080'];
-    for (let i = 0; i < 15; i++) { // More cars for larger map
+    for (let i = 0; i < 40; i++) { // Many more cars for larger map
         let road = roads[Math.floor(Math.random() * roads.length)];
         let x, y, angle;
 
@@ -219,6 +228,15 @@ function update() {
     }
 
     updateUI();
+
+    // Update traffic lights
+    for (let light of trafficLights) {
+        light.timer++;
+        if (light.timer > 300) {
+            light.state = light.state === 'red' ? 'green' : 'red';
+            light.timer = 0;
+        }
+    }
 }
 
 // Update player (on foot)
@@ -315,6 +333,14 @@ function updateAICar(car) {
             } else if (!atIntersection) {
                 // Not at intersection - reset intersection flag
                 car.lastIntersection = null;
+            }
+
+            // Check traffic light
+            if (atIntersection) {
+                let light = trafficLights.find(l => Math.abs(l.x - (car.x + car.width / 2)) < 100 && Math.abs(l.y - (car.y + car.height / 2)) < 100);
+                if (light && light.state === 'red') {
+                    car.speed *= 0.8;
+                }
             }
 
             // Steer towards target direction
@@ -430,6 +456,7 @@ function enterCar() {
             Math.abs(player.y + player.height / 2 - (car.y + car.height / 2)) < 50) {
             player.inCar = true;
             player.car = car;
+            car.isPlayerCar = true; // Take control of this car
             break;
         }
     }
@@ -437,6 +464,9 @@ function enterCar() {
 
 // Exit car
 function exitCar() {
+    if (player.car) {
+        player.car.isPlayerCar = false; // Return control to AI
+    }
     player.inCar = false;
     player.car = null;
 }
@@ -463,6 +493,25 @@ function draw() {
         ctx.fillRect(road.x, road.y, road.width, road.height);
     }
 
+    // Draw road markings
+    ctx.strokeStyle = '#FFF';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 10]);
+    for (let road of roads) {
+        ctx.beginPath();
+        if (road.width > road.height) {
+            // Horizontal road
+            ctx.moveTo(road.x, road.y + road.height / 2);
+            ctx.lineTo(road.x + road.width, road.y + road.height / 2);
+        } else {
+            // Vertical road
+            ctx.moveTo(road.x + road.width / 2, road.y);
+            ctx.lineTo(road.x + road.width / 2, road.y + road.height);
+        }
+        ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
     // Draw buildings
     ctx.fillStyle = '#8B4513';
     for (let building of buildings) {
@@ -475,6 +524,12 @@ function draw() {
             }
         }
         ctx.fillStyle = '#8B4513';
+    }
+
+    // Draw traffic lights
+    for (let light of trafficLights) {
+        ctx.fillStyle = light.state === 'red' ? '#FF0000' : '#00FF00';
+        ctx.fillRect(light.x - 5, light.y - 5, 10, 10);
     }
 
     // Draw cars
