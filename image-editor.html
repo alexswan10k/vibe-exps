@@ -28,6 +28,11 @@
             background-color: #f8f8f8;
             border-radius: 4px;
         }
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
         .tool-group {
             display: flex;
             align-items: center;
@@ -67,6 +72,12 @@
         }
         canvas.crop-mode {
             cursor: crosshair;
+        }
+        #ghostCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
         }
         .instructions {
             margin-top: 20px;
@@ -116,10 +127,17 @@
                 <button id="rescaleBtn">Rescale</button>
                 <input type="number" id="scaleFactor" placeholder="Scale %" min="10" max="500" value="100">
             </div>
+
+            <div class="zoom-controls">
+                <button id="zoomInBtn">+</button>
+                <button id="zoomOutBtn">-</button>
+                <span id="zoomLevel">100%</span>
+            </div>
         </div>
 
         <div class="canvas-container">
             <canvas id="imageCanvas"></canvas>
+            <canvas id="ghostCanvas"></canvas>
         </div>
 
         <div class="instructions">
@@ -130,6 +148,7 @@
                 <li><strong>Crop:</strong> Select "Crop" tool, then click and drag to choose an area - crop applies automatically when you release</li>
                 <li><strong>Adjust:</strong> Use color picker and brush size slider for drawing</li>
                 <li><strong>Rescale:</strong> Enter a percentage and click "Rescale" to change image size</li>
+                <li><strong>Zoom:</strong> Use the + and - buttons or mouse wheel to zoom in/out on the canvas</li>
                 <li><strong>Save:</strong> Click "Save as PNG" to download your edited image</li>
             </ul>
         </div>
@@ -147,8 +166,14 @@
         const rescaleBtn = document.getElementById('rescaleBtn');
         const scaleFactor = document.getElementById('scaleFactor');
         const canvasContainer = document.querySelector('.canvas-container');
+        const ghostCanvas = document.getElementById('ghostCanvas');
+        const ghostCtx = ghostCanvas.getContext('2d');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomLevelSpan = document.getElementById('zoomLevel');
 
         let originalImage = null;
+        let zoomLevel = 1;
         let isDrawing = false;
         let cropStartX = 0;
         let cropStartY = 0;
@@ -169,6 +194,34 @@
             } else {
                 canvas.classList.remove('crop-mode');
             }
+            ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+        });
+
+        // Zoom functionality
+        function updateZoom() {
+            canvas.style.transform = `scale(${zoomLevel})`;
+            ghostCanvas.style.transform = `scale(${zoomLevel})`;
+            zoomLevelSpan.textContent = Math.round(zoomLevel * 100) + '%';
+        }
+
+        zoomInBtn.addEventListener('click', () => {
+            zoomLevel = Math.min(zoomLevel * 1.2, 5);
+            updateZoom();
+        });
+
+        zoomOutBtn.addEventListener('click', () => {
+            zoomLevel = Math.max(zoomLevel / 1.2, 0.1);
+            updateZoom();
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            if (e.deltaY < 0) {
+                zoomLevel = Math.min(zoomLevel * 1.1, 5);
+            } else {
+                zoomLevel = Math.max(zoomLevel / 1.1, 0.1);
+            }
+            updateZoom();
         });
 
         // Function to load image from blob
@@ -178,7 +231,11 @@
                 originalImage = img;
                 canvas.width = img.width;
                 canvas.height = img.height;
+                ghostCanvas.width = img.width;
+                ghostCanvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
+                zoomLevel = 1;
+                updateZoom();
                 saveBtn.disabled = false;
             };
             img.src = URL.createObjectURL(blob);
@@ -228,6 +285,21 @@
         });
 
         canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / zoomLevel;
+            const y = (e.clientY - rect.top) / zoomLevel;
+
+            if (toolSelect.value === 'draw') {
+                ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+                ghostCtx.beginPath();
+                ghostCtx.arc(x, y, brushSize.value / 2, 0, 2 * Math.PI);
+                ghostCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+                ghostCtx.lineWidth = 1;
+                ghostCtx.stroke();
+            } else {
+                ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+            }
+
             if (isDrawing && toolSelect.value === 'draw') {
                 draw(e);
             } else if (isCropping && toolSelect.value === 'crop') {
@@ -248,8 +320,8 @@
             if (!isDrawing) return;
 
             const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const x = (e.clientX - rect.left) / zoomLevel;
+            const y = (e.clientY - rect.top) / zoomLevel;
 
             ctx.lineWidth = brushSize.value;
             ctx.lineCap = 'round';
@@ -263,8 +335,8 @@
 
         function startCrop(e) {
             const rect = canvas.getBoundingClientRect();
-            cropStartX = e.clientX - rect.left;
-            cropStartY = e.clientY - rect.top;
+            cropStartX = (e.clientX - rect.left) / zoomLevel;
+            cropStartY = (e.clientY - rect.top) / zoomLevel;
             isCropping = true;
 
             if (cropOverlay) {
@@ -272,6 +344,7 @@
             }
             cropOverlay = document.createElement('div');
             cropOverlay.className = 'crop-overlay';
+            cropOverlay.style.transformOrigin = 'top left';
             canvasContainer.appendChild(cropOverlay);
         }
 
@@ -279,18 +352,18 @@
             if (!isCropping) return;
 
             const rect = canvas.getBoundingClientRect();
-            cropEndX = e.clientX - rect.left;
-            cropEndY = e.clientY - rect.top;
+            cropEndX = (e.clientX - rect.left) / zoomLevel;
+            cropEndY = (e.clientY - rect.top) / zoomLevel;
 
             const width = Math.abs(cropEndX - cropStartX);
             const height = Math.abs(cropEndY - cropStartY);
             const left = Math.min(cropStartX, cropEndX);
             const top = Math.min(cropStartY, cropEndY);
 
-            cropOverlay.style.left = left + 'px';
-            cropOverlay.style.top = top + 'px';
-            cropOverlay.style.width = width + 'px';
-            cropOverlay.style.height = height + 'px';
+            cropOverlay.style.left = left * zoomLevel + 'px';
+            cropOverlay.style.top = top * zoomLevel + 'px';
+            cropOverlay.style.width = width * zoomLevel + 'px';
+            cropOverlay.style.height = height * zoomLevel + 'px';
         }
 
         function endCrop() {
@@ -309,7 +382,11 @@
                 const imageData = ctx.getImageData(cropX, cropY, cropWidth, cropHeight);
                 canvas.width = cropWidth;
                 canvas.height = cropHeight;
+                ghostCanvas.width = cropWidth;
+                ghostCanvas.height = cropHeight;
                 ctx.putImageData(imageData, 0, 0);
+                zoomLevel = 1;
+                updateZoom();
             }
 
             cropOverlay.remove();
@@ -336,9 +413,14 @@
             // Resize main canvas
             canvas.width = newWidth;
             canvas.height = newHeight;
+            ghostCanvas.width = newWidth;
+            ghostCanvas.height = newHeight;
 
             // Draw scaled image with interpolation
             ctx.drawImage(tempCanvas, 0, 0, newWidth, newHeight);
+
+            zoomLevel = 1;
+            updateZoom();
         });
 
         // Save as PNG
