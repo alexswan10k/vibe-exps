@@ -1,0 +1,49 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(to bottom, #000011, #000033);
+    font-family: Arial, sans-serif;
+    overflow: hidden;
+}
+
+#instructions {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 10;
+    max-width: 300px;
+}
+
+#controls {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    width: 250px;
+}
+
+#controls label {
+    font-size: 0.8em;
+}
+
+#controls input, #controls button {
+    width: 100%;
+    font-size: 0.8em;
+}
+
+#fireworksCanvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
