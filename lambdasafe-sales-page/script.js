@@ -72,6 +72,11 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     setTimeout(typeWriter, 1000);
 
+    // Prepare subtitle for animation
+    const heroP = document.querySelector('#hero p');
+    const pText = heroP.textContent;
+    heroP.innerHTML = pText.split('').map(letter => letter === ' ' ? '&nbsp;' : `<span class="letter">${letter}</span>`).join('');
+
     // Parallax effect for hero background
     window.addEventListener('scroll', function() {
         const scrolled = window.pageYOffset;
@@ -195,9 +200,12 @@ animate();
 // Proximity animation for hero text letters
 document.addEventListener('mousemove', (e) => {
     const h2 = document.querySelector('#hero h2');
-    const letterSpans = h2.querySelectorAll('.letter');
-    letterSpans.forEach(span => {
-        if (span.style.display === 'inline-block') {
+    const p = document.querySelector('#hero p');
+    const h2Letters = h2.querySelectorAll('.letter');
+    const pLetters = p.querySelectorAll('.letter');
+    const allLetters = [...h2Letters, ...pLetters];
+    allLetters.forEach(span => {
+        if (span.style.display !== 'none') {
             const rect = span.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;

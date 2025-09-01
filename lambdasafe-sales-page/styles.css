@@ -142,8 +142,9 @@ nav ul li a:hover {
     transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-.hero-content h2 .letter {
+.hero-content .letter {
     display: inline-block;
+    transition: transform 0.8s ease, opacity 0.8s ease;
 }
 
 @keyframes fadeInUp {
