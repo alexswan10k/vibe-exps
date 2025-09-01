@@ -55,6 +55,7 @@
         <input type="range" id="mountainLevel" min="0" max="1" value="0.6" step="0.05">
 
         <button id="newSeed">New Seed</button>
+        <button id="resetAnimals">Reset Animals</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -110,6 +111,235 @@
             }
         }
 
+        // Animal class
+        class Animal {
+            constructor(position, planetSize) {
+                this.planetSize = planetSize;
+                this.theta = position.theta || Math.random() * Math.PI * 2; // azimuthal angle
+                this.phi = position.phi || Math.acos(2 * Math.random() - 1); // polar angle
+                this.mesh = this.createMesh();
+                this.targetTheta = this.theta;
+                this.targetPhi = this.phi;
+                this.hunger = 0;
+                scene.add(this.mesh);
+                this.updatePosition();
+            }
+
+            createMesh() {
+                const geometry = new THREE.SphereGeometry(ANIMAL_SIZE, 8, 8);
+                const material = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+                return new THREE.Mesh(geometry, material);
+            }
+
+            updatePosition() {
+                // Sample terrain height at this position
+                const terrainHeight = this.sampleTerrainHeight();
+
+                // Position on surface with terrain displacement
+                const surfaceRadius = this.planetSize + terrainHeight;
+                const x = surfaceRadius * Math.sin(this.phi) * Math.cos(this.theta);
+                const y = surfaceRadius * Math.cos(this.phi);
+                const z = surfaceRadius * Math.sin(this.phi) * Math.sin(this.theta);
+
+                this.mesh.position.set(x, y, z);
+
+                // Orient the animal to face outward from planet center
+                this.mesh.lookAt(x * 2, y * 2, z * 2);
+            }
+
+            sampleTerrainHeight() {
+                // Use the same Perlin noise calculation as the planet generation
+                const perlin = new PerlinNoise(currentSeed);
+
+                // Normalize direction vector
+                const nx = Math.sin(this.phi) * Math.cos(this.theta);
+                const ny = Math.cos(this.phi);
+                const nz = Math.sin(this.phi) * Math.sin(this.theta);
+
+                // Generate noise for height displacement (same as planet generation)
+                const noise1 = perlin.noise(nx * 4, ny * 4, nz * 4);
+                const noise2 = perlin.noise(nx * 8, ny * 8, nz * 8) * 0.5;
+                const noise3 = perlin.noise(nx * 16, ny * 16, nz * 16) * 0.25;
+                const totalNoise = (noise1 + noise2 + noise3) * 0.5 + 0.5; // Normalize to 0-1
+
+                // Return displacement (same formula as planet generation)
+                const displacement = (totalNoise - 0.5) * currentHeightScale;
+
+                // Ensure minimum surface radius to prevent animals from going below surface
+                const minRadius = currentPlanetSize - currentHeightScale * 0.3; // Allow some depth but not too much
+                const surfaceRadius = currentPlanetSize + displacement;
+
+                return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+            }
+
+            move() {
+                // Random movement
+                if (Math.random() < 0.05) { // 5% chance to change direction each frame
+                    this.targetTheta = this.theta + (Math.random() - 0.5) * 0.5;
+                    this.targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1,
+                        this.phi + (Math.random() - 0.5) * 0.5));
+                }
+
+                // Move towards target
+                const dTheta = this.targetTheta - this.theta;
+                const dPhi = this.targetPhi - this.phi;
+
+                this.theta += Math.sign(dTheta) * Math.min(Math.abs(dTheta), ANIMAL_SPEED);
+                this.phi += Math.sign(dPhi) * Math.min(Math.abs(dPhi), ANIMAL_SPEED);
+
+                this.updatePosition();
+                this.hunger += 0.001; // Increase hunger over time
+            }
+
+            eat() {
+                this.hunger = 0;
+            }
+
+            remove() {
+                scene.remove(this.mesh);
+                this.mesh.geometry.dispose();
+                this.mesh.material.dispose();
+            }
+        }
+
+        // Food class
+        class Food {
+            constructor(position, planetSize) {
+                this.planetSize = planetSize;
+                this.theta = position.theta || Math.random() * Math.PI * 2;
+                this.phi = position.phi || Math.acos(2 * Math.random() - 1);
+                this.mesh = this.createMesh();
+                scene.add(this.mesh);
+                this.updatePosition();
+            }
+
+            createMesh() {
+                const geometry = new THREE.SphereGeometry(FOOD_SIZE, 6, 6);
+                const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+                return new THREE.Mesh(geometry, material);
+            }
+
+            updatePosition() {
+                // Sample terrain height at this position
+                const terrainHeight = this.sampleTerrainHeight();
+
+                // Position on surface with terrain displacement
+                const surfaceRadius = this.planetSize + terrainHeight;
+                const x = surfaceRadius * Math.sin(this.phi) * Math.cos(this.theta);
+                const y = surfaceRadius * Math.cos(this.phi);
+                const z = surfaceRadius * Math.sin(this.phi) * Math.sin(this.theta);
+
+                this.mesh.position.set(x, y, z);
+            }
+
+            sampleTerrainHeight() {
+                // Use the same Perlin noise calculation as the planet generation
+                const perlin = new PerlinNoise(currentSeed);
+
+                // Normalize direction vector
+                const nx = Math.sin(this.phi) * Math.cos(this.theta);
+                const ny = Math.cos(this.phi);
+                const nz = Math.sin(this.phi) * Math.sin(this.theta);
+
+                // Generate noise for height displacement (same as planet generation)
+                const noise1 = perlin.noise(nx * 4, ny * 4, nz * 4);
+                const noise2 = perlin.noise(nx * 8, ny * 8, nz * 8) * 0.5;
+                const noise3 = perlin.noise(nx * 16, ny * 16, nz * 16) * 0.25;
+                const totalNoise = (noise1 + noise2 + noise3) * 0.5 + 0.5; // Normalize to 0-1
+
+                // Return displacement (same formula as planet generation)
+                const displacement = (totalNoise - 0.5) * currentHeightScale;
+
+                // Ensure minimum surface radius to prevent food from going below surface
+                const minRadius = currentPlanetSize - currentHeightScale * 0.3;
+                const surfaceRadius = currentPlanetSize + displacement;
+
+                return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+            }
+
+            remove() {
+                scene.remove(this.mesh);
+                this.mesh.geometry.dispose();
+                this.mesh.material.dispose();
+            }
+        }
+
+        // Utility functions
+        function getDistanceOnSphere(a, b) {
+            const dTheta = Math.abs(a.theta - b.theta);
+            const dPhi = Math.abs(a.phi - b.phi);
+            return Math.sqrt(dTheta * dTheta + dPhi * dPhi);
+        }
+
+        function spawnFood() {
+            if (Math.random() < FOOD_SPAWN_RATE && foods.length < 20) {
+                const position = {
+                    theta: Math.random() * Math.PI * 2,
+                    phi: Math.acos(2 * Math.random() - 1)
+                };
+                foods.push(new Food(position, currentPlanetSize));
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = animals.length - 1; i >= 0; i--) {
+                const animal = animals[i];
+                for (let j = foods.length - 1; j >= 0; j--) {
+                    const food = foods[j];
+                    const distance = getDistanceOnSphere(animal, food);
+
+                    if (distance < 0.1) { // Collision threshold
+                        // Animal eats food
+                        animal.eat();
+                        food.remove();
+                        foods.splice(j, 1);
+
+                        // Population growth - double the animal
+                        if (animals.length < MAX_POPULATION) {
+                            const newAnimal = new Animal({
+                                theta: animal.theta + (Math.random() - 0.5) * 0.2,
+                                phi: animal.phi + (Math.random() - 0.5) * 0.2
+                            }, currentPlanetSize);
+                            animals.push(newAnimal);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        function updateAnimals() {
+            for (let i = animals.length - 1; i >= 0; i--) {
+                const animal = animals[i];
+                animal.move();
+
+                // Remove animals that are too hungry
+                if (animal.hunger > 1.0) {
+                    animal.remove();
+                    animals.splice(i, 1);
+                }
+            }
+        }
+
+        function resetAnimals() {
+            // Remove all existing animals
+            animals.forEach(animal => animal.remove());
+            animals = [];
+
+            // Remove all existing food
+            foods.forEach(food => food.remove());
+            foods = [];
+
+            // Spawn initial animals
+            for (let i = 0; i < 2; i++) {
+                const position = {
+                    theta: Math.random() * Math.PI * 2,
+                    phi: Math.acos(2 * Math.random() - 1)
+                };
+                animals.push(new Animal(position, currentPlanetSize));
+            }
+        }
+
         // Scene setup
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -125,6 +355,15 @@
         let currentRotationSpeed = 0.005;
         let currentWaterLevel = 0.3;
         let currentMountainLevel = 0.6;
+
+        // Animal simulation variables
+        let animals = [];
+        let foods = [];
+        const MAX_POPULATION = 50;
+        const FOOD_SPAWN_RATE = 0.02; // Probability per frame
+        const ANIMAL_SPEED = 0.01;
+        const FOOD_SIZE = 0.1;
+        const ANIMAL_SIZE = 0.15;
 
         function generatePlanet(seed = null, noiseScale = 10, heightScale = 1.0, planetSize = 5, waterLevel = 0.3, mountainLevel = 0.6) {
             // Remove existing planet
@@ -230,6 +469,12 @@
             requestAnimationFrame(animate);
             controls.update();
             if (planet) planet.rotation.y += currentRotationSpeed;
+
+            // Update animal simulation
+            spawnFood();
+            updateAnimals();
+            checkCollisions();
+
             renderer.render(scene, camera);
         }
         animate();
@@ -274,6 +519,13 @@
             currentSeed = Math.floor(Math.random() * 1000000);
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
         });
+
+        document.getElementById('resetAnimals').addEventListener('click', () => {
+            resetAnimals();
+        });
+
+        // Initialize animals
+        resetAnimals();
 
         // Handle window resize
         window.addEventListener('resize', () => {
