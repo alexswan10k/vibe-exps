@@ -311,7 +311,9 @@ function setCorridorTile(worldX, worldY, value) {
         const localX = worldX - room.x;
         const localY = worldY - room.y;
 
-        if (localX >= 0 && localX < ROOM_SIZE && localY >= 0 && localY < ROOM_SIZE) {
+        // Check if this coordinate is within this room's actual tile array bounds
+        if (localX >= 0 && localY >= 0 &&
+            localX < room.tiles[0].length && localY < room.tiles.length) {
             room.tiles[localY][localX] = value;
             return;
         }
@@ -733,7 +735,9 @@ function getTile(worldX, worldY) {
         const localX = worldX - room.x;
         const localY = worldY - room.y;
 
-        if (localX >= 0 && localX < ROOM_SIZE && localY >= 0 && localY < ROOM_SIZE) {
+        // Check if this coordinate is within this room's actual tile array bounds
+        if (localX >= 0 && localY >= 0 &&
+            localX < room.tiles[0].length && localY < room.tiles.length) {
             return room.tiles[localY][localX];
         }
     }
