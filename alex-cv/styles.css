@@ -840,6 +840,11 @@ nav ul li a:hover {
     stroke-width: 3;
 }
 
+.link.focused {
+    stroke: rgba(23, 162, 184, 1);
+    stroke-width: 4;
+}
+
 /* Nodes */
 .node {
     cursor: pointer;
@@ -1386,6 +1391,43 @@ footer {
 
     .fun-fact p {
         font-size: 0.8rem;
+    }
+
+    /* Projects/Nebula mobile styles */
+    .projects-nebula {
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .nebula-container {
+        width: 100%;
+        max-width: 600px;
+        height: 400px;
+    }
+
+    .nebula-svg {
+        width: 100%;
+        height: 100%;
+    }
+
+    .project-panel {
+        width: 100%;
+        max-width: 600px;
+        height: auto;
+        min-height: 300px;
+    }
+
+    /* Nebula particles and cores mobile adjustments */
+    .nebula-core {
+        r: 20;
+    }
+
+    .tech-particle {
+        r: 6;
+    }
+
+    .nebula-label {
+        font-size: 12px;
     }
 }
 

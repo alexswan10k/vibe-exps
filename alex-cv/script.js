@@ -544,8 +544,11 @@ function initializeNeuralNetwork() {
             .on('drag', dragged)
             .on('end', dragended));
 
+    // Detect if device is touch-enabled (mobile)
+    const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
     // Add circles to nodes
-    node.append('circle')
+    const circles = node.append('circle')
         .attr('class', 'node-circle')
         .attr('r', d => d.type === 'core' ? 25 : 15)
         .attr('fill', d => {
@@ -557,6 +560,44 @@ function initializeNeuralNetwork() {
                 'Other': '#6c5ce7'
             };
             return colors[d.group] || '#4a90e2';
+        });
+
+    // Add click/touch handling for selection (works for both mobile and desktop)
+    circles
+        .style('cursor', 'pointer')
+        .on('touchstart', function(event, d) {
+            // Don't prevent default here to allow drag to work
+            this._touchStartTime = Date.now();
+            this._touchStartX = event.touches[0].clientX;
+            this._touchStartY = event.touches[0].clientY;
+        })
+        .on('touchend', function(event, d) {
+            if (this._touchStartTime) {
+                const touchEndTime = Date.now();
+                const touchDuration = touchEndTime - this._touchStartTime;
+
+                const touchEndX = event.changedTouches[0].clientX;
+                const touchEndY = event.changedTouches[0].clientY;
+                const touchDistance = Math.sqrt(
+                    Math.pow(touchEndX - this._touchStartX, 2) +
+                    Math.pow(touchEndY - this._touchStartY, 2)
+                );
+
+                // Only select if it's a quick tap (not a drag)
+                if (touchDuration < 300 && touchDistance < 10) {
+                    event.preventDefault();
+                    selectNode(d);
+                }
+
+                // Clean up
+                delete this._touchStartTime;
+                delete this._touchStartX;
+                delete this._touchStartY;
+            }
+        })
+        .on('click', function(event, d) {
+            // For mouse clicks, always select (drag is handled separately)
+            selectNode(d);
         });
 
     // Add labels to nodes
@@ -604,13 +645,151 @@ function initializeNeuralNetwork() {
         d.fy = null;
     }
 
-    // Hover interactions with proximity detection
+    // Selection and hover state management
     const skillsPanelTitle = document.getElementById('skills-panel-title');
     const skillsPanelDescription = document.getElementById('skills-panel-description');
     let hoveredNode = null;
+    let selectedNode = null; // Persistent selection state
 
-    // Mouse move proximity detection
+    // Function to select a node (persistent selection)
+    function selectNode(d) {
+        // If clicking the same node, deselect it
+        if (selectedNode === d) {
+            deselectNode();
+            return;
+        }
+
+        // Deselect previous node if any
+        if (selectedNode) {
+            node.filter(n => n === selectedNode)
+                .select('circle')
+                .transition()
+                .duration(200)
+                .attr('stroke-width', 2)
+                .style('filter', 'none');
+
+            node.filter(n => n === selectedNode)
+                .select('text')
+                .transition()
+                .duration(200)
+                .style('opacity', 0);
+
+            link.classed('selected', false);
+        }
+
+        // Select new node
+        selectedNode = d;
+
+        node.filter(n => n === selectedNode)
+            .select('circle')
+            .transition()
+            .duration(200)
+            .attr('stroke-width', 6)
+            .style('filter', 'drop-shadow(0 0 15px rgba(23, 162, 184, 0.9))');
+
+        node.filter(n => n === selectedNode)
+            .select('text')
+            .transition()
+            .duration(200)
+            .style('opacity', 1)
+            .style('fill', '#17a2b8')
+            .style('font-weight', 'bold');
+
+        link.classed('selected', l => l.source === selectedNode || l.target === selectedNode);
+
+        // Update panel with selected node info
+        skillsPanelTitle.textContent = selectedNode.id;
+        skillsPanelDescription.textContent = selectedNode.description;
+    }
+
+    // Function to deselect node
+    function deselectNode() {
+        if (selectedNode) {
+            node.filter(n => n === selectedNode)
+                .select('circle')
+                .transition()
+                .duration(200)
+                .attr('stroke-width', 2)
+                .style('filter', 'none');
+
+            node.filter(n => n === selectedNode)
+                .select('text')
+                .transition()
+                .duration(200)
+                .style('opacity', 0);
+
+            link.classed('selected', false);
+
+            selectedNode = null;
+
+            // Reset panel to default or show hover state
+            if (hoveredNode) {
+                skillsPanelTitle.textContent = hoveredNode.id;
+                skillsPanelDescription.textContent = hoveredNode.description;
+            } else {
+                skillsPanelTitle.textContent = 'Hover over nodes to explore';
+                skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
+            }
+        }
+    }
+
+    // Function to handle hover (only when no node is selected)
+    function handleHover(d) {
+        if (selectedNode) return; // Don't show hover effects when a node is selected
+
+        if (hoveredNode) {
+            // Reset previous hover
+            node.filter(n => n === hoveredNode)
+                .select('circle')
+                .transition()
+                .duration(200)
+                .attr('stroke-width', 2)
+                .style('filter', 'none');
+
+            node.filter(n => n === hoveredNode)
+                .select('text')
+                .transition()
+                .duration(200)
+                .style('opacity', 0);
+
+            link.classed('active', false);
+        }
+
+        hoveredNode = d;
+
+        if (hoveredNode) {
+            // Set new hover
+            node.filter(n => n === hoveredNode)
+                .select('circle')
+                .transition()
+                .duration(200)
+                .attr('stroke-width', 4)
+                .style('filter', 'drop-shadow(0 0 10px rgba(23, 162, 184, 0.8))');
+
+            node.filter(n => n === hoveredNode)
+                .select('text')
+                .transition()
+                .duration(200)
+                .style('opacity', 1)
+                .style('fill', '#17a2b8')
+                .style('font-weight', 'bold');
+
+            link.classed('active', l => l.source === hoveredNode || l.target === hoveredNode);
+
+            skillsPanelTitle.textContent = hoveredNode.id;
+            skillsPanelDescription.textContent = hoveredNode.description;
+        } else {
+            skillsPanelTitle.textContent = 'Hover over nodes to explore';
+            skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
+        }
+    }
+
+
+
+    // Mouse move proximity detection (only when no node is selected)
     svg.addEventListener('mousemove', function(event) {
+        if (selectedNode) return; // Don't do proximity detection when a node is selected
+
         const rect = svg.getBoundingClientRect();
         const mouseX = event.clientX - rect.left;
         const mouseY = event.clientY - rect.top;
@@ -627,76 +806,16 @@ function initializeNeuralNetwork() {
         });
 
         if (closestNode !== hoveredNode) {
-            if (hoveredNode) {
-                // Reset previous hover - remove visual effects
-                node.filter(d => d === hoveredNode)
-                    .select('circle')
-                    .transition()
-                    .duration(200)
-                    .attr('stroke-width', 2)
-                    .style('filter', 'none');
-
-                node.filter(d => d === hoveredNode)
-                    .select('text')
-                    .transition()
-                    .duration(200)
-                    .style('opacity', 0);
-
-                link.classed('active', false);
-            }
-
-            hoveredNode = closestNode;
-
-            if (hoveredNode) {
-                // Set new hover - add visual effects
-                node.filter(d => d === hoveredNode)
-                    .select('circle')
-                    .transition()
-                    .duration(200)
-                    .attr('stroke-width', 4)
-                    .style('filter', 'drop-shadow(0 0 10px rgba(23, 162, 184, 0.8))');
-
-                node.filter(d => d === hoveredNode)
-                    .select('text')
-                    .transition()
-                    .duration(200)
-                    .style('opacity', 1)
-                    .style('fill', '#17a2b8')
-                    .style('font-weight', 'bold');
-
-                link.classed('active', l => l.source === hoveredNode || l.target === hoveredNode);
-
-                skillsPanelTitle.textContent = hoveredNode.id;
-                skillsPanelDescription.textContent = hoveredNode.description;
-            } else {
-                skillsPanelTitle.textContent = 'Hover over nodes to explore';
-                skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
-            }
+            handleHover(closestNode);
         }
     });
 
-    // Mouse leave reset
+    // Mouse leave reset (only when no node is selected)
     svg.addEventListener('mouseleave', function() {
+        if (selectedNode) return; // Don't reset hover when a node is selected
+
         if (hoveredNode) {
-            // Reset hover effects
-            node.filter(d => d === hoveredNode)
-                .select('circle')
-                .transition()
-                .duration(200)
-                .attr('stroke-width', 2)
-                .style('filter', 'none');
-
-            node.filter(d => d === hoveredNode)
-                .select('text')
-                .transition()
-                .duration(200)
-                .style('opacity', 0);
-
-            link.classed('active', false);
-
-            hoveredNode = null;
-            skillsPanelTitle.textContent = 'Hover over nodes to explore';
-            skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
+            handleHover(null);
         }
     });
 
@@ -862,17 +981,17 @@ function initializeTechStackNebula() {
     const techStackContainer = document.getElementById('tech-stack');
     let hoveredProject = null;
 
-    // Mouse move proximity detection for nebula
-    svg.addEventListener('mousemove', function(event) {
+    // Proximity detection function for both mouse and touch
+    function handleProximityDetection(clientX, clientY) {
         const rect = svg.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
 
         let closestProject = null;
         let minDistance = 80; // Proximity threshold
 
         projects.forEach(project => {
-            const distance = Math.sqrt((project.x - mouseX) ** 2 + (project.y - mouseY) ** 2);
+            const distance = Math.sqrt((project.x - x) ** 2 + (project.y - y) ** 2);
             if (distance < minDistance) {
                 minDistance = distance;
                 closestProject = project;
@@ -932,6 +1051,24 @@ function initializeTechStackNebula() {
                 techStackContainer.innerHTML = '';
             }
         }
+    }
+
+    // Mouse move proximity detection for nebula
+    svg.addEventListener('mousemove', function(event) {
+        handleProximityDetection(event.clientX, event.clientY);
+    });
+
+    // Touch move proximity detection for mobile devices
+    svg.addEventListener('touchmove', function(event) {
+        event.preventDefault(); // Prevent scrolling while interacting with nebula
+        const touch = event.touches[0];
+        handleProximityDetection(touch.clientX, touch.clientY);
+    });
+
+    // Touch start for mobile tap interactions
+    svg.addEventListener('touchstart', function(event) {
+        const touch = event.touches[0];
+        handleProximityDetection(touch.clientX, touch.clientY);
     });
 
     // Mouse leave reset
