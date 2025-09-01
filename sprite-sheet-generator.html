@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Sheet Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .controls label {
+            margin-right: 5px;
+        }
+        .controls input, .controls button {
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .controls button {
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background: #0056b3;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin-bottom: 20px;
+            max-width: 100%;
+        }
+        .image-list {
+            margin-bottom: 20px;
+        }
+        .image-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .image-item img {
+            width: 50px;
+            height: 50px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+        }
+        .image-item input {
+            flex: 1;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .image-item .arrows {
+            display: flex;
+            flex-direction: column;
+            margin-left: 10px;
+        }
+        .image-item button {
+            padding: 2px 5px;
+            margin: 1px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            background: #f8f9fa;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .image-item button:hover {
+            background: #e9ecef;
+        }
+        .image-item button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .json-output {
+            margin-top: 20px;
+        }
+        .json-output textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .instructions {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 600px;
+            max-height: 80%;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .modal-header h2 {
+            margin: 0;
+        }
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: black;
+        }
+        .types-code {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            border: 1px solid #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sprite Sheet Generator</h1>
+        
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Paste images from clipboard (Ctrl+V or Cmd+V)</li>
+                <li>Set grid size (columns and rows)</li>
+                <li>Set tile size (width and height in pixels)</li>
+                <li>Name each image in the list below</li>
+                <li>Use ↑↓ arrows to reorder, X to delete images</li>
+                <li>Sprite sheet updates automatically in real-time</li>
+                <li>Click "Save as PNG" to download the sprite sheet</li>
+                <li>View simplified JSON output with name and position</li>
+                <li>Click "Show TypeScript Types" for type definitions</li>
+            </ol>
+        </div>
+
+        <div class="controls">
+            <label for="gridCols">Grid Columns:</label>
+            <input type="number" id="gridCols" value="4" min="1" max="20">
+
+            <label for="gridRows">Grid Rows:</label>
+            <input type="number" id="gridRows" value="4" min="1" max="20">
+
+            <label for="tileWidth">Tile Width:</label>
+            <input type="number" id="tileWidth" value="64" min="8" max="256">
+
+            <label for="tileHeight">Tile Height:</label>
+            <input type="number" id="tileHeight" value="64" min="8" max="256">
+
+            <div class="preset-buttons">
+                <button id="preset32">32x32</button>
+                <button id="preset64">64x64</button>
+                <button id="preset128">128x128</button>
+            </div>
+
+            <button id="saveBtn">Save as PNG</button>
+            <button id="showTypesBtn">Show TypeScript Types</button>
+        </div>
+
+        <div class="image-list">
+            <h3>Images:</h3>
+            <div id="imageList"></div>
+        </div>
+
+        <canvas id="spriteCanvas" width="512" height="512"></canvas>
+
+        <div class="json-output">
+            <h3>JSON Output:</h3>
+            <textarea id="jsonOutput" readonly></textarea>
+        </div>
+    </div>
+
+    <!-- TypeScript Types Modal -->
+    <div id="typesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>TypeScript Types</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="types-code">interface SpriteSheetData {
+  images: SpriteImage[];
+}
+
+interface SpriteImage {
+  name: string;
+  position: {
+    column: number;
+    row: number;
+  };
+}</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('spriteCanvas');
+        const ctx = canvas.getContext('2d');
+        const imageList = document.getElementById('imageList');
+        const jsonOutput = document.getElementById('jsonOutput');
+        const saveBtn = document.getElementById('saveBtn');
+        const showTypesBtn = document.getElementById('showTypesBtn');
+        const gridColsInput = document.getElementById('gridCols');
+        const gridRowsInput = document.getElementById('gridRows');
+        const tileWidthInput = document.getElementById('tileWidth');
+        const tileHeightInput = document.getElementById('tileHeight');
+        const typesModal = document.getElementById('typesModal');
+        const closeBtn = document.querySelector('.close');
+        const preset32Btn = document.getElementById('preset32');
+        const preset64Btn = document.getElementById('preset64');
+        const preset128Btn = document.getElementById('preset128');
+
+        let images = [];
+        let imageNames = [];
+
+        // Load from localStorage on page load
+        function loadFromStorage() {
+            try {
+                const saved = localStorage.getItem('spriteSheetData');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    gridColsInput.value = data.gridCols || 4;
+                    gridRowsInput.value = data.gridRows || 4;
+                    tileWidthInput.value = data.tileWidth || 64;
+                    tileHeightInput.value = data.tileHeight || 64;
+                    imageNames = data.imageNames || [];
+
+                    // Restore images from base64 data
+                    if (data.images && data.images.length > 0) {
+                        images = [];
+                        data.images.forEach((imgData, index) => {
+                            const img = new Image();
+                            img.onload = () => {
+                                images[index] = img;
+                                // Update display once all images are loaded
+                                if (images.filter(i => i).length === data.images.length) {
+                                    updateImageList();
+                                    updateSpriteSheet();
+                                }
+                            };
+                            img.src = imgData;
+                        });
+                    }
+                }
+            } catch (error) {
+                console.warn('Error loading from localStorage:', error);
+            }
+        }
+
+        // Save to localStorage
+        function saveToStorage() {
+            try {
+                // Convert images to base64 for storage
+                const imageData = images.map(img => {
+                    // Create a canvas to convert image to base64
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    return canvas.toDataURL('image/png');
+                });
+
+                const data = {
+                    gridCols: parseInt(gridColsInput.value),
+                    gridRows: parseInt(gridRowsInput.value),
+                    tileWidth: parseInt(tileWidthInput.value),
+                    tileHeight: parseInt(tileHeightInput.value),
+                    imageNames: imageNames,
+                    images: imageData
+                };
+                localStorage.setItem('spriteSheetData', JSON.stringify(data));
+            } catch (error) {
+                console.warn('Error saving to localStorage:', error);
+            }
+        }
+
+        // Generate and update sprite sheet in real-time
+        function updateSpriteSheet() {
+            const cols = parseInt(gridColsInput.value);
+            const rows = parseInt(gridRowsInput.value);
+            const tileWidth = parseInt(tileWidthInput.value);
+            const tileHeight = parseInt(tileHeightInput.value);
+
+            // Update canvas size
+            canvas.width = cols * tileWidth;
+            canvas.height = rows * tileHeight;
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw images
+            images.forEach((img, index) => {
+                const col = index % cols;
+                const row = Math.floor(index / cols);
+
+                if (row < rows) {
+                    const x = col * tileWidth;
+                    const y = row * tileHeight;
+
+                    // Scale image to fit tile while maintaining aspect ratio
+                    const imgAspect = img.width / img.height;
+                    const tileAspect = tileWidth / tileHeight;
+
+                    let drawWidth, drawHeight, drawX, drawY;
+
+                    if (imgAspect > tileAspect) {
+                        // Image is wider than tile
+                        drawWidth = tileWidth;
+                        drawHeight = tileWidth / imgAspect;
+                        drawX = x;
+                        drawY = y + (tileHeight - drawHeight) / 2;
+                    } else {
+                        // Image is taller than tile
+                        drawHeight = tileHeight;
+                        drawWidth = tileHeight * imgAspect;
+                        drawX = x + (tileWidth - drawWidth) / 2;
+                        drawY = y;
+                    }
+
+                    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+                }
+            });
+
+            // Generate simplified JSON
+            const jsonData = {
+                spriteSheet: {
+                    width: canvas.width,
+                    height: canvas.height,
+                    columns: cols,
+                    rows: rows,
+                    tileWidth: tileWidth,
+                    tileHeight: tileHeight
+                },
+                images: images.map((img, index) => ({
+                    name: imageNames[index],
+                    position: {
+                        column: index % cols,
+                        row: Math.floor(index / cols)
+                    }
+                }))
+            };
+
+            jsonOutput.value = JSON.stringify(jsonData, null, 2);
+            saveToStorage();
+        }
+
+        // Handle paste event
+        document.addEventListener('paste', async (e) => {
+            e.preventDefault();
+            const items = e.clipboardData.items;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    const img = new Image();
+                    img.onload = () => {
+                        images.push(img);
+                        imageNames.push(`image_${images.length}`);
+                        updateImageList();
+                        updateSpriteSheet();
+                    };
+                    img.src = URL.createObjectURL(blob);
+                }
+            }
+        });
+
+        // Update the image list display
+        function updateImageList() {
+            imageList.innerHTML = '';
+            images.forEach((img, index) => {
+                const div = document.createElement('div');
+                div.className = 'image-item';
+
+                const imgElement = document.createElement('img');
+                imgElement.src = img.src;
+                div.appendChild(imgElement);
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.value = imageNames[index];
+                input.addEventListener('input', (e) => {
+                    imageNames[index] = e.target.value;
+                    updateSpriteSheet();
+                });
+                div.appendChild(input);
+
+                const arrowsDiv = document.createElement('div');
+                arrowsDiv.className = 'arrows';
+
+                const upBtn = document.createElement('button');
+                upBtn.textContent = '↑';
+                upBtn.disabled = index === 0;
+                upBtn.addEventListener('click', () => moveUp(index));
+                arrowsDiv.appendChild(upBtn);
+
+                const downBtn = document.createElement('button');
+                downBtn.textContent = '↓';
+                downBtn.disabled = index === images.length - 1;
+                downBtn.addEventListener('click', () => moveDown(index));
+                arrowsDiv.appendChild(downBtn);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.textContent = 'X';
+                deleteBtn.style.background = '#dc3545';
+                deleteBtn.style.color = 'white';
+                deleteBtn.addEventListener('click', () => deleteImage(index));
+                arrowsDiv.appendChild(deleteBtn);
+
+                div.appendChild(arrowsDiv);
+
+                imageList.appendChild(div);
+            });
+        }
+
+        // Move item up in the list
+        function moveUp(index) {
+            if (index > 0) {
+                [images[index], images[index - 1]] = [images[index - 1], images[index]];
+                [imageNames[index], imageNames[index - 1]] = [imageNames[index - 1], imageNames[index]];
+                updateImageList();
+                updateSpriteSheet();
+            }
+        }
+
+        // Move item down in the list
+        function moveDown(index) {
+            if (index < images.length - 1) {
+                [images[index], images[index + 1]] = [images[index + 1], images[index]];
+                [imageNames[index], imageNames[index + 1]] = [imageNames[index + 1], imageNames[index]];
+                updateImageList();
+                updateSpriteSheet();
+            }
+        }
+
+        // Delete image from the list
+        function deleteImage(index) {
+            images.splice(index, 1);
+            imageNames.splice(index, 1);
+            updateImageList();
+            updateSpriteSheet();
+        }
+
+        // Add event listeners for real-time updates
+        [gridColsInput, gridRowsInput, tileWidthInput, tileHeightInput].forEach(input => {
+            input.addEventListener('input', updateSpriteSheet);
+        });
+
+        // Modal functionality
+        showTypesBtn.addEventListener('click', () => {
+            typesModal.style.display = 'block';
+        });
+
+        closeBtn.addEventListener('click', () => {
+            typesModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target === typesModal) {
+                typesModal.style.display = 'none';
+            }
+        });
+
+        // Preset button functionality
+        function setTileSize(width, height) {
+            tileWidthInput.value = width;
+            tileHeightInput.value = height;
+            updateSpriteSheet();
+        }
+
+        preset32Btn.addEventListener('click', () => setTileSize(32, 32));
+        preset64Btn.addEventListener('click', () => setTileSize(64, 64));
+        preset128Btn.addEventListener('click', () => setTileSize(128, 128));
+
+        // Save as PNG
+        saveBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'sprite-sheet.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        });
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeApp);
+        } else {
+            initializeApp();
+        }
+
+        function initializeApp() {
+            loadFromStorage();
+            // Only update sprite sheet if we don't have images loading from storage
+            const saved = localStorage.getItem('spriteSheetData');
+            if (!saved || !JSON.parse(saved).images || JSON.parse(saved).images.length === 0) {
+                updateSpriteSheet();
+            }
+        }
+    </script>
+</body>
+</html>

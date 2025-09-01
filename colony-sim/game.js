@@ -26,9 +26,41 @@ class Game {
         this.selectionStart = null;
         this.currentTaskType = null;
 
+        // Sprite sheet properties
+        this.spriteSheet = null;
+        this.spriteSheetLoaded = false;
+        this.spriteConfig = {
+            width: 256,
+            height: 256,
+            columns: 4,
+            rows: 4,
+            tileWidth: 64,
+            tileHeight: 64,
+            images: {
+                grass: { column: 0, row: 0 },
+                iron: { column: 1, row: 0 },
+                tree: { column: 2, row: 0 },
+                sand: { column: 3, row: 0 },
+                stone: { column: 0, row: 1 }
+            }
+        };
+
         this.init();
         this.setupEventListeners();
+        this.loadSpriteSheet();
         this.gameLoop();
+    }
+
+    loadSpriteSheet() {
+        this.spriteSheet = new Image();
+        this.spriteSheet.onload = () => {
+            this.spriteSheetLoaded = true;
+            console.log('Sprite sheet loaded successfully');
+        };
+        this.spriteSheet.onerror = () => {
+            console.error('Failed to load sprite sheet');
+        };
+        this.spriteSheet.src = 'terrain.png';
     }
 
     init() {
@@ -477,8 +509,26 @@ class Game {
                 }
 
                 // Draw tile
-                this.ctx.fillStyle = this.getTileColor(this.map[y][x]);
-                this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+                if (this.spriteSheetLoaded && this.spriteSheet) {
+                    const sprite = this.getTileSprite(this.map[y][x]);
+                    if (sprite) {
+                        const sourceX = sprite.column * this.spriteConfig.tileWidth;
+                        const sourceY = sprite.row * this.spriteConfig.tileHeight;
+                        this.ctx.drawImage(
+                            this.spriteSheet,
+                            sourceX, sourceY, this.spriteConfig.tileWidth, this.spriteConfig.tileHeight,
+                            screenX, screenY, this.tileSize, this.tileSize
+                        );
+                    } else {
+                        // Fallback to solid color if sprite not found
+                        this.ctx.fillStyle = this.getTileColor(this.map[y][x]);
+                        this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+                    }
+                } else {
+                    // Fallback to solid color if sprite sheet not loaded
+                    this.ctx.fillStyle = this.getTileColor(this.map[y][x]);
+                    this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+                }
 
                 // Draw grid
                 this.ctx.strokeStyle = '#2c3e50';
@@ -675,6 +725,18 @@ class Game {
         this.ctx.fillStyle = '#f1c40f';
         this.ctx.font = '16px Arial';
         this.ctx.fillText('👐', x, y);
+    }
+
+    getTileSprite(type) {
+        // Map tile types to sprite names
+        const spriteMap = {
+            'grass': 'grass',
+            'dirt': 'sand', // Use sand sprite for dirt tiles
+            'stone': 'stone'
+        };
+
+        const spriteName = spriteMap[type] || 'grass'; // Default to grass
+        return this.spriteConfig.images[spriteName];
     }
 
     getTileColor(type) {
