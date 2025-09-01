@@ -5,8 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Procedural Planet Generator</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: radial-gradient(ellipse at center, #0a0a2e 0%, #000000 70%, #000000 100%);
+        }
         canvas { display: block; }
+
+        /* Space background */
+        #space-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
         #controls {
             position: absolute;
             top: 10px;
@@ -35,6 +50,8 @@
     </style>
 </head>
 <body>
+    <div id="space-background"></div>
+
     <div id="controls">
         <label>Noise Scale: <span id="noiseScaleValue">10</span></label>
         <input type="range" id="noiseScale" min="1" max="20" value="10" step="0.5">
@@ -121,6 +138,7 @@
                 this.targetTheta = this.theta;
                 this.targetPhi = this.phi;
                 this.hunger = 0;
+                this.isPrey = true; // Mark as prey for predators
                 scene.add(this.mesh);
                 this.updatePosition();
             }
@@ -202,20 +220,117 @@
             }
         }
 
-        // Food class
-        class Food {
+        // Predator class - hunts animals instead of plants
+        class Predator {
+            constructor(position, planetSize) {
+                this.planetSize = planetSize;
+                this.theta = position.theta || Math.random() * Math.PI * 2; // azimuthal angle
+                this.phi = position.phi || Math.acos(2 * Math.random() - 1); // polar angle
+                this.mesh = this.createMesh();
+                this.targetTheta = this.theta;
+                this.targetPhi = this.phi;
+                this.hunger = 0;
+                this.isPredator = true; // Mark as predator
+                scene.add(this.mesh);
+                this.updatePosition();
+            }
+
+            createMesh() {
+                const geometry = new THREE.SphereGeometry(PREDATOR_SIZE, 8, 8);
+                const material = new THREE.MeshPhongMaterial({ color: 0x9932CC }); // Purple color
+                return new THREE.Mesh(geometry, material);
+            }
+
+            updatePosition() {
+                // Sample terrain height at this position
+                const terrainHeight = this.sampleTerrainHeight();
+
+                // Position on surface with terrain displacement
+                const surfaceRadius = this.planetSize + terrainHeight;
+                const x = surfaceRadius * Math.sin(this.phi) * Math.cos(this.theta);
+                const y = surfaceRadius * Math.cos(this.phi);
+                const z = surfaceRadius * Math.sin(this.phi) * Math.sin(this.theta);
+
+                this.mesh.position.set(x, y, z);
+
+                // Orient the predator to face outward from planet center
+                this.mesh.lookAt(x * 2, y * 2, z * 2);
+            }
+
+            sampleTerrainHeight() {
+                // Use the same Perlin noise calculation as the planet generation
+                const perlin = new PerlinNoise(currentSeed);
+
+                // Normalize direction vector
+                const nx = Math.sin(this.phi) * Math.cos(this.theta);
+                const ny = Math.cos(this.phi);
+                const nz = Math.sin(this.phi) * Math.sin(this.theta);
+
+                // Generate noise for height displacement (same as planet generation)
+                const noise1 = perlin.noise(nx * 4, ny * 4, nz * 4);
+                const noise2 = perlin.noise(nx * 8, ny * 8, nz * 8) * 0.5;
+                const noise3 = perlin.noise(nx * 16, ny * 16, nz * 16) * 0.25;
+                const totalNoise = (noise1 + noise2 + noise3) * 0.5 + 0.5; // Normalize to 0-1
+
+                // Return displacement (same formula as planet generation)
+                const displacement = (totalNoise - 0.5) * currentHeightScale;
+
+                // Ensure minimum surface radius to prevent predators from going below surface
+                const minRadius = currentPlanetSize - currentHeightScale * 0.3;
+                const surfaceRadius = currentPlanetSize + displacement;
+
+                return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+            }
+
+            move() {
+                // Random movement
+                if (Math.random() < 0.03) { // Less frequent direction changes for predators
+                    this.targetTheta = this.theta + (Math.random() - 0.5) * 0.8;
+                    this.targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1,
+                        this.phi + (Math.random() - 0.5) * 0.8));
+                }
+
+                // Move towards target
+                const dTheta = this.targetTheta - this.theta;
+                const dPhi = this.targetPhi - this.phi;
+
+                this.theta += Math.sign(dTheta) * Math.min(Math.abs(dTheta), PREDATOR_SPEED);
+                this.phi += Math.sign(dPhi) * Math.min(Math.abs(dPhi), PREDATOR_SPEED);
+
+                this.updatePosition();
+                this.hunger += 0.0005; // Slower hunger increase for predators
+            }
+
+            eat() {
+                this.hunger = 0;
+            }
+
+            remove() {
+                scene.remove(this.mesh);
+                this.mesh.geometry.dispose();
+                this.mesh.material.dispose();
+            }
+        }
+
+        // Plant class with growth and reproduction
+        class Plant {
             constructor(position, planetSize) {
                 this.planetSize = planetSize;
                 this.theta = position.theta || Math.random() * Math.PI * 2;
                 this.phi = position.phi || Math.acos(2 * Math.random() - 1);
+                this.age = 0; // Plant age/growth stage
+                this.energy = 0.5; // Plant energy for reproduction
                 this.mesh = this.createMesh();
                 scene.add(this.mesh);
                 this.updatePosition();
             }
 
             createMesh() {
-                const geometry = new THREE.SphereGeometry(FOOD_SIZE, 6, 6);
-                const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+                const size = PLANT_SIZE * (0.5 + this.age * 0.5); // Grow with age
+                const geometry = new THREE.SphereGeometry(size, 6, 6);
+                const material = new THREE.MeshPhongMaterial({
+                    color: this.age > 0.8 ? 0x90EE90 : 0x00ff00 // Mature plants are lighter green
+                });
                 return new THREE.Mesh(geometry, material);
             }
 
@@ -250,11 +365,48 @@
                 // Return displacement (same formula as planet generation)
                 const displacement = (totalNoise - 0.5) * currentHeightScale;
 
-                // Ensure minimum surface radius to prevent food from going below surface
+                // Ensure minimum surface radius to prevent plants from going below surface
                 const minRadius = currentPlanetSize - currentHeightScale * 0.3;
                 const surfaceRadius = currentPlanetSize + displacement;
 
                 return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+            }
+
+            grow() {
+                // Grow over time
+                this.age = Math.min(1.0, this.age + PLANT_GROWTH_RATE);
+                this.energy += PLANT_GROWTH_RATE * 0.5;
+
+                // Update visual size and color when mature
+                if (this.age > 0.8 && this.energy > 1.0) {
+                    // Mature plant - update mesh
+                    scene.remove(this.mesh);
+                    this.mesh.geometry.dispose();
+                    this.mesh.material.dispose();
+                    this.mesh = this.createMesh();
+                    scene.add(this.mesh);
+                    this.updatePosition();
+                }
+            }
+
+            canReproduce() {
+                return this.age > 0.8 && this.energy > 1.2 && plants.length < MAX_PLANTS;
+            }
+
+            reproduce() {
+                if (this.canReproduce()) {
+                    // Create offspring nearby
+                    const offspringPosition = {
+                        theta: this.theta + (Math.random() - 0.5) * 0.3,
+                        phi: Math.max(0.1, Math.min(Math.PI - 0.1, this.phi + (Math.random() - 0.5) * 0.3))
+                    };
+
+                    const offspring = new Plant(offspringPosition, this.planetSize);
+                    plants.push(offspring);
+
+                    // Reduce energy after reproduction
+                    this.energy -= 0.8;
+                }
             }
 
             remove() {
@@ -271,28 +423,140 @@
             return Math.sqrt(dTheta * dTheta + dPhi * dPhi);
         }
 
-        function spawnFood() {
-            if (Math.random() < FOOD_SPAWN_RATE && foods.length < 20) {
+        function spawnPlants() {
+            if (Math.random() < PLANT_SPAWN_RATE && plants.length < MAX_PLANTS) {
                 const position = {
                     theta: Math.random() * Math.PI * 2,
                     phi: Math.acos(2 * Math.random() - 1)
                 };
-                foods.push(new Food(position, currentPlanetSize));
+                plants.push(new Plant(position, currentPlanetSize));
+            }
+        }
+
+        function updatePlants() {
+            for (let i = plants.length - 1; i >= 0; i--) {
+                const plant = plants[i];
+                plant.grow();
+
+                // Chance for reproduction
+                if (Math.random() < PLANT_REPRODUCTION_CHANCE) {
+                    plant.reproduce();
+                }
+            }
+        }
+
+        function findNearestPlant(animal) {
+            let nearestPlant = null;
+            let minDistance = Infinity;
+
+            for (const plant of plants) {
+                const distance = getDistanceOnSphere(animal, plant);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestPlant = plant;
+                }
+            }
+
+            return nearestPlant;
+        }
+
+        function findNearestPrey(predator) {
+            let nearestPrey = null;
+            let minDistance = Infinity;
+
+            for (const animal of animals) {
+                const distance = getDistanceOnSphere(predator, animal);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestPrey = animal;
+                }
+            }
+
+            return nearestPrey;
+        }
+
+        function updatePredators() {
+            for (let i = predators.length - 1; i >= 0; i--) {
+                const predator = predators[i];
+
+                // If hungry, seek nearest prey
+                if (predator.hunger > 0.2 && animals.length > 0) {
+                    const nearestPrey = findNearestPrey(predator);
+                    if (nearestPrey) {
+                        // Move towards the prey
+                        const dTheta = nearestPrey.theta - predator.theta;
+                        const dPhi = nearestPrey.phi - predator.phi;
+
+                        // Normalize angles for shortest path
+                        let targetTheta = predator.theta + dTheta;
+                        let targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1, predator.phi + dPhi));
+
+                        // Handle theta wraparound
+                        if (Math.abs(dTheta) > Math.PI) {
+                            targetTheta = predator.theta - Math.sign(dTheta) * (2 * Math.PI - Math.abs(dTheta));
+                        }
+
+                        predator.targetTheta = targetTheta;
+                        predator.targetPhi = targetPhi;
+                    }
+                } else {
+                    // Random movement when not hungry
+                    if (Math.random() < 0.03) { // Less frequent direction changes for predators
+                        predator.targetTheta = predator.theta + (Math.random() - 0.5) * 0.8;
+                        predator.targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1,
+                            predator.phi + (Math.random() - 0.5) * 0.8));
+                    }
+                }
+
+                predator.move();
+
+                // Remove predators that are too hungry
+                if (predator.hunger > 1.0) {
+                    predator.remove();
+                    predators.splice(i, 1);
+                }
+            }
+        }
+
+        function checkPredatorCollisions() {
+            for (let i = predators.length - 1; i >= 0; i--) {
+                const predator = predators[i];
+                for (let j = animals.length - 1; j >= 0; j--) {
+                    const animal = animals[j];
+                    const distance = getDistanceOnSphere(predator, animal);
+
+                    if (distance < 0.12) { // Collision threshold (slightly larger for predators)
+                        // Predator eats animal
+                        predator.eat();
+                        animal.remove();
+                        animals.splice(j, 1);
+
+                        // Predator population growth - spawn new predator occasionally
+                        if (predators.length < MAX_PREDATORS && Math.random() < 0.3) {
+                            const newPredator = new Predator({
+                                theta: predator.theta + (Math.random() - 0.5) * 0.3,
+                                phi: predator.phi + (Math.random() - 0.5) * 0.3
+                            }, currentPlanetSize);
+                            predators.push(newPredator);
+                        }
+                        break;
+                    }
+                }
             }
         }
 
         function checkCollisions() {
             for (let i = animals.length - 1; i >= 0; i--) {
                 const animal = animals[i];
-                for (let j = foods.length - 1; j >= 0; j--) {
-                    const food = foods[j];
-                    const distance = getDistanceOnSphere(animal, food);
+                for (let j = plants.length - 1; j >= 0; j--) {
+                    const plant = plants[j];
+                    const distance = getDistanceOnSphere(animal, plant);
 
                     if (distance < 0.1) { // Collision threshold
-                        // Animal eats food
+                        // Animal eats plant
                         animal.eat();
-                        food.remove();
-                        foods.splice(j, 1);
+                        plant.remove();
+                        plants.splice(j, 1);
 
                         // Population growth - double the animal
                         if (animals.length < MAX_POPULATION) {
@@ -311,6 +575,36 @@
         function updateAnimals() {
             for (let i = animals.length - 1; i >= 0; i--) {
                 const animal = animals[i];
+
+                // Smarter AI: If hungry, seek nearest plant
+                if (animal.hunger > 0.3 && plants.length > 0) {
+                    const nearestPlant = findNearestPlant(animal);
+                    if (nearestPlant) {
+                        // Move towards the plant
+                        const dTheta = nearestPlant.theta - animal.theta;
+                        const dPhi = nearestPlant.phi - animal.phi;
+
+                        // Normalize angles for shortest path
+                        let targetTheta = animal.theta + dTheta;
+                        let targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1, animal.phi + dPhi));
+
+                        // Handle theta wraparound
+                        if (Math.abs(dTheta) > Math.PI) {
+                            targetTheta = animal.theta - Math.sign(dTheta) * (2 * Math.PI - Math.abs(dTheta));
+                        }
+
+                        animal.targetTheta = targetTheta;
+                        animal.targetPhi = targetPhi;
+                    }
+                } else {
+                    // Random movement when not hungry
+                    if (Math.random() < 0.05) { // 5% chance to change direction each frame
+                        animal.targetTheta = animal.theta + (Math.random() - 0.5) * 0.5;
+                        animal.targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1,
+                            animal.phi + (Math.random() - 0.5) * 0.5));
+                    }
+                }
+
                 animal.move();
 
                 // Remove animals that are too hungry
@@ -326,9 +620,13 @@
             animals.forEach(animal => animal.remove());
             animals = [];
 
-            // Remove all existing food
-            foods.forEach(food => food.remove());
-            foods = [];
+            // Remove all existing predators
+            predators.forEach(predator => predator.remove());
+            predators = [];
+
+            // Remove all existing plants
+            plants.forEach(plant => plant.remove());
+            plants = [];
 
             // Spawn initial animals
             for (let i = 0; i < 2; i++) {
@@ -338,6 +636,13 @@
                 };
                 animals.push(new Animal(position, currentPlanetSize));
             }
+
+            // Spawn initial predator
+            const predatorPosition = {
+                theta: Math.random() * Math.PI * 2,
+                phi: Math.acos(2 * Math.random() - 1)
+            };
+            predators.push(new Predator(predatorPosition, currentPlanetSize));
         }
 
         // Scene setup
@@ -348,6 +653,8 @@
         document.body.appendChild(renderer.domElement);
 
         let planet;
+        let sun;
+        let otherPlanets = [];
         let currentSeed = null;
         let currentNoiseScale = 10;
         let currentHeightScale = 1.0;
@@ -358,12 +665,19 @@
 
         // Animal simulation variables
         let animals = [];
-        let foods = [];
+        let predators = [];
+        let plants = [];
         const MAX_POPULATION = 50;
-        const FOOD_SPAWN_RATE = 0.02; // Probability per frame
-        const ANIMAL_SPEED = 0.01;
-        const FOOD_SIZE = 0.1;
+        const MAX_PREDATORS = 10;
+        const PLANT_SPAWN_RATE = 0.05; // Increased spawn rate
+        const MAX_PLANTS = 40; // More plants
+        const ANIMAL_SPEED = 0.015; // Slightly faster
+        const PREDATOR_SPEED = 0.02; // Faster than animals
+        const PLANT_SIZE = 0.08;
         const ANIMAL_SIZE = 0.15;
+        const PREDATOR_SIZE = 0.2; // Larger than animals
+        const PLANT_GROWTH_RATE = 0.002;
+        const PLANT_REPRODUCTION_CHANCE = 0.001;
 
         function generatePlanet(seed = null, noiseScale = 10, heightScale = 1.0, planetSize = 5, waterLevel = 0.3, mountainLevel = 0.6) {
             // Remove existing planet
@@ -470,10 +784,36 @@
             controls.update();
             if (planet) planet.rotation.y += currentRotationSpeed;
 
+            // Animate sun and planets
+            if (sun) {
+                sun.rotation.y += 0.01; // Sun rotation
+            }
+
+            // Orbit other planets
+            otherPlanets.forEach((planetData, index) => {
+                const time = Date.now() * 0.001; // Convert to seconds
+                const angle = time * planetData.speed + (index * Math.PI * 2 / otherPlanets.length); // Offset each planet
+
+                // Calculate orbital position
+                const x = Math.cos(angle) * planetData.distance;
+                const z = Math.sin(angle) * planetData.distance;
+                const y = planetData.mesh.position.y; // Keep original Y position
+
+                planetData.mesh.position.set(x, y, z);
+                planetData.mesh.rotation.y += 0.02; // Planet rotation
+            });
+
+            // Update plant simulation
+            spawnPlants();
+            updatePlants();
+
             // Update animal simulation
-            spawnFood();
             updateAnimals();
             checkCollisions();
+
+            // Update predator simulation
+            updatePredators();
+            checkPredatorCollisions();
 
             renderer.render(scene, camera);
         }
@@ -526,6 +866,152 @@
 
         // Initialize animals
         resetAnimals();
+
+        // Create starfield in 3D space with galaxy
+        function createStarfield() {
+            const starGeometry = new THREE.BufferGeometry();
+            const starCount = 2000;
+            const positions = new Float32Array(starCount * 3);
+            const colors = new Float32Array(starCount * 3);
+
+            for (let i = 0; i < starCount; i++) {
+                let x, y, z, radius;
+
+                // Create galaxy-like distribution with spiral arms
+                if (i < 1500) {
+                    // Main galaxy disk
+                    const angle = Math.random() * Math.PI * 4; // Two full rotations
+                    const distance = Math.random() * 80 + 20; // Distance from center
+                    const height = (Math.random() - 0.5) * 10; // Thin disk
+
+                    // Spiral arm effect
+                    const armOffset = Math.sin(angle * 2) * 5;
+                    x = (distance + armOffset) * Math.cos(angle);
+                    y = height;
+                    z = (distance + armOffset) * Math.sin(angle);
+                    radius = Math.sqrt(x*x + y*y + z*z);
+                } else {
+                    // Background stars
+                    radius = 100 + Math.random() * 200;
+                    const theta = Math.random() * Math.PI * 2;
+                    const phi = Math.acos(2 * Math.random() - 1);
+                    x = radius * Math.sin(phi) * Math.cos(theta);
+                    y = radius * Math.cos(phi);
+                    z = radius * Math.sin(phi) * Math.sin(theta);
+                }
+
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                // Color variation based on distance and position
+                const distanceFromCenter = Math.sqrt(x*x + y*y + z*z);
+                if (distanceFromCenter < 50) {
+                    // Core stars - more yellow/white
+                    const brightness = 0.9 + Math.random() * 0.1;
+                    colors[i * 3] = brightness;     // R
+                    colors[i * 3 + 1] = brightness; // G
+                    colors[i * 3 + 2] = brightness * 0.8; // B (slightly blue)
+                } else if (distanceFromCenter < 100) {
+                    // Disk stars - white
+                    const brightness = 0.8 + Math.random() * 0.2;
+                    colors[i * 3] = brightness;     // R
+                    colors[i * 3 + 1] = brightness; // G
+                    colors[i * 3 + 2] = brightness; // B
+                } else {
+                    // Background stars - various colors
+                    const starType = Math.random();
+                    if (starType < 0.7) {
+                        // White stars
+                        const brightness = 0.6 + Math.random() * 0.4;
+                        colors[i * 3] = brightness;
+                        colors[i * 3 + 1] = brightness;
+                        colors[i * 3 + 2] = brightness;
+                    } else if (starType < 0.85) {
+                        // Blue stars
+                        const brightness = 0.7 + Math.random() * 0.3;
+                        colors[i * 3] = brightness * 0.8;
+                        colors[i * 3 + 1] = brightness * 0.9;
+                        colors[i * 3 + 2] = brightness;
+                    } else {
+                        // Red stars
+                        const brightness = 0.5 + Math.random() * 0.3;
+                        colors[i * 3] = brightness;
+                        colors[i * 3 + 1] = brightness * 0.6;
+                        colors[i * 3 + 2] = brightness * 0.4;
+                    }
+                }
+            }
+
+            starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            starGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const starMaterial = new THREE.PointsMaterial({
+                size: 0.08,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            const starField = new THREE.Points(starGeometry, starMaterial);
+            scene.add(starField);
+        }
+
+        // Create the Sun
+        function createSun() {
+            const sunGeometry = new THREE.SphereGeometry(2, 16, 16);
+            const sunMaterial = new THREE.MeshBasicMaterial({
+                color: 0xFFFF99,
+                emissive: 0x444400
+            });
+            const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+            sun.position.set(12, 5, 8);
+            scene.add(sun);
+
+            // Add sun light
+            const sunLight = new THREE.PointLight(0xFFFFCC, 1.5, 50);
+            sunLight.position.copy(sun.position);
+            scene.add(sunLight);
+
+            return sun;
+        }
+
+        // Create additional planets
+        function createOtherPlanets() {
+            const planets = [];
+
+            // Planet 1 - Rocky planet (Mars-like)
+            const planet1Geometry = new THREE.SphereGeometry(0.3, 8, 8);
+            const planet1Material = new THREE.MeshPhongMaterial({ color: 0xCD853F });
+            const planet1 = new THREE.Mesh(planet1Geometry, planet1Material);
+            planet1.position.set(25, 8, -15);
+            scene.add(planet1);
+            planets.push({ mesh: planet1, distance: 35, speed: 0.002 });
+
+            // Planet 2 - Ice planet
+            const planet2Geometry = new THREE.SphereGeometry(0.4, 8, 8);
+            const planet2Material = new THREE.MeshPhongMaterial({ color: 0x87CEEB });
+            const planet2 = new THREE.Mesh(planet2Geometry, planet2Material);
+            planet2.position.set(-30, -5, 20);
+            scene.add(planet2);
+            planets.push({ mesh: planet2, distance: 45, speed: 0.0015 });
+
+            // Planet 3 - Gas giant (smaller)
+            const planet3Geometry = new THREE.SphereGeometry(0.6, 12, 12);
+            const planet3Material = new THREE.MeshPhongMaterial({ color: 0xDDA0DD });
+            const planet3 = new THREE.Mesh(planet3Geometry, planet3Material);
+            planet3.position.set(20, -10, -35);
+            scene.add(planet3);
+            planets.push({ mesh: planet3, distance: 55, speed: 0.001 });
+
+            return planets;
+        }
+
+        createStarfield();
+
+        // Create sun and other planets
+        sun = createSun();
+        otherPlanets = createOtherPlanets();
 
         // Handle window resize
         window.addEventListener('resize', () => {
