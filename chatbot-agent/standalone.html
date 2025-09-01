@@ -10,8 +10,19 @@
 <body>
   <div class="container">
     <h1>Standalone Chatbot Agent with SmolLM2-135M-Instruct</h1>
-    <!-- This chatbot runs SmolLM2-135M-Instruct model using Transformers.js directly in your browser -->
-    <!-- All processing happens client-side - no server required, no data sent externally -->
+
+    <div class="info-panel">
+      <h2>ℹ️ About This Demo</h2>
+      <p>This demo showcases running AI models directly in your browser. You're using:</p>
+      <ul>
+        <li><strong>Transformers.js:</strong> Running the SmolLM2-135M-Instruct model client-side with WebAssembly and ONNX runtime</li>
+        <li><strong>Local Processing:</strong> All AI computation happens in your browser - no data sent to servers</li>
+        <li><strong>ONNX Model:</strong> Using Microsoft's ONNX format with proper chat templates for conversation</li>
+        <li><strong>Hardware Acceleration:</strong> WebGPU support for faster processing when available</li>
+      </ul>
+      <p>This demonstrates modern web AI capabilities, running language models entirely in the browser.</p>
+    </div>
+
     <div class="main-content">
       <div class="chat-section">
         <div id="chat-window">

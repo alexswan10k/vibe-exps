@@ -35,6 +35,46 @@ h1 {
   margin: 0;
 }
 
+.info-panel {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 15px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  backdrop-filter: blur(10px);
+  margin-bottom: 20px;
+  border-left: 4px solid #667eea;
+}
+
+.info-panel h2 {
+  margin-top: 0;
+  color: #4a5568;
+  font-size: 1.4em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.info-panel p {
+  color: #2d3748;
+  line-height: 1.6;
+  margin-bottom: 15px;
+}
+
+.info-panel ul {
+  margin: 15px 0;
+  padding-left: 20px;
+}
+
+.info-panel li {
+  margin-bottom: 8px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.info-panel li strong {
+  color: #3182ce;
+}
+
 .main-content {
   grid-row: 2;
   display: grid;
