@@ -198,31 +198,48 @@ function animate() {
 animate();
 
 // Proximity animation for hero text letters
+let proxMouseX = 0;
+let proxMouseY = 0;
+let lastUpdate = 0;
+const updateInterval = 50; // ms
+
 document.addEventListener('mousemove', (e) => {
-    const h2 = document.querySelector('#hero h2');
-    const p = document.querySelector('#hero p');
-    const h2Letters = h2.querySelectorAll('.letter');
-    const pLetters = p.querySelectorAll('.letter');
-    const allLetters = [...h2Letters, ...pLetters];
-    allLetters.forEach(span => {
-        if (span.style.display !== 'none') {
-            const rect = span.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            const dx = centerX - e.clientX;
-            const dy = centerY - e.clientY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const maxDist = 200;
-            const factor = Math.max(0, 1 - distance / maxDist);
-            const scale = 0.8 + factor * 0.4; // from 0.8 to 1.2
-            const opacity = 0.5 + factor * 0.5; // from 0.5 to 1
-            const moveX = (dx / distance) * factor * 15; // repel up to 15px
-            const moveY = (dy / distance) * factor * 15;
-            span.style.transform = `translate(${moveX}px, ${moveY}px) scale(${scale})`;
-            span.style.opacity = opacity;
-        }
-    });
+    proxMouseX = e.clientX;
+    proxMouseY = e.clientY;
 });
+
+function updateLetters() {
+    const now = Date.now();
+    if (now - lastUpdate > updateInterval) {
+        const h2 = document.querySelector('#hero h2');
+        const p = document.querySelector('#hero p');
+        const h2Letters = h2.querySelectorAll('.letter');
+        const pLetters = p.querySelectorAll('.letter');
+        const allLetters = [...h2Letters, ...pLetters];
+        allLetters.forEach(span => {
+            if (span.style.display !== 'none') {
+                const rect = span.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const dx = centerX - proxMouseX;
+                const dy = centerY - proxMouseY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const maxDist = 200;
+                const factor = Math.max(0, 1 - distance / maxDist);
+                const scale = 0.8 + factor * 0.4; // from 0.8 to 1.2
+                const opacity = 0.5 + factor * 0.5; // from 0.5 to 1
+                const moveX = (dx / distance) * factor * 15; // repel up to 15px
+                const moveY = (dy / distance) * factor * 15;
+                span.style.transform = `translate(${moveX}px, ${moveY}px) scale(${scale})`;
+                span.style.opacity = opacity;
+            }
+        });
+        lastUpdate = now;
+    }
+    requestAnimationFrame(updateLetters);
+}
+
+requestAnimationFrame(updateLetters);
 
 // Add loading animation
 window.addEventListener('load', function() {
