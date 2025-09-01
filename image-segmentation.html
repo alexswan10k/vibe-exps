@@ -173,15 +173,16 @@
         const maskCtx = maskCanvas.getContext('2d');
 
         let currentImage = null;
+        let currentImageUrl = null;
         let segmentationPipeline = null;
 
         // Initialize the segmentation pipeline
         async function initSegmentationModel() {
             try {
-                statusDiv.innerHTML = 'Status: <span class="loading"></span> Loading BiRefNet model...';
-                segmentationPipeline = await pipeline('image-segmentation', 'Xenova/detr-resnet-50-panoptic');
+                statusDiv.innerHTML = 'Status: <span class="loading"></span> Loading segmentation model...';
+                segmentationPipeline = await pipeline('image-segmentation', 'Xenova/detr-resnet-50');
                 statusDiv.innerHTML = 'Status: Model loaded successfully!';
-                console.log('BiRefNet model loaded');
+                console.log('Segmentation model loaded');
             } catch (error) {
                 statusDiv.innerHTML = 'Status: Error loading model - ' + error.message;
                 console.error('Error loading model:', error);
@@ -235,26 +236,30 @@
 
         // Load image from blob
         function loadImageFromBlob(blob) {
+            const url = URL.createObjectURL(blob);
             const img = new Image();
             img.onload = () => {
                 currentImage = img;
+                currentImageUrl = url;
                 displayImage(img);
                 segmentBtn.disabled = false;
                 statusDiv.innerHTML = 'Status: Image loaded. Click "Run Segmentation" to process.';
             };
-            img.src = URL.createObjectURL(blob);
+            img.src = url;
         }
 
         // Load image from file
         function loadImageFromFile(file) {
+            const url = URL.createObjectURL(file);
             const img = new Image();
             img.onload = () => {
                 currentImage = img;
+                currentImageUrl = url;
                 displayImage(img);
                 segmentBtn.disabled = false;
                 statusDiv.innerHTML = 'Status: Image loaded. Click "Run Segmentation" to process.';
             };
-            img.src = URL.createObjectURL(file);
+            img.src = url;
         }
 
         // Display image on canvas
@@ -286,16 +291,35 @@
             statusDiv.innerHTML = 'Status: <span class="loading"></span> Running segmentation...';
 
             try {
-                // Convert canvas to blob for processing
-                originalCanvas.toBlob(async (blob) => {
-                    const result = await segmentationPipeline(blob);
+                // Resize image to fit model requirements (DETR works best with ~800x800)
+                const resizedCanvas = document.createElement('canvas');
+                const resizedCtx = resizedCanvas.getContext('2d');
+                const targetSize = 800;
+                resizedCanvas.width = targetSize;
+                resizedCanvas.height = targetSize;
 
-                    // Display the segmentation mask
-                    displaySegmentationMask(result);
+                // Calculate scaling to fit within target size while maintaining aspect ratio
+                const scale = Math.min(targetSize / currentImage.width, targetSize / currentImage.height);
+                const scaledWidth = currentImage.width * scale;
+                const scaledHeight = currentImage.height * scale;
+                const offsetX = (targetSize - scaledWidth) / 2;
+                const offsetY = (targetSize - scaledHeight) / 2;
 
-                    statusDiv.innerHTML = 'Status: Segmentation complete! You can download the result.';
-                    downloadBtn.disabled = false;
-                });
+                // Fill with black background
+                resizedCtx.fillStyle = 'black';
+                resizedCtx.fillRect(0, 0, targetSize, targetSize);
+
+                // Draw scaled image centered
+                resizedCtx.drawImage(currentImage, offsetX, offsetY, scaledWidth, scaledHeight);
+
+                // Pass the resized canvas to the pipeline
+                const result = await segmentationPipeline(resizedCanvas);
+
+                // Display the segmentation mask
+                displaySegmentationMask(result);
+
+                statusDiv.innerHTML = 'Status: Segmentation complete! You can download the result.';
+                downloadBtn.disabled = false;
             } catch (error) {
                 statusDiv.innerHTML = 'Status: Error during segmentation - ' + error.message;
                 console.error('Segmentation error:', error);
@@ -312,26 +336,24 @@
             // Clear mask canvas
             maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
 
-            // For BiRefNet, we typically get a binary mask
-            // This is a simplified visualization - you might need to adjust based on actual output format
+            // For BiRefNet, the output is typically a binary mask image
             if (maskData.mask) {
-                // If mask is provided as an image/data
+                // If mask is provided as a data URL or blob URL
                 const maskImg = new Image();
                 maskImg.onload = () => {
                     maskCtx.drawImage(maskImg, 0, 0, maskCanvas.width, maskCanvas.height);
                 };
                 maskImg.src = maskData.mask;
             } else if (maskData.data) {
-                // If mask data is provided as raw data
+                // If mask data is provided as raw tensor data
                 const imageData = maskCtx.createImageData(maskCanvas.width, maskCanvas.height);
-                // Process mask data here - this depends on the exact format returned by the model
-                // For now, we'll create a simple visualization
-                for (let i = 0; i < maskData.data.length; i++) {
-                    const value = maskData.data[i];
-                    imageData.data[i * 4] = value > 0.5 ? 255 : 0;     // Red
-                    imageData.data[i * 4 + 1] = value > 0.5 ? 255 : 0; // Green
-                    imageData.data[i * 4 + 2] = value > 0.5 ? 255 : 0; // Blue
-                    imageData.data[i * 4 + 3] = 255;                   // Alpha
+                const data = maskData.data;
+                for (let i = 0; i < data.length; i++) {
+                    const value = data[i] > 0.5 ? 255 : 0; // Threshold for binary mask
+                    imageData.data[i * 4] = value;     // Red
+                    imageData.data[i * 4 + 1] = value; // Green
+                    imageData.data[i * 4 + 2] = value; // Blue
+                    imageData.data[i * 4 + 3] = 255;   // Alpha
                 }
                 maskCtx.putImageData(imageData, 0, 0);
             }
