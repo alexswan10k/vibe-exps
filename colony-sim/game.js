@@ -1,0 +1,718 @@
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('game-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.tileSize = 32;
+        this.mapWidth = 50;
+        this.mapHeight = 50;
+        this.camera = { x: 0, y: 0 };
+        this.selectedTile = null;
+        this.pawns = [];
+        this.resources = [];
+        this.buildings = [];
+        this.tasks = [];
+        this.resourcesInventory = { wood: 0, stone: 0, iron: 0 };
+        this.buildMode = null;
+        this.craftedItems = { food: 0, tools: 0 };
+        this.taskQueue = [];
+        this.droppedResources = [];
+        this.storageArea = null;
+        this.areaSelection = null;
+        this.isSelectingArea = false;
+        this.selectionStart = null;
+        this.currentTaskType = null;
+
+        this.init();
+        this.setupEventListeners();
+        this.gameLoop();
+    }
+
+    init() {
+        this.canvas.width = window.innerWidth - 300;
+        this.canvas.height = window.innerHeight;
+        this.generateMap();
+        this.createInitialPawns();
+        this.generateResources();
+    }
+
+    generateMap() {
+        this.map = [];
+        for (let y = 0; y < this.mapHeight; y++) {
+            this.map[y] = [];
+            for (let x = 0; x < this.mapWidth; x++) {
+                // Generate different terrain types
+                const rand = Math.random();
+                if (rand < 0.6) {
+                    this.map[y][x] = 'grass';
+                } else if (rand < 0.8) {
+                    this.map[y][x] = 'dirt';
+                } else {
+                    this.map[y][x] = 'stone';
+                }
+            }
+        }
+    }
+
+    createInitialPawns() {
+        for (let i = 0; i < 3; i++) {
+            const pawn = new Pawn(
+                Math.floor(Math.random() * this.mapWidth),
+                Math.floor(Math.random() * this.mapHeight),
+                `Pawn ${i + 1}`
+            );
+            this.pawns.push(pawn);
+        }
+    }
+
+    generateResources() {
+        for (let i = 0; i < 20; i++) {
+            const x = Math.floor(Math.random() * this.mapWidth);
+            const y = Math.floor(Math.random() * this.mapHeight);
+            const type = Math.random() < 0.5 ? 'tree' : 'iron';
+            this.resources.push(new Resource(x, y, type));
+        }
+    }
+
+    setupEventListeners() {
+        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
+        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+
+        document.getElementById('chop-trees').addEventListener('click', () => {
+            this.setTaskMode('chop');
+        });
+
+        document.getElementById('mine-iron').addEventListener('click', () => {
+            this.setTaskMode('mine');
+        });
+
+        document.getElementById('haul-resources').addEventListener('click', () => {
+            this.setTaskMode('haul');
+        });
+
+        document.getElementById('build-wall').addEventListener('click', () => {
+            this.buildMode = 'wall';
+            this.currentTaskType = null;
+        });
+
+        document.getElementById('build-table').addEventListener('click', () => {
+            this.buildMode = 'table';
+            this.currentTaskType = null;
+        });
+
+        document.getElementById('build-storage').addEventListener('click', () => {
+            this.setStorageMode();
+        });
+
+        document.getElementById('craft-food').addEventListener('click', () => {
+            this.craftItem('food');
+        });
+
+        document.getElementById('craft-tools').addEventListener('click', () => {
+            this.craftItem('tools');
+        });
+
+        // Keyboard controls for camera
+        document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+    }
+
+    setTaskMode(taskType) {
+        this.currentTaskType = taskType;
+        this.buildMode = null;
+        this.canvas.style.cursor = 'crosshair';
+    }
+
+    setStorageMode() {
+        this.currentTaskType = 'storage';
+        this.buildMode = null;
+        this.canvas.style.cursor = 'crosshair';
+    }
+
+    handleMouseDown(e) {
+        if (this.currentTaskType) {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = Math.floor((e.clientX - rect.left + this.camera.x) / this.tileSize);
+            const y = Math.floor((e.clientY - rect.top + this.camera.y) / this.tileSize);
+
+            this.isSelectingArea = true;
+            this.selectionStart = { x, y };
+            this.areaSelection = { start: { x, y }, end: { x, y } };
+        }
+    }
+
+    handleMouseMove(e) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left + this.camera.x) / this.tileSize);
+        const y = Math.floor((e.clientY - rect.top + this.camera.y) / this.tileSize);
+
+        if (this.isSelectingArea && this.areaSelection) {
+            this.areaSelection.end = { x, y };
+        } else {
+            this.hoveredTile = { x, y };
+        }
+    }
+
+    handleMouseUp(e) {
+        if (this.isSelectingArea && this.areaSelection) {
+            this.isSelectingArea = false;
+            if (this.currentTaskType === 'storage') {
+                this.storageArea = this.areaSelection;
+                this.areaSelection = null;
+                this.currentTaskType = null;
+                this.canvas.style.cursor = 'default';
+            } else {
+                this.createTasksFromArea();
+                this.areaSelection = null;
+                this.currentTaskType = null;
+                this.canvas.style.cursor = 'default';
+            }
+        }
+    }
+
+    createTasksFromArea() {
+        if (!this.areaSelection) return;
+
+        const startX = Math.min(this.areaSelection.start.x, this.areaSelection.end.x);
+        const endX = Math.max(this.areaSelection.start.x, this.areaSelection.end.x);
+        const startY = Math.min(this.areaSelection.start.y, this.areaSelection.end.y);
+        const endY = Math.max(this.areaSelection.start.y, this.areaSelection.end.y);
+
+        if (this.currentTaskType === 'haul') {
+            // For hauling, look for dropped resources in the area
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    const droppedResource = this.droppedResources.find(r => r.x === x && r.y === y);
+                    if (droppedResource) {
+                        const task = {
+                            x: x,
+                            y: y,
+                            type: this.currentTaskType,
+                            resource: droppedResource
+                        };
+                        if (this.storageArea) {
+                            const centerX = Math.floor((this.storageArea.start.x + this.storageArea.end.x) / 2);
+                            const centerY = Math.floor((this.storageArea.start.y + this.storageArea.end.y) / 2);
+                            task.destination = { x: centerX, y: centerY };
+                        }
+                        this.taskQueue.push(task);
+                    }
+                }
+            }
+        } else {
+            // For chopping/mining, look for standing resources
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    const resource = this.resources.find(r => r.x === x && r.y === y);
+                    if (resource) {
+                        if ((this.currentTaskType === 'chop' && resource.type === 'tree') ||
+                            (this.currentTaskType === 'mine' && resource.type === 'iron')) {
+                            this.taskQueue.push({
+                                x: x,
+                                y: y,
+                                type: this.currentTaskType,
+                                resource: resource
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    handleKeyDown(e) {
+        const moveSpeed = 10;
+        switch (e.key) {
+            case 'ArrowUp':
+            case 'w':
+                this.camera.y = Math.max(0, this.camera.y - moveSpeed);
+                break;
+            case 'ArrowDown':
+            case 's':
+                this.camera.y = Math.min((this.mapHeight * this.tileSize) - this.canvas.height, this.camera.y + moveSpeed);
+                break;
+            case 'ArrowLeft':
+            case 'a':
+                this.camera.x = Math.max(0, this.camera.x - moveSpeed);
+                break;
+            case 'ArrowRight':
+            case 'd':
+                this.camera.x = Math.min((this.mapWidth * this.tileSize) - this.canvas.width, this.camera.x + moveSpeed);
+                break;
+        }
+    }
+
+
+
+    buildAt(x, y, type) {
+        if (this.resourcesInventory.wood >= 5) {
+            this.buildings.push(new Building(x, y, type));
+            this.resourcesInventory.wood -= 5;
+            this.updateUI();
+        }
+    }
+
+    harvestResource(x, y) {
+        const resource = this.resources.find(r => r.x === x && r.y === y);
+        if (resource) {
+            // Drop the resource on the ground instead of adding to inventory
+            const resourceType = resource.type === 'tree' ? 'wood' : 'iron';
+            const dropped = new DroppedResource(x, y, resourceType);
+            this.droppedResources.push(dropped);
+            this.resources.splice(this.resources.indexOf(resource), 1);
+            if (this.storageArea) {
+                const centerX = Math.floor((this.storageArea.start.x + this.storageArea.end.x) / 2);
+                const centerY = Math.floor((this.storageArea.start.y + this.storageArea.end.y) / 2);
+                this.taskQueue.push({
+                    x: x,
+                    y: y,
+                    type: 'haul',
+                    resource: dropped,
+                    destination: { x: centerX, y: centerY }
+                });
+            }
+            this.updateUI();
+        }
+    }
+
+    pickupDroppedResource(x, y, addToInventory = true) {
+        const droppedResource = this.droppedResources.find(r => r.x === x && r.y === y);
+        if (droppedResource) {
+            if (addToInventory) {
+                this.resourcesInventory[droppedResource.type] = (this.resourcesInventory[droppedResource.type] || 0) + 1;
+            }
+            this.droppedResources.splice(this.droppedResources.indexOf(droppedResource), 1);
+            this.updateUI();
+            return droppedResource.type;
+        }
+        return null;
+    }
+
+    assignTask(x, y) {
+        // Find nearest pawn and assign task
+        let nearestPawn = null;
+        let minDistance = Infinity;
+        for (const pawn of this.pawns) {
+            const distance = Math.sqrt((pawn.x - x) ** 2 + (pawn.y - y) ** 2);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestPawn = pawn;
+            }
+        }
+        if (nearestPawn) {
+            nearestPawn.assignTask({ x, y, type: 'move' });
+        }
+    }
+
+    craftItem(itemType) {
+        const recipes = {
+            food: { wood: 1 },
+            tools: { iron: 2, wood: 1 }
+        };
+
+        const recipe = recipes[itemType];
+        if (!recipe) return false;
+
+        for (const [resource, amount] of Object.entries(recipe)) {
+            if (!this.resourcesInventory[resource] || this.resourcesInventory[resource] < amount) {
+                return false;
+            }
+        }
+
+        // Consume resources
+        for (const [resource, amount] of Object.entries(recipe)) {
+            this.resourcesInventory[resource] -= amount;
+        }
+
+        // Add crafted item
+        this.craftedItems[itemType] = (this.craftedItems[itemType] || 0) + 1;
+        this.updateUI();
+        return true;
+    }
+
+    update() {
+        // Update pawns
+        for (const pawn of this.pawns) {
+            pawn.update(this);
+        }
+
+        // Update tasks
+        this.tasks = this.tasks.filter(task => !task.completed);
+    }
+
+    render() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Render map
+        for (let y = 0; y < this.mapHeight; y++) {
+            for (let x = 0; x < this.mapWidth; x++) {
+                const screenX = x * this.tileSize - this.camera.x;
+                const screenY = y * this.tileSize - this.camera.y;
+
+                if (screenX + this.tileSize < 0 || screenX > this.canvas.width ||
+                    screenY + this.tileSize < 0 || screenY > this.canvas.height) {
+                    continue;
+                }
+
+                // Draw tile
+                this.ctx.fillStyle = this.getTileColor(this.map[y][x]);
+                this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+
+                // Draw grid
+                this.ctx.strokeStyle = '#2c3e50';
+                this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+            }
+        }
+
+        // Render resources
+        for (const resource of this.resources) {
+            const screenX = resource.x * this.tileSize - this.camera.x;
+            const screenY = resource.y * this.tileSize - this.camera.y;
+
+            // Check if this resource is in the task queue
+            const isQueued = this.taskQueue.some(task =>
+                task.x === resource.x && task.y === resource.y
+            );
+
+            // Base color
+            let baseColor = resource.type === 'tree' ? '#27ae60' : '#95a5a6';
+
+            // Highlight if queued
+            if (isQueued) {
+                baseColor = resource.type === 'tree' ? '#2ecc71' : '#95a5a6';
+                // Add a border to show it's queued
+                this.ctx.strokeStyle = '#f1c40f';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(screenX + 2, screenY + 2, this.tileSize - 4, this.tileSize - 4);
+            }
+
+            this.ctx.fillStyle = baseColor;
+            this.ctx.fillRect(screenX + 4, screenY + 4, this.tileSize - 8, this.tileSize - 8);
+        }
+
+        // Render dropped resources
+        for (const droppedResource of this.droppedResources) {
+            const screenX = droppedResource.x * this.tileSize - this.camera.x;
+            const screenY = droppedResource.y * this.tileSize - this.camera.y;
+
+            // Check if this dropped resource is in the task queue
+            const isQueued = this.taskQueue.some(task =>
+                task.x === droppedResource.x && task.y === droppedResource.y && task.type === 'haul'
+            );
+
+            // Base color
+            let baseColor = droppedResource.type === 'wood' ? '#8b4513' : '#c0c0c0';
+
+            // Highlight if queued
+            if (isQueued) {
+                baseColor = droppedResource.type === 'wood' ? '#a0522d' : '#d3d3d3';
+                // Add a border to show it's queued
+                this.ctx.strokeStyle = '#f1c40f';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(screenX + 6, screenY + 6, this.tileSize - 12, this.tileSize - 12);
+            }
+
+            this.ctx.fillStyle = baseColor;
+            this.ctx.fillRect(screenX + 8, screenY + 8, this.tileSize - 16, this.tileSize - 16);
+        }
+
+        // Render buildings
+        for (const building of this.buildings) {
+            const screenX = building.x * this.tileSize - this.camera.x;
+            const screenY = building.y * this.tileSize - this.camera.y;
+            this.ctx.fillStyle = building.type === 'wall' ? '#8e44ad' : '#e67e22';
+            this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+        }
+
+        // Render pawns
+        for (const pawn of this.pawns) {
+            const screenX = pawn.x * this.tileSize - this.camera.x;
+            const screenY = pawn.y * this.tileSize - this.camera.y;
+            this.ctx.fillStyle = '#f39c12';
+            this.ctx.fillRect(screenX + 4, screenY + 4, this.tileSize - 8, this.tileSize - 8);
+        }
+
+        // Highlight selected tile
+        if (this.selectedTile) {
+            const screenX = this.selectedTile.x * this.tileSize - this.camera.x;
+            const screenY = this.selectedTile.y * this.tileSize - this.camera.y;
+            this.ctx.strokeStyle = '#e74c3c';
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+        }
+
+        // Highlight hovered tile
+        if (this.hoveredTile) {
+            const screenX = this.hoveredTile.x * this.tileSize - this.camera.x;
+            const screenY = this.hoveredTile.y * this.tileSize - this.camera.y;
+            this.ctx.strokeStyle = '#3498db';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+        }
+
+        // Render selection area
+        if (this.areaSelection) {
+            const startX = Math.min(this.areaSelection.start.x, this.areaSelection.end.x);
+            const endX = Math.max(this.areaSelection.start.x, this.areaSelection.end.x);
+            const startY = Math.min(this.areaSelection.start.y, this.areaSelection.end.y);
+            const endY = Math.max(this.areaSelection.start.y, this.areaSelection.end.y);
+
+            const screenStartX = startX * this.tileSize - this.camera.x;
+            const screenStartY = startY * this.tileSize - this.camera.y;
+            const width = (endX - startX + 1) * this.tileSize;
+            const height = (endY - startY + 1) * this.tileSize;
+
+            this.ctx.strokeStyle = '#f1c40f';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(screenStartX, screenStartY, width, height);
+
+            this.ctx.fillStyle = 'rgba(241, 196, 15, 0.2)';
+            this.ctx.fillRect(screenStartX, screenStartY, width, height);
+        }
+
+        // Render storage area
+        if (this.storageArea) {
+            const startX = Math.min(this.storageArea.start.x, this.storageArea.end.x);
+            const endX = Math.max(this.storageArea.start.x, this.storageArea.end.x);
+            const startY = Math.min(this.storageArea.start.y, this.storageArea.end.y);
+            const endY = Math.max(this.storageArea.start.y, this.storageArea.end.y);
+
+            const screenStartX = startX * this.tileSize - this.camera.x;
+            const screenStartY = startY * this.tileSize - this.camera.y;
+            const width = (endX - startX + 1) * this.tileSize;
+            const height = (endY - startY + 1) * this.tileSize;
+
+            this.ctx.strokeStyle = '#f4d03f';
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeRect(screenStartX, screenStartY, width, height);
+
+            this.ctx.fillStyle = 'rgba(244, 208, 63, 0.1)';
+            this.ctx.fillRect(screenStartX, screenStartY, width, height);
+        }
+    }
+
+    getTileColor(type) {
+        switch (type) {
+            case 'grass': return '#2ecc71';
+            case 'dirt': return '#d35400';
+            case 'stone': return '#95a5a6';
+            default: return '#34495e';
+        }
+    }
+
+    updateUI() {
+        // Update pawn list
+        const pawnList = document.getElementById('pawn-list');
+        pawnList.innerHTML = '';
+        for (const pawn of this.pawns) {
+            const taskText = pawn.task ? ` - Task: ${pawn.task.type} (${pawn.task.x}, ${pawn.task.y})` : ' - Idle';
+            const pawnItem = document.createElement('div');
+            pawnItem.className = 'pawn-item';
+            pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}${taskText}`;
+            pawnList.appendChild(pawnItem);
+        }
+
+        // Update task queue
+        const taskList = document.getElementById('task-list');
+        taskList.innerHTML = '';
+        if (this.taskQueue.length === 0) {
+            const noTasks = document.createElement('div');
+            noTasks.className = 'resource-item';
+            noTasks.textContent = 'No tasks in queue';
+            taskList.appendChild(noTasks);
+        } else {
+            for (let i = 0; i < Math.min(this.taskQueue.length, 10); i++) {
+                const task = this.taskQueue[i];
+                const taskItem = document.createElement('div');
+                taskItem.className = 'resource-item';
+                taskItem.textContent = `${task.type} at (${task.x}, ${task.y})`;
+                taskList.appendChild(taskItem);
+            }
+            if (this.taskQueue.length > 10) {
+                const moreTasks = document.createElement('div');
+                moreTasks.className = 'resource-item';
+                moreTasks.textContent = `... and ${this.taskQueue.length - 10} more tasks`;
+                taskList.appendChild(moreTasks);
+            }
+        }
+
+        // Update resource list
+        const resourceList = document.getElementById('resource-list');
+        resourceList.innerHTML = '';
+        for (const [type, amount] of Object.entries(this.resourcesInventory)) {
+            const resourceItem = document.createElement('div');
+            resourceItem.className = 'resource-item';
+            resourceItem.textContent = `${type}: ${amount}`;
+            resourceList.appendChild(resourceItem);
+        }
+
+        // Update crafted items list
+        const craftedList = document.getElementById('crafted-list');
+        craftedList.innerHTML = '';
+        for (const [type, amount] of Object.entries(this.craftedItems)) {
+            const craftedItem = document.createElement('div');
+            craftedItem.className = 'resource-item';
+            craftedItem.textContent = `${type}: ${amount}`;
+            craftedList.appendChild(craftedItem);
+        }
+    }
+
+    getNearestAvailableTask(pawn) {
+        if (this.taskQueue.length === 0) return null;
+
+        let nearestTask = null;
+        let minDistance = Infinity;
+
+        for (const task of this.taskQueue) {
+            const distance = Math.sqrt((pawn.x - task.x) ** 2 + (pawn.y - task.y) ** 2);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestTask = task;
+            }
+        }
+
+        return nearestTask;
+    }
+
+    gameLoop() {
+        this.update();
+        this.render();
+        this.updateUI();
+        requestAnimationFrame(() => this.gameLoop());
+    }
+}
+
+class Pawn {
+    constructor(x, y, name) {
+        this.x = x;
+        this.y = y;
+        this.name = name;
+        this.hunger = 100;
+        this.sleep = 100;
+        this.task = null;
+        this.speed = 0.05;
+        this.carrying = null;
+    }
+
+    update(game) {
+        // Decrease needs over time
+        this.hunger = Math.max(0, this.hunger - 0.1);
+        this.sleep = Math.max(0, this.sleep - 0.05);
+
+        // Handle critical needs
+        if (this.hunger < 20 && game.craftedItems.food > 0) {
+            this.eat(game);
+        } else if (this.sleep < 20) {
+            this.sleepAction();
+        } else if (this.task) {
+            this.executeTask(game);
+        } else {
+            // Try to pick up the nearest available task from the queue
+            if (game.taskQueue.length > 0) {
+                const nearestTask = game.getNearestAvailableTask(this);
+                if (nearestTask) {
+                    // Remove the task from the queue
+                    const taskIndex = game.taskQueue.indexOf(nearestTask);
+                    if (taskIndex > -1) {
+                        game.taskQueue.splice(taskIndex, 1);
+                        this.assignTask(nearestTask);
+                    }
+                }
+            } else {
+                // Idle behavior - wander randomly
+                if (Math.random() < 0.01) {
+                    this.x += (Math.random() - 0.5) * 2;
+                    this.y += (Math.random() - 0.5) * 2;
+                    this.x = Math.max(0, Math.min(49, this.x));
+                    this.y = Math.max(0, Math.min(49, this.y));
+                }
+            }
+        }
+    }
+
+    eat(game) {
+        if (game.craftedItems.food > 0) {
+            game.craftedItems.food--;
+            this.hunger = Math.min(100, this.hunger + 50);
+        }
+    }
+
+    sleepAction() {
+        // Simple sleep recovery
+        this.sleep = Math.min(100, this.sleep + 0.5);
+    }
+
+    assignTask(task) {
+        this.task = task;
+    }
+
+    executeTask(game) {
+        const dx = this.task.x - this.x;
+        const dy = this.task.y - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < 0.1) {
+            // Arrived at destination
+            if (this.task.type === 'chop' || this.task.type === 'mine') {
+                // Harvest the resource
+                game.harvestResource(this.task.x, this.task.y);
+                this.task.completed = true;
+                this.task = null;
+            } else if (this.task.type === 'haul') {
+                if (!this.carrying) {
+                    this.carrying = game.pickupDroppedResource(this.task.x, this.task.y, false);
+                    if (this.carrying && this.task.destination) {
+                        this.task.x = this.task.destination.x;
+                        this.task.y = this.task.destination.y;
+                        this.task.type = 'move_to_storage';
+                    } else if (this.carrying) {
+                        // Add to inventory
+                        game.resourcesInventory[this.carrying] = (game.resourcesInventory[this.carrying] || 0) + 1;
+                        this.carrying = null;
+                        this.task.completed = true;
+                        this.task = null;
+                    } else {
+                        this.task.completed = true;
+                        this.task = null;
+                    }
+                }
+            } else if (this.task.type === 'move_to_storage') {
+                // Drop at storage
+                game.droppedResources.push(new DroppedResource(this.task.x, this.task.y, this.carrying));
+                this.carrying = null;
+                this.task.completed = true;
+                this.task = null;
+            }
+        } else {
+            // Move towards destination
+            this.x += (dx / distance) * this.speed;
+            this.y += (dy / distance) * this.speed;
+        }
+    }
+}
+
+class Resource {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+    }
+}
+
+class Building {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+    }
+}
+
+class DroppedResource {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.type = type;
+    }
+}
+
+// Initialize game
+new Game();
