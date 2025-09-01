@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Image Editor & Draw Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+        }
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .tool-group label {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        input[type="color"], input[type="range"], button {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            cursor: crosshair;
+        }
+        canvas.crop-mode {
+            cursor: crosshair;
+        }
+        .instructions {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .crop-overlay {
+            position: absolute;
+            border: 2px dashed #007bff;
+            background-color: rgba(0,123,255,0.1);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>HTML Image Editor & Draw Tool</h1>
+
+        <div class="toolbar">
+            <div class="tool-group">
+                <button id="pasteBtn">Paste Image</button>
+                <button id="saveBtn" disabled>Save as PNG</button>
+            </div>
+
+            <div class="tool-group">
+                <label for="toolSelect">Tool:</label>
+                <select id="toolSelect">
+                    <option value="draw">Draw</option>
+                    <option value="crop">Crop</option>
+                </select>
+            </div>
+
+            <div class="tool-group">
+                <label for="colorPicker">Color:</label>
+                <input type="color" id="colorPicker" value="#000000">
+            </div>
+
+            <div class="tool-group">
+                <label for="brushSize">Brush Size:</label>
+                <input type="range" id="brushSize" min="1" max="50" value="5">
+                <span id="brushSizeValue">5</span>
+            </div>
+
+            <div class="tool-group">
+                <button id="rescaleBtn">Rescale</button>
+                <input type="number" id="scaleFactor" placeholder="Scale %" min="10" max="500" value="100">
+            </div>
+        </div>
+
+        <div class="canvas-container">
+            <canvas id="imageCanvas"></canvas>
+        </div>
+
+        <div class="instructions">
+            <p><strong>Instructions:</strong></p>
+            <ul>
+                <li>Click "Paste Image" to load an image from your clipboard</li>
+                <li>Use the Draw tool to paint on the image</li>
+                <li>Use the Crop tool: select it, then click and drag to choose an area - crop applies automatically when you release</li>
+                <li>Adjust brush size and color for drawing</li>
+                <li>Use Rescale to change image size</li>
+                <li>Click "Save as PNG" to download the edited image</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('imageCanvas');
+        const ctx = canvas.getContext('2d');
+        const pasteBtn = document.getElementById('pasteBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const toolSelect = document.getElementById('toolSelect');
+        const colorPicker = document.getElementById('colorPicker');
+        const brushSize = document.getElementById('brushSize');
+        const brushSizeValue = document.getElementById('brushSizeValue');
+        const rescaleBtn = document.getElementById('rescaleBtn');
+        const scaleFactor = document.getElementById('scaleFactor');
+        const canvasContainer = document.querySelector('.canvas-container');
+
+        let originalImage = null;
+        let isDrawing = false;
+        let cropStartX = 0;
+        let cropStartY = 0;
+        let cropEndX = 0;
+        let cropEndY = 0;
+        let isCropping = false;
+        let cropOverlay = null;
+
+        // Update brush size display
+        brushSize.addEventListener('input', () => {
+            brushSizeValue.textContent = brushSize.value;
+        });
+
+        // Update cursor based on selected tool
+        toolSelect.addEventListener('change', () => {
+            if (toolSelect.value === 'crop') {
+                canvas.classList.add('crop-mode');
+            } else {
+                canvas.classList.remove('crop-mode');
+            }
+        });
+
+        // Paste image from clipboard
+        pasteBtn.addEventListener('click', async () => {
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const item of clipboardItems) {
+                    for (const type of item.types) {
+                        if (type.startsWith('image/')) {
+                            const blob = await item.getType(type);
+                            const img = new Image();
+                            img.onload = () => {
+                                originalImage = img;
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                ctx.drawImage(img, 0, 0);
+                                saveBtn.disabled = false;
+                            };
+                            img.src = URL.createObjectURL(blob);
+                            return;
+                        }
+                    }
+                }
+                alert('No image found in clipboard');
+            } catch (err) {
+                console.error('Failed to read clipboard:', err);
+                alert('Failed to paste image. Make sure you have an image copied.');
+            }
+        });
+
+        // Drawing functionality
+        canvas.addEventListener('mousedown', (e) => {
+            if (toolSelect.value === 'draw') {
+                isDrawing = true;
+                draw(e);
+            } else if (toolSelect.value === 'crop') {
+                startCrop(e);
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isDrawing && toolSelect.value === 'draw') {
+                draw(e);
+            } else if (isCropping && toolSelect.value === 'crop') {
+                updateCrop(e);
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            if (toolSelect.value === 'draw') {
+                isDrawing = false;
+                ctx.beginPath();
+            } else if (toolSelect.value === 'crop') {
+                endCrop();
+            }
+        });
+
+        function draw(e) {
+            if (!isDrawing) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            ctx.lineWidth = brushSize.value;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = colorPicker.value;
+
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        function startCrop(e) {
+            const rect = canvas.getBoundingClientRect();
+            cropStartX = e.clientX - rect.left;
+            cropStartY = e.clientY - rect.top;
+            isCropping = true;
+
+            if (cropOverlay) {
+                cropOverlay.remove();
+            }
+            cropOverlay = document.createElement('div');
+            cropOverlay.className = 'crop-overlay';
+            canvasContainer.appendChild(cropOverlay);
+        }
+
+        function updateCrop(e) {
+            if (!isCropping) return;
+
+            const rect = canvas.getBoundingClientRect();
+            cropEndX = e.clientX - rect.left;
+            cropEndY = e.clientY - rect.top;
+
+            const width = Math.abs(cropEndX - cropStartX);
+            const height = Math.abs(cropEndY - cropStartY);
+            const left = Math.min(cropStartX, cropEndX);
+            const top = Math.min(cropStartY, cropEndY);
+
+            cropOverlay.style.left = left + 'px';
+            cropOverlay.style.top = top + 'px';
+            cropOverlay.style.width = width + 'px';
+            cropOverlay.style.height = height + 'px';
+        }
+
+        function endCrop() {
+            if (!cropOverlay) return;
+
+            isCropping = false;
+
+            // Calculate crop dimensions from stored coordinates
+            const cropX = Math.min(cropStartX, cropEndX);
+            const cropY = Math.min(cropStartY, cropEndY);
+            const cropWidth = Math.abs(cropEndX - cropStartX);
+            const cropHeight = Math.abs(cropEndY - cropStartY);
+
+            // Only crop if there's a meaningful selection
+            if (cropWidth > 5 && cropHeight > 5) {
+                const imageData = ctx.getImageData(cropX, cropY, cropWidth, cropHeight);
+                canvas.width = cropWidth;
+                canvas.height = cropHeight;
+                ctx.putImageData(imageData, 0, 0);
+            }
+
+            cropOverlay.remove();
+            cropOverlay = null;
+        }
+
+
+
+        // Rescale image
+        rescaleBtn.addEventListener('click', () => {
+            const factor = parseFloat(scaleFactor.value) / 100;
+            if (isNaN(factor) || factor <= 0) return;
+
+            const newWidth = Math.round(canvas.width * factor);
+            const newHeight = Math.round(canvas.height * factor);
+
+            // Create temporary canvas with current content
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            tempCtx.drawImage(canvas, 0, 0);
+
+            // Resize main canvas
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+
+            // Draw scaled image with interpolation
+            ctx.drawImage(tempCanvas, 0, 0, newWidth, newHeight);
+        });
+
+        // Save as PNG
+        saveBtn.addEventListener('click', () => {
+            const link = document.createElement('a');
+            link.download = 'edited-image.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // Prevent context menu on right click
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+    </script>
+</body>
+</html>
