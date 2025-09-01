@@ -938,35 +938,201 @@ nav ul li a:hover {
 /* Education Section */
 #education {
     padding: 5rem 2rem;
-    background: #f8f9fa;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
     text-align: center;
+    position: relative;
+    overflow: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#education::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 40%, rgba(23, 162, 184, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba(255, 107, 53, 0.1) 0%, transparent 50%);
+    animation: education-bg-float 15s ease-in-out infinite alternate;
+}
+
+@keyframes education-bg-float {
+    0% { transform: translateX(0) translateY(0); }
+    100% { transform: translateX(30px) translateY(-15px); }
 }
 
 #education h2 {
     font-size: 2.5rem;
     margin-bottom: 3rem;
-    color: #333;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(23, 162, 184, 0.5);
+    z-index: 10;
+    position: relative;
 }
 
-.education-item {
-    background: white;
+.education-container {
+    position: relative;
+    z-index: 10;
+    max-width: 600px;
+    width: 100%;
+}
+
+.card-wrapper {
+    position: relative;
+    width: 100%;
+    height: 400px;
+    margin: 0 auto;
+    cursor: pointer;
+}
+
+.card-wrapper::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 20px;
+    background: transparent;
+    z-index: 5;
+}
+
+.education-card {
+    perspective: 1000px;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.card-front,
+.card-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    border-radius: 20px;
     padding: 2rem;
-    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    transition: transform 0.6s ease-in-out;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
+    transform-style: preserve-3d;
+}
+
+.card-front {
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    transform: rotateY(0deg);
+    z-index: 2;
+}
+
+.card-back {
+    background: linear-gradient(135deg, #16213e, #0f3460);
+    transform: rotateY(180deg);
+    z-index: 1;
+}
+
+.card-wrapper:hover .card-front {
+    transform: rotateY(-180deg);
+    z-index: 1;
+}
+
+.card-wrapper:hover .card-back {
+    transform: rotateY(0deg);
+    z-index: 2;
+}
+
+.education-icon {
+    font-size: 4rem;
+    color: #17a2b8;
+    margin-bottom: 1rem;
+    animation: icon-bounce 2s ease-in-out infinite;
+}
+
+@keyframes icon-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.card-front h3 {
+    color: #fff;
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.card-front .degree {
+    color: #17a2b8;
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+.card-front .grade {
+    color: #4ecdc4;
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.card-front .year {
+    color: #ccc;
+    font-size: 1rem;
+}
+
+.education-details h4 {
+    color: #17a2b8;
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+}
+
+.education-details ul {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 1.5rem;
+}
+
+.education-details li {
+    color: #fff;
+    margin-bottom: 0.5rem;
+    padding-left: 1.5rem;
+    position: relative;
+}
+
+.education-details li::before {
+    content: '▹';
+    color: #17a2b8;
+    position: absolute;
+    left: 0;
+    font-weight: bold;
+}
+
+.fun-fact {
+    background: rgba(23, 162, 184, 0.1);
+    border: 1px solid rgba(23, 162, 184, 0.3);
     border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    max-width: 800px;
-    margin-left: auto;
-    margin-right: auto;
+    padding: 1rem;
+    margin-top: 1rem;
 }
 
-.education-item h3 {
-    color: #333;
-    margin-bottom: 0.5rem;
+.fun-fact i {
+    color: #f9ca24;
+    margin-right: 0.5rem;
 }
 
-.education-item p {
-    color: #666;
-    margin-bottom: 0.5rem;
+.fun-fact p {
+    color: #fff;
+    font-size: 0.9rem;
+    margin: 0;
+    line-height: 1.4;
 }
 
 /* Contact Section */
@@ -1126,6 +1292,54 @@ footer {
         width: 100%;
         max-width: 600px;
         height: 400px;
+    }
+
+    /* Education mobile styles */
+    .card-wrapper {
+        height: 350px;
+        max-width: 400px;
+    }
+
+    .card-front,
+    .card-back {
+        padding: 1.5rem;
+    }
+
+    .education-icon {
+        font-size: 3rem;
+    }
+
+    .card-front h3 {
+        font-size: 1.5rem;
+    }
+
+    .card-front .degree {
+        font-size: 1.1rem;
+    }
+
+    .card-front .grade {
+        font-size: 1rem;
+    }
+
+    .card-front .year {
+        font-size: 0.9rem;
+    }
+
+    .education-details h4 {
+        font-size: 1.2rem;
+    }
+
+    .education-details li {
+        font-size: 0.9rem;
+        margin-bottom: 0.4rem;
+    }
+
+    .fun-fact {
+        padding: 0.8rem;
+    }
+
+    .fun-fact p {
+        font-size: 0.8rem;
     }
 }
 
