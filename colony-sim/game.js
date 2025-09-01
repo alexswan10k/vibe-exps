@@ -419,24 +419,11 @@ class Game {
     harvestResource(x, y) {
         const resource = this.resources.find(r => r.x === x && r.y === y);
         if (resource) {
-            // Drop the resource on the ground instead of adding to inventory
             const resourceType = resource.type === 'tree' ? 'wood' : 'iron';
-            const dropped = new DroppedResource(x, y, resourceType);
-            this.droppedResources.push(dropped);
             this.resources.splice(this.resources.indexOf(resource), 1);
-            if (this.storageArea) {
-                const centerX = Math.floor((this.storageArea.start.x + this.storageArea.end.x) / 2);
-                const centerY = Math.floor((this.storageArea.start.y + this.storageArea.end.y) / 2);
-                this.taskQueue.push({
-                    x: x,
-                    y: y,
-                    type: 'haul',
-                    resource: dropped,
-                    destination: { x: centerX, y: centerY }
-                });
-            }
-            this.updateUI();
+            return resourceType;
         }
+        return null;
     }
 
     pickupDroppedResource(x, y, addToInventory = true) {
@@ -956,9 +943,26 @@ class Pawn {
             // Arrived at destination
             if (this.task.type === 'chop' || this.task.type === 'mine') {
                 // Harvest the resource
-                game.harvestResource(this.task.x, this.task.y);
-                this.task.completed = true;
-                this.task = null;
+                const type = game.harvestResource(this.task.x, this.task.y);
+                if (type) {
+                    this.carrying = type;
+                    if (game.storageArea) {
+                        const centerX = Math.floor((game.storageArea.start.x + game.storageArea.end.x) / 2);
+                        const centerY = Math.floor((game.storageArea.start.y + game.storageArea.end.y) / 2);
+                        this.task.x = centerX;
+                        this.task.y = centerY;
+                        this.task.type = 'move_to_storage';
+                    } else {
+                        game.resourcesInventory[this.carrying] = (game.resourcesInventory[this.carrying] || 0) + 1;
+                        this.carrying = null;
+                        this.task.completed = true;
+                        this.task = null;
+                    }
+                } else {
+                    this.task.completed = true;
+                    this.task = null;
+                }
+                game.updateUI();
             } else if (this.task.type === 'haul') {
                 if (!this.carrying) {
                     this.carrying = game.pickupDroppedResource(this.task.x, this.task.y, false);
@@ -987,11 +991,24 @@ class Pawn {
                 // Mine stone terrain
                 if (game.map[this.task.y][this.task.x] === 'stone') {
                     game.map[this.task.y][this.task.x] = 'dirt';
-                    game.resourcesInventory.stone = (game.resourcesInventory.stone || 0) + 1;
+                    this.carrying = 'stone';
+                    if (game.storageArea) {
+                        const centerX = Math.floor((game.storageArea.start.x + game.storageArea.end.x) / 2);
+                        const centerY = Math.floor((game.storageArea.start.y + game.storageArea.end.y) / 2);
+                        this.task.x = centerX;
+                        this.task.y = centerY;
+                        this.task.type = 'move_to_storage';
+                    } else {
+                        game.resourcesInventory[this.carrying] = (game.resourcesInventory[this.carrying] || 0) + 1;
+                        this.carrying = null;
+                        this.task.completed = true;
+                        this.task = null;
+                    }
                     game.updateUI();
+                } else {
+                    this.task.completed = true;
+                    this.task = null;
                 }
-                this.task.completed = true;
-                this.task = null;
             } else if (this.task.type === 'harvest_plant') {
                 // Harvest mature plant
                 const plant = game.plants.find(p => p.x === this.task.x && p.y === this.task.y);
