@@ -15,7 +15,9 @@ async function initModel() {
   console.log('Loading llama2.c-stories15M model...');
   spinner.style.display = 'block';
   try {
-    generator = await pipeline('text-generation', 'Xenova/llama2.c-stories15M');
+    // generator = await pipeline('text-generation', 'Xenova/llama2.c-stories15M');
+    generator = await pipeline('text-generation', 'HuggingFaceTB/SmolLM2-135M-Instruct');
+
     console.log('Model loaded.');
   } catch (error) {
     console.error('Error loading model:', error);
