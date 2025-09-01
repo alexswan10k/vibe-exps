@@ -30,19 +30,23 @@ messageInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') sendMessage();
 });
 
-function formatPrompt(messages) {
-  let prompt = 'You are a helpful AI assistant. ';
+function formatChatTemplate(messages) {
+  let formatted = '';
 
+  // If first message is not system, add default system message
+  if (messages.length === 0 || messages[0].role !== 'system') {
+    formatted = '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n';
+  }
+
+  // Format each message
   messages.forEach(msg => {
-    if (msg.role === 'user') {
-      prompt += `User: ${msg.content}\n`;
-    } else if (msg.role === 'assistant') {
-      prompt += `Assistant: ${msg.content}\n`;
-    }
+    formatted += `<|im_start|>${msg.role}\n${msg.content}<|im_end|>\n`;
   });
 
-  prompt += 'Assistant: ';
-  return prompt;
+  // Add generation prompt
+  formatted += '<|im_start|>assistant\n';
+
+  return formatted;
 }
 
 async function sendMessage() {
@@ -61,36 +65,51 @@ async function sendMessage() {
   sendButton.disabled = true;
 
   try {
-    const prompt = formatPrompt(conversationHistory);
+    const prompt = formatChatTemplate(conversationHistory);
     console.log('=== FORMATTED PROMPT ===');
     console.log(prompt);
     console.log('=== END PROMPT ===');
 
     const output = await generator(prompt, {
-      max_new_tokens: 100,
+      max_new_tokens: 150,
       do_sample: true,
-      temperature: 0.8,
-      stop: ['\nUser:', '\nAssistant:']  // Stop at next user/assistant turn
+      temperature: 0.7,
+      top_p: 0.9,
+      pad_token_id: 2,
+      eos_token_id: 2
     });
 
     console.log('=== RAW MODEL OUTPUT ===');
     console.log('Full response:', output[0].generated_text);
     console.log('=== END RAW OUTPUT ===');
 
-    // Extract the assistant's response by subtracting the prompt
+    // Create a plain text version of the conversation for subtraction
+    let plainPrompt = '';
+    if (conversationHistory.length === 0 || conversationHistory[0].role !== 'system') {
+      plainPrompt = 'system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face\n';
+    }
+
+    conversationHistory.forEach(msg => {
+      plainPrompt += `${msg.role}\n${msg.content}\n`;
+    });
+    plainPrompt += 'assistant\n';
+
+    console.log('=== SUBTRACTION DEBUG ===');
+    console.log('Plain prompt for subtraction:', plainPrompt);
+    console.log('Plain prompt length:', plainPrompt.length);
+
+    // Subtract the plain text prompt from the response
     const fullResponse = output[0].generated_text;
-    const generatedOnly = fullResponse.substring(prompt.length);
+    const assistantResponse = fullResponse.substring(plainPrompt.length).trim();
+
+    console.log('Full response starts with plain prompt?', fullResponse.startsWith(plainPrompt));
+    console.log('Assistant response:', assistantResponse);
+    console.log('=== END SUBTRACTION DEBUG ===');
 
     console.log('=== PARSING DEBUG ===');
-    console.log('Generated only:', generatedOnly);
-
-    // Clean up the response - remove extra whitespace and stop sequences
-    let assistantResponse = generatedOnly
-      .replace(/\nUser:.*/s, '')  // Remove any following User: lines
-      .replace(/\nAssistant:.*/s, '')  // Remove any following Assistant: lines
-      .trim();
-
-    console.log('Cleaned response:', assistantResponse);
+    console.log('Prompt length:', prompt.length);
+    console.log('Full response length:', fullResponse.length);
+    console.log('Assistant response:', assistantResponse);
     console.log('=== END PARSING DEBUG ===');
 
     console.log('=== PARSED RESPONSE ===');
