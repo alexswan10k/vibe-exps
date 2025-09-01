@@ -345,107 +345,81 @@
                             // Hide the card
                             card.style.display = 'none';
 
-                            // Create colored placeholder canvas
-                            const placeholderCanvas = document.createElement('canvas');
-                            placeholderCanvas.width = rect.width;
-                            placeholderCanvas.height = rect.height;
-                            const placeholderCtx = placeholderCanvas.getContext('2d');
+                            // Create triangular particles for this card
+                            const numParticles = 200; // Number of triangular pieces per card
 
-                            // Function to draw rounded rectangle
-                            function drawRoundedRect(ctx, x, y, width, height, radius) {
-                                ctx.beginPath();
-                                ctx.moveTo(x + radius, y);
-                                ctx.lineTo(x + width - radius, y);
-                                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-                                ctx.lineTo(x + width, y + height - radius);
-                                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-                                ctx.lineTo(x + radius, y + height);
-                                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-                                ctx.lineTo(x, y + radius);
-                                ctx.quadraticCurveTo(x, y, x + radius, y);
-                                ctx.closePath();
-                            }
-
-                            // Create vibrant gradient background
-                            const colors = [
-                                ['#ff6b6b', '#ffa500'], // Red to orange
-                                ['#4ecdc4', '#44a08d'], // Teal to green
-                                ['#45b7d1', '#96c93d'], // Blue to green
-                                ['#f093fb', '#f5576c'], // Pink to red
-                                ['#4facfe', '#00f2fe'], // Blue to cyan
-                                ['#43e97b', '#38f9d7'], // Green to cyan
-                                ['#fa709a', '#fee140'], // Pink to yellow
-                                ['#a8edea', '#fed6e3'], // Light blue to pink
-                                ['#ff9a9e', '#fecfef'], // Red to pink
-                                ['#ffecd2', '#fcb69f'], // Cream to orange
-                                ['#ff9a9e', '#fecfef'], // Red to pink
-                                ['#ffecd2', '#fcb69f']  // Cream to orange
+                            // Color palette: mostly white, some original colors
+                            const cardColors = [
+                                '#ffffff', // White
+                                '#ff6b6b', '#ffa500', // Red to orange
+                                '#4ecdc4', '#44a08d', // Teal to green
+                                '#45b7d1', '#96c93d', // Blue to green
+                                '#f093fb', '#f5576c', // Pink to red
+                                '#4facfe', '#00f2fe', // Blue to cyan
+                                '#43e97b', '#38f9d7', // Green to cyan
+                                '#fa709a', '#fee140', // Pink to yellow
+                                '#a8edea', '#fed6e3', // Light blue to pink
+                                '#ff9a9e', '#fecfef', // Red to pink
+                                '#ffecd2', '#fcb69f'  // Cream to orange
                             ];
 
-                            const [color1, color2] = colors[index % colors.length];
-                            const gradient = placeholderCtx.createLinearGradient(0, 0, 0, rect.height);
-                            gradient.addColorStop(0, color1);
-                            gradient.addColorStop(1, color2);
+                            for (let i = 0; i < numParticles; i++) {
+                                // Random position within card bounds
+                                const particleX = rect.left + Math.random() * rect.width;
+                                const particleY = rect.top + Math.random() * rect.height;
 
-                            // Fill background with rounded corners
-                            placeholderCtx.fillStyle = gradient;
-                            drawRoundedRect(placeholderCtx, 0, 0, rect.width, rect.height, 12);
-                            placeholderCtx.fill();
+                                // Random triangle size (5-15 pixels)
+                                const size = 5 + Math.random() * 10;
 
-                            // Add border with rounded corners
-                            placeholderCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-                            placeholderCtx.lineWidth = 3;
-                            drawRoundedRect(placeholderCtx, 3, 3, rect.width - 6, rect.height - 6, 9);
-                            placeholderCtx.stroke();
+                                // Random triangle shape
+                                const triangle = {
+                                    x1: -size/2 + (Math.random() - 0.5) * size,
+                                    y1: -size/2 + (Math.random() - 0.5) * size,
+                                    x2: size/2 + (Math.random() - 0.5) * size,
+                                    y2: -size/2 + (Math.random() - 0.5) * size,
+                                    x3: (Math.random() - 0.5) * size,
+                                    y3: size/2 + (Math.random() - 0.5) * size,
+                                    color: cardColors[Math.floor(Math.random() * cardColors.length)]
+                                };
 
-                            // Add project number
-                            placeholderCtx.fillStyle = 'white';
-                            placeholderCtx.font = 'bold 28px Arial';
-                            placeholderCtx.textAlign = 'center';
-                            placeholderCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-                            placeholderCtx.shadowBlur = 4;
-                            placeholderCtx.fillText((index + 1).toString(), rect.width / 2, rect.height / 2 + 10);
+                                // Calculate explosion physics from card center
+                                const centerX = window.innerWidth / 2;
+                                const centerY = window.innerHeight / 2;
+                                const cardCenterX = rect.left + rect.width / 2;
+                                const cardCenterY = rect.top + rect.height / 2;
 
-                            // Calculate explosion physics
-                            const centerX = window.innerWidth / 2;
-                            const centerY = window.innerHeight / 2;
-                            const cardCenterX = rect.left + rect.width / 2;
-                            const cardCenterY = rect.top + rect.height / 2;
+                                const dx = particleX - centerX;
+                                const dy = particleY - centerY;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
 
-                            const dx = cardCenterX - centerX;
-                            const dy = cardCenterY - centerY;
-                            const distance = Math.sqrt(dx * dx + dy * dy);
+                                const normalizedDx = dx / distance || 0;
+                                const normalizedDy = dy / distance || 0;
 
-                            const normalizedDx = dx / distance || 0;
-                            const normalizedDy = dy / distance || 0;
+                                const baseForce = 15 + Math.random() * 10; // Random base force
+                                const distanceMultiplier = Math.min(distance / 150, 3);
+                                const explosionForce = baseForce + distanceMultiplier * 10;
 
-                            const baseForce = 25;
-                            const distanceMultiplier = Math.min(distance / 150, 3);
-                            const explosionForce = baseForce + distanceMultiplier * 15;
+                                const randomAngle = (Math.random() - 0.5) * 0.8;
+                                const cos = Math.cos(randomAngle);
+                                const sin = Math.sin(randomAngle);
 
-                            const randomAngle = (Math.random() - 0.5) * 0.6;
-                            const cos = Math.cos(randomAngle);
-                            const sin = Math.sin(randomAngle);
+                                const finalDx = normalizedDx * cos - normalizedDy * sin;
+                                const finalDy = normalizedDx * sin + normalizedDy * cos;
 
-                            const finalDx = normalizedDx * cos - normalizedDy * sin;
-                            const finalDy = normalizedDx * sin + normalizedDy * cos;
+                                const vx = finalDx * explosionForce + (Math.random() - 0.5) * 5; // Add some randomness
+                                const vy = finalDy * explosionForce + (Math.random() - 0.5) * 5;
 
-                            const vx = finalDx * explosionForce;
-                            const vy = finalDy * explosionForce;
-
-                            particles.push({
-                                image: placeholderCanvas,
-                                x: rect.left,
-                                y: rect.top,
-                                vx: vx,
-                                vy: vy,
-                                angularVelocity: (Math.random() - 0.5) * 8,
-                                rotation: 0,
-                                width: rect.width,
-                                height: rect.height,
-                                originalX: rect.left,
-                                originalY: rect.top
-                            });
+                                particles.push({
+                                    triangle: triangle,
+                                    x: particleX,
+                                    y: particleY,
+                                    vx: vx,
+                                    vy: vy,
+                                    angularVelocity: (Math.random() - 0.5) * 12,
+                                    rotation: Math.random() * 360,
+                                    size: size
+                                });
+                            }
                         }
                     }
                 });
@@ -512,9 +486,9 @@
                     particle.rotation += particle.angularVelocity;
 
                     // Bounce off left and right walls
-                    if (particle.x <= 0 || particle.x + particle.width >= window.innerWidth) {
+                    if (particle.x <= 0 || particle.x + particle.size >= window.innerWidth) {
                         particle.vx *= -bounce;
-                        particle.x = Math.max(0, Math.min(particle.x, window.innerWidth - particle.width));
+                        particle.x = Math.max(0, Math.min(particle.x, window.innerWidth - particle.size));
                         particle.angularVelocity += (Math.random() - 0.5) * 4;
                     }
 
@@ -526,19 +500,25 @@
                     }
 
                     // Ground collision - bottom of screen is ground
-                    if (particle.y + particle.height >= window.innerHeight) {
+                    if (particle.y + particle.size >= window.innerHeight) {
                         particle.vy = 0; // Stop vertical movement
-                        particle.y = window.innerHeight - particle.height; // Position on ground
+                        particle.y = window.innerHeight - particle.size; // Position on ground
                         particle.vx *= 0.95; // Extra friction on ground
                         particle.angularVelocity *= 0.9; // Reduce rotation on ground
                     }
 
-                    // Draw particle
+                    // Draw triangle particle
                     try {
                         ctx.save();
-                        ctx.translate(particle.x + particle.width / 2, particle.y + particle.height / 2);
+                        ctx.translate(particle.x, particle.y);
                         ctx.rotate(particle.rotation * Math.PI / 180);
-                        ctx.drawImage(particle.image, -particle.width / 2, -particle.height / 2, particle.width, particle.height);
+                        ctx.fillStyle = particle.triangle.color;
+                        ctx.beginPath();
+                        ctx.moveTo(particle.triangle.x1, particle.triangle.y1);
+                        ctx.lineTo(particle.triangle.x2, particle.triangle.y2);
+                        ctx.lineTo(particle.triangle.x3, particle.triangle.y3);
+                        ctx.closePath();
+                        ctx.fill();
                         ctx.restore();
                     } catch (drawError) {
                         console.error('Error drawing particle:', drawError);
