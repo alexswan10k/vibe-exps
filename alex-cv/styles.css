@@ -556,53 +556,8 @@ nav ul li a:hover {
     50% { opacity: 1; }
 }
 
-/* Projects Section */
+/* Projects Section - Tech Stack Nebula */
 #projects {
-    padding: 5rem 2rem;
-    background: white;
-    text-align: center;
-}
-
-#projects h2 {
-    font-size: 2.5rem;
-    margin-bottom: 3rem;
-    color: #333;
-}
-
-.projects-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 2rem;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.project-card {
-    background: #f8f9fa;
-    padding: 2rem;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-    transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.project-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-}
-
-.project-card i {
-    font-size: 3rem;
-    color: #17a2b8;
-    margin-bottom: 1rem;
-}
-
-.project-card h3 {
-    color: #333;
-    margin-bottom: 1rem;
-}
-
-/* Technologies Section - Force Directed Graph */
-#technologies {
     padding: 5rem 2rem;
     background: #0a0a0a;
     text-align: center;
@@ -613,6 +568,214 @@ nav ul li a:hover {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+}
+
+#projects h2 {
+    font-size: 2.5rem;
+    margin-bottom: 3rem;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(23, 162, 184, 0.5);
+    z-index: 10;
+    position: relative;
+}
+
+.projects-nebula {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4rem;
+    max-width: 1600px;
+    width: 100%;
+}
+
+.nebula-container {
+    position: relative;
+    width: 1200px;
+    height: 600px;
+}
+
+.nebula-svg {
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(23, 162, 184, 0.1) 0%, rgba(0, 0, 0, 0.8) 70%);
+    border-radius: 10px;
+}
+
+/* Nebula particles */
+.nebula-particle {
+    fill: rgba(255, 255, 255, 0.8);
+    stroke: rgba(23, 162, 184, 0.5);
+    stroke-width: 1;
+    transition: all 0.3s ease;
+}
+
+.nebula-particle:hover {
+    fill: rgba(23, 162, 184, 1);
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 2;
+}
+
+.nebula-core {
+    fill: radial-gradient(circle, rgba(23, 162, 184, 0.8), rgba(23, 162, 184, 0.3));
+    stroke: rgba(255, 255, 255, 0.5);
+    stroke-width: 2;
+    filter: blur(1px);
+}
+
+.nebula-core:hover {
+    fill: radial-gradient(circle, rgba(23, 162, 184, 1), rgba(23, 162, 184, 0.5));
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 3;
+    filter: blur(0.5px);
+}
+
+/* Nebula labels */
+.nebula-label {
+    pointer-events: none;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    user-select: none;
+}
+
+.nebula-label:hover {
+    fill: #17a2b8;
+}
+
+/* Tech stack particles */
+.tech-particle {
+    fill: rgba(255, 255, 255, 0.6);
+    stroke: rgba(23, 162, 184, 0.3);
+    stroke-width: 1;
+    transition: all 0.3s ease;
+}
+
+.tech-particle:hover {
+    fill: rgba(23, 162, 184, 0.9);
+    stroke: rgba(255, 255, 255, 0.6);
+    stroke-width: 2;
+}
+
+/* Project panel */
+.project-panel {
+    width: 350px;
+    height: 400px;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    border-radius: 15px;
+    padding: 2rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.project-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="50" cy="50" r="2" fill="rgba(255,255,255,0.05)"/><circle cx="80" cy="80" r="1.5" fill="rgba(255,255,255,0.08)"/></svg>') repeat;
+    opacity: 0.3;
+    z-index: 1;
+}
+
+.panel-content {
+    position: relative;
+    z-index: 2;
+}
+
+.panel-content h3 {
+    color: #17a2b8;
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.panel-content p {
+    color: #ccc;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+#project-panel-description {
+    color: #fff;
+    font-size: 1rem;
+    text-align: center;
+}
+
+/* Tech stack display */
+.tech-stack {
+    margin-top: 1rem;
+}
+
+.tech-tag {
+    display: inline-block;
+    background: rgba(23, 162, 184, 0.2);
+    color: #17a2b8;
+    padding: 0.3rem 0.8rem;
+    margin: 0.2rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    border: 1px solid rgba(23, 162, 184, 0.3);
+    transition: all 0.3s ease;
+}
+
+.tech-tag:hover {
+    background: rgba(23, 162, 184, 0.4);
+    transform: scale(1.05);
+}
+
+/* Nebula background effects */
+.nebula-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 40%, rgba(23, 162, 184, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba(255, 107, 53, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 50% 80%, rgba(78, 205, 196, 0.1) 0%, transparent 50%);
+    animation: nebula-drift 20s ease-in-out infinite alternate;
+}
+
+@keyframes nebula-drift {
+    0% { transform: translateX(0) translateY(0) scale(1); }
+    100% { transform: translateX(20px) translateY(-10px) scale(1.05); }
+}
+
+/* Technologies Section - Force Directed Graph */
+#technologies {
+    padding: 5rem 2rem;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+#technologies > h2 {
+    margin-bottom: 2rem;
+}
+
+#technologies .content-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3rem;
+    max-width: 1600px;
+    width: 100%;
 }
 
 #technologies h2 {
@@ -720,7 +883,7 @@ nav ul li a:hover {
 /* Skills panel */
 .skills-panel {
     width: 350px;
-    height: 300px;
+    height: 400px;
     background: linear-gradient(135deg, #1e3c72, #2a5298);
     border-radius: 15px;
     padding: 2rem;
@@ -731,7 +894,7 @@ nav ul li a:hover {
     justify-content: center;
     position: relative;
     overflow: hidden;
-    margin-top: 2rem;
+    flex-shrink: 0;
 }
 
 .skills-panel::before {
@@ -952,6 +1115,17 @@ footer {
         max-width: 500px;
         height: auto;
         min-height: 250px;
+    }
+
+    #technologies .content-wrapper {
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .force-graph {
+        width: 100%;
+        max-width: 600px;
+        height: 400px;
     }
 }
 

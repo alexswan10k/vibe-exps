@@ -160,6 +160,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Neural network initialization
     initializeNeuralNetwork();
 
+    // Tech stack nebula initialization
+    initializeTechStackNebula();
+
     // Mobile menu toggle (if needed in future)
     // For now, the nav is responsive enough
 });
@@ -664,4 +667,279 @@ function initializeNeuralNetwork() {
     setTimeout(() => {
         simulation.alphaTarget(0).restart();
     }, 3000);
+}
+
+// Tech Stack Nebula Initialization
+function initializeTechStackNebula() {
+    const svg = document.querySelector('.nebula-svg');
+    if (!svg) {
+        console.error('Nebula SVG element not found');
+        return;
+    }
+
+    const width = 1200;
+    const height = 600;
+
+    // Project data with tech stacks
+    const projects = [
+        {
+            id: 'bigkit',
+            name: 'Bigkit RAD Tool + Visual Designer',
+            description: 'Low-code rapid application development platform with drag-and-drop visual designer.',
+            x: width * 0.2,
+            y: height * 0.3,
+            techStack: ['C#', '.NET Core', 'React', 'TypeScript', 'SQL', 'Docker'],
+            color: '#ff6b35'
+        },
+        {
+            id: 'dicom',
+            name: 'Synthetic DICOS Data Generation with WebGPU',
+            description: 'Generating synthetic medical imaging data for training AI models.',
+            x: width * 0.8,
+            y: height * 0.2,
+            techStack: ['WebGPU', 'TypeScript', 'Python', 'Rust', 'AI/ML'],
+            color: '#4ecdc4'
+        },
+        {
+            id: 'tracking',
+            name: '3D Object Tracking with Raycast Voxel Projection',
+            description: 'Object simulation in Unreal Engine 5 and Godot using wgpu.',
+            x: width * 0.15,
+            y: height * 0.7,
+            techStack: ['C++', 'Unreal Engine', 'Godot', 'WebGPU', 'Rust'],
+            color: '#45b7d1'
+        },
+        {
+            id: 'organizator',
+            name: 'Organizator - Inventory Manager for Android',
+            description: 'Mobile app for inventory management.',
+            x: width * 0.85,
+            y: height * 0.75,
+            techStack: ['Java', 'Android', 'SQLite', 'Kotlin'],
+            color: '#f9ca24'
+        },
+        {
+            id: 'fable',
+            name: 'Fable - F# to Rust Transpiler',
+            description: 'Open source project for transpiling F# code to Rust.',
+            x: width * 0.5,
+            y: height * 0.5,
+            techStack: ['F#', 'Rust', 'Compiler Design', 'Open Source'],
+            color: '#6c5ce7'
+        }
+    ];
+
+    // Create nebula background
+    const nebulaBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    nebulaBg.setAttribute('class', 'nebula-bg');
+    nebulaBg.setAttribute('width', width);
+    nebulaBg.setAttribute('height', height);
+    nebulaBg.setAttribute('fill', 'none');
+    svg.appendChild(nebulaBg);
+
+    // Create project cores and tech particles
+    projects.forEach(project => {
+        // Create project core
+        const coreGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        coreGroup.setAttribute('class', 'nebula-core-group');
+        coreGroup.setAttribute('data-project', project.id);
+
+        const core = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        core.setAttribute('class', 'nebula-core');
+        core.setAttribute('cx', project.x);
+        core.setAttribute('cy', project.y);
+        core.setAttribute('r', '25');
+        core.setAttribute('fill', `radial-gradient(circle, ${project.color}, rgba(23, 162, 184, 0.3))`);
+        core.setAttribute('data-project', project.id);
+        core.setAttribute('data-name', project.name);
+        core.setAttribute('data-description', project.description);
+        core.setAttribute('data-tech-stack', JSON.stringify(project.techStack));
+
+        // Add project label
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('class', 'nebula-label');
+        label.setAttribute('x', project.x);
+        label.setAttribute('y', project.y - 45); // Position above the core
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', '14px');
+        label.setAttribute('font-weight', 'bold');
+        label.setAttribute('fill', '#ffffff');
+        label.setAttribute('stroke', 'rgba(0, 0, 0, 0.8)');
+        label.setAttribute('stroke-width', '0.5px');
+        label.textContent = project.name;
+
+        coreGroup.appendChild(core);
+        coreGroup.appendChild(label);
+        svg.appendChild(coreGroup);
+
+        // Create tech stack particles orbiting around the core
+        project.techStack.forEach((tech, index) => {
+            const angle = (index / project.techStack.length) * 2 * Math.PI;
+            const radius = 60 + Math.random() * 40; // Random radius between 60-100
+            const particleX = project.x + Math.cos(angle) * radius;
+            const particleY = project.y + Math.sin(angle) * radius;
+
+            const particle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            particle.setAttribute('class', 'tech-particle');
+            particle.setAttribute('cx', particleX);
+            particle.setAttribute('cy', particleY);
+            particle.setAttribute('r', '8');
+            particle.setAttribute('data-tech', tech);
+            particle.setAttribute('data-project', project.id);
+
+            // Color particles based on tech type
+            const techColors = {
+                'C#': '#239120',
+                '.NET Core': '#512bd4',
+                'React': '#61dafb',
+                'TypeScript': '#3178c6',
+                'SQL': '#336791',
+                'Docker': '#2496ed',
+                'WebGPU': '#ff6b35',
+                'Python': '#3776ab',
+                'Rust': '#000000',
+                'AI/ML': '#ff6b35',
+                'C++': '#00599c',
+                'Unreal Engine': '#313131',
+                'Godot': '#478cbf',
+                'Java': '#ed8b00',
+                'Android': '#3ddc84',
+                'SQLite': '#003b57',
+                'Kotlin': '#7f52ff',
+                'F#': '#378bba',
+                'Compiler Design': '#6c5ce7',
+                'Open Source': '#ffffff'
+            };
+
+            particle.setAttribute('fill', techColors[tech] || '#17a2b8');
+            particle.setAttribute('stroke', 'rgba(23, 162, 184, 0.5)');
+            particle.setAttribute('stroke-width', '1');
+
+            svg.appendChild(particle);
+        });
+    });
+
+    // Add hover interactions
+    const projectPanelTitle = document.getElementById('project-panel-title');
+    const projectPanelDescription = document.getElementById('project-panel-description');
+    const techStackContainer = document.getElementById('tech-stack');
+    let hoveredProject = null;
+
+    // Mouse move proximity detection for nebula
+    svg.addEventListener('mousemove', function(event) {
+        const rect = svg.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        let closestProject = null;
+        let minDistance = 80; // Proximity threshold
+
+        projects.forEach(project => {
+            const distance = Math.sqrt((project.x - mouseX) ** 2 + (project.y - mouseY) ** 2);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestProject = project;
+            }
+        });
+
+        if (closestProject !== hoveredProject) {
+            // Reset previous hover effects
+            if (hoveredProject) {
+                const prevCores = svg.querySelectorAll(`.nebula-core[data-project="${hoveredProject.id}"]`);
+                const prevParticles = svg.querySelectorAll(`.tech-particle[data-project="${hoveredProject.id}"]`);
+
+                prevCores.forEach(core => {
+                    core.setAttribute('stroke-width', '2');
+                    core.style.filter = 'blur(1px)';
+                });
+
+                prevParticles.forEach(particle => {
+                    particle.setAttribute('stroke-width', '1');
+                    particle.style.opacity = '0.6';
+                });
+            }
+
+            hoveredProject = closestProject;
+
+            if (hoveredProject) {
+                // Apply hover effects
+                const cores = svg.querySelectorAll(`.nebula-core[data-project="${hoveredProject.id}"]`);
+                const particles = svg.querySelectorAll(`.tech-particle[data-project="${hoveredProject.id}"]`);
+
+                cores.forEach(core => {
+                    core.setAttribute('stroke-width', '4');
+                    core.style.filter = 'blur(0.5px) drop-shadow(0 0 10px rgba(23, 162, 184, 0.8))';
+                });
+
+                particles.forEach(particle => {
+                    particle.setAttribute('stroke-width', '2');
+                    particle.style.opacity = '1';
+                });
+
+                // Update panel
+                projectPanelTitle.textContent = hoveredProject.name;
+                projectPanelDescription.textContent = hoveredProject.description;
+
+                // Update tech stack display
+                techStackContainer.innerHTML = '';
+                hoveredProject.techStack.forEach(tech => {
+                    const techTag = document.createElement('span');
+                    techTag.className = 'tech-tag';
+                    techTag.textContent = tech;
+                    techStackContainer.appendChild(techTag);
+                });
+            } else {
+                // Reset panel
+                projectPanelTitle.textContent = 'Hover over a nebula to explore';
+                projectPanelDescription.textContent = 'Navigate the tech stack nebula to discover my projects and their technologies.';
+                techStackContainer.innerHTML = '';
+            }
+        }
+    });
+
+    // Mouse leave reset
+    svg.addEventListener('mouseleave', function() {
+        if (hoveredProject) {
+            const cores = svg.querySelectorAll(`.nebula-core[data-project="${hoveredProject.id}"]`);
+            const particles = svg.querySelectorAll(`.tech-particle[data-project="${hoveredProject.id}"]`);
+
+            cores.forEach(core => {
+                core.setAttribute('stroke-width', '2');
+                core.style.filter = 'blur(1px)';
+            });
+
+            particles.forEach(particle => {
+                particle.setAttribute('stroke-width', '1');
+                particle.style.opacity = '0.6';
+            });
+
+            hoveredProject = null;
+            projectPanelTitle.textContent = 'Hover over a nebula to explore';
+            projectPanelDescription.textContent = 'Navigate the tech stack nebula to discover my projects and their technologies.';
+            techStackContainer.innerHTML = '';
+        }
+    });
+
+    // Add floating animation to particles
+    function animateParticles() {
+        const particles = svg.querySelectorAll('.tech-particle');
+        particles.forEach((particle, index) => {
+            const time = Date.now() * 0.001 + index * 0.5;
+            const amplitude = 5;
+            const frequency = 0.5 + Math.random() * 0.5;
+
+            const originalX = parseFloat(particle.getAttribute('cx'));
+            const originalY = parseFloat(particle.getAttribute('cy'));
+
+            const offsetX = Math.sin(time * frequency) * amplitude;
+            const offsetY = Math.cos(time * frequency) * amplitude;
+
+            particle.setAttribute('cx', originalX + offsetX);
+            particle.setAttribute('cy', originalY + offsetY);
+        });
+
+        requestAnimationFrame(animateParticles);
+    }
+
+    animateParticles();
 }

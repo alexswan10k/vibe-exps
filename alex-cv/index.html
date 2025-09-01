@@ -131,46 +131,42 @@
 
     <section id="technologies">
         <h2>Technologies & Skills</h2>
-        <div class="force-graph">
-            <svg class="graph-svg" viewBox="0 0 1200 600">
-                <!-- Links (edges) -->
-                <g class="links"></g>
-                <!-- Nodes -->
-                <g class="nodes"></g>
-            </svg>
-        </div>
+        <div class="content-wrapper">
+            <div class="force-graph">
+                <svg class="graph-svg" viewBox="0 0 1200 600">
+                    <!-- Links (edges) -->
+                    <g class="links"></g>
+                    <!-- Nodes -->
+                    <g class="nodes"></g>
+                </svg>
+            </div>
 
-        <!-- Skills details panel -->
-        <div class="skills-panel">
-            <div class="panel-content">
-                <h3 id="skills-panel-title">Hover over nodes to explore</h3>
-                <p id="skills-panel-description">Navigate the force-directed graph to discover my technical expertise and skills.</p>
+            <!-- Skills details panel -->
+            <div class="skills-panel">
+                <div class="panel-content">
+                    <h3 id="skills-panel-title">Hover over nodes to explore</h3>
+                    <p id="skills-panel-description">Navigate the force-directed graph to discover my technical expertise and skills.</p>
+                </div>
             </div>
         </div>
     </section>
 
     <section id="projects">
         <h2>R&D Projects & Open Source</h2>
-        <div class="projects-grid">
-            <div class="project-card">
-                <h3>Bigkit RAD Tool + Visual Designer</h3>
-                <p>Low-code rapid application development platform with drag-and-drop visual designer.</p>
+        <div class="projects-nebula">
+            <div class="nebula-container">
+                <svg class="nebula-svg" viewBox="0 0 1200 600">
+                    <!-- Nebula formations will be generated here -->
+                </svg>
             </div>
-            <div class="project-card">
-                <h3>Synthetic DICOS Data Generation with WebGPU</h3>
-                <p>Generating synthetic medical imaging data for training AI models.</p>
-            </div>
-            <div class="project-card">
-                <h3>3D Object Tracking with Raycast Voxel Projection</h3>
-                <p>Object simulation in Unreal Engine 5 and Godot using wgpu.</p>
-            </div>
-            <div class="project-card">
-                <h3>Organizator - Inventory Manager for Android</h3>
-                <p>Mobile app for inventory management.</p>
-            </div>
-            <div class="project-card">
-                <h3>Fable - F# to Rust Transpiler</h3>
-                <p>Open source project for transpiling F# code to Rust.</p>
+
+            <!-- Project details panel -->
+            <div class="project-panel">
+                <div class="panel-content">
+                    <h3 id="project-panel-title">Hover over a nebula to explore</h3>
+                    <p id="project-panel-description">Navigate the tech stack nebula to discover my projects and their technologies.</p>
+                    <div id="tech-stack" class="tech-stack"></div>
+                </div>
             </div>
         </div>
     </section>
