@@ -364,7 +364,20 @@ function initializeNeuralNetwork() {
         { id: 'Rust', group: 'Languages', type: 'leaf', description: 'Systems programming language', x: width/2 + 50, y: height/2 + 100 },
         { id: 'C#', group: 'Languages', type: 'leaf', description: 'Object-oriented programming language', x: width/2 - 50, y: height/2 + 100 },
         { id: 'Docker', group: 'Other', type: 'leaf', description: 'Containerization platform', x: width/2 - 200, y: height/2 + 150 },
-        { id: 'WebGPU', group: 'Other', type: 'leaf', description: 'Modern graphics API for the web', x: width/2 - 350, y: height/2 + 50 }
+        { id: 'WebGPU', group: 'Other', type: 'leaf', description: 'Modern graphics API for the web', x: width/2 - 350, y: height/2 + 50 },
+
+        // Additional skills for more connections
+        { id: 'JavaScript', group: 'Languages', type: 'leaf', description: 'Core web programming language', x: width/2 + 100, y: height/2 + 120 },
+        { id: 'SQL', group: 'Languages', type: 'leaf', description: 'Database query language', x: width/2 - 100, y: height/2 + 120 },
+        { id: 'AWS', group: 'Backend', type: 'leaf', description: 'Cloud computing platform', x: width/2 - 300, y: height/2 - 50 },
+        { id: 'Azure', group: 'Backend', type: 'leaf', description: 'Microsoft cloud platform', x: width/2 - 350, y: height/2 },
+        { id: 'Terraform', group: 'Backend', type: 'leaf', description: 'Infrastructure as code tool', x: width/2 - 400, y: height/2 + 50 },
+        { id: 'Webpack', group: 'Frontend', type: 'leaf', description: 'Module bundler for JavaScript', x: width/2 + 300, y: height/2 + 50 },
+        { id: 'Storybook', group: 'Frontend', type: 'leaf', description: 'UI component development tool', x: width/2 + 350, y: height/2 },
+        { id: 'ONNX', group: 'AI/ML', type: 'leaf', description: 'Open Neural Network Exchange format', x: width/2 - 100, y: height/2 - 200 },
+        { id: 'LLMs', group: 'AI/ML', type: 'leaf', description: 'Large Language Models', x: width/2 + 100, y: height/2 - 200 },
+        { id: 'Volume Raycasting', group: 'Other', type: 'leaf', description: '3D volume visualization technique', x: width/2 - 450, y: height/2 + 100 },
+        { id: 'React Three Fiber', group: 'Other', type: 'leaf', description: 'React renderer for Three.js', x: width/2 - 400, y: height/2 + 150 }
     ];
 
     const links = [
@@ -372,26 +385,102 @@ function initializeNeuralNetwork() {
         { source: 'Backend', target: '.NET Core' },
         { source: 'Backend', target: 'Node.js' },
         { source: 'Backend', target: 'GraphQL' },
+        { source: 'Backend', target: 'AWS' },
+        { source: 'Backend', target: 'Azure' },
+        { source: 'Backend', target: 'Terraform' },
+        { source: 'Backend', target: 'Docker' },
         { source: 'Frontend', target: 'React' },
         { source: 'Frontend', target: 'Redux' },
         { source: 'Frontend', target: 'TypeScript' },
+        { source: 'Frontend', target: 'Webpack' },
+        { source: 'Frontend', target: 'Storybook' },
+        { source: 'Frontend', target: 'JavaScript' },
         { source: 'AI/ML', target: 'YOLO' },
         { source: 'AI/ML', target: 'Python' },
+        { source: 'AI/ML', target: 'ONNX' },
+        { source: 'AI/ML', target: 'LLMs' },
+        { source: 'AI/ML', target: 'WebGPU' },
         { source: 'Languages', target: 'Rust' },
         { source: 'Languages', target: 'C#' },
         { source: 'Languages', target: 'TypeScript' },
+        { source: 'Languages', target: 'JavaScript' },
+        { source: 'Languages', target: 'Python' },
+        { source: 'Languages', target: 'SQL' },
         { source: 'Other', target: 'Docker' },
-        { source: 'Other', target: 'WebGPU' }
+        { source: 'Other', target: 'WebGPU' },
+        { source: 'Other', target: 'Volume Raycasting' },
+        { source: 'Other', target: 'React Three Fiber' },
+
+        // Cross-connections between skills
+        { source: 'TypeScript', target: 'JavaScript' },
+        { source: 'React', target: 'JavaScript' },
+        { source: 'Node.js', target: 'JavaScript' },
+        { source: 'React', target: 'TypeScript' },
+        { source: 'Node.js', target: 'TypeScript' },
+        { source: 'Python', target: 'AI/ML' },
+        { source: 'Docker', target: 'Backend' },
+        { source: 'WebGPU', target: 'Other' },
+        { source: 'Volume Raycasting', target: 'WebGPU' },
+        { source: 'React Three Fiber', target: 'React' },
+        { source: 'React Three Fiber', target: 'WebGPU' },
+        { source: 'YOLO', target: 'Python' },
+        { source: 'ONNX', target: 'Python' },
+        { source: 'LLMs', target: 'Python' },
+        { source: 'SQL', target: 'Backend' },
+        { source: 'C#', target: '.NET Core' },
+        { source: 'Rust', target: 'WebGPU' },
+        { source: 'Webpack', target: 'JavaScript' },
+        { source: 'Storybook', target: 'React' },
+        { source: 'AWS', target: 'Terraform' },
+        { source: 'Azure', target: 'Terraform' },
+        { source: 'GraphQL', target: 'Node.js' },
+        { source: 'Redux', target: 'React' },
+
+        // Additional cross-domain connections
+        { source: 'AI/ML', target: 'Backend' },
+        { source: 'AI/ML', target: 'Frontend' },
+        { source: 'Frontend', target: 'Backend' },
+        { source: 'Other', target: 'AI/ML' },
+        { source: 'Other', target: 'Frontend' }
     ];
 
-    // Create force simulation with better parameters
+    // Create force simulation with better parameters for more interconnected graph
     const simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(d => d.source.type === 'core' ? 120 : 80).strength(0.7))
-        .force('charge', d3.forceManyBody().strength(d => d.type === 'core' ? -800 : -400))
-        .force('center', d3.forceCenter(width / 2, height / 2).strength(0.1))
-        .force('collision', d3.forceCollide().radius(d => d.type === 'core' ? 40 : 25).strength(0.8))
-        .velocityDecay(0.8)
-        .alphaDecay(0.02);
+        .force('link', d3.forceLink(links).id(d => d.id).distance(d => {
+            // Different distances based on connection type
+            if (d.source.type === 'core' && d.target.type === 'core') return 200; // core to core
+            if (d.source.type === 'core' || d.target.type === 'core') return 120; // core to leaf
+            return 80; // leaf to leaf
+        }).strength(d => {
+            // Stronger links for core connections, weaker for cross-domain
+            if (d.source.group === d.target.group) return 0.8; // same group
+            if (d.source.type === 'core' && d.target.type === 'core') return 0.3; // core cross-domain
+            return 0.5; // mixed connections
+        }))
+        .force('charge', d3.forceManyBody().strength(d => d.type === 'core' ? -1200 : -600))
+        .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
+        .force('collision', d3.forceCollide().radius(d => d.type === 'core' ? 45 : 30).strength(0.9))
+        .force('x', d3.forceX(d => {
+            // Position core groups in a circle
+            const coreGroups = ['Backend', 'Frontend', 'AI/ML', 'Languages', 'Other'];
+            const index = coreGroups.indexOf(d.group);
+            if (index !== -1) {
+                const angle = (index / coreGroups.length) * 2 * Math.PI;
+                return width/2 + Math.cos(angle) * 250;
+            }
+            return width/2;
+        }).strength(d => d.type === 'core' ? 0.3 : 0.1))
+        .force('y', d3.forceY(d => {
+            const coreGroups = ['Backend', 'Frontend', 'AI/ML', 'Languages', 'Other'];
+            const index = coreGroups.indexOf(d.group);
+            if (index !== -1) {
+                const angle = (index / coreGroups.length) * 2 * Math.PI;
+                return height/2 + Math.sin(angle) * 150;
+            }
+            return height/2;
+        }).strength(d => d.type === 'core' ? 0.3 : 0.1))
+        .velocityDecay(0.6)
+        .alphaDecay(0.01);
 
     // Create links
     const link = d3.select('.links')
