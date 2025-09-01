@@ -22,11 +22,17 @@ body {
 }
 
 #ui-panel {
-    width: 300px;
+    width: 600px;
     background-color: #34495e;
     border-left: 2px solid #ecf0f1;
     padding: 20px;
     overflow-y: auto;
+    display: flex;
+    gap: 20px;
+}
+
+#left-column, #right-column {
+    flex: 1;
 }
 
 #ui-panel h3 {

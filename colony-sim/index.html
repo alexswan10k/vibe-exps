@@ -10,83 +10,89 @@ n<!DOCTYPE html>
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
         <div id="ui-panel">
-            <div id="pawn-info">
-                <h3>Pawn Info</h3>
-                <div id="pawn-list"></div>
-            </div>
-            <div id="task-queue">
-                <h3>Task Queue</h3>
-                <div id="task-list"></div>
-            </div>
-            <div id="commands">
-                <h3>Commands</h3>
-                <button id="chop-trees">Chop Trees</button>
-                <button id="mine-iron">Mine Iron</button>
-                <button id="haul-resources">Haul Resources</button>
-                <button id="build-wall">Build Wall</button>
-                <button id="build-table">Build Crafting Table</button>
-                <button id="build-storage">Build Storage</button>
-                <button id="craft-food">Craft Food</button>
-                <button id="craft-tools">Craft Tools</button>
-            </div>
-            <div id="legend">
-                <h3>Legend</h3>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #f39c12;"></div>
-                    <span>Pawn</span>
+            <div id="left-column">
+                <div id="pawn-info">
+                    <h3>Pawn Info</h3>
+                    <div id="pawn-list"></div>
                 </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #27ae60;"></div>
-                    <span>Tree</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #95a5a6;"></div>
-                    <span>Iron</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #8e44ad;"></div>
-                    <span>Wall</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #e67e22;"></div>
-                    <span>Crafting Table</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #f4d03f;"></div>
-                    <span>Storage</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #2ecc71;"></div>
-                    <span>Grass</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #d35400;"></div>
-                    <span>Dirt</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #95a5a6;"></div>
-                    <span>Stone</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #8b4513;"></div>
-                    <span>Dropped Wood</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #c0c0c0;"></div>
-                    <span>Dropped Iron</span>
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background-color: #f4d03f;"></div>
-                    <span>Storage Area</span>
+                <div id="commands">
+                    <h3>Commands</h3>
+                    <button id="chop-trees">Chop Trees</button>
+                    <button id="mine-iron">Mine Iron</button>
+                    <button id="mine-stone">Mine Stone</button>
+                    <button id="harvest-plants">Harvest Plants</button>
+                    <button id="haul-resources">Haul Resources</button>
+                    <button id="build-wall">Build Wall</button>
+                    <button id="build-table">Build Crafting Table</button>
+                    <button id="build-storage">Build Storage</button>
+                    <button id="craft-food">Craft Food</button>
+                    <button id="craft-tools">Craft Tools</button>
                 </div>
             </div>
-            <div id="resources">
-                <h3>Resources</h3>
-                <div id="resource-list"></div>
-            </div>
-            <div id="crafted-items">
-                <h3>Crafted Items</h3>
-                <div id="crafted-list"></div>
+            <div id="right-column">
+                <div id="task-queue">
+                    <h3>Task Queue</h3>
+                    <div id="task-list"></div>
+                </div>
+                <div id="legend">
+                    <h3>Legend</h3>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #f39c12;"></div>
+                        <span>Pawn</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #27ae60;"></div>
+                        <span>Tree</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #95a5a6;"></div>
+                        <span>Iron</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #8e44ad;"></div>
+                        <span>Wall</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #e67e22;"></div>
+                        <span>Crafting Table</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #f4d03f;"></div>
+                        <span>Storage</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #2ecc71;"></div>
+                        <span>Grass</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #d35400;"></div>
+                        <span>Dirt</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #7f8c8d;"></div>
+                        <span>Stone</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #32CD32;"></div>
+                        <span>Plant</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #8b4513;"></div>
+                        <span>Dropped Wood</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #c0c0c0;"></div>
+                        <span>Dropped Iron</span>
+                    </div>
+                </div>
+                <div id="resources">
+                    <h3>Resources</h3>
+                    <div id="resource-list"></div>
+                </div>
+                <div id="crafted-items">
+                    <h3>Crafted Items</h3>
+                    <div id="crafted-list"></div>
+                </div>
             </div>
         </div>
     </div>

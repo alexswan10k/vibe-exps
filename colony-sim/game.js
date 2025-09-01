@@ -6,6 +6,9 @@ class Game {
         this.mapWidth = 50;
         this.mapHeight = 50;
         this.camera = { x: 0, y: 0 };
+        this.zoom = 1;
+        this.minZoom = 0.5;
+        this.maxZoom = 2;
         this.selectedTile = null;
         this.pawns = [];
         this.resources = [];
@@ -16,6 +19,7 @@ class Game {
         this.craftedItems = { food: 0, tools: 0 };
         this.taskQueue = [];
         this.droppedResources = [];
+        this.plants = [];
         this.storageArea = null;
         this.areaSelection = null;
         this.isSelectingArea = false;
@@ -28,7 +32,7 @@ class Game {
     }
 
     init() {
-        this.canvas.width = window.innerWidth - 300;
+        this.canvas.width = window.innerWidth - 600;
         this.canvas.height = window.innerHeight;
         this.generateMap();
         this.createInitialPawns();
@@ -48,6 +52,14 @@ class Game {
                     this.map[y][x] = 'dirt';
                 } else {
                     this.map[y][x] = 'stone';
+                }
+            }
+        }
+        // Generate plants on grass
+        for (let y = 0; y < this.mapHeight; y++) {
+            for (let x = 0; x < this.mapWidth; x++) {
+                if (this.map[y][x] === 'grass' && Math.random() < 0.05) {
+                    this.plants.push(new Plant(x, y, 0));
                 }
             }
         }
@@ -86,6 +98,14 @@ class Game {
             this.setTaskMode('mine');
         });
 
+        document.getElementById('mine-stone').addEventListener('click', () => {
+            this.setTaskMode('mine_stone');
+        });
+
+        document.getElementById('harvest-plants').addEventListener('click', () => {
+            this.setTaskMode('harvest_plant');
+        });
+
         document.getElementById('haul-resources').addEventListener('click', () => {
             this.setTaskMode('haul');
         });
@@ -93,11 +113,13 @@ class Game {
         document.getElementById('build-wall').addEventListener('click', () => {
             this.buildMode = 'wall';
             this.currentTaskType = null;
+            this.canvas.style.cursor = 'crosshair';
         });
 
         document.getElementById('build-table').addEventListener('click', () => {
             this.buildMode = 'table';
             this.currentTaskType = null;
+            this.canvas.style.cursor = 'crosshair';
         });
 
         document.getElementById('build-storage').addEventListener('click', () => {
@@ -114,6 +136,9 @@ class Game {
 
         // Keyboard controls for camera
         document.addEventListener('keydown', (e) => this.handleKeyDown(e));
+
+        // Mouse wheel zoom
+        this.canvas.addEventListener('wheel', (e) => this.handleMouseWheel(e));
     }
 
     setTaskMode(taskType) {
@@ -129,7 +154,7 @@ class Game {
     }
 
     handleMouseDown(e) {
-        if (this.currentTaskType) {
+        if (this.currentTaskType || this.buildMode) {
             const rect = this.canvas.getBoundingClientRect();
             const x = Math.floor((e.clientX - rect.left + this.camera.x) / this.tileSize);
             const y = Math.floor((e.clientY - rect.top + this.camera.y) / this.tileSize);
@@ -159,6 +184,11 @@ class Game {
                 this.storageArea = this.areaSelection;
                 this.areaSelection = null;
                 this.currentTaskType = null;
+                this.canvas.style.cursor = 'default';
+            } else if (this.buildMode) {
+                this.buildInArea();
+                this.areaSelection = null;
+                this.buildMode = null;
                 this.canvas.style.cursor = 'default';
             } else {
                 this.createTasksFromArea();
@@ -198,6 +228,34 @@ class Game {
                     }
                 }
             }
+        } else if (this.currentTaskType === 'mine_stone') {
+            // For mining stone, look for stone terrain
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    if (this.map[y][x] === 'stone') {
+                        this.taskQueue.push({
+                            x: x,
+                            y: y,
+                            type: this.currentTaskType
+                        });
+                    }
+                }
+            }
+        } else if (this.currentTaskType === 'harvest_plant') {
+            // For harvesting plants, look for mature plants
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    const plant = this.plants.find(p => p.x === x && p.y === y);
+                    if (plant && plant.growth >= 50) {
+                        this.taskQueue.push({
+                            x: x,
+                            y: y,
+                            type: this.currentTaskType,
+                            plant: plant
+                        });
+                    }
+                }
+            }
         } else {
             // For chopping/mining, look for standing resources
             for (let y = startY; y <= endY; y++) {
@@ -215,6 +273,35 @@ class Game {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    buildInArea() {
+        if (!this.areaSelection) return;
+
+        const startX = Math.min(this.areaSelection.start.x, this.areaSelection.end.x);
+        const endX = Math.max(this.areaSelection.start.x, this.areaSelection.end.x);
+        const startY = Math.min(this.areaSelection.start.y, this.areaSelection.end.y);
+        const endY = Math.max(this.areaSelection.start.y, this.areaSelection.end.y);
+
+        if (this.buildMode === 'wall') {
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    if (this.resourcesInventory.wood >= 1) {
+                        this.buildings.push(new Building(x, y, 'wall'));
+                        this.resourcesInventory.wood -= 1;
+                    }
+                }
+            }
+            this.updateUI();
+        } else if (this.buildMode === 'table') {
+            if (this.resourcesInventory.wood >= 5) {
+                const centerX = Math.floor((startX + endX) / 2);
+                const centerY = Math.floor((startY + endY) / 2);
+                this.buildings.push(new Building(centerX, centerY, 'table'));
+                this.resourcesInventory.wood -= 5;
+                this.updateUI();
             }
         }
     }
@@ -238,6 +325,37 @@ class Game {
             case 'd':
                 this.camera.x = Math.min((this.mapWidth * this.tileSize) - this.canvas.width, this.camera.x + moveSpeed);
                 break;
+        }
+    }
+
+    handleMouseWheel(e) {
+        e.preventDefault();
+        const zoomSpeed = 0.1;
+        const oldZoom = this.zoom;
+
+        if (e.deltaY < 0) {
+            // Zoom in
+            this.zoom = Math.min(this.maxZoom, this.zoom + zoomSpeed);
+        } else {
+            // Zoom out
+            this.zoom = Math.max(this.minZoom, this.zoom - zoomSpeed);
+        }
+
+        // Adjust camera to zoom towards mouse position
+        if (oldZoom !== this.zoom) {
+            const rect = this.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            const worldX = (mouseX + this.camera.x) / oldZoom;
+            const worldY = (mouseY + this.camera.y) / oldZoom;
+
+            this.camera.x = worldX * this.zoom - mouseX;
+            this.camera.y = worldY * this.zoom - mouseY;
+
+            // Ensure camera stays within bounds
+            this.camera.x = Math.max(0, Math.min((this.mapWidth * this.tileSize * this.zoom) - this.canvas.width, this.camera.x));
+            this.camera.y = Math.max(0, Math.min((this.mapHeight * this.tileSize * this.zoom) - this.canvas.height, this.camera.y));
         }
     }
 
@@ -335,6 +453,11 @@ class Game {
             pawn.update(this);
         }
 
+        // Update plants
+        for (const plant of this.plants) {
+            plant.update();
+        }
+
         // Update tasks
         this.tasks = this.tasks.filter(task => !task.completed);
     }
@@ -383,6 +506,12 @@ class Game {
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
                 this.ctx.strokeRect(screenX + 2, screenY + 2, this.tileSize - 4, this.tileSize - 4);
+                // Draw appropriate icon
+                if (resource.type === 'tree') {
+                    this.drawChopIcon(screenX + 2, screenY + 20);
+                } else {
+                    this.drawMineIcon(screenX + 2, screenY + 20);
+                }
             }
 
             this.ctx.fillStyle = baseColor;
@@ -409,10 +538,40 @@ class Game {
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
                 this.ctx.strokeRect(screenX + 6, screenY + 6, this.tileSize - 12, this.tileSize - 12);
+                // Draw haul icon
+                this.drawHaulIcon(screenX + 6, screenY + 20);
             }
 
             this.ctx.fillStyle = baseColor;
             this.ctx.fillRect(screenX + 8, screenY + 8, this.tileSize - 16, this.tileSize - 16);
+        }
+
+        // Render plants
+        for (const plant of this.plants) {
+            const screenX = plant.x * this.tileSize - this.camera.x;
+            const screenY = plant.y * this.tileSize - this.camera.y;
+
+            // Check if this plant is in the task queue
+            const isQueued = this.taskQueue.some(task =>
+                task.x === plant.x && task.y === plant.y && task.type === 'harvest_plant'
+            );
+
+            let color = '#90EE90';
+            if (plant.growth > 50) color = '#32CD32';
+
+            // Highlight if queued
+            if (isQueued) {
+                color = plant.growth > 50 ? '#228B22' : '#66CDAA';
+                // Add a border to show it's queued
+                this.ctx.strokeStyle = '#f1c40f';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(screenX + 4, screenY + 4, this.tileSize - 8, this.tileSize - 8);
+                // Draw harvest icon
+                this.drawHarvestIcon(screenX + 4, screenY + 20);
+            }
+
+            this.ctx.fillStyle = color;
+            this.ctx.fillRect(screenX + 6, screenY + 6, this.tileSize - 12, this.tileSize - 12);
         }
 
         // Render buildings
@@ -490,11 +649,39 @@ class Game {
         }
     }
 
+    drawHarvestIcon(x, y) {
+        // Draw a larger scythe icon at bottom left
+        this.ctx.fillStyle = '#f1c40f';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('⚒', x, y);
+    }
+
+    drawChopIcon(x, y) {
+        // Draw a larger axe icon
+        this.ctx.fillStyle = '#f1c40f';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('🪓', x, y);
+    }
+
+    drawMineIcon(x, y) {
+        // Draw a larger pickaxe icon
+        this.ctx.fillStyle = '#f1c40f';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('⛏', x, y);
+    }
+
+    drawHaulIcon(x, y) {
+        // Draw a larger hand icon
+        this.ctx.fillStyle = '#f1c40f';
+        this.ctx.font = '16px Arial';
+        this.ctx.fillText('👐', x, y);
+    }
+
     getTileColor(type) {
         switch (type) {
             case 'grass': return '#2ecc71';
             case 'dirt': return '#d35400';
-            case 'stone': return '#95a5a6';
+            case 'stone': return '#7f8c8d';
             default: return '#34495e';
         }
     }
@@ -681,6 +868,25 @@ class Pawn {
                 this.carrying = null;
                 this.task.completed = true;
                 this.task = null;
+            } else if (this.task.type === 'mine_stone') {
+                // Mine stone terrain
+                if (game.map[this.task.y][this.task.x] === 'stone') {
+                    game.map[this.task.y][this.task.x] = 'dirt';
+                    game.resourcesInventory.stone = (game.resourcesInventory.stone || 0) + 1;
+                    game.updateUI();
+                }
+                this.task.completed = true;
+                this.task = null;
+            } else if (this.task.type === 'harvest_plant') {
+                // Harvest mature plant
+                const plant = game.plants.find(p => p.x === this.task.x && p.y === this.task.y);
+                if (plant && plant.growth >= 50) {
+                    game.craftedItems.food = (game.craftedItems.food || 0) + 1;
+                    game.plants.splice(game.plants.indexOf(plant), 1);
+                    game.updateUI();
+                }
+                this.task.completed = true;
+                this.task = null;
             }
         } else {
             // Move towards destination
@@ -711,6 +917,20 @@ class DroppedResource {
         this.x = x;
         this.y = y;
         this.type = type;
+    }
+}
+
+class Plant {
+    constructor(x, y, growth) {
+        this.x = x;
+        this.y = y;
+        this.growth = growth;
+    }
+
+    update() {
+        if (this.growth < 100) {
+            this.growth += 0.05;
+        }
     }
 }
 
