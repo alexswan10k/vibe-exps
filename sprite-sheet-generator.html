@@ -150,6 +150,64 @@
             white-space: pre-wrap;
             border: 1px solid #dee2e6;
         }
+        .session-manager {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .session-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .session-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .session-item {
+            padding: 5px 10px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .session-item.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .session-item:hover {
+            background: #e9ecef;
+        }
+        .session-item.active:hover {
+            background: #0056b3;
+        }
+        .backup-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .backup-controls input[type="file"] {
+            display: none;
+        }
+        .backup-controls label {
+            padding: 5px 10px;
+            background: #28a745;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .backup-controls label:hover {
+            background: #218838;
+        }
     </style>
 </head>
 <body>
@@ -169,6 +227,21 @@
                 <li>View simplified JSON output with name and position</li>
                 <li>Click "Show TypeScript Types" for type definitions</li>
             </ol>
+        </div>
+
+        <div class="session-manager">
+            <h3>Session Manager</h3>
+            <div class="session-controls">
+                <input type="text" id="newSessionName" placeholder="New session name" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                <button id="createSessionBtn">Create Session</button>
+                <button id="deleteSessionBtn" style="background: #dc3545;">Delete Current</button>
+            </div>
+            <div class="session-list" id="sessionList"></div>
+            <div class="backup-controls">
+                <button id="backupBtn">Backup All Sessions</button>
+                <input type="file" id="restoreFile" accept=".json">
+                <label for="restoreFile">Restore from File</label>
+            </div>
         </div>
 
         <div class="controls">
@@ -245,45 +318,144 @@ interface SpriteImage {
         const preset64Btn = document.getElementById('preset64');
         const preset128Btn = document.getElementById('preset128');
 
+        // Session management elements
+        const newSessionNameInput = document.getElementById('newSessionName');
+        const createSessionBtn = document.getElementById('createSessionBtn');
+        const deleteSessionBtn = document.getElementById('deleteSessionBtn');
+        const sessionList = document.getElementById('sessionList');
+        const backupBtn = document.getElementById('backupBtn');
+        const restoreFile = document.getElementById('restoreFile');
+
         let images = [];
         let imageNames = [];
+        let sessions = {};
+        let currentSessionId = 'default';
 
-        // Load from localStorage on page load
-        function loadFromStorage() {
-            try {
-                const saved = localStorage.getItem('spriteSheetData');
-                if (saved) {
-                    const data = JSON.parse(saved);
-                    gridColsInput.value = data.gridCols || 4;
-                    gridRowsInput.value = data.gridRows || 4;
-                    tileWidthInput.value = data.tileWidth || 64;
-                    tileHeightInput.value = data.tileHeight || 64;
-                    imageNames = data.imageNames || [];
-
-                    // Restore images from base64 data
-                    if (data.images && data.images.length > 0) {
-                        images = [];
-                        data.images.forEach((imgData, index) => {
-                            const img = new Image();
-                            img.onload = () => {
-                                images[index] = img;
-                                // Update display once all images are loaded
-                                if (images.filter(i => i).length === data.images.length) {
-                                    updateImageList();
-                                    updateSpriteSheet();
-                                }
-                            };
-                            img.src = imgData;
-                        });
-                    }
+        // Migrate old data if it exists
+        function migrateOldData() {
+            const oldData = localStorage.getItem('spriteSheetData');
+            if (oldData && !localStorage.getItem('spriteSheetSessions')) {
+                try {
+                    const parsedOldData = JSON.parse(oldData);
+                    sessions = {
+                        'default': {
+                            name: 'Default Session',
+                            gridCols: parsedOldData.gridCols || 4,
+                            gridRows: parsedOldData.gridRows || 4,
+                            tileWidth: parsedOldData.tileWidth || 64,
+                            tileHeight: parsedOldData.tileHeight || 64,
+                            imageNames: parsedOldData.imageNames || [],
+                            images: parsedOldData.images || []
+                        }
+                    };
+                    localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+                    localStorage.setItem('currentSessionId', currentSessionId);
+                    // Remove old data
+                    localStorage.removeItem('spriteSheetData');
+                    console.log('Migrated old data to new session format');
+                } catch (error) {
+                    console.warn('Error migrating old data:', error);
                 }
-            } catch (error) {
-                console.warn('Error loading from localStorage:', error);
             }
         }
 
-        // Save to localStorage
-        function saveToStorage() {
+        // Initialize default session if none exists
+        migrateOldData();
+        if (!localStorage.getItem('spriteSheetSessions')) {
+            sessions = {
+                'default': {
+                    name: 'Default Session',
+                    gridCols: 4,
+                    gridRows: 4,
+                    tileWidth: 64,
+                    tileHeight: 64,
+                    imageNames: [],
+                    images: []
+                }
+            };
+            localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+            localStorage.setItem('currentSessionId', currentSessionId);
+        }
+
+        // Load sessions from localStorage
+        function loadSessions() {
+            try {
+                const savedSessions = localStorage.getItem('spriteSheetSessions');
+                const savedCurrentId = localStorage.getItem('currentSessionId');
+
+                if (savedSessions) {
+                    sessions = JSON.parse(savedSessions);
+                    currentSessionId = savedCurrentId || 'default';
+                } else {
+                    // Initialize with default session
+                    sessions = {
+                        'default': {
+                            name: 'Default Session',
+                            gridCols: 4,
+                            gridRows: 4,
+                            tileWidth: 64,
+                            tileHeight: 64,
+                            imageNames: [],
+                            images: []
+                        }
+                    };
+                    currentSessionId = 'default';
+                    localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+                    localStorage.setItem('currentSessionId', currentSessionId);
+                }
+            } catch (error) {
+                console.warn('Error loading sessions from localStorage:', error);
+                // Fallback to default session
+                sessions = {
+                    'default': {
+                        name: 'Default Session',
+                        gridCols: 4,
+                        gridRows: 4,
+                        tileWidth: 64,
+                        tileHeight: 64,
+                        imageNames: [],
+                        images: []
+                    }
+                };
+                currentSessionId = 'default';
+            }
+        }
+
+        // Load current session data
+        function loadCurrentSession() {
+            const session = sessions[currentSessionId];
+            if (session) {
+                gridColsInput.value = session.gridCols || 4;
+                gridRowsInput.value = session.gridRows || 4;
+                tileWidthInput.value = session.tileWidth || 64;
+                tileHeightInput.value = session.tileHeight || 64;
+                imageNames = session.imageNames || [];
+
+                // Restore images from base64 data
+                if (session.images && session.images.length > 0) {
+                    images = [];
+                    session.images.forEach((imgData, index) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            images[index] = img;
+                            // Update display once all images are loaded
+                            if (images.filter(i => i).length === session.images.length) {
+                                updateImageList();
+                                updateSpriteSheet();
+                            }
+                        };
+                        img.src = imgData;
+                    });
+                } else {
+                    images = [];
+                    updateImageList();
+                    updateSpriteSheet();
+                }
+            }
+        }
+
+        // Save current session to localStorage
+        function saveCurrentSession() {
             try {
                 // Convert images to base64 for storage
                 const imageData = images.map(img => {
@@ -296,7 +468,8 @@ interface SpriteImage {
                     return canvas.toDataURL('image/png');
                 });
 
-                const data = {
+                sessions[currentSessionId] = {
+                    name: sessions[currentSessionId].name,
                     gridCols: parseInt(gridColsInput.value),
                     gridRows: parseInt(gridRowsInput.value),
                     tileWidth: parseInt(tileWidthInput.value),
@@ -304,10 +477,143 @@ interface SpriteImage {
                     imageNames: imageNames,
                     images: imageData
                 };
-                localStorage.setItem('spriteSheetData', JSON.stringify(data));
+
+                localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+                localStorage.setItem('currentSessionId', currentSessionId);
             } catch (error) {
-                console.warn('Error saving to localStorage:', error);
+                console.warn('Error saving session to localStorage:', error);
             }
+        }
+
+        // Update session list UI
+        function updateSessionList() {
+            sessionList.innerHTML = '';
+            Object.keys(sessions).forEach(sessionId => {
+                const sessionItem = document.createElement('div');
+                sessionItem.className = 'session-item' + (sessionId === currentSessionId ? ' active' : '');
+                sessionItem.textContent = sessions[sessionId].name;
+                sessionItem.addEventListener('click', () => switchToSession(sessionId));
+                sessionList.appendChild(sessionItem);
+            });
+        }
+
+        // Switch to a different session
+        function switchToSession(sessionId) {
+            if (sessionId !== currentSessionId) {
+                // Save current session before switching
+                saveCurrentSession();
+                currentSessionId = sessionId;
+                loadCurrentSession();
+                updateSessionList();
+                localStorage.setItem('currentSessionId', currentSessionId);
+            }
+        }
+
+        // Create a new session
+        function createSession(name) {
+            if (!name.trim()) {
+                alert('Please enter a session name');
+                return;
+            }
+
+            const sessionId = 'session_' + Date.now();
+            sessions[sessionId] = {
+                name: name.trim(),
+                gridCols: 4,
+                gridRows: 4,
+                tileWidth: 64,
+                tileHeight: 64,
+                imageNames: [],
+                images: []
+            };
+
+            // Save current session before switching
+            saveCurrentSession();
+            currentSessionId = sessionId;
+            loadCurrentSession();
+            updateSessionList();
+            localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+            localStorage.setItem('currentSessionId', currentSessionId);
+
+            // Clear the input field
+            setTimeout(() => {
+                newSessionNameInput.value = '';
+                newSessionNameInput.focus();
+            }, 0);
+        }
+
+        // Delete current session
+        function deleteCurrentSession() {
+            if (Object.keys(sessions).length <= 1) {
+                alert('Cannot delete the last session');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete "${sessions[currentSessionId].name}"?`)) {
+                return;
+            }
+
+            delete sessions[currentSessionId];
+            currentSessionId = Object.keys(sessions)[0];
+            loadCurrentSession();
+            updateSessionList();
+            localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+            localStorage.setItem('currentSessionId', currentSessionId);
+        }
+
+        // Backup all sessions to file
+        function backupSessions() {
+            try {
+                const backupData = {
+                    sessions: sessions,
+                    currentSessionId: currentSessionId,
+                    exportDate: new Date().toISOString(),
+                    version: '1.0'
+                };
+
+                const dataStr = JSON.stringify(backupData, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `sprite-sheet-sessions-backup-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.warn('Error creating backup:', error);
+                alert('Error creating backup file');
+            }
+        }
+
+        // Restore sessions from file
+        function restoreSessions(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const backupData = JSON.parse(e.target.result);
+
+                    if (backupData.sessions && typeof backupData.sessions === 'object') {
+                        if (confirm('This will replace all current sessions. Are you sure?')) {
+                            sessions = backupData.sessions;
+                            currentSessionId = backupData.currentSessionId || Object.keys(sessions)[0];
+                            localStorage.setItem('spriteSheetSessions', JSON.stringify(sessions));
+                            localStorage.setItem('currentSessionId', currentSessionId);
+                            loadCurrentSession();
+                            updateSessionList();
+                            alert('Sessions restored successfully!');
+                        }
+                    } else {
+                        alert('Invalid backup file format');
+                    }
+                } catch (error) {
+                    console.warn('Error restoring backup:', error);
+                    alert('Error reading backup file');
+                }
+            };
+            reader.readAsText(file);
         }
 
         // Generate and update sprite sheet in real-time
@@ -377,7 +683,7 @@ interface SpriteImage {
             };
 
             jsonOutput.value = JSON.stringify(jsonData, null, 2);
-            saveToStorage();
+            saveCurrentSession();
         }
 
         // Handle paste event
@@ -515,6 +821,30 @@ interface SpriteImage {
             link.click();
         });
 
+        // Session management event listeners
+        createSessionBtn.addEventListener('click', () => {
+            createSession(newSessionNameInput.value);
+        });
+
+        newSessionNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                createSession(newSessionNameInput.value);
+            }
+        });
+
+        deleteSessionBtn.addEventListener('click', deleteCurrentSession);
+
+        backupBtn.addEventListener('click', backupSessions);
+
+        restoreFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                restoreSessions(file);
+                // Reset file input
+                e.target.value = '';
+            }
+        });
+
         // Initialize when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', initializeApp);
@@ -523,12 +853,9 @@ interface SpriteImage {
         }
 
         function initializeApp() {
-            loadFromStorage();
-            // Only update sprite sheet if we don't have images loading from storage
-            const saved = localStorage.getItem('spriteSheetData');
-            if (!saved || !JSON.parse(saved).images || JSON.parse(saved).images.length === 0) {
-                updateSpriteSheet();
-            }
+            loadSessions();
+            loadCurrentSession();
+            updateSessionList();
         }
     </script>
 </body>
