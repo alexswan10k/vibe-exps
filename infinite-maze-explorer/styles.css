@@ -1,0 +1,72 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    font-family: 'Courier New', monospace;
+    color: #e94560;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+.game-container {
+    text-align: center;
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid #e94560;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+}
+
+h1 {
+    font-size: 2.5em;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px #e94560;
+    image-rendering: pixelated;
+}
+
+.game-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    font-size: 1.2em;
+}
+
+.score, .timer {
+    background: rgba(233, 69, 96, 0.1);
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 1px solid #e94560;
+}
+
+canvas {
+    border: 2px solid #e94560;
+    background: #000;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    box-shadow: 0 0 15px rgba(233, 69, 96, 0.5);
+}
+
+.controls {
+    margin-top: 20px;
+    font-size: 1.1em;
+    color: #f39c12;
+}
+
+.controls p {
+    margin: 5px 0;
+}
+
+/* Retro glow effect */
+@keyframes glow {
+    0% { box-shadow: 0 0 5px #e94560; }
+    50% { box-shadow: 0 0 20px #e94560, 0 0 30px #e94560; }
+    100% { box-shadow: 0 0 5px #e94560; }
+}
+
+.game-container {
+    animation: glow 2s ease-in-out infinite alternate;
+}
