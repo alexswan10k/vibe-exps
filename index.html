@@ -68,6 +68,7 @@
         .project-card:nth-child(14) { animation-delay: 1.4s; }
         .project-card:nth-child(15) { animation-delay: 1.5s; }
         .project-card:nth-child(16) { animation-delay: 1.6s; }
+        .project-card:nth-child(17) { animation-delay: 1.7s; }
         .project-card:hover {
             transform: translateY(-8px) scale(1.02);
             box-shadow: 0 15px 30px rgba(0,0,0,0.2);
@@ -93,13 +94,16 @@
             font-size: 1.4em;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
+            text-align: center;
         }
         .project-card p {
             color: #555;
             margin: 15px 0;
             line-height: 1.5;
             flex-grow: 1;
+            text-align: justify;
         }
 
         @keyframes fadeIn {
@@ -292,6 +296,11 @@
         <a href="dungeon-crawler/index.html" class="project-card">
             <h3>🏰 Procedural Dungeon Crawler</h3>
             <p>Explore procedurally generated dungeons, fight monsters, collect gold, and level up in this classic RPG adventure.</p>
+        </a>
+
+        <a href="hacker-simulator/index.html" class="project-card">
+            <h3>💻 Hacker Simulator</h3>
+            <p>Experience a terminal-style hacker simulation with command-line interface, filesystem navigation, and cyber challenges.</p>
         </a>
     </div>
 
