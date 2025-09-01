@@ -201,12 +201,16 @@ document.addEventListener('mousemove', (e) => {
             const rect = span.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
-            const distance = Math.sqrt((e.clientX - centerX) ** 2 + (e.clientY - centerY) ** 2);
+            const dx = centerX - e.clientX;
+            const dy = centerY - e.clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
             const maxDist = 200;
             const factor = Math.max(0, 1 - distance / maxDist);
             const scale = 0.8 + factor * 0.4; // from 0.8 to 1.2
             const opacity = 0.5 + factor * 0.5; // from 0.5 to 1
-            span.style.transform = `scale(${scale})`;
+            const moveX = (dx / distance) * factor * 15; // repel up to 15px
+            const moveY = (dy / distance) * factor * 15;
+            span.style.transform = `translate(${moveX}px, ${moveY}px) scale(${scale})`;
             span.style.opacity = opacity;
         }
     });
