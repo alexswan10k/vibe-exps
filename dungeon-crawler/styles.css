@@ -1,0 +1,96 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    font-family: 'Courier New', monospace;
+    color: #e94560;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    border-radius: 10px;
+    border: 2px solid #e94560;
+    box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+}
+
+.game-ui {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 800px;
+    margin-bottom: 10px;
+}
+
+.stats {
+    display: flex;
+    gap: 20px;
+}
+
+.stat {
+    background: rgba(26, 26, 46, 0.8);
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 1px solid #e94560;
+    font-size: 14px;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    background: linear-gradient(45deg, #e94560, #f39c12);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(233, 69, 96, 0.4);
+}
+
+#game-canvas {
+    border: 3px solid #e94560;
+    border-radius: 10px;
+    background: #000;
+    box-shadow: 0 0 30px rgba(233, 69, 96, 0.5);
+    image-rendering: pixelated;
+}
+
+.messages {
+    width: 100%;
+    max-width: 800px;
+    height: 100px;
+    background: rgba(26, 26, 46, 0.8);
+    border: 1px solid #e94560;
+    border-radius: 5px;
+    padding: 10px;
+    overflow-y: auto;
+    font-size: 12px;
+}
+
+#message-log {
+    color: #a8dadc;
+}
