@@ -157,6 +157,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Solar system background stars
     createStars();
 
+    // Neural network initialization
+    initializeNeuralNetwork();
+
     // Mobile menu toggle (if needed in future)
     // For now, the nav is responsive enough
 });
@@ -328,3 +331,208 @@ body.loaded section {
 
 `;
 document.head.appendChild(style);
+
+// Force Directed Graph Initialization
+function initializeNeuralNetwork() {
+    const svg = document.querySelector('.graph-svg');
+    if (!svg) {
+        console.error('SVG element not found');
+        return;
+    }
+
+    const width = 1200;
+    const height = 600;
+
+    // Define the graph data with more comprehensive skills
+    const nodes = [
+        // Core skill groups
+        { id: 'Backend', group: 'Backend', type: 'core', description: '.NET Core, Node.js, GraphQL, Event Sourcing, CQRS, Pub/Sub, Terraform, Serverless, Clouds (AWS, Azure, GCP), Air-gapped systems', x: width/2 - 200, y: height/2 },
+        { id: 'Frontend', group: 'Frontend', type: 'core', description: 'React, Redux, Webpack, Storybook, Testing: Mocha, Jasmine, Cypress, Authentication: OIDC, OAuth', x: width/2 + 200, y: height/2 },
+        { id: 'AI/ML', group: 'AI/ML', type: 'core', description: 'Vision: YOLO, DETR-ResNet, ONNX Integration, LLMs, Ollama, Autonomous Agents, RAG', x: width/2, y: height/2 - 150 },
+        { id: 'Languages', group: 'Languages', type: 'core', description: 'C#, F#, TypeScript, JavaScript, Rust, SQL, Python, Scala, Java', x: width/2, y: height/2 + 150 },
+        { id: 'Other', group: 'Other', type: 'core', description: 'WebGPU, GStreamer, Docker, 3D: Volume Raycasting, React Three Fiber', x: width/2 - 300, y: height/2 + 100 },
+
+        // Individual skills
+        { id: '.NET Core', group: 'Backend', type: 'leaf', description: 'Primary backend framework for enterprise applications', x: width/2 - 100, y: height/2 + 50 },
+        { id: 'Node.js', group: 'Backend', type: 'leaf', description: 'JavaScript runtime for server-side development', x: width/2 - 150, y: height/2 - 50 },
+        { id: 'GraphQL', group: 'Backend', type: 'leaf', description: 'Query language for APIs', x: width/2 - 250, y: height/2 },
+        { id: 'React', group: 'Frontend', type: 'leaf', description: 'Modern JavaScript library for building user interfaces', x: width/2 + 100, y: height/2 + 50 },
+        { id: 'Redux', group: 'Frontend', type: 'leaf', description: 'State management for React applications', x: width/2 + 150, y: height/2 - 50 },
+        { id: 'TypeScript', group: 'Frontend', type: 'leaf', description: 'Typed superset of JavaScript', x: width/2 + 250, y: height/2 },
+        { id: 'YOLO', group: 'AI/ML', type: 'leaf', description: 'Real-time object detection system', x: width/2 + 50, y: height/2 - 100 },
+        { id: 'Python', group: 'AI/ML', type: 'leaf', description: 'Primary language for machine learning', x: width/2 - 50, y: height/2 - 100 },
+        { id: 'Rust', group: 'Languages', type: 'leaf', description: 'Systems programming language', x: width/2 + 50, y: height/2 + 100 },
+        { id: 'C#', group: 'Languages', type: 'leaf', description: 'Object-oriented programming language', x: width/2 - 50, y: height/2 + 100 },
+        { id: 'Docker', group: 'Other', type: 'leaf', description: 'Containerization platform', x: width/2 - 200, y: height/2 + 150 },
+        { id: 'WebGPU', group: 'Other', type: 'leaf', description: 'Modern graphics API for the web', x: width/2 - 350, y: height/2 + 50 }
+    ];
+
+    const links = [
+        // Connect core groups to their skills
+        { source: 'Backend', target: '.NET Core' },
+        { source: 'Backend', target: 'Node.js' },
+        { source: 'Backend', target: 'GraphQL' },
+        { source: 'Frontend', target: 'React' },
+        { source: 'Frontend', target: 'Redux' },
+        { source: 'Frontend', target: 'TypeScript' },
+        { source: 'AI/ML', target: 'YOLO' },
+        { source: 'AI/ML', target: 'Python' },
+        { source: 'Languages', target: 'Rust' },
+        { source: 'Languages', target: 'C#' },
+        { source: 'Languages', target: 'TypeScript' },
+        { source: 'Other', target: 'Docker' },
+        { source: 'Other', target: 'WebGPU' }
+    ];
+
+    // Create force simulation with better parameters
+    const simulation = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(d => d.source.type === 'core' ? 120 : 80).strength(0.7))
+        .force('charge', d3.forceManyBody().strength(d => d.type === 'core' ? -800 : -400))
+        .force('center', d3.forceCenter(width / 2, height / 2).strength(0.1))
+        .force('collision', d3.forceCollide().radius(d => d.type === 'core' ? 40 : 25).strength(0.8))
+        .velocityDecay(0.8)
+        .alphaDecay(0.02);
+
+    // Create links
+    const link = d3.select('.links')
+        .selectAll('line')
+        .data(links)
+        .enter().append('line')
+        .attr('class', 'link')
+        .attr('stroke-width', 2);
+
+    // Create nodes
+    const node = d3.select('.nodes')
+        .selectAll('g')
+        .data(nodes)
+        .enter().append('g')
+        .attr('class', d => `node ${d.type}`)
+        .attr('data-group', d => d.group)
+        .attr('data-skill', d => d.id)
+        .attr('data-description', d => d.description)
+        .call(d3.drag()
+            .on('start', dragstarted)
+            .on('drag', dragged)
+            .on('end', dragended));
+
+    // Add circles to nodes
+    node.append('circle')
+        .attr('class', 'node-circle')
+        .attr('r', d => d.type === 'core' ? 25 : 15)
+        .attr('fill', d => {
+            const colors = {
+                'Backend': '#ff6b35',
+                'Frontend': '#4ecdc4',
+                'AI/ML': '#45b7d1',
+                'Languages': '#f9ca24',
+                'Other': '#6c5ce7'
+            };
+            return colors[d.group] || '#4a90e2';
+        });
+
+    // Add labels to nodes
+    node.append('text')
+        .attr('class', 'node-label')
+        .attr('text-anchor', 'middle')
+        .attr('dy', d => d.type === 'core' ? '0.35em' : '1.5em')
+        .attr('font-size', d => d.type === 'core' ? '14px' : '12px')
+        .attr('font-weight', d => d.type === 'core' ? 'bold' : 'normal')
+        .text(d => d.id);
+
+    // Update positions on simulation tick
+    simulation.on('tick', () => {
+        // Keep nodes within bounds
+        nodes.forEach(d => {
+            d.x = Math.max(30, Math.min(width - 30, d.x));
+            d.y = Math.max(30, Math.min(height - 30, d.y));
+        });
+
+        link
+            .attr('x1', d => d.source.x)
+            .attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x)
+            .attr('y2', d => d.target.y);
+
+        node
+            .attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+    // Drag functions
+    function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+    }
+
+    // Hover interactions with proximity detection
+    const skillsPanelTitle = document.getElementById('skills-panel-title');
+    const skillsPanelDescription = document.getElementById('skills-panel-description');
+    let hoveredNode = null;
+
+    // Mouse move proximity detection
+    svg.addEventListener('mousemove', function(event) {
+        const rect = svg.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        let closestNode = null;
+        let minDistance = 50; // Proximity threshold
+
+        nodes.forEach(d => {
+            const distance = Math.sqrt((d.x - mouseX) ** 2 + (d.y - mouseY) ** 2);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestNode = d;
+            }
+        });
+
+        if (closestNode !== hoveredNode) {
+            if (hoveredNode) {
+                // Reset previous hover
+                node.classed('hovered', false);
+                link.classed('active', false);
+            }
+
+            hoveredNode = closestNode;
+
+            if (hoveredNode) {
+                // Set new hover
+                node.classed('hovered', d => d === hoveredNode);
+                link.classed('active', l => l.source === hoveredNode || l.target === hoveredNode);
+
+                skillsPanelTitle.textContent = hoveredNode.id;
+                skillsPanelDescription.textContent = hoveredNode.description;
+            } else {
+                skillsPanelTitle.textContent = 'Hover over nodes to explore';
+                skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
+            }
+        }
+    });
+
+    // Mouse leave reset
+    svg.addEventListener('mouseleave', function() {
+        if (hoveredNode) {
+            hoveredNode = null;
+            node.classed('hovered', false);
+            link.classed('active', false);
+            skillsPanelTitle.textContent = 'Hover over nodes to explore';
+            skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
+        }
+    });
+
+    // Stabilize simulation after a few seconds
+    setTimeout(() => {
+        simulation.alphaTarget(0).restart();
+    }, 3000);
+}

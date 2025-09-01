@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alexander Swan - Expert Software Developer</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -130,45 +131,20 @@
 
     <section id="technologies">
         <h2>Technologies & Skills</h2>
-        <div class="tech-grid">
-            <div class="tech-category">
-                <h3>Backend</h3>
-                <ul>
-                    <li>.NET Core, Node.js, GraphQL</li>
-                    <li>Event Sourcing, CQRS, Pub/Sub</li>
-                    <li>Terraform, Serverless, Clouds (AWS, Azure, GCP)</li>
-                    <li>Air-gapped systems</li>
-                </ul>
-            </div>
-            <div class="tech-category">
-                <h3>Frontend</h3>
-                <ul>
-                    <li>React, Redux, Webpack, Storybook</li>
-                    <li>Testing: Mocha, Jasmine, Cypress</li>
-                    <li>Authentication: OIDC, OAuth</li>
-                </ul>
-            </div>
-            <div class="tech-category">
-                <h3>AI/ML</h3>
-                <ul>
-                    <li>Vision: YOLO, DETR-ResNet</li>
-                    <li>ONNX Integration, LLMs, Ollama</li>
-                    <li>Autonomous Agents, RAG</li>
-                </ul>
-            </div>
-            <div class="tech-category">
-                <h3>Languages</h3>
-                <ul>
-                    <li>C#, F#, TypeScript, JavaScript</li>
-                    <li>Rust, SQL, Python, Scala, Java</li>
-                </ul>
-            </div>
-            <div class="tech-category">
-                <h3>Other</h3>
-                <ul>
-                    <li>WebGPU, GStreamer, Docker</li>
-                    <li>3D: Volume Raycasting, React Three Fiber</li>
-                </ul>
+        <div class="force-graph">
+            <svg class="graph-svg" viewBox="0 0 1200 600">
+                <!-- Links (edges) -->
+                <g class="links"></g>
+                <!-- Nodes -->
+                <g class="nodes"></g>
+            </svg>
+        </div>
+
+        <!-- Skills details panel -->
+        <div class="skills-panel">
+            <div class="panel-content">
+                <h3 id="skills-panel-title">Hover over nodes to explore</h3>
+                <p id="skills-panel-description">Navigate the force-directed graph to discover my technical expertise and skills.</p>
             </div>
         </div>
     </section>
