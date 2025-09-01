@@ -132,6 +132,77 @@ class MazeGame {
         autoButton.addEventListener('click', () => {
             this.toggleAutoMode();
         });
+
+        // Touch controls
+        this.setupTouchControls();
+    }
+
+    setupTouchControls() {
+        const upBtn = document.getElementById('upBtn');
+        const downBtn = document.getElementById('downBtn');
+        const leftBtn = document.getElementById('leftBtn');
+        const rightBtn = document.getElementById('rightBtn');
+
+        // Touch and mouse events for better mobile support
+        const handleTouchStart = (key) => {
+            this.keys[key] = true;
+        };
+
+        const handleTouchEnd = (key) => {
+            this.keys[key] = false;
+        };
+
+        // Up button
+        upBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleTouchStart('ArrowUp');
+        });
+        upBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleTouchEnd('ArrowUp');
+        });
+        upBtn.addEventListener('mousedown', () => handleTouchStart('ArrowUp'));
+        upBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowUp'));
+        upBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowUp'));
+
+        // Down button
+        downBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleTouchStart('ArrowDown');
+        });
+        downBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleTouchEnd('ArrowDown');
+        });
+        downBtn.addEventListener('mousedown', () => handleTouchStart('ArrowDown'));
+        downBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowDown'));
+        downBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowDown'));
+
+        // Left button
+        leftBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleTouchStart('ArrowLeft');
+        });
+        leftBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleTouchEnd('ArrowLeft');
+        });
+        leftBtn.addEventListener('mousedown', () => handleTouchStart('ArrowLeft'));
+        leftBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowLeft'));
+        leftBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowLeft'));
+
+        // Right button
+        rightBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleTouchStart('ArrowRight');
+        });
+        rightBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleTouchEnd('ArrowRight');
+        });
+        rightBtn.addEventListener('mousedown', () => handleTouchStart('ArrowRight'));
+        rightBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowRight'));
+        rightBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowRight'));
     }
 
     toggleAutoMode() {

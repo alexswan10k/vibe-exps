@@ -8,15 +8,68 @@
 </head>
 <body>
     <div class="game-container">
-        <h1>Infinite Maze Explorer</h1>
-        <div class="game-info">
-            <div class="score">Score: <span id="score">0</span></div>
-            <div class="timer">Time: <span id="timer">00:00</span></div>
+        <header class="game-header">
+            <div class="header-left">
+                <div class="score">Score: <span id="score">0</span></div>
+            </div>
+            <div class="header-center">
+                <h1>Infinite Maze Explorer</h1>
+            </div>
+            <div class="header-right">
+                <div class="timer">Time: <span id="timer">00:00</span></div>
+            </div>
+        </header>
+        <!-- Main Game Layout -->
+        <div class="main-game-layout">
+            <!-- Game Canvas Section -->
+            <div class="game-section">
+                <canvas id="mazeCanvas" width="800" height="600"></canvas>
+            </div>
+
+            <!-- Utility Panels Section -->
+            <div class="utility-section">
+                <!-- Instruction Panel -->
+                <div class="instruction-panel">
+                    <h3>Controls</h3>
+                    <div class="instruction-content">
+                        <div class="keyboard-controls">
+                            <h4>Keyboard:</h4>
+                            <ul>
+                                <li><kbd>↑</kbd> or <kbd>W</kbd> - Move Up</li>
+                                <li><kbd>↓</kbd> or <kbd>S</kbd> - Move Down</li>
+                                <li><kbd>←</kbd> or <kbd>A</kbd> - Move Left</li>
+                                <li><kbd>→</kbd> or <kbd>D</kbd> - Move Right</li>
+                            </ul>
+                        </div>
+                        <div class="touch-controls">
+                            <h4>Touch/Mobile:</h4>
+                            <p>Use the on-screen buttons</p>
+                        </div>
+                    </div>
+                    <div class="game-tips">
+                        <p><strong>Goal:</strong> Collect golden coins (+10 points each)</p>
+                        <p><strong>Features:</strong> Fog-of-war reveals explored areas</p>
+                    </div>
+                </div>
+
+                <!-- Touch Controls -->
+                <div class="touch-controls-section">
+                    <div class="touch-buttons">
+                        <div class="dpad">
+                            <button id="upBtn" class="touch-btn up-btn">↑</button>
+                            <div class="dpad-middle">
+                                <button id="leftBtn" class="touch-btn left-btn">←</button>
+                                <button id="rightBtn" class="touch-btn right-btn">→</button>
+                            </div>
+                            <button id="downBtn" class="touch-btn down-btn">↓</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <canvas id="mazeCanvas" width="800" height="600"></canvas>
+
         <div class="controls">
             <button id="autoButton" class="auto-button">Auto Explore</button>
-            <p>Use arrow keys or WASD to move, or click Auto Explore to let the AI play!</p>
             <p>Collect the golden coins to increase your score!</p>
         </div>
     </div>
