@@ -54,15 +54,17 @@ function startNewGame() {
 // Create the starting room
 function createStartingRoom() {
     const roomKey = '0,0';
+    const roomWidth = ROOM_SIZE;
+    const roomHeight = ROOM_SIZE;
     const room = {
         x: 0,
         y: 0,
-        width: ROOM_SIZE,
-        height: ROOM_SIZE,
+        width: roomWidth,
+        height: roomHeight,
         exits: [],
         parent: null,
         depth: 0,
-        tiles: Array(ROOM_SIZE).fill().map(() => Array(ROOM_SIZE).fill(0))
+        tiles: Array(roomHeight).fill().map(() => Array(roomWidth).fill(0))
     };
 
     // Generate random exits (1-4 exits)
@@ -134,16 +136,19 @@ function generateRoomAtExit(parentRoom, exitIndex) {
         return;
     }
 
-    // Create new room
+    // Create new room with random size (6-12 tiles)
+    const roomWidth = 6 + Math.floor(Math.random() * 7); // 6-12
+    const roomHeight = 6 + Math.floor(Math.random() * 7); // 6-12
+
     const newRoom = {
         x: newRoomX,
         y: newRoomY,
-        width: ROOM_SIZE,
-        height: ROOM_SIZE,
+        width: roomWidth,
+        height: roomHeight,
         exits: [],
         parent: parentRoom,
         depth: parentRoom.depth + 1,
-        tiles: Array(ROOM_SIZE).fill().map(() => Array(ROOM_SIZE).fill(0))
+        tiles: Array(roomHeight).fill().map(() => Array(roomWidth).fill(0))
     };
 
     // Generate exits for new room (but avoid the direction we came from)
@@ -183,8 +188,8 @@ function generateRoomExits(room, avoidDirection = null) {
 
     for (let i = 0; i < Math.min(numExits, shuffledDirections.length); i++) {
         const dir = shuffledDirections[i];
-        const exitX = dir.dx === 0 ? Math.floor(Math.random() * (ROOM_SIZE - 2)) + 1 : (dir.dx === -1 ? 0 : ROOM_SIZE - 1);
-        const exitY = dir.dy === 0 ? Math.floor(Math.random() * (ROOM_SIZE - 2)) + 1 : (dir.dy === -1 ? 0 : ROOM_SIZE - 1);
+        const exitX = dir.dx === 0 ? Math.floor(Math.random() * (room.width - 2)) + 1 : (dir.dx === -1 ? 0 : room.width - 1);
+        const exitY = dir.dy === 0 ? Math.floor(Math.random() * (room.height - 2)) + 1 : (dir.dy === -1 ? 0 : room.height - 1);
 
         room.exits.push({
             x: exitX,
@@ -198,8 +203,8 @@ function generateRoomExits(room, avoidDirection = null) {
     // Ensure at least one exit if this is a dead end (depth > 2)
     if (room.exits.length === 0 && room.depth > 2) {
         const randomDir = availableDirections[Math.floor(Math.random() * availableDirections.length)];
-        const exitX = randomDir.dx === 0 ? Math.floor(Math.random() * (ROOM_SIZE - 2)) + 1 : (randomDir.dx === -1 ? 0 : ROOM_SIZE - 1);
-        const exitY = randomDir.dy === 0 ? Math.floor(Math.random() * (ROOM_SIZE - 2)) + 1 : (randomDir.dy === -1 ? 0 : ROOM_SIZE - 1);
+        const exitX = randomDir.dx === 0 ? Math.floor(Math.random() * (room.width - 2)) + 1 : (randomDir.dx === -1 ? 0 : room.width - 1);
+        const exitY = randomDir.dy === 0 ? Math.floor(Math.random() * (room.height - 2)) + 1 : (randomDir.dy === -1 ? 0 : room.height - 1);
 
         room.exits.push({
             x: exitX,
@@ -248,20 +253,20 @@ function connectRooms(roomA, roomB, exit) {
     let corridorEndX, corridorEndY;
     switch (exit.direction) {
         case 'north':
-            corridorEndX = roomB.x + Math.floor(ROOM_SIZE / 2);
-            corridorEndY = roomB.y + ROOM_SIZE - 1;
+            corridorEndX = roomB.x + Math.floor(roomB.width / 2);
+            corridorEndY = roomB.y + roomB.height - 1;
             break;
         case 'south':
-            corridorEndX = roomB.x + Math.floor(ROOM_SIZE / 2);
+            corridorEndX = roomB.x + Math.floor(roomB.width / 2);
             corridorEndY = roomB.y;
             break;
         case 'west':
-            corridorEndX = roomB.x + ROOM_SIZE - 1;
-            corridorEndY = roomB.y + Math.floor(ROOM_SIZE / 2);
+            corridorEndX = roomB.x + roomB.width - 1;
+            corridorEndY = roomB.y + Math.floor(roomB.height / 2);
             break;
         case 'east':
             corridorEndX = roomB.x;
-            corridorEndY = roomB.y + Math.floor(ROOM_SIZE / 2);
+            corridorEndY = roomB.y + Math.floor(roomB.height / 2);
             break;
     }
 
@@ -763,8 +768,8 @@ function placeEntities() {
         let x, y, attempts = 0;
 
         do {
-            x = room.x + Math.floor(Math.random() * ROOM_SIZE);
-            y = room.y + Math.floor(Math.random() * ROOM_SIZE);
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
             attempts++;
         } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 50);
 
@@ -779,8 +784,8 @@ function placeEntities() {
         let x, y, attempts = 0;
 
         do {
-            x = room.x + Math.floor(Math.random() * ROOM_SIZE);
-            y = room.y + Math.floor(Math.random() * ROOM_SIZE);
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
             attempts++;
         } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 50);
 
@@ -795,8 +800,8 @@ function placeEntities() {
         let x, y, attempts = 0;
 
         do {
-            x = room.x + Math.floor(Math.random() * ROOM_SIZE);
-            y = room.y + Math.floor(Math.random() * ROOM_SIZE);
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
             attempts++;
         } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 50);
 
@@ -1074,13 +1079,20 @@ function spawnEntitiesInRoom(room) {
     // Skip corridor rooms
     if (room.isCorridor) return;
 
+    // Don't spawn enemies in the first room (depth 0)
+    const isStartingRoom = room.depth === 0;
+
+    // Scale enemy count based on depth (deeper = more dangerous)
+    const enemyScale = Math.max(0, Math.min(3, Math.floor(room.depth / 2)));
+    const maxEnemies = isStartingRoom ? 0 : Math.max(1, enemyScale);
+
     // Spawn 1-3 treasures
     const numTreasures = Math.floor(Math.random() * 3) + 1;
     for (let i = 0; i < numTreasures; i++) {
         let x, y, attempts = 0;
         do {
-            x = room.x + Math.floor(Math.random() * ROOM_SIZE);
-            y = room.y + Math.floor(Math.random() * ROOM_SIZE);
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
             attempts++;
         } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 20);
 
@@ -1089,13 +1101,13 @@ function spawnEntitiesInRoom(room) {
         }
     }
 
-    // Spawn 1-2 traps
-    const numTraps = Math.floor(Math.random() * 2) + 1;
+    // Spawn 1-2 traps (fewer in starting room)
+    const numTraps = isStartingRoom ? Math.floor(Math.random() * 2) : Math.floor(Math.random() * 2) + 1;
     for (let i = 0; i < numTraps; i++) {
         let x, y, attempts = 0;
         do {
-            x = room.x + Math.floor(Math.random() * ROOM_SIZE);
-            y = room.y + Math.floor(Math.random() * ROOM_SIZE);
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
             attempts++;
         } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 20);
 
@@ -1104,21 +1116,25 @@ function spawnEntitiesInRoom(room) {
         }
     }
 
-    // Spawn 0-2 enemies
-    const numEnemies = Math.floor(Math.random() * 3); // 0-2 enemies
+    // Spawn enemies based on depth (scaled difficulty)
+    const numEnemies = Math.floor(Math.random() * (maxEnemies + 1));
     for (let i = 0; i < numEnemies; i++) {
         let x, y, attempts = 0;
         do {
-            x = room.x + Math.floor(Math.random() * ROOM_SIZE);
-            y = room.y + Math.floor(Math.random() * ROOM_SIZE);
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
             attempts++;
         } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 20);
 
         if (attempts < 20) {
+            // Scale enemy stats based on depth
+            const baseHealth = 20 + room.depth * 5;
+            const baseAttack = 5 + Math.floor(room.depth / 2);
+
             enemies.push({
                 x, y,
-                health: 20 + Math.floor(Math.random() * 20),
-                attack: 5 + Math.floor(Math.random() * 5)
+                health: baseHealth + Math.floor(Math.random() * 15),
+                attack: baseAttack + Math.floor(Math.random() * 5)
             });
         }
     }
