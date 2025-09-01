@@ -262,5 +262,80 @@ body.loaded section {
     z-index: 9999;
     transition: none;
 }
+
+.scattered-sprite {
+    animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
 `;
 document.head.appendChild(style);
+
+// Sprite scattering code
+const spriteImage = new Image();
+spriteImage.onload = function() {
+    const W = spriteImage.width;
+    const H = spriteImage.height;
+    const border = 20;
+    const gap = 20;
+    const usableW = W - 2 * border;
+    const usableH = H - 2 * border;
+    const imgW = (usableW - 2 * gap) / 3;
+    const rowH = (usableH - gap) / 2;
+    const sprites = [
+        { x: border, y: border, w: imgW, h: usableH }, // sprite 1: spans 2 rows
+        { x: border + imgW + gap, y: border, w: imgW, h: rowH }, // sprite 2
+        { x: border + 2 * imgW + 2 * gap, y: border, w: imgW, h: rowH }, // sprite 3
+        { x: border + imgW + gap, y: border + rowH + gap, w: imgW, h: rowH }, // sprite 4
+        { x: border + 2 * imgW + 2 * gap, y: border + rowH + gap, w: imgW, h: rowH } // sprite 5
+    ];
+    // Scatter in sections (excluding hero)
+    const sections = ['features', 'about', 'projects', 'testimonials', 'contact'];
+    sections.forEach(sectionId => {
+        const section = document.getElementById(sectionId);
+        if (section) {
+            const numSprites = Math.random() < 0.5 ? 1 : 2; // 1 or 2 sprites per section
+            for (let i = 0; i < numSprites; i++) {
+                const sprite = sprites[Math.floor(Math.random() * sprites.length)];
+                const div = document.createElement('div');
+                div.className = 'scattered-sprite';
+                div.style.backgroundImage = `url('ai.png')`;
+                div.style.backgroundSize = `${W}px ${H}px`;
+                div.style.backgroundPosition = `-${sprite.x}px -${sprite.y}px`;
+                div.style.width = `${sprite.w * 0.6}px`; // scale down
+                div.style.height = `${sprite.h * 0.6}px`;
+                div.style.position = 'absolute';
+                // Position in edges/corners to avoid blocking text
+                const positions = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+                const pos = positions[Math.floor(Math.random() * positions.length)];
+                switch (pos) {
+                    case 'top-left':
+                        div.style.left = '5%';
+                        div.style.top = '5%';
+                        break;
+                    case 'top-right':
+                        div.style.right = '5%';
+                        div.style.top = '5%';
+                        break;
+                    case 'bottom-left':
+                        div.style.left = '5%';
+                        div.style.bottom = '5%';
+                        break;
+                    case 'bottom-right':
+                        div.style.right = '5%';
+                        div.style.bottom = '5%';
+                        break;
+                }
+                div.style.opacity = '0.15'; // more subtle
+                div.style.pointerEvents = 'none';
+                div.style.zIndex = '-1'; // behind content
+                section.style.position = 'relative';
+                section.appendChild(div);
+            }
+        }
+    });
+};
+spriteImage.src = 'ai.png';
