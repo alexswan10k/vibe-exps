@@ -17,7 +17,7 @@ body {
 }
 
 #output {
-    height: calc(100vh - 60px);
+    height: calc(100vh - 120px);
     overflow-y: auto;
     white-space: pre-wrap;
     line-height: 1.4;
@@ -43,6 +43,29 @@ body {
     outline: none;
     flex: 1;
     caret-color: #00ff00;
+}
+
+#command-buttons {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+#command-buttons button {
+    background: #111;
+    border: 1px solid #00ff00;
+    color: #00ff00;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#command-buttons button:hover {
+    background: #00ff00;
+    color: #000;
 }
 
 /* Flickering effect */
