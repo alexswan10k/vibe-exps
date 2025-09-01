@@ -105,25 +105,33 @@ h1 {
 
 .actions {
     margin: 20px 0;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    max-width: 600px;
+    margin: 20px auto;
 }
 
 button {
     background: #FF6347;
     border: 2px solid #8B4513;
     color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
+    padding: 10px 12px;
+    border-radius: 6px;
     cursor: pointer;
     font-family: 'Courier New', monospace;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: bold;
     text-transform: uppercase;
     transition: all 0.2s ease;
     box-shadow: 0 4px 0px #8B4513;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    gap: 4px;
+    line-height: 1.2;
 }
 
 button:hover {
