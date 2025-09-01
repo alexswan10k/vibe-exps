@@ -117,7 +117,7 @@ class Game {
     checkCollisions() {
         // Player projectiles vs enemies
         this.projectiles.forEach((projectile, pIndex) => {
-            if (projectile.speed < 0) return; // Only check enemy projectiles
+            if (projectile.speed > 0) return; // Skip enemy projectiles, only check player projectiles
 
             this.enemies.forEach((enemy, eIndex) => {
                 if (this.isColliding(projectile, enemy)) {

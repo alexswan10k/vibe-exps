@@ -16,13 +16,15 @@ body {
     background: rgba(0, 0, 0, 0.8);
     border: 2px solid #e94560;
     border-radius: 10px;
-    padding: 20px;
+    padding: 15px;
     box-shadow: 0 0 20px rgba(233, 69, 96, 0.3);
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 h1 {
-    font-size: 2.5em;
-    margin-bottom: 20px;
+    font-size: 2.2em;
+    margin-bottom: 15px;
     text-shadow: 0 0 10px #e94560;
     image-rendering: pixelated;
 }
@@ -30,7 +32,7 @@ h1 {
 .game-info {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     font-size: 1.2em;
 }
 
@@ -51,13 +53,43 @@ canvas {
 }
 
 .controls {
-    margin-top: 20px;
+    margin-top: 15px;
     font-size: 1.1em;
     color: #f39c12;
 }
 
 .controls p {
     margin: 5px 0;
+}
+
+.auto-button {
+    background: linear-gradient(135deg, #e94560, #f39c12);
+    color: #000;
+    border: 2px solid #e94560;
+    padding: 10px 20px;
+    font-size: 1.1em;
+    font-family: 'Courier New', monospace;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 0 10px rgba(233, 69, 96, 0.3);
+}
+
+.auto-button:hover {
+    background: linear-gradient(135deg, #f39c12, #e94560);
+    box-shadow: 0 0 15px rgba(233, 69, 96, 0.6);
+    transform: scale(1.05);
+}
+
+.auto-button:active {
+    transform: scale(0.95);
+}
+
+.auto-button.auto-active {
+    background: linear-gradient(135deg, #27ae60, #2ecc71);
+    border-color: #27ae60;
+    box-shadow: 0 0 15px rgba(39, 174, 96, 0.6);
 }
 
 /* Retro glow effect */
