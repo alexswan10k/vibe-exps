@@ -125,12 +125,12 @@
         <div class="instructions">
             <p><strong>Instructions:</strong></p>
             <ul>
-                <li>Click "Paste Image" to load an image from your clipboard</li>
-                <li>Use the Draw tool to paint on the image</li>
-                <li>Use the Crop tool: select it, then click and drag to choose an area - crop applies automatically when you release</li>
-                <li>Adjust brush size and color for drawing</li>
-                <li>Use Rescale to change image size</li>
-                <li>Click "Save as PNG" to download the edited image</li>
+                <li><strong>Paste Image:</strong> Click "Paste Image" button or simply press <kbd>Ctrl</kbd>+<kbd>V</kbd> to load an image from your clipboard</li>
+                <li><strong>Draw:</strong> Select "Draw" tool, then click and drag to paint on the image</li>
+                <li><strong>Crop:</strong> Select "Crop" tool, then click and drag to choose an area - crop applies automatically when you release</li>
+                <li><strong>Adjust:</strong> Use color picker and brush size slider for drawing</li>
+                <li><strong>Rescale:</strong> Enter a percentage and click "Rescale" to change image size</li>
+                <li><strong>Save:</strong> Click "Save as PNG" to download your edited image</li>
             </ul>
         </div>
     </div>
@@ -171,7 +171,20 @@
             }
         });
 
-        // Paste image from clipboard
+        // Function to load image from blob
+        function loadImageFromBlob(blob) {
+            const img = new Image();
+            img.onload = () => {
+                originalImage = img;
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                saveBtn.disabled = false;
+            };
+            img.src = URL.createObjectURL(blob);
+        }
+
+        // Paste image from clipboard (button click)
         pasteBtn.addEventListener('click', async () => {
             try {
                 const clipboardItems = await navigator.clipboard.read();
@@ -179,15 +192,7 @@
                     for (const type of item.types) {
                         if (type.startsWith('image/')) {
                             const blob = await item.getType(type);
-                            const img = new Image();
-                            img.onload = () => {
-                                originalImage = img;
-                                canvas.width = img.width;
-                                canvas.height = img.height;
-                                ctx.drawImage(img, 0, 0);
-                                saveBtn.disabled = false;
-                            };
-                            img.src = URL.createObjectURL(blob);
+                            loadImageFromBlob(blob);
                             return;
                         }
                     }
@@ -196,6 +201,19 @@
             } catch (err) {
                 console.error('Failed to read clipboard:', err);
                 alert('Failed to paste image. Make sure you have an image copied.');
+            }
+        });
+
+        // Ctrl+V paste functionality (no permissions required)
+        document.addEventListener('paste', (e) => {
+            const items = e.clipboardData.items;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    loadImageFromBlob(blob);
+                    e.preventDefault(); // Prevent default paste behavior
+                    return;
+                }
             }
         });
 
