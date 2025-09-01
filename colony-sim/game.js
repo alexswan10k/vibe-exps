@@ -188,8 +188,8 @@ class Game {
     handleMouseDown(e) {
         if (this.currentTaskType || this.buildMode) {
             const rect = this.canvas.getBoundingClientRect();
-            const x = Math.floor((e.clientX - rect.left + this.camera.x) / this.tileSize);
-            const y = Math.floor((e.clientY - rect.top + this.camera.y) / this.tileSize);
+            const x = Math.floor((e.clientX - rect.left + this.camera.x) / (this.tileSize * this.zoom));
+            const y = Math.floor((e.clientY - rect.top + this.camera.y) / (this.tileSize * this.zoom));
 
             this.isSelectingArea = true;
             this.selectionStart = { x, y };
@@ -199,8 +199,8 @@ class Game {
 
     handleMouseMove(e) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left + this.camera.x) / this.tileSize);
-        const y = Math.floor((e.clientY - rect.top + this.camera.y) / this.tileSize);
+        const x = Math.floor((e.clientX - rect.left + this.camera.x) / (this.tileSize * this.zoom));
+        const y = Math.floor((e.clientY - rect.top + this.camera.y) / (this.tileSize * this.zoom));
 
         if (this.isSelectingArea && this.areaSelection) {
             this.areaSelection.end = { x, y };
@@ -347,7 +347,7 @@ class Game {
                 break;
             case 'ArrowDown':
             case 's':
-                this.camera.y = Math.min((this.mapHeight * this.tileSize) - this.canvas.height, this.camera.y + moveSpeed);
+                this.camera.y = Math.min((this.mapHeight * this.tileSize * this.zoom) - this.canvas.height, this.camera.y + moveSpeed);
                 break;
             case 'ArrowLeft':
             case 'a':
@@ -355,7 +355,7 @@ class Game {
                 break;
             case 'ArrowRight':
             case 'd':
-                this.camera.x = Math.min((this.mapWidth * this.tileSize) - this.canvas.width, this.camera.x + moveSpeed);
+                this.camera.x = Math.min((this.mapWidth * this.tileSize * this.zoom) - this.canvas.width, this.camera.x + moveSpeed);
                 break;
         }
     }
@@ -379,16 +379,31 @@ class Game {
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
 
-            const worldX = (mouseX + this.camera.x) / oldZoom;
-            const worldY = (mouseY + this.camera.y) / oldZoom;
+            const worldX = (mouseX + this.camera.x) / (this.tileSize * oldZoom);
+            const worldY = (mouseY + this.camera.y) / (this.tileSize * oldZoom);
 
-            this.camera.x = worldX * this.zoom - mouseX;
-            this.camera.y = worldY * this.zoom - mouseY;
+            this.camera.x = worldX * this.tileSize * this.zoom - mouseX;
+            this.camera.y = worldY * this.tileSize * this.zoom - mouseY;
 
             // Ensure camera stays within bounds
             this.camera.x = Math.max(0, Math.min((this.mapWidth * this.tileSize * this.zoom) - this.canvas.width, this.camera.x));
             this.camera.y = Math.max(0, Math.min((this.mapHeight * this.tileSize * this.zoom) - this.canvas.height, this.camera.y));
         }
+    }
+
+    focusCameraOnPawn(pawn) {
+        // Zoom in a little if too far zoomed out
+        if (this.zoom < 1) {
+            this.zoom = 1;
+        }
+
+        // Center camera on the pawn's position
+        this.camera.x = pawn.x * this.tileSize * this.zoom - this.canvas.width / 2;
+        this.camera.y = pawn.y * this.tileSize * this.zoom - this.canvas.height / 2;
+
+        // Ensure camera stays within bounds
+        this.camera.x = Math.max(0, Math.min((this.mapWidth * this.tileSize * this.zoom) - this.canvas.width, this.camera.x));
+        this.camera.y = Math.max(0, Math.min((this.mapHeight * this.tileSize * this.zoom) - this.canvas.height, this.camera.y));
     }
 
 
@@ -500,11 +515,12 @@ class Game {
         // Render map
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
-                const screenX = x * this.tileSize - this.camera.x;
-                const screenY = y * this.tileSize - this.camera.y;
+                const screenX = x * this.tileSize * this.zoom - this.camera.x;
+                const screenY = y * this.tileSize * this.zoom - this.camera.y;
+                const tileSizeZoomed = this.tileSize * this.zoom;
 
-                if (screenX + this.tileSize < 0 || screenX > this.canvas.width ||
-                    screenY + this.tileSize < 0 || screenY > this.canvas.height) {
+                if (screenX + tileSizeZoomed < 0 || screenX > this.canvas.width ||
+                    screenY + tileSizeZoomed < 0 || screenY > this.canvas.height) {
                     continue;
                 }
 
@@ -517,29 +533,30 @@ class Game {
                         this.ctx.drawImage(
                             this.spriteSheet,
                             sourceX, sourceY, this.spriteConfig.tileWidth, this.spriteConfig.tileHeight,
-                            screenX, screenY, this.tileSize, this.tileSize
+                            screenX, screenY, tileSizeZoomed, tileSizeZoomed
                         );
                     } else {
                         // Fallback to solid color if sprite not found
                         this.ctx.fillStyle = this.getTileColor(this.map[y][x]);
-                        this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+                        this.ctx.fillRect(screenX, screenY, tileSizeZoomed, tileSizeZoomed);
                     }
                 } else {
                     // Fallback to solid color if sprite sheet not loaded
                     this.ctx.fillStyle = this.getTileColor(this.map[y][x]);
-                    this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+                    this.ctx.fillRect(screenX, screenY, tileSizeZoomed, tileSizeZoomed);
                 }
 
                 // Draw grid
                 this.ctx.strokeStyle = '#2c3e50';
-                this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+                this.ctx.strokeRect(screenX, screenY, tileSizeZoomed, tileSizeZoomed);
             }
         }
 
         // Render resources
         for (const resource of this.resources) {
-            const screenX = resource.x * this.tileSize - this.camera.x;
-            const screenY = resource.y * this.tileSize - this.camera.y;
+            const screenX = resource.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = resource.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
 
             // Check if this resource is in the task queue
             const isQueued = this.taskQueue.some(task =>
@@ -555,23 +572,24 @@ class Game {
                 // Add a border to show it's queued
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(screenX + 2, screenY + 2, this.tileSize - 4, this.tileSize - 4);
+                this.ctx.strokeRect(screenX + 2 * this.zoom, screenY + 2 * this.zoom, tileSizeZoomed - 4 * this.zoom, tileSizeZoomed - 4 * this.zoom);
                 // Draw appropriate icon
                 if (resource.type === 'tree') {
-                    this.drawChopIcon(screenX + 2, screenY + 20);
+                    this.drawChopIcon(screenX + 2 * this.zoom, screenY + 20 * this.zoom);
                 } else {
-                    this.drawMineIcon(screenX + 2, screenY + 20);
+                    this.drawMineIcon(screenX + 2 * this.zoom, screenY + 20 * this.zoom);
                 }
             }
 
             this.ctx.fillStyle = baseColor;
-            this.ctx.fillRect(screenX + 4, screenY + 4, this.tileSize - 8, this.tileSize - 8);
+            this.ctx.fillRect(screenX + 4 * this.zoom, screenY + 4 * this.zoom, tileSizeZoomed - 8 * this.zoom, tileSizeZoomed - 8 * this.zoom);
         }
 
         // Render dropped resources
         for (const droppedResource of this.droppedResources) {
-            const screenX = droppedResource.x * this.tileSize - this.camera.x;
-            const screenY = droppedResource.y * this.tileSize - this.camera.y;
+            const screenX = droppedResource.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = droppedResource.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
 
             // Check if this dropped resource is in the task queue
             const isQueued = this.taskQueue.some(task =>
@@ -587,19 +605,20 @@ class Game {
                 // Add a border to show it's queued
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(screenX + 6, screenY + 6, this.tileSize - 12, this.tileSize - 12);
+                this.ctx.strokeRect(screenX + 6 * this.zoom, screenY + 6 * this.zoom, tileSizeZoomed - 12 * this.zoom, tileSizeZoomed - 12 * this.zoom);
                 // Draw haul icon
-                this.drawHaulIcon(screenX + 6, screenY + 20);
+                this.drawHaulIcon(screenX + 6 * this.zoom, screenY + 20 * this.zoom);
             }
 
             this.ctx.fillStyle = baseColor;
-            this.ctx.fillRect(screenX + 8, screenY + 8, this.tileSize - 16, this.tileSize - 16);
+            this.ctx.fillRect(screenX + 8 * this.zoom, screenY + 8 * this.zoom, tileSizeZoomed - 16 * this.zoom, tileSizeZoomed - 16 * this.zoom);
         }
 
         // Render plants
         for (const plant of this.plants) {
-            const screenX = plant.x * this.tileSize - this.camera.x;
-            const screenY = plant.y * this.tileSize - this.camera.y;
+            const screenX = plant.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = plant.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
 
             // Check if this plant is in the task queue
             const isQueued = this.taskQueue.some(task =>
@@ -615,47 +634,51 @@ class Game {
                 // Add a border to show it's queued
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(screenX + 4, screenY + 4, this.tileSize - 8, this.tileSize - 8);
+                this.ctx.strokeRect(screenX + 4 * this.zoom, screenY + 4 * this.zoom, tileSizeZoomed - 8 * this.zoom, tileSizeZoomed - 8 * this.zoom);
                 // Draw harvest icon
-                this.drawHarvestIcon(screenX + 4, screenY + 20);
+                this.drawHarvestIcon(screenX + 4 * this.zoom, screenY + 20 * this.zoom);
             }
 
             this.ctx.fillStyle = color;
-            this.ctx.fillRect(screenX + 6, screenY + 6, this.tileSize - 12, this.tileSize - 12);
+            this.ctx.fillRect(screenX + 6 * this.zoom, screenY + 6 * this.zoom, tileSizeZoomed - 12 * this.zoom, tileSizeZoomed - 12 * this.zoom);
         }
 
         // Render buildings
         for (const building of this.buildings) {
-            const screenX = building.x * this.tileSize - this.camera.x;
-            const screenY = building.y * this.tileSize - this.camera.y;
+            const screenX = building.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = building.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
             this.ctx.fillStyle = building.type === 'wall' ? '#8e44ad' : '#e67e22';
-            this.ctx.fillRect(screenX, screenY, this.tileSize, this.tileSize);
+            this.ctx.fillRect(screenX, screenY, tileSizeZoomed, tileSizeZoomed);
         }
 
         // Render pawns
         for (const pawn of this.pawns) {
-            const screenX = pawn.x * this.tileSize - this.camera.x;
-            const screenY = pawn.y * this.tileSize - this.camera.y;
+            const screenX = pawn.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = pawn.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
             this.ctx.fillStyle = '#f39c12';
-            this.ctx.fillRect(screenX + 4, screenY + 4, this.tileSize - 8, this.tileSize - 8);
+            this.ctx.fillRect(screenX + 4 * this.zoom, screenY + 4 * this.zoom, tileSizeZoomed - 8 * this.zoom, tileSizeZoomed - 8 * this.zoom);
         }
 
         // Highlight selected tile
         if (this.selectedTile) {
-            const screenX = this.selectedTile.x * this.tileSize - this.camera.x;
-            const screenY = this.selectedTile.y * this.tileSize - this.camera.y;
+            const screenX = this.selectedTile.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = this.selectedTile.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
             this.ctx.strokeStyle = '#e74c3c';
             this.ctx.lineWidth = 3;
-            this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+            this.ctx.strokeRect(screenX, screenY, tileSizeZoomed, tileSizeZoomed);
         }
 
         // Highlight hovered tile
         if (this.hoveredTile) {
-            const screenX = this.hoveredTile.x * this.tileSize - this.camera.x;
-            const screenY = this.hoveredTile.y * this.tileSize - this.camera.y;
+            const screenX = this.hoveredTile.x * this.tileSize * this.zoom - this.camera.x;
+            const screenY = this.hoveredTile.y * this.tileSize * this.zoom - this.camera.y;
+            const tileSizeZoomed = this.tileSize * this.zoom;
             this.ctx.strokeStyle = '#3498db';
             this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(screenX, screenY, this.tileSize, this.tileSize);
+            this.ctx.strokeRect(screenX, screenY, tileSizeZoomed, tileSizeZoomed);
         }
 
         // Render selection area
@@ -665,10 +688,10 @@ class Game {
             const startY = Math.min(this.areaSelection.start.y, this.areaSelection.end.y);
             const endY = Math.max(this.areaSelection.start.y, this.areaSelection.end.y);
 
-            const screenStartX = startX * this.tileSize - this.camera.x;
-            const screenStartY = startY * this.tileSize - this.camera.y;
-            const width = (endX - startX + 1) * this.tileSize;
-            const height = (endY - startY + 1) * this.tileSize;
+            const screenStartX = startX * this.tileSize * this.zoom - this.camera.x;
+            const screenStartY = startY * this.tileSize * this.zoom - this.camera.y;
+            const width = (endX - startX + 1) * this.tileSize * this.zoom;
+            const height = (endY - startY + 1) * this.tileSize * this.zoom;
 
             this.ctx.strokeStyle = '#f1c40f';
             this.ctx.lineWidth = 2;
@@ -685,10 +708,10 @@ class Game {
             const startY = Math.min(this.storageArea.start.y, this.storageArea.end.y);
             const endY = Math.max(this.storageArea.start.y, this.storageArea.end.y);
 
-            const screenStartX = startX * this.tileSize - this.camera.x;
-            const screenStartY = startY * this.tileSize - this.camera.y;
-            const width = (endX - startX + 1) * this.tileSize;
-            const height = (endY - startY + 1) * this.tileSize;
+            const screenStartX = startX * this.tileSize * this.zoom - this.camera.x;
+            const screenStartY = startY * this.tileSize * this.zoom - this.camera.y;
+            const width = (endX - startX + 1) * this.tileSize * this.zoom;
+            const height = (endY - startY + 1) * this.tileSize * this.zoom;
 
             this.ctx.strokeStyle = '#f4d03f';
             this.ctx.lineWidth = 3;
@@ -702,28 +725,28 @@ class Game {
     drawHarvestIcon(x, y) {
         // Draw a larger scythe icon at bottom left
         this.ctx.fillStyle = '#f1c40f';
-        this.ctx.font = '16px Arial';
+        this.ctx.font = `${16 * this.zoom}px Arial`;
         this.ctx.fillText('⚒', x, y);
     }
 
     drawChopIcon(x, y) {
         // Draw a larger axe icon
         this.ctx.fillStyle = '#f1c40f';
-        this.ctx.font = '16px Arial';
+        this.ctx.font = `${16 * this.zoom}px Arial`;
         this.ctx.fillText('🪓', x, y);
     }
 
     drawMineIcon(x, y) {
         // Draw a larger pickaxe icon
         this.ctx.fillStyle = '#f1c40f';
-        this.ctx.font = '16px Arial';
+        this.ctx.font = `${16 * this.zoom}px Arial`;
         this.ctx.fillText('⛏', x, y);
     }
 
     drawHaulIcon(x, y) {
         // Draw a larger hand icon
         this.ctx.fillStyle = '#f1c40f';
-        this.ctx.font = '16px Arial';
+        this.ctx.font = `${16 * this.zoom}px Arial`;
         this.ctx.fillText('👐', x, y);
     }
 
@@ -752,12 +775,34 @@ class Game {
         // Update pawn list
         const pawnList = document.getElementById('pawn-list');
         pawnList.innerHTML = '';
-        for (const pawn of this.pawns) {
+        for (let i = 0; i < this.pawns.length; i++) {
+            const pawn = this.pawns[i];
             const taskText = pawn.task ? ` - Task: ${pawn.task.type} (${pawn.task.x}, ${pawn.task.y})` : ' - Idle';
             const pawnItem = document.createElement('div');
             pawnItem.className = 'pawn-item';
             pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}${taskText}`;
+            pawnItem.style.cursor = 'pointer';
+            pawnItem.dataset.pawnIndex = i;
             pawnList.appendChild(pawnItem);
+        }
+
+        // Add event listener to pawn-info for delegation (only once)
+        const pawnInfo = document.getElementById('pawn-info');
+        if (!pawnInfo.hasPawnClickListener) {
+            pawnInfo.addEventListener('click', (e) => {
+                let element = e.target;
+                while (element && element !== pawnInfo) {
+                    if (element.classList && element.classList.contains('pawn-item')) {
+                        const index = parseInt(element.dataset.pawnIndex);
+                        if (index >= 0 && index < this.pawns.length) {
+                            this.focusCameraOnPawn(this.pawns[index]);
+                        }
+                        break;
+                    }
+                    element = element.parentElement;
+                }
+            });
+            pawnInfo.hasPawnClickListener = true;
         }
 
         // Update task queue
