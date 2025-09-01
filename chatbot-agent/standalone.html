@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Standalone Chatbot Agent</title>
+  <link rel="stylesheet" href="public/styles.css">
+  <!-- Transformers.js will be imported in the script -->
+</head>
+<body>
+  <div class="container">
+    <h1>Standalone Chatbot Agent with llama2.c-stories15M</h1>
+    <!-- This chatbot runs llama2.c-stories15M model using Transformers.js directly in your browser -->
+    <!-- All processing happens client-side - no server required, no data sent externally -->
+    <div class="main-content">
+      <div class="chat-section">
+        <div id="chat-window">
+          <div id="messages"></div>
+          <div id="spinner" class="spinner" style="display: none;"></div>
+        </div>
+        <div class="input-area">
+          <input type="text" id="message-input" placeholder="Type your message...">
+          <button id="send-button">Send</button>
+          <button id="clear-button">Clear Chat</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="standalone-script.js"></script>
+</body>
+</html>
