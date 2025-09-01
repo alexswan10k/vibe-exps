@@ -59,12 +59,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Typing effect for hero title
     const heroTitle = document.querySelector('#hero h2');
     const originalText = heroTitle.textContent;
-    heroTitle.innerHTML = originalText.split('').map(letter => letter === ' ' ? `<span style="display:none">&nbsp;</span>` : `<span style="display:none">${letter}</span>`).join('');
-    const spans = heroTitle.querySelectorAll('span');
+    const words = originalText.split(' ');
+    heroTitle.innerHTML = words.map(word => `<span class="word">${word.split('').map(letter => `<span class="letter" style="display:none">${letter}</span>`).join('')}</span>`).join('&nbsp;');
+    const letterSpans = heroTitle.querySelectorAll('.letter');
     let i = 0;
     const typeWriter = () => {
-        if (i < originalText.length) {
-            spans[i].style.display = 'inline-block';
+        if (i < letterSpans.length) {
+            letterSpans[i].style.display = 'inline-block';
             i++;
             setTimeout(typeWriter, 100);
         }
@@ -194,9 +195,9 @@ animate();
 // Proximity animation for hero text letters
 document.addEventListener('mousemove', (e) => {
     const h2 = document.querySelector('#hero h2');
-    const spans = h2.querySelectorAll('span');
-    spans.forEach(span => {
-        if (span.style.display === 'inline-block' && span.innerHTML !== '&nbsp;') {
+    const letterSpans = h2.querySelectorAll('.letter');
+    letterSpans.forEach(span => {
+        if (span.style.display === 'inline-block') {
             const rect = span.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
