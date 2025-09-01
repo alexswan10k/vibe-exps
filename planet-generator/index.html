@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Planet Generator</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 100;
+            max-width: 200px;
+        }
+        #controls label { display: block; margin-bottom: 5px; }
+        #controls input { width: 100%; margin-bottom: 10px; }
+        #controls button {
+            width: 100%;
+            padding: 8px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #controls button:hover { background: #666; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label>Noise Scale: <span id="noiseScaleValue">10</span></label>
+        <input type="range" id="noiseScale" min="1" max="20" value="10" step="0.5">
+
+        <label>Height Scale: <span id="heightScaleValue">1.0</span></label>
+        <input type="range" id="heightScale" min="0" max="2" value="1.0" step="0.1">
+
+        <label>Planet Size: <span id="planetSizeValue">5</span></label>
+        <input type="range" id="planetSize" min="1" max="10" value="5" step="0.5">
+
+        <label>Rotation Speed: <span id="rotationSpeedValue">0.005</span></label>
+        <input type="range" id="rotationSpeed" min="0" max="0.02" value="0.005" step="0.001">
+
+        <label>Water Level: <span id="waterLevelValue">0.3</span></label>
+        <input type="range" id="waterLevel" min="0" max="1" value="0.3" step="0.05">
+
+        <label>Mountain Level: <span id="mountainLevelValue">0.6</span></label>
+        <input type="range" id="mountainLevel" min="0" max="1" value="0.6" step="0.05">
+
+        <button id="newSeed">New Seed</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        // Simple Perlin noise implementation
+        class PerlinNoise {
+            constructor(seed = null) {
+                this.permutation = [];
+                const random = seed ? this.seededRandom(seed) : Math.random;
+                for (let i = 0; i < 256; i++) {
+                    this.permutation[i] = Math.floor(random() * 256);
+                }
+                this.p = [...this.permutation, ...this.permutation];
+            }
+
+            seededRandom(seed) {
+                return function() {
+                    seed = (seed * 9301 + 49297) % 233280;
+                    return seed / 233280;
+                };
+            }
+
+            fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+            lerp(t, a, b) { return a + t * (b - a); }
+            grad(hash, x, y, z) {
+                const h = hash & 15;
+                const u = h < 8 ? x : y;
+                const v = h < 4 ? y : h == 12 || h == 14 ? x : z;
+                return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
+            }
+
+            noise(x, y, z) {
+                const X = Math.floor(x) & 255;
+                const Y = Math.floor(y) & 255;
+                const Z = Math.floor(z) & 255;
+                x -= Math.floor(x);
+                y -= Math.floor(y);
+                z -= Math.floor(z);
+                const u = this.fade(x);
+                const v = this.fade(y);
+                const w = this.fade(z);
+                const A = this.p[X] + Y, AA = this.p[A] + Z, AB = this.p[A + 1] + Z;
+                const B = this.p[X + 1] + Y, BA = this.p[B] + Z, BB = this.p[B + 1] + Z;
+                return this.lerp(w, this.lerp(v, this.lerp(u, this.grad(this.p[AA], x, y, z),
+                                                     this.grad(this.p[BA], x - 1, y, z)),
+                                         this.lerp(u, this.grad(this.p[AB], x, y - 1, z),
+                                                     this.grad(this.p[BB], x - 1, y - 1, z))),
+                             this.lerp(v, this.lerp(u, this.grad(this.p[AA + 1], x, y, z - 1),
+                                                     this.grad(this.p[BA + 1], x - 1, y, z - 1)),
+                                         this.lerp(u, this.grad(this.p[AB + 1], x, y - 1, z - 1),
+                                                     this.grad(this.p[BB + 1], x - 1, y - 1, z - 1))));
+            }
+        }
+
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        let planet;
+        let currentSeed = null;
+        let currentNoiseScale = 10;
+        let currentHeightScale = 1.0;
+        let currentPlanetSize = 5;
+        let currentRotationSpeed = 0.005;
+        let currentWaterLevel = 0.3;
+        let currentMountainLevel = 0.6;
+
+        function generatePlanet(seed = null, noiseScale = 10, heightScale = 1.0, planetSize = 5, waterLevel = 0.3, mountainLevel = 0.6) {
+            // Remove existing planet
+            if (planet) {
+                scene.remove(planet);
+                planet.geometry.dispose();
+                planet.material.dispose();
+            }
+
+            const perlin = new PerlinNoise(seed);
+
+            // Generate texture
+            const size = 512;
+            const data = new Uint8Array(size * size * 4);
+
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const x = i / size * noiseScale;
+                    const y = j / size * noiseScale;
+                    const noise = (perlin.noise(x, y, 0) + 1) / 2; // Normalize to 0-1
+
+                    let r, g, b;
+                    if (noise < waterLevel) {
+                        // Water
+                        r = 0; g = 100; b = 200;
+                    } else if (noise < mountainLevel) {
+                        // Land
+                        r = 34; g = 139; b = 34;
+                    } else {
+                        // Mountains
+                        r = 139; g = 69; b = 19;
+                    }
+
+                    const idx = (i * size + j) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 255;
+                }
+            }
+
+            const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+            texture.needsUpdate = true;
+
+            // Create planet
+            const geometry = new THREE.SphereGeometry(planetSize, 64, 64);
+            const material = new THREE.MeshPhongMaterial({ map: texture });
+
+            // Apply height displacement using Perlin noise
+            const positions = geometry.attributes.position.array;
+
+            for (let i = 0; i < positions.length; i += 3) {
+                const x = positions[i];
+                const y = positions[i + 1];
+                const z = positions[i + 2];
+
+                // Normalize to get direction
+                const length = Math.sqrt(x * x + y * y + z * z);
+                const nx = x / length;
+                const ny = y / length;
+                const nz = z / length;
+
+                // Generate noise for height displacement
+                const noise1 = perlin.noise(nx * 4, ny * 4, nz * 4);
+                const noise2 = perlin.noise(nx * 8, ny * 8, nz * 8) * 0.5;
+                const noise3 = perlin.noise(nx * 16, ny * 16, nz * 16) * 0.25;
+                const totalNoise = (noise1 + noise2 + noise3) * 0.5 + 0.5; // Normalize to 0-1
+
+                // Displace vertex along normal
+                const displacement = (totalNoise - 0.5) * heightScale;
+                positions[i] = x + nx * displacement;
+                positions[i + 1] = y + ny * displacement;
+                positions[i + 2] = z + nz * displacement;
+            }
+
+            geometry.attributes.position.needsUpdate = true;
+            geometry.computeVertexNormals(); // Recalculate normals for proper lighting
+
+            planet = new THREE.Mesh(geometry, material);
+            scene.add(planet);
+        }
+
+        // Generate initial planet
+        generatePlanet();
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(10, 10, 5);
+        scene.add(directionalLight);
+
+        // Camera position
+        camera.position.z = 15;
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            if (planet) planet.rotation.y += currentRotationSpeed;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Control event listeners
+        document.getElementById('noiseScale').addEventListener('input', (e) => {
+            currentNoiseScale = parseFloat(e.target.value);
+            document.getElementById('noiseScaleValue').textContent = currentNoiseScale;
+            generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+        });
+
+        document.getElementById('heightScale').addEventListener('input', (e) => {
+            currentHeightScale = parseFloat(e.target.value);
+            document.getElementById('heightScaleValue').textContent = currentHeightScale;
+            generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+        });
+
+        document.getElementById('planetSize').addEventListener('input', (e) => {
+            currentPlanetSize = parseFloat(e.target.value);
+            document.getElementById('planetSizeValue').textContent = currentPlanetSize;
+            generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+        });
+
+        document.getElementById('rotationSpeed').addEventListener('input', (e) => {
+            currentRotationSpeed = parseFloat(e.target.value);
+            document.getElementById('rotationSpeedValue').textContent = currentRotationSpeed;
+        });
+
+        document.getElementById('waterLevel').addEventListener('input', (e) => {
+            currentWaterLevel = parseFloat(e.target.value);
+            document.getElementById('waterLevelValue').textContent = currentWaterLevel;
+            generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+        });
+
+        document.getElementById('mountainLevel').addEventListener('input', (e) => {
+            currentMountainLevel = parseFloat(e.target.value);
+            document.getElementById('mountainLevelValue').textContent = currentMountainLevel;
+            generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+        });
+
+        document.getElementById('newSeed').addEventListener('click', () => {
+            currentSeed = Math.floor(Math.random() * 1000000);
+            generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+        });
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
