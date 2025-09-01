@@ -130,34 +130,16 @@ class Particle {
 const particles = [];
 let mouseX = 0;
 let mouseY = 0;
-let hoverX = 0;
-let hoverY = 0;
-let hovering = false;
 let lastParticleTime = 0;
-const particleInterval = 20; // ms between particles
-const maxParticles = 100;
+const particleInterval = 50; // ms between particles (increased for less intensity)
+const maxParticles = 50; // reduced max particles
 
-// Select clickable elements
-const clickableElements = document.querySelectorAll('a, button, input[type="submit"], .cta-button, .tech-category, .timeline-item, .project-card, .education-item');
-
-clickableElements.forEach(el => {
-    el.addEventListener('mouseenter', (e) => {
-        hovering = true;
-        hoverX = e.pageX;
-        hoverY = e.pageY;
-    });
-    el.addEventListener('mouseleave', () => {
-        hovering = false;
-    });
-});
+// Select clickable elements for click effect only
+const clickableElements = document.querySelectorAll('a, button, input[type="submit"], .cta-button');
 
 document.addEventListener('mousemove', (e) => {
     mouseX = e.pageX;
     mouseY = e.pageY;
-    if (hovering) {
-        hoverX = mouseX;
-        hoverY = mouseY;
-    }
     const now = Date.now();
     if (now - lastParticleTime > particleInterval && particles.length < maxParticles) {
         // Add new particle
@@ -172,12 +154,6 @@ document.addEventListener('click', () => {
 });
 
 function animate() {
-    const now = Date.now();
-    // Emit particles on hover even without mouse move
-    if (hovering && now - lastParticleTime > particleInterval && particles.length < maxParticles) {
-        particles.push(new Particle(hoverX, hoverY));
-        lastParticleTime = now;
-    }
     for (let i = particles.length - 1; i >= 0; i--) {
         if (particles[i].update()) {
             particles.splice(i, 1);
