@@ -1091,9 +1091,9 @@ function render() {
         }
     });
 
-    // Render player (always centered on screen)
+    // Render player (always centered on screen) - final positioning correction
     ctx.fillStyle = '#00ff00';
-    ctx.fillRect(CANVAS_WIDTH / 2 - TILE_SIZE / 2 + 2, CANVAS_HEIGHT / 2 - TILE_SIZE / 2 + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    ctx.fillRect(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, TILE_SIZE, TILE_SIZE);
 
     // Add subtle lighting effect centered on player
     const gradient = ctx.createRadialGradient(
@@ -1142,8 +1142,8 @@ function spawnEntitiesInRoom(room) {
         }
     }
 
-    // Spawn 1-2 food items
-    const numFood = Math.floor(Math.random() * 2) + 1;
+    // Spawn 0-1 food items (reduced frequency)
+    const numFood = Math.random() < 0.3 ? 1 : 0; // 30% chance of food
     for (let i = 0; i < numFood; i++) {
         let x, y, attempts = 0;
         do {
