@@ -9,7 +9,44 @@ document.querySelectorAll('nav a[href^="#"]').forEach(anchor => {
                 block: 'start'
             });
         }
+        // Close mobile menu after clicking a link
+        const navMenu = document.getElementById('nav-menu');
+        const burgerMenu = document.getElementById('burger-menu');
+        if (navMenu && burgerMenu) {
+            navMenu.classList.remove('active');
+            burgerMenu.classList.remove('active');
+        }
     });
+});
+
+// Burger menu toggle
+document.addEventListener('DOMContentLoaded', function() {
+    const burgerMenu = document.getElementById('burger-menu');
+    const navMenu = document.getElementById('nav-menu');
+
+    if (burgerMenu && navMenu) {
+        burgerMenu.addEventListener('click', function(e) {
+            e.stopPropagation(); // Prevent event bubbling
+            this.classList.toggle('active');
+            navMenu.classList.toggle('active');
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!burgerMenu.contains(e.target) && !navMenu.contains(e.target)) {
+                burgerMenu.classList.remove('active');
+                navMenu.classList.remove('active');
+            }
+        });
+
+        // Close menu on window resize if desktop size
+        window.addEventListener('resize', function() {
+            if (window.innerWidth > 768) {
+                burgerMenu.classList.remove('active');
+                navMenu.classList.remove('active');
+            }
+        });
+    }
 });
 
 // Intersection Observer for scroll animations

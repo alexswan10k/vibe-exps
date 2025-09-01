@@ -85,9 +85,11 @@ nav {
     50% { background-position: 100% 50%; }
 }
 
+
 nav ul {
     display: flex;
     list-style: none;
+    transition: all 0.3s ease;
 }
 
 nav ul li {
@@ -102,6 +104,36 @@ nav ul li a {
 
 nav ul li a:hover {
     color: #007bff;
+}
+
+/* Burger Menu */
+.burger-menu {
+    display: none;
+    flex-direction: column;
+    cursor: pointer;
+    padding: 0.5rem;
+    z-index: 1001;
+}
+
+.burger-menu span {
+    width: 25px;
+    height: 3px;
+    background: #333;
+    margin: 3px 0;
+    transition: 0.3s;
+    border-radius: 2px;
+}
+
+.burger-menu.active span:nth-child(1) {
+    transform: rotate(-45deg) translate(-5px, 6px);
+}
+
+.burger-menu.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.burger-menu.active span:nth-child(3) {
+    transform: rotate(45deg) translate(-5px, -6px);
 }
 
 /* Hero Section */
@@ -449,17 +481,57 @@ footer {
 
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-    nav {
-        flex-direction: column;
-        padding: 1rem;
+    /* Burger Menu */
+    .burger-menu {
+        display: flex !important;
     }
 
     nav ul {
-        margin-top: 1rem;
+        position: fixed;
+        top: 100%;
+        left: 0;
+        width: 100%;
+        height: 0;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: center;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+        transition: height 0.3s ease;
+        z-index: 999;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    nav ul.active {
+        height: 300px;
+        padding: 2rem 0;
     }
 
     nav ul li {
-        margin-left: 1rem;
+        margin: 1rem 0;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+    }
+
+    nav ul.active li {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    nav ul.active li:nth-child(1) { transition-delay: 0.1s; }
+    nav ul.active li:nth-child(2) { transition-delay: 0.2s; }
+    nav ul.active li:nth-child(3) { transition-delay: 0.3s; }
+    nav ul.active li:nth-child(4) { transition-delay: 0.4s; }
+    nav ul.active li:nth-child(5) { transition-delay: 0.5s; }
+    nav ul.active li:nth-child(6) { transition-delay: 0.6s; }
+
+    nav {
+        flex-direction: row;
+        padding: 1rem;
     }
 
     .logo img {
@@ -473,11 +545,16 @@ footer {
     #hero {
         flex-direction: column;
         text-align: center;
-        padding: 2rem 1rem;
+        padding: 4rem 1rem 2rem 1rem; /* Added more top padding for mobile */
+        min-height: 100vh;
     }
 
     .hero-content h2 {
         font-size: 2rem;
+    }
+
+    .hero-content p {
+        font-size: 1.1rem;
     }
 
     .hero-image i {
