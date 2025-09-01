@@ -159,10 +159,20 @@
                 const y = surfaceRadius * Math.cos(this.phi);
                 const z = surfaceRadius * Math.sin(this.phi) * Math.sin(this.theta);
 
-                this.mesh.position.set(x, y, z);
+                // Apply planet rotation to keep animals on surface as planet rotates
+                if (planet) {
+                    const rotationMatrix = new THREE.Matrix4();
+                    rotationMatrix.makeRotationY(planet.rotation.y);
+                    const rotatedPosition = new THREE.Vector3(x, y, z).applyMatrix4(rotationMatrix);
+                    this.mesh.position.copy(rotatedPosition);
 
-                // Orient the animal to face outward from planet center
-                this.mesh.lookAt(x * 2, y * 2, z * 2);
+                    // Orient the animal to face outward from planet center (accounting for rotation)
+                    const rotatedOutward = new THREE.Vector3(x * 2, y * 2, z * 2).applyMatrix4(rotationMatrix);
+                    this.mesh.lookAt(rotatedOutward);
+                } else {
+                    this.mesh.position.set(x, y, z);
+                    this.mesh.lookAt(x * 2, y * 2, z * 2);
+                }
             }
 
             sampleTerrainHeight() {
@@ -251,10 +261,20 @@
                 const y = surfaceRadius * Math.cos(this.phi);
                 const z = surfaceRadius * Math.sin(this.phi) * Math.sin(this.theta);
 
-                this.mesh.position.set(x, y, z);
+                // Apply planet rotation to keep predators on surface as planet rotates
+                if (planet) {
+                    const rotationMatrix = new THREE.Matrix4();
+                    rotationMatrix.makeRotationY(planet.rotation.y);
+                    const rotatedPosition = new THREE.Vector3(x, y, z).applyMatrix4(rotationMatrix);
+                    this.mesh.position.copy(rotatedPosition);
 
-                // Orient the predator to face outward from planet center
-                this.mesh.lookAt(x * 2, y * 2, z * 2);
+                    // Orient the predator to face outward from planet center (accounting for rotation)
+                    const rotatedOutward = new THREE.Vector3(x * 2, y * 2, z * 2).applyMatrix4(rotationMatrix);
+                    this.mesh.lookAt(rotatedOutward);
+                } else {
+                    this.mesh.position.set(x, y, z);
+                    this.mesh.lookAt(x * 2, y * 2, z * 2);
+                }
             }
 
             sampleTerrainHeight() {
@@ -344,7 +364,15 @@
                 const y = surfaceRadius * Math.cos(this.phi);
                 const z = surfaceRadius * Math.sin(this.phi) * Math.sin(this.theta);
 
-                this.mesh.position.set(x, y, z);
+                // Apply planet rotation to keep plants on surface as planet rotates
+                if (planet) {
+                    const rotationMatrix = new THREE.Matrix4();
+                    rotationMatrix.makeRotationY(planet.rotation.y);
+                    const rotatedPosition = new THREE.Vector3(x, y, z).applyMatrix4(rotationMatrix);
+                    this.mesh.position.copy(rotatedPosition);
+                } else {
+                    this.mesh.position.set(x, y, z);
+                }
             }
 
             sampleTerrainHeight() {
@@ -689,27 +717,89 @@
 
             const perlin = new PerlinNoise(seed);
 
-            // Generate texture
-            const size = 512;
+            // Generate texture with higher resolution and more complex patterns
+            const size = 1024;
             const data = new Uint8Array(size * size * 4);
 
             for (let i = 0; i < size; i++) {
                 for (let j = 0; j < size; j++) {
                     const x = i / size * noiseScale;
                     const y = j / size * noiseScale;
-                    const noise = (perlin.noise(x, y, 0) + 1) / 2; // Normalize to 0-1
+
+                    // Generate multiple octaves of noise for more detail
+                    const noise1 = perlin.noise(x, y, 0);
+                    const noise2 = perlin.noise(x * 2, y * 2, 0) * 0.5;
+                    const noise3 = perlin.noise(x * 4, y * 4, 0) * 0.25;
+                    const noise4 = perlin.noise(x * 8, y * 8, 0) * 0.125;
+                    const noise5 = perlin.noise(x * 16, y * 16, 0) * 0.0625;
+
+                    const totalNoise = (noise1 + noise2 + noise3 + noise4 + noise5) * 0.5 + 0.5;
+                    const noise = Math.max(0, Math.min(1, totalNoise)); // Clamp to 0-1
+
+                    // Add some turbulence for more organic patterns
+                    const turbulence = perlin.noise(x * 3 + noise, y * 3 + noise, 0) * 0.1;
+                    const finalNoise = Math.max(0, Math.min(1, noise + turbulence));
+
+                    // Temperature gradient (poles are colder)
+                    const latitude = Math.abs((j / size - 0.5) * 2); // 0 at equator, 1 at poles
+                    const temperature = 1 - latitude * 0.7; // Warmer at equator
+
+                    // Humidity variation
+                    const humidity = perlin.noise(x * 0.5, y * 0.5, 100) * 0.5 + 0.5;
 
                     let r, g, b;
-                    if (noise < waterLevel) {
-                        // Water
-                        r = 0; g = 100; b = 200;
-                    } else if (noise < mountainLevel) {
-                        // Land
-                        r = 34; g = 139; b = 34;
+                    if (finalNoise < waterLevel) {
+                        // Water biomes
+                        if (temperature < 0.3) {
+                            // Ice caps
+                            r = 200; g = 220; b = 255;
+                        } else if (humidity > 0.7) {
+                            // Deep ocean
+                            r = 0; g = 20; b = 80;
+                        } else {
+                            // Regular ocean
+                            r = 0; g = 100; b = 200;
+                        }
+                    } else if (finalNoise < mountainLevel) {
+                        // Land biomes
+                        if (temperature < 0.4) {
+                            // Tundra
+                            r = 160; g = 140; b = 120;
+                        } else if (temperature > 0.8 && humidity > 0.6) {
+                            // Tropical rainforest
+                            r = 20; g = 80; b = 30;
+                        } else if (temperature > 0.7 && humidity < 0.4) {
+                            // Desert
+                            r = 194; g = 178; b = 128;
+                        } else if (humidity > 0.7) {
+                            // Forest
+                            r = 34; g = 139; b = 34;
+                        } else if (humidity > 0.5) {
+                            // Grassland
+                            r = 124; g = 252; b = 0;
+                        } else {
+                            // Plains
+                            r = 154; g = 205; b = 50;
+                        }
                     } else {
-                        // Mountains
-                        r = 139; g = 69; b = 19;
+                        // Mountain biomes
+                        if (temperature < 0.3) {
+                            // Snow-capped mountains
+                            r = 255; g = 250; b = 250;
+                        } else if (temperature > 0.8) {
+                            // Volcanic mountains
+                            r = 80; g = 40; b = 20;
+                        } else {
+                            // Regular mountains
+                            r = 139; g = 69; b = 19;
+                        }
                     }
+
+                    // Add some color variation for more realism
+                    const variation = (perlin.noise(x * 20, y * 20, 200) - 0.5) * 0.1;
+                    r = Math.max(0, Math.min(255, r + variation * 255));
+                    g = Math.max(0, Math.min(255, g + variation * 255));
+                    b = Math.max(0, Math.min(255, b + variation * 255));
 
                     const idx = (i * size + j) * 4;
                     data[idx] = r;
@@ -803,6 +893,11 @@
                 planetData.mesh.rotation.y += 0.02; // Planet rotation
             });
 
+            // Update plant positions to follow planet rotation
+            plants.forEach(plant => plant.updatePosition());
+            animals.forEach(animal => animal.updatePosition());
+            predators.forEach(predator => predator.updatePosition());
+
             // Update plant simulation
             spawnPlants();
             updatePlants();
@@ -819,23 +914,47 @@
         }
         animate();
 
+        // Function to update all entities when planet changes
+        function updateAllEntityPositions() {
+            // Update all plants
+            plants.forEach(plant => {
+                plant.planetSize = currentPlanetSize;
+                plant.updatePosition();
+            });
+
+            // Update all animals
+            animals.forEach(animal => {
+                animal.planetSize = currentPlanetSize;
+                animal.updatePosition();
+            });
+
+            // Update all predators
+            predators.forEach(predator => {
+                predator.planetSize = currentPlanetSize;
+                predator.updatePosition();
+            });
+        }
+
         // Control event listeners
         document.getElementById('noiseScale').addEventListener('input', (e) => {
             currentNoiseScale = parseFloat(e.target.value);
             document.getElementById('noiseScaleValue').textContent = currentNoiseScale;
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+            updateAllEntityPositions();
         });
 
         document.getElementById('heightScale').addEventListener('input', (e) => {
             currentHeightScale = parseFloat(e.target.value);
             document.getElementById('heightScaleValue').textContent = currentHeightScale;
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+            updateAllEntityPositions();
         });
 
         document.getElementById('planetSize').addEventListener('input', (e) => {
             currentPlanetSize = parseFloat(e.target.value);
             document.getElementById('planetSizeValue').textContent = currentPlanetSize;
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+            updateAllEntityPositions();
         });
 
         document.getElementById('rotationSpeed').addEventListener('input', (e) => {
@@ -847,17 +966,20 @@
             currentWaterLevel = parseFloat(e.target.value);
             document.getElementById('waterLevelValue').textContent = currentWaterLevel;
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+            updateAllEntityPositions();
         });
 
         document.getElementById('mountainLevel').addEventListener('input', (e) => {
             currentMountainLevel = parseFloat(e.target.value);
             document.getElementById('mountainLevelValue').textContent = currentMountainLevel;
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+            updateAllEntityPositions();
         });
 
         document.getElementById('newSeed').addEventListener('click', () => {
             currentSeed = Math.floor(Math.random() * 1000000);
             generatePlanet(currentSeed, currentNoiseScale, currentHeightScale, currentPlanetSize, currentWaterLevel, currentMountainLevel);
+            updateAllEntityPositions();
         });
 
         document.getElementById('resetAnimals').addEventListener('click', () => {
