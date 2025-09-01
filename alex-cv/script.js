@@ -487,7 +487,7 @@ function initializeNeuralNetwork() {
         const mouseY = event.clientY - rect.top;
 
         let closestNode = null;
-        let minDistance = 50; // Proximity threshold
+        let minDistance = 60; // Proximity threshold
 
         nodes.forEach(d => {
             const distance = Math.sqrt((d.x - mouseX) ** 2 + (d.y - mouseY) ** 2);
@@ -499,16 +499,42 @@ function initializeNeuralNetwork() {
 
         if (closestNode !== hoveredNode) {
             if (hoveredNode) {
-                // Reset previous hover
-                node.classed('hovered', false);
+                // Reset previous hover - remove visual effects
+                node.filter(d => d === hoveredNode)
+                    .select('circle')
+                    .transition()
+                    .duration(200)
+                    .attr('stroke-width', 2)
+                    .style('filter', 'none');
+
+                node.filter(d => d === hoveredNode)
+                    .select('text')
+                    .transition()
+                    .duration(200)
+                    .style('opacity', 0);
+
                 link.classed('active', false);
             }
 
             hoveredNode = closestNode;
 
             if (hoveredNode) {
-                // Set new hover
-                node.classed('hovered', d => d === hoveredNode);
+                // Set new hover - add visual effects
+                node.filter(d => d === hoveredNode)
+                    .select('circle')
+                    .transition()
+                    .duration(200)
+                    .attr('stroke-width', 4)
+                    .style('filter', 'drop-shadow(0 0 10px rgba(23, 162, 184, 0.8))');
+
+                node.filter(d => d === hoveredNode)
+                    .select('text')
+                    .transition()
+                    .duration(200)
+                    .style('opacity', 1)
+                    .style('fill', '#17a2b8')
+                    .style('font-weight', 'bold');
+
                 link.classed('active', l => l.source === hoveredNode || l.target === hoveredNode);
 
                 skillsPanelTitle.textContent = hoveredNode.id;
@@ -523,9 +549,23 @@ function initializeNeuralNetwork() {
     // Mouse leave reset
     svg.addEventListener('mouseleave', function() {
         if (hoveredNode) {
-            hoveredNode = null;
-            node.classed('hovered', false);
+            // Reset hover effects
+            node.filter(d => d === hoveredNode)
+                .select('circle')
+                .transition()
+                .duration(200)
+                .attr('stroke-width', 2)
+                .style('filter', 'none');
+
+            node.filter(d => d === hoveredNode)
+                .select('text')
+                .transition()
+                .duration(200)
+                .style('opacity', 0);
+
             link.classed('active', false);
+
+            hoveredNode = null;
             skillsPanelTitle.textContent = 'Hover over nodes to explore';
             skillsPanelDescription.textContent = 'Navigate the force-directed graph to discover my technical expertise and skills.';
         }

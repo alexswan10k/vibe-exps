@@ -651,11 +651,6 @@ nav ul li a:hover {
 /* Nodes */
 .node {
     cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.node:hover {
-    transform: scale(1.2);
 }
 
 .node.core {
@@ -669,7 +664,7 @@ nav ul li a:hover {
 .node-circle {
     stroke: #fff;
     stroke-width: 2px;
-    transition: all 0.3s ease;
+    transition: stroke-width 0.3s ease, filter 0.3s ease;
 }
 
 .node.core .node-circle {
@@ -680,11 +675,6 @@ nav ul li a:hover {
 .node.leaf .node-circle {
     r: 15;
     fill: radial-gradient(circle, #4a90e2, #357abd);
-}
-
-.node:hover .node-circle {
-    stroke-width: 4px;
-    filter: drop-shadow(0 0 10px rgba(23, 162, 184, 0.8));
 }
 
 /* Different node colors */
