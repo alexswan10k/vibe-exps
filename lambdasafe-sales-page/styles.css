@@ -43,17 +43,46 @@ nav {
 .logo {
     display: flex;
     align-items: center;
+    position: relative;
 }
 
 .logo img {
     height: 40px;
     margin-right: 10px;
+    transition: transform 0.3s ease;
+}
+
+.logo img:hover {
+    transform: scale(1.1) rotate(5deg);
 }
 
 .logo h1 {
-    color: #007bff;
-    font-size: 1.2rem;
+    font-size: 1.5rem;
+    font-weight: bold;
     margin: 0;
+    letter-spacing: 0.2em;
+    transition: all 0.3s ease;
+}
+
+.logo .letter {
+    display: inline-block;
+    background: linear-gradient(45deg, #007bff, #00d4ff, #007bff);
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientShift 3s ease-in-out infinite;
+    transition: transform 0.8s ease, opacity 0.8s ease;
+}
+
+.logo .letter:hover {
+    transform: scale(1.4);
+    opacity: 0.8;
+}
+
+@keyframes gradientShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
 }
 
 nav ul {
