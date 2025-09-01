@@ -59,11 +59,12 @@ document.addEventListener('DOMContentLoaded', function() {
     // Typing effect for hero title
     const heroTitle = document.querySelector('#hero h2');
     const originalText = heroTitle.textContent;
-    heroTitle.textContent = '';
+    heroTitle.innerHTML = originalText.split('').map(letter => letter === ' ' ? `<span style="display:none">&nbsp;</span>` : `<span style="display:none">${letter}</span>`).join('');
+    const spans = heroTitle.querySelectorAll('span');
     let i = 0;
     const typeWriter = () => {
         if (i < originalText.length) {
-            heroTitle.textContent += originalText.charAt(i);
+            spans[i].style.display = 'inline-block';
             i++;
             setTimeout(typeWriter, 100);
         }
@@ -189,6 +190,26 @@ function animate() {
 }
 
 animate();
+
+// Proximity animation for hero text letters
+document.addEventListener('mousemove', (e) => {
+    const h2 = document.querySelector('#hero h2');
+    const spans = h2.querySelectorAll('span');
+    spans.forEach(span => {
+        if (span.style.display === 'inline-block' && span.innerHTML !== '&nbsp;') {
+            const rect = span.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const distance = Math.sqrt((e.clientX - centerX) ** 2 + (e.clientY - centerY) ** 2);
+            const maxDist = 200;
+            const factor = Math.max(0, 1 - distance / maxDist);
+            const scale = 0.8 + factor * 0.4; // from 0.8 to 1.2
+            const opacity = 0.5 + factor * 0.5; // from 0.5 to 1
+            span.style.transform = `scale(${scale})`;
+            span.style.opacity = opacity;
+        }
+    });
+});
 
 // Add loading animation
 window.addEventListener('load', function() {
