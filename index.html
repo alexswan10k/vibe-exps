@@ -266,7 +266,7 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
@@ -301,7 +301,6 @@
             });
 
             shakeButton.addEventListener('click', function() {
-                console.log('Shake button clicked, isExploded:', isExploded);
                 if (isExploded) {
                     resetCards();
                 } else {
@@ -312,16 +311,9 @@
                 }
             });
 
-            async function explodeCards() {
+            function explodeCards() {
                 isExploded = true;
                 shakeButton.textContent = '🔄 Reset Earthquake';
-
-                // Hide original cards
-                cards.forEach(card => {
-                    if (!card.classList.contains('hidden')) {
-                        card.style.opacity = '0';
-                    }
-                });
 
                 // Create canvas overlay
                 canvas = document.createElement('canvas');
@@ -330,161 +322,139 @@
                 canvas.style.position = 'fixed';
                 canvas.style.top = '0';
                 canvas.style.left = '0';
-                canvas.style.zIndex = '999999'; // Extremely high z-index
+                canvas.style.zIndex = '999999';
                 canvas.style.pointerEvents = 'none';
-                canvas.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'; // Make it slightly visible for debugging
+
                 document.body.appendChild(canvas);
                 ctx = canvas.getContext('2d');
-                console.log('Canvas created and added to DOM:', canvas);
 
                 particles = [];
                 originalPositions = [];
 
-                // Take snapshots and create particles
-                for (let i = 0; i < cards.length; i++) {
-                    const card = cards[i];
-                    if (card.classList.contains('hidden')) continue;
+                // Hide original cards and create placeholder particles
+                cards.forEach((card, index) => {
+                    if (!card.classList.contains('hidden')) {
+                        const rect = card.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            originalPositions.push({
+                                element: card,
+                                left: rect.left,
+                                top: rect.top
+                            });
 
-                    const rect = card.getBoundingClientRect();
-                    originalPositions.push({
-                        element: card,
-                        left: rect.left,
-                        top: rect.top
-                    });
+                            // Hide the card
+                            card.style.display = 'none';
 
-                    try {
-                        console.log('Taking snapshot of card:', i);
-                        // Force fallback for testing - comment out this line to test real snapshots
-                        throw new Error('Testing fallback rectangles');
+                            // Create colored placeholder canvas
+                            const placeholderCanvas = document.createElement('canvas');
+                            placeholderCanvas.width = rect.width;
+                            placeholderCanvas.height = rect.height;
+                            const placeholderCtx = placeholderCanvas.getContext('2d');
 
-                        // Take snapshot of the card
-                        const snapshot = await html2canvas(card, {
-                            backgroundColor: null,
-                            scale: 1,
-                            useCORS: true
-                        });
-                        console.log('Snapshot taken successfully');
+                            // Function to draw rounded rectangle
+                            function drawRoundedRect(ctx, x, y, width, height, radius) {
+                                ctx.beginPath();
+                                ctx.moveTo(x + radius, y);
+                                ctx.lineTo(x + width - radius, y);
+                                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                                ctx.lineTo(x + width, y + height - radius);
+                                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                                ctx.lineTo(x + radius, y + height);
+                                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                                ctx.lineTo(x, y + radius);
+                                ctx.quadraticCurveTo(x, y, x + radius, y);
+                                ctx.closePath();
+                            }
 
-                        // Calculate explosion physics
-                        const centerX = window.innerWidth / 2;
-                        const centerY = window.innerHeight / 2;
-                        const cardCenterX = rect.left + rect.width / 2;
-                        const cardCenterY = rect.top + rect.height / 2;
+                            // Create vibrant gradient background
+                            const colors = [
+                                ['#ff6b6b', '#ffa500'], // Red to orange
+                                ['#4ecdc4', '#44a08d'], // Teal to green
+                                ['#45b7d1', '#96c93d'], // Blue to green
+                                ['#f093fb', '#f5576c'], // Pink to red
+                                ['#4facfe', '#00f2fe'], // Blue to cyan
+                                ['#43e97b', '#38f9d7'], // Green to cyan
+                                ['#fa709a', '#fee140'], // Pink to yellow
+                                ['#a8edea', '#fed6e3'], // Light blue to pink
+                                ['#ff9a9e', '#fecfef'], // Red to pink
+                                ['#ffecd2', '#fcb69f'], // Cream to orange
+                                ['#ff9a9e', '#fecfef'], // Red to pink
+                                ['#ffecd2', '#fcb69f']  // Cream to orange
+                            ];
 
-                        const dx = cardCenterX - centerX;
-                        const dy = cardCenterY - centerY;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
+                            const [color1, color2] = colors[index % colors.length];
+                            const gradient = placeholderCtx.createLinearGradient(0, 0, 0, rect.height);
+                            gradient.addColorStop(0, color1);
+                            gradient.addColorStop(1, color2);
 
-                        // Normalize direction
-                        const normalizedDx = dx / distance || 0;
-                        const normalizedDy = dy / distance || 0;
+                            // Fill background with rounded corners
+                            placeholderCtx.fillStyle = gradient;
+                            drawRoundedRect(placeholderCtx, 0, 0, rect.width, rect.height, 12);
+                            placeholderCtx.fill();
 
-                        // Calculate explosive force
-                        const baseForce = 25;
-                        const distanceMultiplier = Math.min(distance / 150, 3);
-                        const explosionForce = baseForce + distanceMultiplier * 15;
+                            // Add border with rounded corners
+                            placeholderCtx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                            placeholderCtx.lineWidth = 3;
+                            drawRoundedRect(placeholderCtx, 3, 3, rect.width - 6, rect.height - 6, 9);
+                            placeholderCtx.stroke();
 
-                        // Add randomness
-                        const randomAngle = (Math.random() - 0.5) * 0.6;
-                        const cos = Math.cos(randomAngle);
-                        const sin = Math.sin(randomAngle);
+                            // Add project number
+                            placeholderCtx.fillStyle = 'white';
+                            placeholderCtx.font = 'bold 28px Arial';
+                            placeholderCtx.textAlign = 'center';
+                            placeholderCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                            placeholderCtx.shadowBlur = 4;
+                            placeholderCtx.fillText((index + 1).toString(), rect.width / 2, rect.height / 2 + 10);
 
-                        const finalDx = normalizedDx * cos - normalizedDy * sin;
-                        const finalDy = normalizedDx * sin + normalizedDy * cos;
+                            // Calculate explosion physics
+                            const centerX = window.innerWidth / 2;
+                            const centerY = window.innerHeight / 2;
+                            const cardCenterX = rect.left + rect.width / 2;
+                            const cardCenterY = rect.top + rect.height / 2;
 
-                        const vx = finalDx * explosionForce;
-                        const vy = finalDy * explosionForce;
+                            const dx = cardCenterX - centerX;
+                            const dy = cardCenterY - centerY;
+                            const distance = Math.sqrt(dx * dx + dy * dy);
 
-                        particles.push({
-                            image: snapshot,
-                            x: rect.left,
-                            y: rect.top,
-                            vx: vx,
-                            vy: vy,
-                            angularVelocity: (Math.random() - 0.5) * 8,
-                            rotation: 0,
-                            width: rect.width,
-                            height: rect.height,
-                            originalX: rect.left,
-                            originalY: rect.top
-                        });
-                    } catch (error) {
-                        console.error('Error taking snapshot:', error);
-                        // Fallback: create a simple colored rectangle
-                        console.log('Using fallback rectangle for card:', i);
-                        const fallbackCanvas = document.createElement('canvas');
-                        fallbackCanvas.width = rect.width;
-                        fallbackCanvas.height = rect.height;
-                        const fallbackCtx = fallbackCanvas.getContext('2d');
+                            const normalizedDx = dx / distance || 0;
+                            const normalizedDy = dy / distance || 0;
 
-                        // Create a gradient background similar to the cards
-                        const gradient = fallbackCtx.createLinearGradient(0, 0, 0, rect.height);
-                        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-                        gradient.addColorStop(1, 'rgba(255, 255, 255, 0.9)');
-                        fallbackCtx.fillStyle = gradient;
-                        fallbackCtx.fillRect(0, 0, rect.width, rect.height);
+                            const baseForce = 25;
+                            const distanceMultiplier = Math.min(distance / 150, 3);
+                            const explosionForce = baseForce + distanceMultiplier * 15;
 
-                        // Add border
-                        fallbackCtx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
-                        fallbackCtx.lineWidth = 2;
-                        fallbackCtx.strokeRect(2, 2, rect.width - 4, rect.height - 4);
+                            const randomAngle = (Math.random() - 0.5) * 0.6;
+                            const cos = Math.cos(randomAngle);
+                            const sin = Math.sin(randomAngle);
 
-                        // Add some text
-                        fallbackCtx.fillStyle = '#FF0000';
-                        fallbackCtx.font = 'bold 20px Arial';
-                        fallbackCtx.textAlign = 'center';
-                        fallbackCtx.fillText('CARD ' + (i + 1), rect.width / 2, rect.height / 2);
+                            const finalDx = normalizedDx * cos - normalizedDy * sin;
+                            const finalDy = normalizedDx * sin + normalizedDy * cos;
 
-                        // Add a colored border to make it more visible
-                        fallbackCtx.strokeStyle = '#FF0000';
-                        fallbackCtx.lineWidth = 4;
-                        fallbackCtx.strokeRect(4, 4, rect.width - 8, rect.height - 8);
+                            const vx = finalDx * explosionForce;
+                            const vy = finalDy * explosionForce;
 
-                        // Calculate explosion physics (same as above)
-                        const centerX = window.innerWidth / 2;
-                        const centerY = window.innerHeight / 2;
-                        const cardCenterX = rect.left + rect.width / 2;
-                        const cardCenterY = rect.top + rect.height / 2;
-
-                        const dx = cardCenterX - centerX;
-                        const dy = cardCenterY - centerY;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-
-                        const normalizedDx = dx / distance || 0;
-                        const normalizedDy = dy / distance || 0;
-
-                        const baseForce = 25;
-                        const distanceMultiplier = Math.min(distance / 150, 3);
-                        const explosionForce = baseForce + distanceMultiplier * 15;
-
-                        const randomAngle = (Math.random() - 0.5) * 0.6;
-                        const cos = Math.cos(randomAngle);
-                        const sin = Math.sin(randomAngle);
-
-                        const finalDx = normalizedDx * cos - normalizedDy * sin;
-                        const finalDy = normalizedDx * sin + normalizedDy * cos;
-
-                        const vx = finalDx * explosionForce;
-                        const vy = finalDy * explosionForce;
-
-                        particles.push({
-                            image: fallbackCanvas,
-                            x: rect.left,
-                            y: rect.top,
-                            vx: vx,
-                            vy: vy,
-                            angularVelocity: (Math.random() - 0.5) * 8,
-                            rotation: 0,
-                            width: rect.width,
-                            height: rect.height,
-                            originalX: rect.left,
-                            originalY: rect.top
-                        });
+                            particles.push({
+                                image: placeholderCanvas,
+                                x: rect.left,
+                                y: rect.top,
+                                vx: vx,
+                                vy: vy,
+                                angularVelocity: (Math.random() - 0.5) * 8,
+                                rotation: 0,
+                                width: rect.width,
+                                height: rect.height,
+                                originalX: rect.left,
+                                originalY: rect.top
+                            });
+                        }
                     }
-                }
+                });
 
-                console.log('Starting animation with', particles.length, 'particles');
-                animate();
+                if (particles.length > 0) {
+                    animate();
+                } else {
+                    resetCards();
+                }
             }
 
             function resetCards() {
@@ -505,7 +475,7 @@
 
                 // Show original cards
                 cards.forEach(card => {
-                    card.style.opacity = '1';
+                    card.style.display = 'block';
                 });
 
                 particles = [];
@@ -513,12 +483,7 @@
             }
 
             function animate() {
-                if (!ctx) {
-                    console.log('No canvas context, returning');
-                    return;
-                }
-
-                console.log('Animate called, particles:', particles.length);
+                if (!ctx) return;
 
                 // Clear canvas
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -546,17 +511,26 @@
                     // Update rotation
                     particle.rotation += particle.angularVelocity;
 
-                    // Bounce off walls
+                    // Bounce off left and right walls
                     if (particle.x <= 0 || particle.x + particle.width >= window.innerWidth) {
                         particle.vx *= -bounce;
                         particle.x = Math.max(0, Math.min(particle.x, window.innerWidth - particle.width));
                         particle.angularVelocity += (Math.random() - 0.5) * 4;
                     }
 
-                    if (particle.y <= 0 || particle.y + particle.height >= window.innerHeight) {
+                    // Bounce off top wall
+                    if (particle.y <= 0) {
                         particle.vy *= -bounce;
-                        particle.y = Math.max(0, Math.min(particle.y, window.innerHeight - particle.height));
+                        particle.y = 0;
                         particle.angularVelocity += (Math.random() - 0.5) * 4;
+                    }
+
+                    // Ground collision - bottom of screen is ground
+                    if (particle.y + particle.height >= window.innerHeight) {
+                        particle.vy = 0; // Stop vertical movement
+                        particle.y = window.innerHeight - particle.height; // Position on ground
+                        particle.vx *= 0.95; // Extra friction on ground
+                        particle.angularVelocity *= 0.9; // Reduce rotation on ground
                     }
 
                     // Draw particle
@@ -566,7 +540,6 @@
                         ctx.rotate(particle.rotation * Math.PI / 180);
                         ctx.drawImage(particle.image, -particle.width / 2, -particle.height / 2, particle.width, particle.height);
                         ctx.restore();
-                        console.log('Drew particle at', particle.x, particle.y);
                     } catch (drawError) {
                         console.error('Error drawing particle:', drawError);
                     }
