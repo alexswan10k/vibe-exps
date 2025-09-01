@@ -24,11 +24,11 @@ class MazeGame {
 
         // AI memory to prevent getting stuck
         this.recentMoves = [];
-        this.maxRecentMoves = 8;
+        this.maxRecentMoves = 25; // Increased from 8 to prevent loops
         this.stuckCounter = 0;
         this.lastDirection = null;
         this.moveHistory = []; // Track position history
-        this.maxHistory = 20;
+        this.maxHistory = 80; // Increased from 20 to prevent revisiting positions
         this.consecutiveSameDirection = 0;
 
         this.keys = {};
@@ -212,20 +212,14 @@ class MazeGame {
                     this.moveHistory.shift();
                 }
 
-                // Check if we're stuck in a pattern
+                // Simple stuck detection: if we've made the same move 4+ times in a row
                 if (this.recentMoves.length >= 4) {
                     const lastFour = this.recentMoves.slice(-4);
                     if (lastFour.every(move => move === lastFour[0])) {
                         this.stuckCounter++;
                     } else {
-                        this.stuckCounter = 0;
+                        this.stuckCounter = 0; // Reset if pattern broken
                     }
-                }
-
-                // Check if we're going in circles (visited same position recently)
-                const currentPos = `${newX},${newY}`;
-                if (this.moveHistory.some(pos => pos.x === newX && pos.y === newY)) {
-                    this.stuckCounter += 2; // Penalize revisiting positions
                 }
             }
 
@@ -310,125 +304,95 @@ class MazeGame {
 
     findBestDirection() {
         const directions = [
-            { x: 0, y: -1 }, // up
-            { x: 1, y: 0 },  // right
-            { x: 0, y: 1 },  // down
-            { x: -1, y: 0 }  // left
+            { x: 0, y: -1, name: 'up' },    // up
+            { x: 1, y: 0, name: 'right' },  // right
+            { x: 0, y: 1, name: 'down' },  // down
+            { x: -1, y: 0, name: 'left' }  // left
         ];
 
-        // MOMENTUM SYSTEM: If we've been moving in the same direction for a while, keep going!
-        if (this.consecutiveSameDirection >= 3 && this.lastDirection) {
-            const [dx, dy] = this.lastDirection.split(',').map(Number);
-            const continuedDirection = { x: dx, y: dy };
+        // Calculate scores for all adjacent traversable squares
+        let bestDirection = null;
+        let bestScore = -Infinity;
 
-            // Check if we can continue in this direction
-            const newX = this.player.x + continuedDirection.x;
-            const newY = this.player.y + continuedDirection.y;
+        for (const dir of directions) {
+            const newX = this.player.x + dir.x;
+            const newY = this.player.y + dir.y;
 
-            if (newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows &&
-                this.maze[newY][newX] === 0) {
-                // 80% chance to continue straight when in momentum
-                if (Math.random() < 0.8) {
-                    return continuedDirection;
+            // Skip if not traversable
+            if (newX < 0 || newX >= this.cols || newY < 0 || newY >= this.rows ||
+                this.maze[newY][newX] !== 0) {
+                continue;
+            }
+
+            let score = 0;
+
+            // Base score for being traversable
+            score += 1;
+
+            // Penalty for each time this position has been visited
+            const posKey = `${newX},${newY}`;
+            const visitCount = this.moveHistory.filter(pos => pos.x === newX && pos.y === newY).length;
+            score -= visitCount;
+
+            // Bonus for continuing in the same direction
+            if (this.lastDirection) {
+                const [lastDx, lastDy] = this.lastDirection.split(',').map(Number);
+                if (dir.x === lastDx && dir.y === lastDy) {
+                    score += 2; // Same direction bonus
                 }
+
+            // Bonus for turning left (relative to current direction)
+            const currentDirIndex = this.getDirectionIndex(lastDx, lastDy);
+            const newDirIndex = this.getDirectionIndex(dir.x, dir.y);
+            const leftTurnIndex = (currentDirIndex - 1 + 4) % 4;
+
+            if (newDirIndex === leftTurnIndex) {
+                score += 1; // Left turn bonus
+            }
+
+            // Bonus for food (collectibles) visible in this direction
+            if (this.hasCollectibleInDirection(dir.x, dir.y)) {
+                score += 5; // Food bonus
+            }
+            }
+
+            // Choose the highest scoring direction
+            if (score > bestScore) {
+                bestScore = score;
+                bestDirection = dir;
             }
         }
 
-        // If we're stuck, be completely aggressive and random
-        if (this.stuckCounter > 3) {
-            this.recentMoves = [];
-            this.stuckCounter = 0;
-            this.consecutiveSameDirection = 0;
+        return bestDirection;
+    }
 
-            const validDirections = directions.filter(dir => {
-                const newX = this.player.x + dir.x;
-                const newY = this.player.y + dir.y;
-                return newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows &&
-                       this.maze[newY][newX] === 0;
-            });
+    getDirectionIndex(dx, dy) {
+        if (dx === 0 && dy === -1) return 0; // up
+        if (dx === 1 && dy === 0) return 1;  // right
+        if (dx === 0 && dy === 1) return 2;  // down
+        if (dx === -1 && dy === 0) return 3; // left
+        return -1;
+    }
 
-            if (validDirections.length > 0) {
-                return validDirections[Math.floor(Math.random() * validDirections.length)];
-            }
-        }
-
-        // First priority: move towards visible collectibles
-        let closestCollectible = null;
-        let closestDistance = Infinity;
-
+    hasCollectibleInDirection(dirX, dirY) {
+        // Check if there are any collectibles visible in this direction
         for (const collectible of this.collectibles) {
             if (this.isInVisionRange(collectible.x, collectible.y)) {
-                const distance = Math.abs(collectible.x - this.player.x) + Math.abs(collectible.y - this.player.y);
-                if (distance < closestDistance) {
-                    closestDistance = distance;
-                    closestCollectible = collectible;
+                // Check if the collectible is in the same direction
+                const dx = collectible.x - this.player.x;
+                const dy = collectible.y - this.player.y;
+
+                // Normalize the direction vectors for comparison
+                const collectibleDirX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+                const collectibleDirY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+
+                // If the collectible is in the same direction (or same axis), return true
+                if (collectibleDirX === dirX && collectibleDirY === dirY) {
+                    return true;
                 }
             }
         }
-
-        if (closestCollectible) {
-            const dx = closestCollectible.x - this.player.x;
-            const dy = closestCollectible.y - this.player.y;
-
-            let targetDirection;
-            if (Math.abs(dx) > Math.abs(dy)) {
-                targetDirection = dx > 0 ? { x: 1, y: 0 } : { x: -1, y: 0 };
-            } else {
-                targetDirection = dy > 0 ? { x: 0, y: 1 } : { x: 0, y: -1 };
-            }
-
-            // Check if target direction is valid
-            const newX = this.player.x + targetDirection.x;
-            const newY = this.player.y + targetDirection.y;
-            if (newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows &&
-                this.maze[newY][newX] === 0) {
-                return targetDirection;
-            }
-        }
-
-        // Second priority: explore unexplored areas aggressively
-        const unexploredDirections = directions.filter(dir => {
-            const newX = this.player.x + dir.x;
-            const newY = this.player.y + dir.y;
-            return newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows &&
-                   this.maze[newY][newX] === 0 && !this.explored.has(`${newX},${newY}`);
-        });
-
-        if (unexploredDirections.length > 0) {
-            // 60% chance to pick unexplored, 40% chance to be random even with unexplored options
-            if (Math.random() < 0.6) {
-                return unexploredDirections[Math.floor(Math.random() * unexploredDirections.length)];
-            }
-        }
-
-        // AGGRESSIVE EXPLORATION: When no clear goals, be much more random
-        const validDirections = directions.filter(dir => {
-            const newX = this.player.x + dir.x;
-            const newY = this.player.y + dir.y;
-            return newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows &&
-                   this.maze[newY][newX] === 0;
-        });
-
-        if (validDirections.length > 0) {
-            // Track which directions we haven't tried recently
-            const untriedDirections = validDirections.filter(dir => {
-                const moveKey = `${dir.x},${dir.y}`;
-                return !this.recentMoves.includes(moveKey);
-            });
-
-            // Prefer untried directions, but still be somewhat random
-            let chosenDirection;
-            if (untriedDirections.length > 0 && Math.random() < 0.7) {
-                chosenDirection = untriedDirections[Math.floor(Math.random() * untriedDirections.length)];
-            } else {
-                chosenDirection = validDirections[Math.floor(Math.random() * validDirections.length)];
-            }
-
-            return chosenDirection;
-        }
-
-        // No valid moves (shouldn't happen in a proper maze)
-        return null;
+        return false;
     }
 
     isInVisionRange(x, y) {
@@ -488,6 +452,23 @@ class MazeGame {
         } catch (e) {
             console.log('Web Audio API not supported');
         }
+    }
+
+    resetStuckState() {
+        // Intelligent reset: keep some useful information but clear problematic patterns
+        this.stuckCounter = 0;
+        this.consecutiveSameDirection = 0;
+
+        // Clear recent moves to break patterns, but keep some position history
+        this.recentMoves = [];
+
+        // Keep the last 10 positions for context, but clear the most recent ones that might be causing loops
+        if (this.moveHistory.length > 10) {
+            this.moveHistory = this.moveHistory.slice(0, 10);
+        }
+
+        // Reset direction tracking
+        this.lastDirection = null;
     }
 
     startGameLoop() {
