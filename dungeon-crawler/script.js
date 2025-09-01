@@ -2,13 +2,14 @@
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
 const TILE_SIZE = 20;
-const MAP_WIDTH = CANVAS_WIDTH / TILE_SIZE;
-const MAP_HEIGHT = CANVAS_HEIGHT / TILE_SIZE;
+const CHUNK_SIZE = 20; // Size of each chunk in tiles
+const RENDER_DISTANCE = 2; // How many chunks to render around player
 
 // Game variables
 let canvas, ctx;
-let gameMap = [];
-let player = { x: 1, y: 1, health: 100, gold: 0, level: 1 };
+let chunks = {}; // Store generated chunks
+let player = { x: 0, y: 0, health: 100, gold: 0, level: 1 };
+let camera = { x: 0, y: 0 };
 let enemies = [];
 let treasures = [];
 let traps = [];
@@ -31,31 +32,46 @@ function init() {
 // Start a new game
 function startNewGame() {
     gameRunning = true;
+    chunks = {};
     enemies = [];
     treasures = [];
     traps = [];
     messageLog = [];
 
-    generateDungeon();
+    // Generate initial chunks around origin
+    for (let chunkX = -RENDER_DISTANCE; chunkX <= RENDER_DISTANCE; chunkX++) {
+        for (let chunkY = -RENDER_DISTANCE; chunkY <= RENDER_DISTANCE; chunkY++) {
+            generateChunk(chunkX, chunkY);
+        }
+    }
+
     placePlayer();
     placeEntities();
+    updateCamera();
     updateUI();
-    addMessage("Welcome to the dungeon! Use arrow keys to move.");
+    addMessage("Welcome to the infinite dungeon! Use arrow keys to move.");
     gameLoop();
 }
 
-// Binary Space Partitioning for dungeon generation
-function generateDungeon() {
-    gameMap = Array(MAP_HEIGHT).fill().map(() => Array(MAP_WIDTH).fill(1)); // 1 = wall, 0 = floor
+// Generate a chunk at the given coordinates
+function generateChunk(chunkX, chunkY) {
+    const chunkKey = `${chunkX},${chunkY}`;
+    if (chunks[chunkKey]) return chunks[chunkKey];
+
+    // Initialize chunk with walls
+    const chunk = Array(CHUNK_SIZE).fill().map(() => Array(CHUNK_SIZE).fill(1));
+
+    // Note: Using standard Math.random() for simplicity
+    // Chunks will be randomly generated each time
 
     let rooms = [];
 
     // Create rooms using BSP
     function createRooms(container, depth = 0) {
-        if (depth > 3 || container.width < 12 || container.height < 12) {
+        if (depth > 2 || container.width < 8 || container.height < 8) {
             // Create a room in this leaf
-            const roomWidth = Math.max(6, container.width - 4);
-            const roomHeight = Math.max(6, container.height - 4);
+            const roomWidth = Math.max(4, container.width - 2);
+            const roomHeight = Math.max(4, container.height - 2);
             const roomX = container.x + Math.floor((container.width - roomWidth) / 2);
             const roomY = container.y + Math.floor((container.height - roomHeight) / 2);
 
@@ -73,8 +89,8 @@ function generateDungeon() {
             // Carve out the room
             for (let y = room.y; y < room.y + room.height; y++) {
                 for (let x = room.x; x < room.x + room.width; x++) {
-                    if (x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
-                        gameMap[y][x] = 0;
+                    if (x >= 0 && x < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE) {
+                        chunk[y][x] = 0;
                     }
                 }
             }
@@ -82,7 +98,7 @@ function generateDungeon() {
         }
 
         const splitHorizontally = container.width > container.height;
-        const splitRatio = 0.4 + Math.random() * 0.2; // Split between 40-60%
+        const splitRatio = 0.45 + Math.random() * 0.1; // Split between 45-55%
 
         if (splitHorizontally) {
             const splitX = Math.floor(container.x + container.width * splitRatio);
@@ -95,21 +111,121 @@ function generateDungeon() {
         }
     }
 
-    createRooms({ x: 0, y: 0, width: MAP_WIDTH, height: MAP_HEIGHT });
+    createRooms({ x: 0, y: 0, width: CHUNK_SIZE, height: CHUNK_SIZE });
 
     // Connect rooms with corridors
     for (let i = 1; i < rooms.length; i++) {
         const roomA = rooms[i - 1];
         const roomB = rooms[i];
-
-        // Create L-shaped corridor
-        createCorridor(roomA.centerX, roomA.centerY, roomB.centerX, roomB.centerY);
+        createCorridor(chunk, roomA.centerX, roomA.centerY, roomB.centerX, roomB.centerY);
     }
+
+    // Add connection points to chunk edges for seamless travel
+    addChunkConnections(chunk, chunkX, chunkY, rooms);
+
+    chunks[chunkKey] = chunk;
+    return chunk;
 }
 
-// Create L-shaped corridor between two points
-function createCorridor(x1, y1, x2, y2) {
-    // Horizontal then vertical, or vertical then horizontal
+// Add connection points at chunk edges for seamless travel between chunks
+function addChunkConnections(chunk, chunkX, chunkY, rooms) {
+    // Create connection points on all four edges
+    const connections = [];
+
+    // Use chunk coordinates to create deterministic but varied connection patterns
+    const seed = chunkX * 1000 + chunkY;
+
+    // North edge (top)
+    for (let x = 2; x < CHUNK_SIZE - 2; x += 3) {
+        // Create connections based on chunk coordinates for consistency
+        if ((chunkX + chunkY + x) % 4 === 0) {
+            connections.push({ x: x, y: 0, direction: 'north' });
+            // Create a small corridor extending inward
+            for (let y = 0; y < 3; y++) {
+                if (y < CHUNK_SIZE) chunk[y][x] = 0;
+            }
+        }
+    }
+
+    // South edge (bottom)
+    for (let x = 2; x < CHUNK_SIZE - 2; x += 3) {
+        if ((chunkX + chunkY + x) % 4 === 1) {
+            connections.push({ x: x, y: CHUNK_SIZE - 1, direction: 'south' });
+            for (let y = CHUNK_SIZE - 3; y < CHUNK_SIZE; y++) {
+                if (y >= 0) chunk[y][x] = 0;
+            }
+        }
+    }
+
+    // West edge (left)
+    for (let y = 2; y < CHUNK_SIZE - 2; y += 3) {
+        if ((chunkX + chunkY + y) % 4 === 2) {
+            connections.push({ x: 0, y: y, direction: 'west' });
+            for (let x = 0; x < 3; x++) {
+                if (x < CHUNK_SIZE) chunk[y][x] = 0;
+            }
+        }
+    }
+
+    // East edge (right)
+    for (let y = 2; y < CHUNK_SIZE - 2; y += 3) {
+        if ((chunkX + chunkY + y) % 4 === 3) {
+            connections.push({ x: CHUNK_SIZE - 1, y: y, direction: 'east' });
+            for (let x = CHUNK_SIZE - 3; x < CHUNK_SIZE; x++) {
+                if (x >= 0) chunk[y][x] = 0;
+            }
+        }
+    }
+
+    // Ensure at least some connections exist
+    if (connections.length === 0) {
+        // Force create connections on each edge
+        const midX = Math.floor(CHUNK_SIZE / 2);
+        const midY = Math.floor(CHUNK_SIZE / 2);
+
+        connections.push({ x: midX, y: 0, direction: 'north' });
+        for (let y = 0; y < 3; y++) {
+            chunk[y][midX] = 0;
+        }
+
+        connections.push({ x: midX, y: CHUNK_SIZE - 1, direction: 'south' });
+        for (let y = CHUNK_SIZE - 3; y < CHUNK_SIZE; y++) {
+            chunk[y][midX] = 0;
+        }
+
+        connections.push({ x: 0, y: midY, direction: 'west' });
+        for (let x = 0; x < 3; x++) {
+            chunk[midY][x] = 0;
+        }
+
+        connections.push({ x: CHUNK_SIZE - 1, y: midY, direction: 'east' });
+        for (let x = CHUNK_SIZE - 3; x < CHUNK_SIZE; x++) {
+            chunk[midY][x] = 0;
+        }
+    }
+
+    // Connect edge connections to nearby rooms
+    connections.forEach(conn => {
+        // Find the nearest room and connect to it
+        let nearestRoom = null;
+        let minDistance = Infinity;
+
+        rooms.forEach(room => {
+            const distance = Math.abs(conn.x - room.centerX) + Math.abs(conn.y - room.centerY);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestRoom = room;
+            }
+        });
+
+        if (nearestRoom) {
+            createCorridor(chunk, conn.x, conn.y, nearestRoom.centerX, nearestRoom.centerY);
+        }
+    });
+}
+
+// Create L-shaped corridor between two points in a chunk
+function createCorridor(chunk, x1, y1, x2, y2) {
     const horizontalFirst = Math.random() < 0.5;
 
     if (horizontalFirst) {
@@ -117,16 +233,16 @@ function createCorridor(x1, y1, x2, y2) {
         const startX = Math.min(x1, x2);
         const endX = Math.max(x1, x2);
         for (let x = startX; x <= endX; x++) {
-            if (x >= 0 && x < MAP_WIDTH && y1 >= 0 && y1 < MAP_HEIGHT) {
-                gameMap[y1][x] = 0;
+            if (x >= 0 && x < CHUNK_SIZE && y1 >= 0 && y1 < CHUNK_SIZE) {
+                chunk[y1][x] = 0;
             }
         }
         // Vertical corridor
         const startY = Math.min(y1, y2);
         const endY = Math.max(y1, y2);
         for (let y = startY; y <= endY; y++) {
-            if (x2 >= 0 && x2 < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
-                gameMap[y][x2] = 0;
+            if (x2 >= 0 && x2 < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE) {
+                chunk[y][x2] = 0;
             }
         }
     } else {
@@ -134,35 +250,77 @@ function createCorridor(x1, y1, x2, y2) {
         const startY = Math.min(y1, y2);
         const endY = Math.max(y1, y2);
         for (let y = startY; y <= endY; y++) {
-            if (x1 >= 0 && x1 < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT) {
-                gameMap[y][x1] = 0;
+            if (x1 >= 0 && x1 < CHUNK_SIZE && y >= 0 && y < CHUNK_SIZE) {
+                chunk[y][x1] = 0;
             }
         }
         // Horizontal corridor
         const startX = Math.min(x1, x2);
         const endX = Math.max(x1, x2);
         for (let x = startX; x <= endX; x++) {
-            if (x >= 0 && x < MAP_WIDTH && y2 >= 0 && y2 < MAP_HEIGHT) {
-                gameMap[y2][x] = 0;
+            if (x >= 0 && x < CHUNK_SIZE && y2 >= 0 && y2 < CHUNK_SIZE) {
+                chunk[y2][x] = 0;
             }
         }
     }
 }
 
+// Seeded random number generator for consistent chunk generation
+function seededRandom(seed) {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+}
+
 // Place player on a valid floor tile
 function placePlayer() {
-    player = { x: 1, y: 1, health: 100, gold: 0, level: 1 };
+    // Generate the starting chunk first
+    const startChunk = generateChunk(0, 0);
 
-    // Find a valid starting position
-    for (let y = 1; y < MAP_HEIGHT - 1; y++) {
-        for (let x = 1; x < MAP_WIDTH - 1; x++) {
-            if (gameMap[y][x] === 0) {
-                player.x = x;
-                player.y = y;
+    // Find a valid starting position in the chunk
+    // Try multiple approaches to ensure we find a floor tile
+
+    // First, try to find a position in the center area
+    for (let y = 5; y < CHUNK_SIZE - 5; y++) {
+        for (let x = 5; x < CHUNK_SIZE - 5; x++) {
+            if (startChunk[y][x] === 0) {
+                player = { x: x, y: y, health: 100, gold: 0, level: 1 };
                 return;
             }
         }
     }
+
+    // If center doesn't work, try the entire chunk
+    for (let y = 1; y < CHUNK_SIZE - 1; y++) {
+        for (let x = 1; x < CHUNK_SIZE - 1; x++) {
+            if (startChunk[y][x] === 0) {
+                player = { x: x, y: y, health: 100, gold: 0, level: 1 };
+                return;
+            }
+        }
+    }
+
+    // Last resort: force create a floor tile at the center
+    const centerX = Math.floor(CHUNK_SIZE / 2);
+    const centerY = Math.floor(CHUNK_SIZE / 2);
+    startChunk[centerY][centerX] = 0;
+    player = { x: centerX, y: centerY, health: 100, gold: 0, level: 1 };
+}
+
+// Update camera to follow player
+function updateCamera() {
+    camera.x = player.x * TILE_SIZE - CANVAS_WIDTH / 2;
+    camera.y = player.y * TILE_SIZE - CANVAS_HEIGHT / 2;
+}
+
+// Get tile at world coordinates
+function getTile(worldX, worldY) {
+    const chunkX = Math.floor(worldX / CHUNK_SIZE);
+    const chunkY = Math.floor(worldY / CHUNK_SIZE);
+    const localX = worldX - chunkX * CHUNK_SIZE;
+    const localY = worldY - chunkY * CHUNK_SIZE;
+
+    const chunk = generateChunk(chunkX, chunkY);
+    return chunk[localY][localX];
 }
 
 // Place entities (treasures, traps, enemies)
@@ -171,33 +329,33 @@ function placeEntities() {
     traps = [];
     enemies = [];
 
-    // Place treasures
-    for (let i = 0; i < 10; i++) {
+    // Place treasures in nearby chunks
+    for (let i = 0; i < 20; i++) {
         let x, y;
         do {
-            x = Math.floor(Math.random() * MAP_WIDTH);
-            y = Math.floor(Math.random() * MAP_HEIGHT);
-        } while (gameMap[y][x] !== 0 || (x === player.x && y === player.y));
+            x = player.x + Math.floor(Math.random() * 40) - 20;
+            y = player.y + Math.floor(Math.random() * 40) - 20;
+        } while (getTile(x, y) !== 0 || (x === player.x && y === player.y));
         treasures.push({ x, y, collected: false });
     }
 
-    // Place traps
-    for (let i = 0; i < 15; i++) {
+    // Place traps in nearby chunks
+    for (let i = 0; i < 30; i++) {
         let x, y;
         do {
-            x = Math.floor(Math.random() * MAP_WIDTH);
-            y = Math.floor(Math.random() * MAP_HEIGHT);
-        } while (gameMap[y][x] !== 0 || (x === player.x && y === player.y));
+            x = player.x + Math.floor(Math.random() * 40) - 20;
+            y = player.y + Math.floor(Math.random() * 40) - 20;
+        } while (getTile(x, y) !== 0 || (x === player.x && y === player.y));
         traps.push({ x, y, triggered: false });
     }
 
-    // Place enemies
-    for (let i = 0; i < 5; i++) {
+    // Place enemies in nearby chunks
+    for (let i = 0; i < 10; i++) {
         let x, y;
         do {
-            x = Math.floor(Math.random() * MAP_WIDTH);
-            y = Math.floor(Math.random() * MAP_HEIGHT);
-        } while (gameMap[y][x] !== 0 || (x === player.x && y === player.y));
+            x = player.x + Math.floor(Math.random() * 40) - 20;
+            y = player.y + Math.floor(Math.random() * 40) - 20;
+        } while (getTile(x, y) !== 0 || (x === player.x && y === player.y));
         enemies.push({ x, y, health: 20 + Math.floor(Math.random() * 20), attack: 5 + Math.floor(Math.random() * 5) });
     }
 }
@@ -226,9 +384,10 @@ function handleKeyPress(event) {
             return;
     }
 
-    if (newX >= 0 && newX < MAP_WIDTH && newY >= 0 && newY < MAP_HEIGHT && gameMap[newY][newX] === 0) {
+    if (getTile(newX, newY) === 0) {
         player.x = newX;
         player.y = newY;
+        updateCamera();
         checkCollisions();
         moveEnemies();
         updateUI();
@@ -277,7 +436,7 @@ function moveEnemies() {
         const newX = enemy.x + direction.x;
         const newY = enemy.y + direction.y;
 
-        if (newX >= 0 && newX < MAP_WIDTH && newY >= 0 && newY < MAP_HEIGHT && gameMap[newY][newX] === 0) {
+        if (getTile(newX, newY) === 0) {
             enemy.x = newX;
             enemy.y = newY;
         }
@@ -345,15 +504,37 @@ function updateMessageLog() {
 function render() {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Render map
-    for (let y = 0; y < MAP_HEIGHT; y++) {
-        for (let x = 0; x < MAP_WIDTH; x++) {
-            if (gameMap[y][x] === 1) {
-                ctx.fillStyle = '#333';
-                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            } else {
-                ctx.fillStyle = '#111';
-                ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+    // Calculate visible chunks
+    const startChunkX = Math.floor(camera.x / (CHUNK_SIZE * TILE_SIZE)) - 1;
+    const endChunkX = Math.floor((camera.x + CANVAS_WIDTH) / (CHUNK_SIZE * TILE_SIZE)) + 1;
+    const startChunkY = Math.floor(camera.y / (CHUNK_SIZE * TILE_SIZE)) - 1;
+    const endChunkY = Math.floor((camera.y + CANVAS_HEIGHT) / (CHUNK_SIZE * TILE_SIZE)) + 1;
+
+    // Render visible chunks
+    for (let chunkY = startChunkY; chunkY <= endChunkY; chunkY++) {
+        for (let chunkX = startChunkX; chunkX <= endChunkX; chunkX++) {
+            const chunk = generateChunk(chunkX, chunkY);
+
+            // Calculate screen position for this chunk
+            const screenX = chunkX * CHUNK_SIZE * TILE_SIZE - camera.x;
+            const screenY = chunkY * CHUNK_SIZE * TILE_SIZE - camera.y;
+
+            // Render chunk tiles
+            for (let y = 0; y < CHUNK_SIZE; y++) {
+                for (let x = 0; x < CHUNK_SIZE; x++) {
+                    const tileX = screenX + x * TILE_SIZE;
+                    const tileY = screenY + y * TILE_SIZE;
+
+                    // Only render if tile is visible on screen
+                    if (tileX > -TILE_SIZE && tileX < CANVAS_WIDTH && tileY > -TILE_SIZE && tileY < CANVAS_HEIGHT) {
+                        if (chunk[y][x] === 1) {
+                            ctx.fillStyle = '#333';
+                        } else {
+                            ctx.fillStyle = '#111';
+                        }
+                        ctx.fillRect(tileX, tileY, TILE_SIZE, TILE_SIZE);
+                    }
+                }
             }
         }
     }
@@ -361,36 +542,49 @@ function render() {
     // Render treasures
     treasures.forEach(treasure => {
         if (!treasure.collected) {
-            ctx.fillStyle = '#ffd700';
-            ctx.fillRect(treasure.x * TILE_SIZE + 5, treasure.y * TILE_SIZE + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+            const screenX = treasure.x * TILE_SIZE - camera.x;
+            const screenY = treasure.y * TILE_SIZE - camera.y;
+            if (screenX > -TILE_SIZE && screenX < CANVAS_WIDTH && screenY > -TILE_SIZE && screenY < CANVAS_HEIGHT) {
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(screenX + 5, screenY + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+            }
         }
     });
 
     // Render traps
     traps.forEach(trap => {
         if (!trap.triggered) {
-            ctx.fillStyle = '#8b0000';
-            ctx.fillRect(trap.x * TILE_SIZE + 8, trap.y * TILE_SIZE + 8, TILE_SIZE - 16, TILE_SIZE - 16);
+            const screenX = trap.x * TILE_SIZE - camera.x;
+            const screenY = trap.y * TILE_SIZE - camera.y;
+            if (screenX > -TILE_SIZE && screenX < CANVAS_WIDTH && screenY > -TILE_SIZE && screenY < CANVAS_HEIGHT) {
+                ctx.fillStyle = '#8b0000';
+                ctx.fillRect(screenX + 8, screenY + 8, TILE_SIZE - 16, TILE_SIZE - 16);
+            }
         }
     });
 
     // Render enemies
     enemies.forEach(enemy => {
-        ctx.fillStyle = '#ff0000';
-        ctx.fillRect(enemy.x * TILE_SIZE + 3, enemy.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+        const screenX = enemy.x * TILE_SIZE - camera.x;
+        const screenY = enemy.y * TILE_SIZE - camera.y;
+        if (screenX > -TILE_SIZE && screenX < CANVAS_WIDTH && screenY > -TILE_SIZE && screenY < CANVAS_HEIGHT) {
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(screenX + 3, screenY + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+        }
     });
 
-    // Render player
+    // Render player (always centered on screen)
     ctx.fillStyle = '#00ff00';
-    ctx.fillRect(player.x * TILE_SIZE + 2, player.y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+    ctx.fillRect(CANVAS_WIDTH / 2 - TILE_SIZE / 2 + 2, CANVAS_HEIGHT / 2 - TILE_SIZE / 2 + 2, TILE_SIZE - 4, TILE_SIZE - 4);
 
-    // Add lighting effect
+    // Add subtle lighting effect centered on player
     const gradient = ctx.createRadialGradient(
-        player.x * TILE_SIZE + TILE_SIZE / 2, player.y * TILE_SIZE + TILE_SIZE / 2, 0,
-        player.x * TILE_SIZE + TILE_SIZE / 2, player.y * TILE_SIZE + TILE_SIZE / 2, 150
+        CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 0,
+        CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 200
     );
     gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.8)');
+    gradient.addColorStop(0.8, 'rgba(0, 0, 0, 0.2)');
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.5)');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 }
