@@ -15,6 +15,7 @@ let currentRoom = null; // Current room the player is in
 let enemies = [];
 let treasures = [];
 let traps = [];
+let food = [];
 let messageLog = [];
 let gameRunning = false;
 
@@ -38,6 +39,7 @@ function startNewGame() {
     enemies = [];
     treasures = [];
     traps = [];
+    food = [];
     messageLog = [];
 
     // Create the starting room
@@ -751,14 +753,15 @@ function getTile(worldX, worldY) {
     return 1;
 }
 
-// Place entities (treasures, traps, enemies)
+// Place entities (treasures, traps, enemies, food)
 function placeEntities() {
     treasures = [];
     traps = [];
     enemies = [];
+    food = [];
 
-    // Get list of all existing rooms (excluding corridors)
-    const existingRooms = Object.values(rooms).filter(room => !room.isCorridor);
+    // Get list of all existing rooms (excluding corridors and starting room)
+    const existingRooms = Object.values(rooms).filter(room => !room.isCorridor && room.depth > 0);
 
     if (existingRooms.length === 0) return;
 
@@ -791,6 +794,22 @@ function placeEntities() {
 
         if (attempts < 50) {
             traps.push({ x, y, triggered: false });
+        }
+    }
+
+    // Place food in existing rooms
+    for (let i = 0; i < Math.min(15, existingRooms.length * 2); i++) {
+        const room = existingRooms[Math.floor(Math.random() * existingRooms.length)];
+        let x, y, attempts = 0;
+
+        do {
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
+            attempts++;
+        } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 50);
+
+        if (attempts < 50) {
+            food.push({ x, y, collected: false });
         }
     }
 
@@ -884,6 +903,16 @@ function checkCollisions() {
             treasure.collected = true;
             player.gold += 10 + Math.floor(Math.random() * 20);
             addMessage(`You found ${player.gold} gold!`);
+        }
+    });
+
+    // Check food
+    food.forEach((foodItem, index) => {
+        if (foodItem.x === player.x && foodItem.y === player.y && !foodItem.collected) {
+            foodItem.collected = true;
+            const healAmount = 15 + Math.floor(Math.random() * 20);
+            player.health = Math.min(100, player.health + healAmount);
+            addMessage(`You ate some food! Restored ${healAmount} health.`);
         }
     });
 
@@ -1028,6 +1057,18 @@ function render() {
         }
     });
 
+    // Render food
+    food.forEach(foodItem => {
+        if (!foodItem.collected) {
+            const screenX = foodItem.x * TILE_SIZE - camera.x;
+            const screenY = foodItem.y * TILE_SIZE - camera.y;
+            if (screenX > -TILE_SIZE && screenX < CANVAS_WIDTH && screenY > -TILE_SIZE && screenY < CANVAS_HEIGHT) {
+                ctx.fillStyle = '#90EE90';
+                ctx.fillRect(screenX + 6, screenY + 6, TILE_SIZE - 12, TILE_SIZE - 12);
+            }
+        }
+    });
+
     // Render traps
     traps.forEach(trap => {
         if (!trap.triggered) {
@@ -1098,6 +1139,21 @@ function spawnEntitiesInRoom(room) {
 
         if (attempts < 20) {
             treasures.push({ x, y, collected: false });
+        }
+    }
+
+    // Spawn 1-2 food items
+    const numFood = Math.floor(Math.random() * 2) + 1;
+    for (let i = 0; i < numFood; i++) {
+        let x, y, attempts = 0;
+        do {
+            x = room.x + Math.floor(Math.random() * room.width);
+            y = room.y + Math.floor(Math.random() * room.height);
+            attempts++;
+        } while ((getTile(x, y) !== 0 || (x === player.x && y === player.y)) && attempts < 20);
+
+        if (attempts < 20) {
+            food.push({ x, y, collected: false });
         }
     }
 
