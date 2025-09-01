@@ -105,18 +105,21 @@ h1 {
 
 .actions {
     margin: 20px 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
 }
 
 button {
     background: #FF6347;
     border: 2px solid #8B4513;
     color: white;
-    padding: 10px 20px;
-    margin: 0 5px;
+    padding: 8px 16px;
     border-radius: 4px;
     cursor: pointer;
     font-family: 'Courier New', monospace;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: bold;
     text-transform: uppercase;
     transition: all 0.2s ease;
