@@ -33,10 +33,88 @@ document.querySelectorAll('section').forEach(section => {
 
 // No form in contact, just mailto link
 
-// Add some interactive effects
+// Solar System Proximity Detection
 document.addEventListener('DOMContentLoaded', function() {
+    const planets = document.querySelectorAll('.planet');
+    const panelCompany = document.getElementById('panel-company');
+    const panelPeriod = document.getElementById('panel-period');
+    const panelDescription = document.getElementById('panel-description');
+    const solarSystem = document.querySelector('.solar-system');
+    let currentNearestPlanet = null;
+
+    // Proximity detection
+    document.addEventListener('mousemove', function(e) {
+        if (!solarSystem) return;
+
+        const solarRect = solarSystem.getBoundingClientRect();
+        const mouseX = e.clientX - solarRect.left;
+        const mouseY = e.clientY - solarRect.top;
+
+        // Check if mouse is within solar system bounds
+        if (mouseX < 0 || mouseX > solarRect.width || mouseY < 0 || mouseY > solarRect.height) {
+            // Reset all planets and panel
+            planets.forEach(planet => {
+                planet.classList.remove('near');
+            });
+            if (currentNearestPlanet) {
+                panelCompany.textContent = 'Hover over a planet to explore';
+                panelPeriod.textContent = '';
+                panelDescription.textContent = 'Move your mouse around the solar system to discover my professional journey through the years.';
+                currentNearestPlanet = null;
+            }
+            return;
+        }
+
+        let nearestPlanet = null;
+        let nearestDistance = Infinity;
+
+        planets.forEach(planet => {
+            const planetRect = planet.getBoundingClientRect();
+            const planetCenterX = planetRect.left + planetRect.width / 2 - solarRect.left;
+            const planetCenterY = planetRect.top + planetRect.height / 2 - solarRect.top;
+
+            const distance = Math.sqrt(
+                Math.pow(mouseX - planetCenterX, 2) +
+                Math.pow(mouseY - planetCenterY, 2)
+            );
+
+            // Proximity threshold (adjust as needed)
+            const proximityThreshold = 100;
+
+            if (distance < proximityThreshold && distance < nearestDistance) {
+                nearestDistance = distance;
+                nearestPlanet = planet;
+            }
+
+            // Add/remove near class for scaling effect
+            if (distance < proximityThreshold) {
+                planet.classList.add('near');
+            } else {
+                planet.classList.remove('near');
+            }
+        });
+
+        // Update panel if nearest planet changed
+        if (nearestPlanet !== currentNearestPlanet) {
+            if (nearestPlanet) {
+                const company = nearestPlanet.dataset.company;
+                const period = nearestPlanet.dataset.period;
+                const description = nearestPlanet.dataset.description;
+
+                panelCompany.textContent = company;
+                panelPeriod.textContent = period;
+                panelDescription.textContent = description;
+            } else {
+                panelCompany.textContent = 'Hover over a planet to explore';
+                panelPeriod.textContent = '';
+                panelDescription.textContent = 'Move your mouse around the solar system to discover my professional journey through the years.';
+            }
+            currentNearestPlanet = nearestPlanet;
+        }
+    });
+
     // Add hover effect to interactive elements
-    const interactiveElements = document.querySelectorAll('.tech-category, .timeline-item, .project-card, .education-item');
+    const interactiveElements = document.querySelectorAll('.tech-category, .project-card, .education-item');
     interactiveElements.forEach(card => {
         card.addEventListener('mouseenter', function() {
             this.style.transform = 'translateY(-15px) scale(1.02)';
@@ -76,9 +154,27 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // Solar system background stars
+    createStars();
+
     // Mobile menu toggle (if needed in future)
     // For now, the nav is responsive enough
 });
+
+// Create animated stars for solar system background
+function createStars() {
+    const experienceSection = document.getElementById('experience');
+    const solarSystem = document.querySelector('.solar-system');
+
+    for (let i = 0; i < 100; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.animationDelay = Math.random() * 3 + 's';
+        solarSystem.appendChild(star);
+    }
+}
 
 // Particle system for lambda cursor trail
 class Particle {
