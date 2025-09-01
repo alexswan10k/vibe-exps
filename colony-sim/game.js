@@ -774,16 +774,24 @@ class Game {
     updateUI() {
         // Update pawn list
         const pawnList = document.getElementById('pawn-list');
-        pawnList.innerHTML = '';
+        const existingItems = Array.from(pawnList.querySelectorAll('.pawn-item'));
         for (let i = 0; i < this.pawns.length; i++) {
+            let pawnItem;
+            if (i < existingItems.length) {
+                pawnItem = existingItems[i];
+            } else {
+                pawnItem = document.createElement('div');
+                pawnItem.className = 'pawn-item';
+                pawnItem.style.cursor = 'pointer';
+                pawnList.appendChild(pawnItem);
+            }
             const pawn = this.pawns[i];
             const taskText = pawn.task ? ` - Task: ${pawn.task.type} (${pawn.task.x}, ${pawn.task.y})` : ' - Idle';
-            const pawnItem = document.createElement('div');
-            pawnItem.className = 'pawn-item';
             pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}${taskText}`;
-            pawnItem.style.cursor = 'pointer';
             pawnItem.dataset.pawnIndex = i;
-            pawnList.appendChild(pawnItem);
+        }
+        for (let i = this.pawns.length; i < existingItems.length; i++) {
+            pawnList.removeChild(existingItems[i]);
         }
 
         // Add event listener to pawn-info for delegation (only once)
