@@ -134,6 +134,7 @@
                 this.planetSize = planetSize;
                 this.theta = position.theta || Math.random() * Math.PI * 2; // azimuthal angle
                 this.phi = position.phi || Math.acos(2 * Math.random() - 1); // polar angle
+                this.cachedTerrainHeight = null; // Cache terrain height to prevent bobbing
                 this.mesh = this.createMesh();
                 this.targetTheta = this.theta;
                 this.targetPhi = this.phi;
@@ -176,6 +177,11 @@
             }
 
             sampleTerrainHeight() {
+                // Use cached terrain height if available to prevent bobbing
+                if (this.cachedTerrainHeight !== null) {
+                    return this.cachedTerrainHeight;
+                }
+
                 // Use the same Perlin noise calculation as the planet generation
                 const perlin = new PerlinNoise(currentSeed);
 
@@ -197,7 +203,9 @@
                 const minRadius = currentPlanetSize - currentHeightScale * 0.3; // Allow some depth but not too much
                 const surfaceRadius = currentPlanetSize + displacement;
 
-                return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+                // Cache the result to prevent bobbing
+                this.cachedTerrainHeight = Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+                return this.cachedTerrainHeight;
             }
 
             move() {
@@ -236,6 +244,7 @@
                 this.planetSize = planetSize;
                 this.theta = position.theta || Math.random() * Math.PI * 2; // azimuthal angle
                 this.phi = position.phi || Math.acos(2 * Math.random() - 1); // polar angle
+                this.cachedTerrainHeight = null; // Cache terrain height to prevent bobbing
                 this.mesh = this.createMesh();
                 this.targetTheta = this.theta;
                 this.targetPhi = this.phi;
@@ -278,6 +287,11 @@
             }
 
             sampleTerrainHeight() {
+                // Use cached terrain height if available to prevent bobbing
+                if (this.cachedTerrainHeight !== null) {
+                    return this.cachedTerrainHeight;
+                }
+
                 // Use the same Perlin noise calculation as the planet generation
                 const perlin = new PerlinNoise(currentSeed);
 
@@ -299,7 +313,9 @@
                 const minRadius = currentPlanetSize - currentHeightScale * 0.3;
                 const surfaceRadius = currentPlanetSize + displacement;
 
-                return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+                // Cache the result to prevent bobbing
+                this.cachedTerrainHeight = Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+                return this.cachedTerrainHeight;
             }
 
             move() {
@@ -340,6 +356,7 @@
                 this.phi = position.phi || Math.acos(2 * Math.random() - 1);
                 this.age = 0; // Plant age/growth stage
                 this.energy = 0.5; // Plant energy for reproduction
+                this.cachedTerrainHeight = null; // Cache terrain height to prevent bobbing
                 this.mesh = this.createMesh();
                 scene.add(this.mesh);
                 this.updatePosition();
@@ -376,6 +393,11 @@
             }
 
             sampleTerrainHeight() {
+                // Use cached terrain height if available to prevent bobbing
+                if (this.cachedTerrainHeight !== null) {
+                    return this.cachedTerrainHeight;
+                }
+
                 // Use the same Perlin noise calculation as the planet generation
                 const perlin = new PerlinNoise(currentSeed);
 
@@ -397,7 +419,9 @@
                 const minRadius = currentPlanetSize - currentHeightScale * 0.3;
                 const surfaceRadius = currentPlanetSize + displacement;
 
-                return Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+                // Cache the result to prevent bobbing
+                this.cachedTerrainHeight = Math.max(surfaceRadius - currentPlanetSize, minRadius - currentPlanetSize);
+                return this.cachedTerrainHeight;
             }
 
             grow() {
@@ -916,6 +940,11 @@
 
         // Function to update all entities when planet changes
         function updateAllEntityPositions() {
+            // Clear cached terrain heights so entities recalculate positions
+            plants.forEach(plant => plant.cachedTerrainHeight = null);
+            animals.forEach(animal => animal.cachedTerrainHeight = null);
+            predators.forEach(predator => predator.cachedTerrainHeight = null);
+
             // Update all plants
             plants.forEach(plant => {
                 plant.planetSize = currentPlanetSize;
