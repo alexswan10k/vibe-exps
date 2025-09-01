@@ -50,7 +50,7 @@ const fs = {
                                 contents: {
                                     'secret.txt': {
                                         type: 'file',
-                                        content: 'This is a secret file.\nIt contains valuable information.\n'
+                                        content: 'This is a secret file.\nIt contains valuable information.\n\nACCESS CODE: CYBERHEIST2024\n\nUse this code to hack the mainframe.\n'
                                     },
                                     'notes.txt': {
                                         type: 'file',
@@ -61,6 +61,10 @@ const fs = {
                             'downloads': {
                                 type: 'dir',
                                 contents: {}
+                            },
+                            'mission.txt': {
+                                type: 'file',
+                                content: 'MISSION BRIEFING:\n\nWelcome, elite hacker!\n\nYour mission: Hack the mainframe!\n\nObjectives:\n\n1. Navigate to /home/user/documents\n2. Read the secret.txt file to find the access code\n3. Use the access code to hack the mainframe: hack <code>\n4. Explore the system with ls, cd, cat, grep commands\n\nRemember: Use Tab for autocomplete and | for piping!\n\nGood luck, agent.\n'
                             }
                         }
                     }
@@ -103,6 +107,10 @@ const fs = {
                     'echo': { type: 'file', content: 'echo command' },
                     'grep': { type: 'file', content: 'grep command' }
                 }
+            },
+            'README.txt': {
+                type: 'file',
+                content: 'Welcome to CyberHeist Terminal!\n\nThis is a simulated Linux environment for learning and practicing command-line skills.\n\nStart by reading your mission briefing: cat /home/user/mission.txt\n\nUse Tab for autocomplete and | for piping commands together.\n\nHappy hacking!\n'
             }
         }
     }
@@ -274,8 +282,17 @@ const commands = {
         const lines = stdin.split('\n');
         return lines.filter(line => line.includes(pattern)).join('\n') + '\n';
     },
+    hack: (args, stdin) => {
+        if (args.length === 0) return 'hack: missing target\nUsage: hack <code>\n';
+        const code = args[0].toUpperCase();
+        if (code === 'CYBERHEIST2024') {
+            return '🔥 MAINFRAME HACKED! 🔥\n\nCongratulations, elite hacker!\n\nYou have successfully breached the CyberHeist mainframe.\n\nAll data has been compromised. Mission accomplished!\n\n🏆 VICTORY! 🏆\n';
+        } else {
+            return 'Access denied. Invalid access code.\n';
+        }
+    },
     help: (args, stdin) => {
-        return 'Available commands:\n- ls [dir]: list directory contents\n- cd [dir]: change directory\n- pwd: print working directory\n- cat [file]: display file contents\n- echo [text]: display text\n- grep [pattern]: search for pattern\n- clear: clear screen\n- help: show this help\n';
+        return 'Available commands:\n- ls [dir]: list directory contents\n- cd [dir]: change directory\n- pwd: print working directory\n- cat [file]: display file contents\n- echo [text]: display text\n- grep [pattern]: search for pattern\n- hack <code>: hack the mainframe with access code\n- clear: clear screen\n- help: show this help\n';
     },
     clear: (args, stdin) => {
         clearOutput();
@@ -370,5 +387,5 @@ commandInput.addEventListener('keydown', (e) => {
 });
 
 // Initialize
-const intro = "Welcome to CyberHeist Terminal v3.0\nSimulated Linux environment loaded.\n\nType 'help' for available commands.\n";
+const intro = "Welcome to CyberHeist Terminal v3.0\nSimulated Linux environment loaded.\n\nRead the README: cat README.txt\n\nType 'help' for available commands.\n";
 typeText(intro, updatePrompt);
