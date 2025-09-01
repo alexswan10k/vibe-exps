@@ -234,43 +234,120 @@ class VirtualPet {
         }
     }
 
+    createGameModal(title, content) {
+        // Remove existing modal if any
+        const existingModal = document.getElementById('game-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Create modal overlay
+        const modal = document.createElement('div');
+        modal.id = 'game-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-family: 'Courier New', monospace;
+        `;
+
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+            background: #FFFACD;
+            border: 4px solid #8B4513;
+            border-radius: 8px;
+            padding: 20px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        `;
+
+        // Add title
+        const modalTitle = document.createElement('h2');
+        modalTitle.textContent = title;
+        modalTitle.style.cssText = `
+            color: #8B4513;
+            margin-bottom: 20px;
+            font-size: 18px;
+        `;
+
+        // Add content
+        const modalBody = document.createElement('div');
+        modalBody.innerHTML = content;
+
+        // Add close button
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '❌ Close';
+        closeBtn.style.cssText = `
+            background: #FF6347;
+            border: 2px solid #8B4513;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 20px;
+        `;
+        closeBtn.onclick = () => modal.remove();
+
+        modalContent.appendChild(modalTitle);
+        modalContent.appendChild(modalBody);
+        modalContent.appendChild(closeBtn);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+
+        return { modal, modalBody, closeBtn };
+    }
+
     reactionGame() {
-        const startTime = Date.now();
+        const { modal, modalBody } = this.createGameModal('⚡ Reaction Game', '<p>Get ready to click as fast as you can!</p><div id="reaction-wait">Wait for the signal...</div>');
+
         const delay = Math.random() * 3000 + 1000; // 1-4 seconds
+        const startTime = Date.now() + delay;
 
         setTimeout(() => {
-            const reactionTime = Date.now() - startTime;
-            const userReaction = confirm("Click OK as fast as you can!");
+            const waitDiv = document.getElementById('reaction-wait');
+            waitDiv.innerHTML = '<button id="reaction-btn" style="font-size: 24px; padding: 20px; background: #FFD700; border: 3px solid #FF6347;">CLICK NOW! 🚀</button>';
 
-            if (userReaction) {
+            const reactionBtn = document.getElementById('reaction-btn');
+            reactionBtn.onclick = () => {
+                const reactionTime = Date.now() - startTime;
+
                 if (reactionTime < 500) {
                     this.happiness = Math.min(100, this.happiness + 30);
                     this.energy = Math.max(0, this.energy - 10);
                     this.careScore += 15;
-                    alert("Amazing reflexes! Your pet is super excited!");
+                    waitDiv.innerHTML = '<p style="color: #32CD32; font-size: 18px;">🎉 Amazing reflexes!<br>Your pet is super excited!</p>';
                     this.playSound('win');
                 } else if (reactionTime < 1000) {
                     this.happiness = Math.min(100, this.happiness + 20);
                     this.energy = Math.max(0, this.energy - 12);
                     this.careScore += 10;
-                    alert("Good reaction! Your pet enjoyed that!");
+                    waitDiv.innerHTML = '<p style="color: #32CD32; font-size: 18px;">👍 Good reaction!<br>Your pet enjoyed that!</p>';
                     this.playSound('win');
                 } else {
                     this.happiness = Math.min(100, this.happiness + 10);
                     this.energy = Math.max(0, this.energy - 15);
                     this.careScore += 5;
-                    alert("Not bad! Your pet had fun!");
+                    waitDiv.innerHTML = '<p style="color: #FFD700; font-size: 18px;">👌 Not bad!<br>Your pet had fun!</p>';
                     this.playSound('action');
                 }
-            } else {
-                this.happiness = Math.max(0, this.happiness - 5);
-                this.energy = Math.max(0, this.energy - 8);
-                alert("Too slow! Your pet is a bit disappointed.");
-                this.playSound('lose');
-            }
 
-            this.updateEvolution();
-            this.updateUI();
+                this.updateEvolution();
+                this.updateUI();
+
+                setTimeout(() => modal.remove(), 2000);
+            };
         }, delay);
     }
 
@@ -280,40 +357,61 @@ class VirtualPet {
             sequence.push(Math.floor(Math.random() * 4) + 1);
         }
 
-        let userSequence = [];
+        const { modal, modalBody } = this.createGameModal('🧠 Memory Game', '<div id="memory-content"><p>Watch the sequence...</p><div id="sequence-display"></div></div>');
+
         let step = 0;
+        const displayDiv = document.getElementById('sequence-display');
 
         const showSequence = () => {
             if (step < sequence.length) {
-                alert(`Remember this number: ${sequence[step]}`);
+                displayDiv.textContent = sequence[step];
+                displayDiv.style.cssText = 'font-size: 48px; color: #FF6347; margin: 20px;';
                 setTimeout(() => {
-                    step++;
-                    showSequence();
+                    displayDiv.textContent = '?';
+                    setTimeout(() => {
+                        step++;
+                        showSequence();
+                    }, 500);
                 }, 1000);
             } else {
-                // Now ask for input
-                for (let i = 0; i < sequence.length; i++) {
-                    const guess = prompt(`Enter number ${i + 1}:`);
-                    userSequence.push(parseInt(guess));
+                // Now show input buttons
+                const contentDiv = document.getElementById('memory-content');
+                contentDiv.innerHTML = '<p>Click the numbers in the correct order:</p><div id="number-buttons"></div><div id="user-sequence"></div>';
+
+                const buttonContainer = document.getElementById('number-buttons');
+                const userSeqDiv = document.getElementById('user-sequence');
+
+                // Create number buttons
+                for (let i = 1; i <= 4; i++) {
+                    const btn = document.createElement('button');
+                    btn.textContent = i;
+                    btn.style.cssText = 'font-size: 24px; padding: 15px; margin: 5px; background: #FFD700; border: 2px solid #8B4513; border-radius: 8px; cursor: pointer;';
+                    btn.onclick = () => {
+                        userSeqDiv.textContent += i + ' ';
+                        if (userSeqDiv.textContent.trim().split(' ').length === sequence.length) {
+                            const userSequence = userSeqDiv.textContent.trim().split(' ').map(n => parseInt(n));
+                            const correct = userSequence.every((num, index) => num === sequence[index]);
+
+                            if (correct) {
+                                this.happiness = Math.min(100, this.happiness + 25);
+                                this.energy = Math.max(0, this.energy - 15);
+                                this.careScore += 12;
+                                contentDiv.innerHTML = '<p style="color: #32CD32; font-size: 18px;">🎉 Perfect memory!<br>Your pet is impressed!</p>';
+                                this.playSound('win');
+                            } else {
+                                this.happiness = Math.max(0, this.happiness - 8);
+                                this.energy = Math.max(0, this.energy - 12);
+                                contentDiv.innerHTML = `<p style="color: #FF6347; font-size: 16px;">Not quite! The sequence was:<br><strong>${sequence.join(' ')}</strong></p>`;
+                                this.playSound('lose');
+                            }
+
+                            this.updateEvolution();
+                            this.updateUI();
+                            setTimeout(() => modal.remove(), 3000);
+                        }
+                    };
+                    buttonContainer.appendChild(btn);
                 }
-
-                const correct = userSequence.every((num, index) => num === sequence[index]);
-
-                if (correct) {
-                    this.happiness = Math.min(100, this.happiness + 25);
-                    this.energy = Math.max(0, this.energy - 15);
-                    this.careScore += 12;
-                    alert("Perfect memory! Your pet is impressed!");
-                    this.playSound('win');
-                } else {
-                    this.happiness = Math.max(0, this.happiness - 8);
-                    this.energy = Math.max(0, this.energy - 12);
-                    alert(`Not quite! The sequence was: ${sequence.join(', ')}`);
-                    this.playSound('lose');
-                }
-
-                this.updateEvolution();
-                this.updateUI();
             }
         };
 
@@ -322,36 +420,83 @@ class VirtualPet {
 
     patternGame() {
         const colors = ['Red', 'Blue', 'Green', 'Yellow'];
+        const colorStyles = {
+            'Red': '#FF6347',
+            'Blue': '#4169E1',
+            'Green': '#32CD32',
+            'Yellow': '#FFD700'
+        };
+
         const pattern = [];
         for (let i = 0; i < 3; i++) {
             pattern.push(colors[Math.floor(Math.random() * colors.length)]);
         }
 
-        alert(`Watch the pattern: ${pattern.join(' -> ')}`);
+        const { modal, modalBody } = this.createGameModal('🎨 Pattern Game', '<div id="pattern-content"><p>Watch the pattern...</p><div id="pattern-display"></div></div>');
 
-        setTimeout(() => {
-            const guess = prompt("What was the pattern? (e.g., Red -> Blue -> Green)");
-            const userPattern = guess.split('->').map(s => s.trim());
+        let step = 0;
+        const displayDiv = document.getElementById('pattern-display');
 
-            const correct = userPattern.length === pattern.length &&
-                          userPattern.every((color, index) => color === pattern[index]);
-
-            if (correct) {
-                this.happiness = Math.min(100, this.happiness + 20);
-                this.energy = Math.max(0, this.energy - 12);
-                this.careScore += 10;
-                alert("Great pattern recognition! Your pet loves learning!");
-                this.playSound('win');
+        const showPattern = () => {
+            if (step < pattern.length) {
+                displayDiv.textContent = pattern[step];
+                displayDiv.style.cssText = `font-size: 48px; color: ${colorStyles[pattern[step]]}; margin: 20px; text-shadow: 2px 2px 0px #000;`;
+                setTimeout(() => {
+                    displayDiv.textContent = '?';
+                    displayDiv.style.color = '#666';
+                    setTimeout(() => {
+                        step++;
+                        showPattern();
+                    }, 500);
+                }, 1200);
             } else {
-                this.happiness = Math.max(0, this.happiness - 10);
-                this.energy = Math.max(0, this.energy - 10);
-                alert(`Close! The pattern was: ${pattern.join(' -> ')}`);
-                this.playSound('lose');
-            }
+                // Now show color buttons
+                const contentDiv = document.getElementById('pattern-content');
+                contentDiv.innerHTML = '<p>Click the colors in the correct order:</p><div id="color-buttons"></div><div id="user-pattern" style="margin-top: 15px; font-size: 18px;"></div>';
 
-            this.updateEvolution();
-            this.updateUI();
-        }, 2000);
+                const buttonContainer = document.getElementById('color-buttons');
+                const userPatternDiv = document.getElementById('user-pattern');
+
+                // Create color buttons
+                colors.forEach(color => {
+                    const btn = document.createElement('button');
+                    btn.textContent = '●';
+                    btn.style.cssText = `font-size: 36px; padding: 15px; margin: 5px; background: ${colorStyles[color]}; border: 3px solid #8B4513; border-radius: 50%; cursor: pointer; width: 60px; height: 60px;`;
+                    btn.onclick = () => {
+                        userPatternDiv.innerHTML += `<span style="color: ${colorStyles[color]}; margin: 0 5px;">●</span>`;
+                        const currentPattern = Array.from(userPatternDiv.children).map(span => {
+                            const bgColor = span.style.color;
+                            return Object.keys(colorStyles).find(key => colorStyles[key] === bgColor);
+                        });
+
+                        if (currentPattern.length === pattern.length) {
+                            const correct = currentPattern.every((color, index) => color === pattern[index]);
+
+                            if (correct) {
+                                this.happiness = Math.min(100, this.happiness + 20);
+                                this.energy = Math.max(0, this.energy - 12);
+                                this.careScore += 10;
+                                contentDiv.innerHTML = '<p style="color: #32CD32; font-size: 18px;">🎉 Great pattern recognition!<br>Your pet loves learning!</p>';
+                                this.playSound('win');
+                            } else {
+                                this.happiness = Math.max(0, this.happiness - 10);
+                                this.energy = Math.max(0, this.energy - 10);
+                                const correctPattern = pattern.map(color => `<span style="color: ${colorStyles[color]};">●</span>`).join(' ');
+                                contentDiv.innerHTML = `<p style="color: #FF6347; font-size: 16px;">Close! The pattern was:<br>${correctPattern}</p>`;
+                                this.playSound('lose');
+                            }
+
+                            this.updateEvolution();
+                            this.updateUI();
+                            setTimeout(() => modal.remove(), 3000);
+                        }
+                    };
+                    buttonContainer.appendChild(btn);
+                });
+            }
+        };
+
+        showPattern();
     }
 
     randomEvent() {
