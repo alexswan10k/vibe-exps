@@ -83,17 +83,133 @@ document.addEventListener('DOMContentLoaded', function() {
     // For now, the nav is responsive enough
 });
 
+// Particle system for lambda cursor trail
+class Particle {
+    constructor(x, y) {
+        // Add randomness to position
+        this.x = x + (Math.random() - 0.5) * 20;
+        this.y = y + (Math.random() - 0.5) * 20;
+        // More varied velocity
+        this.vx = (Math.random() - 0.5) * 4;
+        this.vy = (Math.random() - 0.5) * 4;
+        // More varied size
+        this.size = Math.random() * 30 + 5;
+        this.originalSize = this.size;
+        this.life = 1;
+        this.decay = Math.random() * 0.03 + 0.005;
+        this.element = document.createElement('div');
+        this.element.className = 'lambda-particle';
+        this.element.textContent = 'λ';
+        this.element.style.left = this.x + 'px';
+        this.element.style.top = this.y + 'px';
+        this.element.style.fontSize = this.size + 'px';
+        document.body.appendChild(this.element);
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+        this.size = this.originalSize * this.life;
+        this.element.style.left = this.x + 'px';
+        this.element.style.top = this.y + 'px';
+        this.element.style.fontSize = this.size + 'px';
+        this.element.style.opacity = this.life;
+        if (this.life <= 0) {
+            this.element.remove();
+            return true; // remove particle
+        }
+        return false;
+    }
+
+    swell() {
+        this.size *= 2;
+        this.element.style.fontSize = this.size + 'px';
+        this.decay *= 0.5; // slower decay
+    }
+}
+
+const particles = [];
+let mouseX = 0;
+let mouseY = 0;
+let hoverX = 0;
+let hoverY = 0;
+let hovering = false;
+let lastParticleTime = 0;
+const particleInterval = 20; // ms between particles
+const maxParticles = 100;
+
+// Select clickable elements
+const clickableElements = document.querySelectorAll('a, button, input[type="submit"], .cta-button, .feature-card, .project-card, .testimonial');
+
+clickableElements.forEach(el => {
+    el.addEventListener('mouseenter', (e) => {
+        hovering = true;
+        hoverX = e.pageX;
+        hoverY = e.pageY;
+    });
+    el.addEventListener('mouseleave', () => {
+        hovering = false;
+    });
+});
+
+document.addEventListener('mousemove', (e) => {
+    mouseX = e.pageX;
+    mouseY = e.pageY;
+    if (hovering) {
+        hoverX = mouseX;
+        hoverY = mouseY;
+    }
+    const now = Date.now();
+    if (now - lastParticleTime > particleInterval && particles.length < maxParticles) {
+        // Add new particle
+        particles.push(new Particle(mouseX, mouseY));
+        lastParticleTime = now;
+    }
+});
+
+document.addEventListener('click', () => {
+    // Swell all particles
+    particles.forEach(particle => particle.swell());
+});
+
+function animate() {
+    const now = Date.now();
+    // Emit particles on hover even without mouse move
+    if (hovering && now - lastParticleTime > particleInterval && particles.length < maxParticles) {
+        particles.push(new Particle(hoverX, hoverY));
+        lastParticleTime = now;
+    }
+    for (let i = particles.length - 1; i >= 0; i--) {
+        if (particles[i].update()) {
+            particles.splice(i, 1);
+        }
+    }
+    requestAnimationFrame(animate);
+}
+
+animate();
+
 // Add loading animation
 window.addEventListener('load', function() {
     document.body.classList.add('loaded');
 });
 
-// CSS for loaded state
+// CSS for loaded state and particles
 const style = document.createElement('style');
 style.textContent = `
 body.loaded section {
     opacity: 1;
     transform: translateY(0);
+}
+
+.lambda-particle {
+    position: absolute;
+    pointer-events: none;
+    color: #007bff;
+    font-weight: bold;
+    z-index: 9999;
+    transition: none;
 }
 `;
 document.head.appendChild(style);
