@@ -201,8 +201,13 @@ body {
 
 .switch input {
     opacity: 0;
-    width: 0;
-    height: 0;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    margin: 0;
+    cursor: pointer;
 }
 
 .slider {
@@ -305,14 +310,15 @@ const MODULE_TEMPLATES = {
     oscillator: createModuleTemplate(
         'oscillator',
         'Oscillator',
-        140,
+        160,
         120,
         [
-            { name: 'Out', type: 'output', x: 135, y: 60 }
+            { name: 'V/Oct', type: 'input', x: -5, y: 40 },
+            { name: 'Out', type: 'output', x: 155, y: 60 }
         ],
         [
-            { name: 'Frequency', type: 'potentiometer', x: 20, y: 40 },
-            { name: 'Waveform', type: 'potentiometer', x: 80, y: 40 }
+            { name: 'Frequency', type: 'potentiometer', x: 30, y: 40 },
+            { name: 'Waveform', type: 'potentiometer', x: 90, y: 40 }
         ]
     ),
 
@@ -426,6 +432,59 @@ const MODULE_TEMPLATES = {
             { name: 'Tempo', type: 'potentiometer', x: 20, y: 30 },
             { name: 'Play/Stop', type: 'switch', x: 100, y: 30 }
         ]
+    ),
+
+    oscilloscope: createModuleTemplate(
+        'oscilloscope',
+        'Oscilloscope',
+        200,
+        140,
+        [
+            { name: 'In', type: 'input', x: -5, y: 70 }
+        ],
+        [
+            { name: 'Timebase', type: 'potentiometer', x: 20, y: 20 },
+            { name: 'Vertical', type: 'potentiometer', x: 80, y: 20 },
+            { name: 'Trigger', type: 'potentiometer', x: 140, y: 20 }
+        ]
+    ),
+
+    lfo: createModuleTemplate(
+        'lfo',
+        'LFO',
+        140,
+        120,
+        [
+            { name: 'Out', type: 'output', x: 135, y: 60 }
+        ],
+        [
+            { name: 'Frequency', type: 'potentiometer', x: 20, y: 40 },
+            { name: 'Amplitude', type: 'potentiometer', x: 80, y: 40 }
+        ]
+    ),
+
+    'level-meter': createModuleTemplate(
+        'level-meter',
+        'Level Meter',
+        120,
+        140,
+        [
+            { name: 'In', type: 'input', x: -5, y: 70 }
+        ],
+        []
+    ),
+
+    gate: createModuleTemplate(
+        'gate',
+        'Gate',
+        120,
+        100,
+        [
+            { name: 'Out', type: 'output', x: 115, y: 50 }
+        ],
+        [
+            { name: 'Gate', type: 'switch', x: 50, y: 40 }
+        ]
     )
 };
 
@@ -515,16 +574,20 @@ class AudioEngine {
             case 'oscillator':
                 const oscillator = this.audioContext.createOscillator();
                 const oscGain = this.audioContext.createGain();
+                const vOctGain = this.audioContext.createGain();
 
                 oscillator.frequency.value = 440; // Default frequency
                 oscillator.type = 'sine';
                 oscGain.gain.value = 0.1; // Low volume to prevent clipping
+                vOctGain.gain.value = 1; // Default multiplier
 
                 oscillator.connect(oscGain);
+                vOctGain.connect(oscillator.frequency);
                 oscillator.start();
 
                 this.audioNodes.set(module.id, oscillator);
                 this.gainNodes.set(module.id, oscGain);
+                this.gainNodes.set(`${module.id}-v-oct`, vOctGain);
 
                 return oscGain;
 
@@ -540,7 +603,16 @@ class AudioEngine {
                 const vcaGain = this.audioContext.createGain();
                 vcaGain.gain.value = 0;
 
+                // Create CV input gain node for modulation
+                const vcaCvGain = this.audioContext.createGain();
+                vcaCvGain.gain.value = 0;
+
                 this.gainNodes.set(module.id, vcaGain);
+                this.gainNodes.set(`${module.id}-cv`, vcaCvGain);
+
+                // Connect CV input to modulate the main gain
+                vcaCvGain.connect(vcaGain.gain);
+
                 return vcaGain;
 
             case 'vcf':
@@ -588,6 +660,62 @@ class AudioEngine {
                 this.gainNodes.set(module.id, envGain);
                 return envGain;
 
+            case 'oscilloscope':
+                // Oscilloscope needs a gain node to receive input signals and an analyser for visualization
+                const scopeGain = this.audioContext.createGain();
+                scopeGain.gain.value = 1; // Unity gain for monitoring
+
+                const analyser = this.audioContext.createAnalyser();
+                analyser.fftSize = 2048;
+                analyser.smoothingTimeConstant = 0.8;
+
+                // Connect gain to analyser
+                scopeGain.connect(analyser);
+
+                this.gainNodes.set(module.id, scopeGain);
+                this.audioNodes.set(module.id, analyser); // Store analyser for access by component
+                return scopeGain;
+
+            case 'lfo':
+                // LFO (Low Frequency Oscillator) - creates modulation signals
+                const lfoOscillator = this.audioContext.createOscillator();
+                const lfoGain = this.audioContext.createGain();
+
+                lfoOscillator.frequency.value = 1; // Default 1 Hz
+                lfoOscillator.type = 'sine';
+                lfoGain.gain.value = 0.5; // Default amplitude
+
+                lfoOscillator.connect(lfoGain);
+                lfoOscillator.start();
+
+                this.audioNodes.set(module.id, lfoOscillator);
+                this.gainNodes.set(module.id, lfoGain);
+                return lfoGain;
+
+            case 'level-meter':
+                // Level Meter - needs a gain node to receive input signals and an analyser for level monitoring
+                const levelGain = this.audioContext.createGain();
+                levelGain.gain.value = 1; // Unity gain for monitoring
+
+                const levelAnalyser = this.audioContext.createAnalyser();
+                levelAnalyser.fftSize = 2048;
+                levelAnalyser.smoothingTimeConstant = 0.8;
+
+                // Connect gain to analyser
+                levelGain.connect(levelAnalyser);
+
+                this.gainNodes.set(module.id, levelGain);
+                this.audioNodes.set(module.id, levelAnalyser); // Store analyser for access by component
+                return levelGain;
+
+            case 'gate':
+                // Gate - simple toggle that outputs 1.0 (high) or 0.0 (low)
+                const gateGain = this.audioContext.createGain();
+                gateGain.gain.value = 0; // Default to off (0)
+
+                this.gainNodes.set(module.id, gateGain);
+                return gateGain;
+
             default:
                 // Generic gain node for other modules
                 const gain = this.audioContext.createGain();
@@ -626,6 +754,14 @@ class AudioEngine {
                             audioNode.type = 'sawtooth';
                         }
                     }
+
+                    // Handle V/Oct input modulation
+                    const vOctGain = this.gainNodes.get(`${module.id}-v-oct`);
+                    if (vOctGain) {
+                        // V/Oct standard: 1V per octave, so 1V = 2x frequency
+                        // Map 0-1 to appropriate frequency multiplier
+                        vOctGain.gain.value = Math.pow(2, (freqControl ? freqControl.value * 5 : 2.5) - 2.5);
+                    }
                 }
                 break;
 
@@ -660,6 +796,7 @@ class AudioEngine {
                         gainNode.gain.value = levelControl.value;
                     }
                 }
+                // CV input modulation is handled via the gain connection in createAudioNode
                 break;
 
             case 'mixer':
@@ -690,6 +827,32 @@ class AudioEngine {
                 }
                 if (mixerMaster && masterControl) {
                     mixerMaster.gain.value = masterControl.value;
+                }
+                break;
+
+            case 'lfo':
+                if (audioNode) {
+                    const freqControl = module.controls.find(c => c.name === 'Frequency');
+                    if (freqControl) {
+                        // Map 0-1 to 0.1-20 Hz (LFO range)
+                        audioNode.frequency.value = 0.1 + (freqControl.value * 19.9);
+                    }
+                }
+                if (gainNode) {
+                    const ampControl = module.controls.find(c => c.name === 'Amplitude');
+                    if (ampControl) {
+                        gainNode.gain.value = ampControl.value;
+                    }
+                }
+                break;
+
+            case 'gate':
+                if (gainNode) {
+                    const gateControl = module.controls.find(c => c.name === 'Gate');
+                    if (gateControl) {
+                        // Output 1.0 for gate on, 0.0 for gate off
+                        gainNode.gain.value = gateControl.value;
+                    }
                 }
                 break;
         }
@@ -739,6 +902,23 @@ class AudioEngine {
             let fromNode = null;
             if (fromModule.type === 'oscillator') {
                 fromNode = this.gainNodes.get(fromModule.id); // Use gain node for oscillator
+            } else if (fromModule.type === 'sequencer') {
+                // For sequencer, route to the correct output based on patch point
+                const fromPatchPoint = fromModule.patchPoints.find(p => p.id === connection.fromPatchId);
+                if (fromPatchPoint) {
+                    if (fromPatchPoint.name === 'CV Out') {
+                        fromNode = this.gainNodes.get(`${fromModule.id}-cv`);
+                    } else if (fromPatchPoint.name === 'Gate Out') {
+                        fromNode = this.gainNodes.get(`${fromModule.id}-gate`);
+                    }
+                }
+                // Fallback to main gain node if patch point not found
+                if (!fromNode) {
+                    fromNode = this.gainNodes.get(fromModule.id);
+                }
+            } else if (fromModule.type === 'gate') {
+                // For gate module, use the main gain node
+                fromNode = this.gainNodes.get(fromModule.id);
             } else {
                 fromNode = this.audioNodes.get(fromModule.id) || this.gainNodes.get(fromModule.id);
             }
@@ -747,6 +927,32 @@ class AudioEngine {
             let toNode = null;
             if (toModule.type === 'output') {
                 toNode = this.gainNodes.get(toModule.id); // Output module's gain node
+            } else if (toModule.type === 'oscillator') {
+                // For oscillator, route to the correct input
+                const toPatchPoint = toModule.patchPoints.find(p => p.id === connection.toPatchId);
+                if (toPatchPoint) {
+                    if (toPatchPoint.name === 'V/Oct') {
+                        toNode = this.gainNodes.get(`${toModule.id}-v-oct`);
+                    }
+                }
+                // Fallback to main gain node if patch point not found
+                if (!toNode) {
+                    toNode = this.gainNodes.get(toModule.id);
+                }
+            } else if (toModule.type === 'vca') {
+                // For VCA, route to the correct input
+                const toPatchPoint = toModule.patchPoints.find(p => p.id === connection.toPatchId);
+                if (toPatchPoint) {
+                    if (toPatchPoint.name === 'CV In') {
+                        toNode = this.gainNodes.get(`${toModule.id}-cv`);
+                    } else if (toPatchPoint.name === 'Audio In') {
+                        toNode = this.gainNodes.get(toModule.id);
+                    }
+                }
+                // Fallback to main gain node if patch point not found
+                if (!toNode) {
+                    toNode = this.gainNodes.get(toModule.id);
+                }
             } else if (toModule.type === 'mixer') {
                 // For mixer, route to the correct input channel
                 const toPatchPoint = toModule.patchPoints.find(p => p.id === connection.toPatchId);
@@ -765,6 +971,9 @@ class AudioEngine {
                 if (!toNode) {
                     toNode = this.gainNodes.get(toModule.id);
                 }
+            } else if (toModule.type === 'level-meter') {
+                // For level meter, route to the gain node (which feeds into analyser)
+                toNode = this.gainNodes.get(toModule.id);
             } else {
                 toNode = this.audioNodes.get(toModule.id) || this.gainNodes.get(toModule.id);
             }
@@ -842,6 +1051,10 @@ function ModulePanel({ onDragStart }) {
         { type: 'cv-gate', name: 'CV/Gate Generator' },
         { type: 'mixer', name: 'Mixer' },
         { type: 'sequencer', name: 'Sequencer' },
+        { type: 'oscilloscope', name: 'Oscilloscope' },
+        { type: 'level-meter', name: 'Level Meter' },
+        { type: 'gate', name: 'Gate' },
+        { type: 'lfo', name: 'LFO' },
         { type: 'output', name: 'Output' }
     ];
 
@@ -1112,6 +1325,395 @@ function SequencerModule({ module, onPatchPointMouseDown, onControlChange, onMod
 }
 
 /**
+ * OscilloscopeModule Component - Special oscilloscope module for signal visualization
+ * @param {Object} props
+ * @param {Module} props.module - Module data
+ * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
+ * @param {function} props.onControlChange - Called when control changes
+ * @param {function} props.onModuleMove - Called when module is moved
+ * @param {boolean} props.isConnecting - Whether currently connecting
+ * @param {string|null} props.connectionStartId - ID of connection start point
+ * @param {AudioEngine} props.audioEngine - Audio engine instance
+ */
+function OscilloscopeModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId, audioEngine }) {
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const moduleRef = useRef(null);
+    const canvasRef = useRef(null);
+    const analyserRef = useRef(null);
+    const animationRef = useRef(null);
+
+    const handleMouseDown = useCallback((e) => {
+        if (e.target.closest('.patch-point') || e.target.closest('.potentiometer, .switch')) {
+            return; // Don't drag if clicking on patch points or controls
+        }
+
+        setIsDragging(true);
+        const rect = moduleRef.current.getBoundingClientRect();
+        setDragStart({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        });
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isDragging) return;
+
+        const rackArea = moduleRef.current.parentElement;
+        const rackRect = rackArea.getBoundingClientRect();
+
+        const newX = Math.max(0, Math.min(
+            e.clientX - rackRect.left - dragStart.x,
+            rackRect.width - module.width
+        ));
+        const newY = Math.max(0, Math.min(
+            e.clientY - rackRect.top - dragStart.y,
+            rackRect.height - module.height
+        ));
+
+        onModuleMove(module.id, newX, newY);
+    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    // Add global mouse event listeners when dragging
+    React.useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    // Oscilloscope visualization
+    React.useEffect(() => {
+        if (!audioEngine || !canvasRef.current) return;
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+
+        // Get the analyser created by AudioEngine
+        const analyser = audioEngine.audioNodes.get(module.id);
+        if (!analyser) return;
+
+        analyserRef.current = analyser;
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const draw = () => {
+            analyser.getByteTimeDomainData(dataArray);
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#0f0';
+            ctx.beginPath();
+
+            const sliceWidth = canvas.width / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.stroke();
+            animationRef.current = requestAnimationFrame(draw);
+        };
+
+        draw();
+
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
+    }, [audioEngine, module.id]);
+
+    return (
+        <div
+            ref={moduleRef}
+            className="module"
+            style={{
+                left: module.x,
+                top: module.y,
+                width: module.width,
+                height: module.height,
+                cursor: isDragging ? 'grabbing' : 'grab'
+            }}
+            onMouseDown={handleMouseDown}
+        >
+            <div className="module-header">{module.name}</div>
+
+            {/* Oscilloscope display */}
+            <canvas
+                ref={canvasRef}
+                width="160"
+                height="80"
+                style={{
+                    position: 'absolute',
+                    top: '40px',
+                    left: '20px',
+                    backgroundColor: '#000',
+                    border: '1px solid #444'
+                }}
+            />
+
+            {module.patchPoints.map(patchPoint => (
+                <React.Fragment key={patchPoint.id}>
+                    <PatchPoint
+                        patchPoint={patchPoint}
+                        onMouseDown={onPatchPointMouseDown}
+                        isConnecting={isConnecting}
+                        connectionStartId={connectionStartId}
+                    />
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
+                            top: patchPoint.y - 8,
+                            fontSize: '10px',
+                            color: '#ccc',
+                            pointerEvents: 'none',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        {patchPoint.name}
+                    </div>
+                </React.Fragment>
+            ))}
+
+            {module.controls.map(control => (
+                <Control
+                    key={control.id}
+                    control={control}
+                    onChange={onControlChange}
+                />
+            ))}
+        </div>
+    );
+}
+
+/**
+ * LevelMeterModule Component - Simple level meter for signal monitoring
+ * @param {Object} props
+ * @param {Module} props.module - Module data
+ * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
+ * @param {function} props.onControlChange - Called when control changes
+ * @param {function} props.onModuleMove - Called when module is moved
+ * @param {boolean} props.isConnecting - Whether currently connecting
+ * @param {string|null} props.connectionStartId - ID of connection start point
+ * @param {AudioEngine} props.audioEngine - Audio engine instance
+ */
+function LevelMeterModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId, audioEngine }) {
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const [level, setLevel] = useState(0);
+    const moduleRef = useRef(null);
+    const analyserRef = useRef(null);
+    const animationRef = useRef(null);
+
+    const handleMouseDown = useCallback((e) => {
+        if (e.target.closest('.patch-point')) {
+            return; // Don't drag if clicking on patch points
+        }
+
+        setIsDragging(true);
+        const rect = moduleRef.current.getBoundingClientRect();
+        setDragStart({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        });
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isDragging) return;
+
+        const rackArea = moduleRef.current.parentElement;
+        const rackRect = rackArea.getBoundingClientRect();
+
+        const newX = Math.max(0, Math.min(
+            e.clientX - rackRect.left - dragStart.x,
+            rackRect.width - module.width
+        ));
+        const newY = Math.max(0, Math.min(
+            e.clientY - rackRect.top - dragStart.y,
+            rackRect.height - module.height
+        ));
+
+        onModuleMove(module.id, newX, newY);
+    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    // Add global mouse event listeners when dragging
+    React.useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    // Level meter monitoring
+    React.useEffect(() => {
+        if (!audioEngine) return;
+
+        // Get the analyser created by AudioEngine
+        const analyser = audioEngine.audioNodes.get(module.id);
+        if (!analyser) return;
+
+        analyserRef.current = analyser;
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+
+        const updateLevel = () => {
+            analyser.getByteTimeDomainData(dataArray);
+
+            // Calculate RMS level
+            let sum = 0;
+            for (let i = 0; i < bufferLength; i++) {
+                const sample = (dataArray[i] - 128) / 128; // Convert to -1 to 1 range
+                sum += sample * sample;
+            }
+            const rms = Math.sqrt(sum / bufferLength);
+
+            // Convert to dB and scale to 0-1 range
+            const dbLevel = 20 * Math.log10(rms + 0.0001); // Add small offset to avoid -inf
+            const normalizedLevel = Math.max(0, Math.min(1, (dbLevel + 60) / 60)); // -60dB to 0dB range
+
+            setLevel(normalizedLevel);
+            animationRef.current = requestAnimationFrame(updateLevel);
+        };
+
+        updateLevel();
+
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
+    }, [audioEngine, module.id]);
+
+    return (
+        <div
+            ref={moduleRef}
+            className="module"
+            style={{
+                left: module.x,
+                top: module.y,
+                width: module.width,
+                height: module.height,
+                cursor: isDragging ? 'grabbing' : 'grab'
+            }}
+            onMouseDown={handleMouseDown}
+        >
+            <div className="module-header">{module.name}</div>
+
+            {/* Level meter display */}
+            <div
+                style={{
+                    position: 'absolute',
+                    top: '40px',
+                    left: '20px',
+                    width: '80px',
+                    height: '80px',
+                    backgroundColor: '#000',
+                    border: '1px solid #444',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}
+            >
+                {/* Level bar */}
+                <div
+                    style={{
+                        width: '20px',
+                        height: '60px',
+                        backgroundColor: '#333',
+                        border: '1px solid #666',
+                        position: 'relative',
+                        marginBottom: '5px'
+                    }}
+                >
+                    <div
+                        style={{
+                            position: 'absolute',
+                            bottom: '0',
+                            left: '0',
+                            right: '0',
+                            height: `${level * 100}%`,
+                            backgroundColor: level > 0.8 ? '#f00' : level > 0.6 ? '#ff0' : '#0f0',
+                            transition: 'height 0.1s ease-out'
+                        }}
+                    />
+                </div>
+
+                {/* Level value */}
+                <div
+                    style={{
+                        fontSize: '12px',
+                        color: '#fff',
+                        fontFamily: 'monospace',
+                        textAlign: 'center'
+                    }}
+                >
+                    {Math.round(level * 100)}%
+                </div>
+            </div>
+
+            {module.patchPoints.map(patchPoint => (
+                <React.Fragment key={patchPoint.id}>
+                    <PatchPoint
+                        patchPoint={patchPoint}
+                        onMouseDown={onPatchPointMouseDown}
+                        isConnecting={isConnecting}
+                        connectionStartId={connectionStartId}
+                    />
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
+                            top: patchPoint.y - 8,
+                            fontSize: '10px',
+                            color: '#ccc',
+                            pointerEvents: 'none',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        {patchPoint.name}
+                    </div>
+                </React.Fragment>
+            ))}
+        </div>
+    );
+}
+
+/**
  * Module Component - Individual synth module
  * @param {Object} props
  * @param {Module} props.module - Module data
@@ -1305,6 +1907,7 @@ function ConnectionLine({ connection, modules, onRemove }) {
  * @param {function} props.onLoadState - Called when loading a new state
  * @param {Object} props.sequencerStates - Sequencer state for each sequencer module
  * @param {function} props.onStepChange - Called when step values change
+ * @param {AudioEngine} props.audioEngine - Audio engine instance
  */
 function Rack({
     modules,
@@ -1319,7 +1922,8 @@ function Rack({
     connectionStartId,
     onLoadState,
     sequencerStates,
-    onStepChange
+    onStepChange,
+    audioEngine
 }) {
     const rackRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -1669,6 +2273,32 @@ function Rack({
                                 onStepChange={onStepChange}
                                 stepValues={sequencerState.stepValues}
                                 currentStep={sequencerState.currentStep}
+                            />
+                        );
+                    } else if (module.type === 'oscilloscope') {
+                        return (
+                            <OscilloscopeModule
+                                key={module.id}
+                                module={module}
+                                onPatchPointMouseDown={onPatchPointMouseDown}
+                                onControlChange={onControlChange}
+                                onModuleMove={onModuleMove}
+                                isConnecting={isConnecting}
+                                connectionStartId={connectionStartId}
+                                audioEngine={audioEngine}
+                            />
+                        );
+                    } else if (module.type === 'level-meter') {
+                        return (
+                            <LevelMeterModule
+                                key={module.id}
+                                module={module}
+                                onPatchPointMouseDown={onPatchPointMouseDown}
+                                onControlChange={onControlChange}
+                                onModuleMove={onModuleMove}
+                                isConnecting={isConnecting}
+                                connectionStartId={connectionStartId}
+                                audioEngine={audioEngine}
                             />
                         );
                     } else {
@@ -2420,6 +3050,7 @@ function App() {
                 onLoadState={handleLoadState}
                 sequencerStates={sequencerStates}
                 onStepChange={handleStepChange}
+                audioEngine={audioEngine}
             />
         </div>
     );
