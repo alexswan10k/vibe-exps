@@ -268,7 +268,7 @@ const MODULE_TEMPLATES = {
         ],
         [
             { name: 'Frequency', type: 'potentiometer', x: 20, y: 40 },
-            { name: 'Waveform', type: 'switch', x: 80, y: 40 }
+            { name: 'Waveform', type: 'potentiometer', x: 80, y: 40 }
         ]
     ),
 
@@ -499,8 +499,14 @@ class AudioEngine {
 
                     const waveformControl = module.controls.find(c => c.name === 'Waveform');
                     if (waveformControl) {
-                        // 0 = sine, 1 = square
-                        audioNode.type = waveformControl.value > 0.5 ? 'square' : 'sine';
+                        // Map 0-1 range to sine -> square -> sawtooth
+                        if (waveformControl.value < 0.33) {
+                            audioNode.type = 'sine';
+                        } else if (waveformControl.value < 0.66) {
+                            audioNode.type = 'square';
+                        } else {
+                            audioNode.type = 'sawtooth';
+                        }
                     }
                 }
                 break;
@@ -548,32 +554,53 @@ class AudioEngine {
     updateConnections(modules, connections) {
         if (!this.audioContext) return;
 
-        // Disconnect all existing connections first
-        this.audioNodes.forEach(node => {
+        // First, disconnect ALL gain nodes from everything except their internal connections
+        this.gainNodes.forEach((node, moduleId) => {
             try {
+                // Disconnect from all destinations
                 node.disconnect();
             } catch (e) {
                 // Ignore disconnect errors
             }
         });
 
-        this.gainNodes.forEach(node => {
-            try {
-                node.disconnect();
-            } catch (e) {
-                // Ignore disconnect errors
+        // Reconnect internal oscillator connections (oscillator -> gain)
+        this.audioNodes.forEach((node, moduleId) => {
+            const module = modules.find(m => m.id === moduleId);
+            if (module && module.type === 'oscillator') {
+                try {
+                    const gainNode = this.gainNodes.get(moduleId);
+                    if (gainNode) {
+                        node.connect(gainNode);
+                    }
+                } catch (e) {
+                    // Ignore errors
+                }
             }
         });
 
-        // Reconnect based on current connections
+        // Now reconnect based on current connections
         connections.forEach(connection => {
             const fromModule = modules.find(m => m.id === connection.fromModuleId);
             const toModule = modules.find(m => m.id === connection.toModuleId);
 
             if (!fromModule || !toModule) return;
 
-            const fromNode = this.audioNodes.get(fromModule.id) || this.gainNodes.get(fromModule.id);
-            const toNode = this.audioNodes.get(toModule.id) || this.gainNodes.get(toModule.id);
+            // For source modules, use the gain node (output of the module)
+            let fromNode = null;
+            if (fromModule.type === 'oscillator') {
+                fromNode = this.gainNodes.get(fromModule.id); // Use gain node for oscillator
+            } else {
+                fromNode = this.audioNodes.get(fromModule.id) || this.gainNodes.get(fromModule.id);
+            }
+
+            // For destination modules, use the appropriate input node
+            let toNode = null;
+            if (toModule.type === 'output') {
+                toNode = this.gainNodes.get(toModule.id); // Output module's gain node
+            } else {
+                toNode = this.audioNodes.get(toModule.id) || this.gainNodes.get(toModule.id);
+            }
 
             if (fromNode && toNode) {
                 try {
@@ -584,16 +611,19 @@ class AudioEngine {
             }
         });
 
-        // Ensure output modules are connected to destination
+        // Ensure output modules are connected to destination only if they have input connections
         modules.forEach(module => {
             if (module.type === 'output') {
                 const outputNode = this.gainNodes.get(module.id);
-                if (outputNode && !outputNode._connectedToDestination) {
-                    try {
-                        outputNode.connect(this.audioContext.destination);
-                        outputNode._connectedToDestination = true;
-                    } catch (error) {
-                        console.error('Failed to connect output to destination:', error);
+                if (outputNode) {
+                    // Check if this output module has any input connections
+                    const hasInputConnection = connections.some(conn => conn.toModuleId === module.id);
+                    if (hasInputConnection) {
+                        try {
+                            outputNode.connect(this.audioContext.destination);
+                        } catch (error) {
+                            console.error('Failed to connect output to destination:', error);
+                        }
                     }
                 }
             }
@@ -1003,6 +1033,35 @@ function App() {
         });
     }, []);
 
+    // Resume audio context on user interaction
+    React.useEffect(() => {
+        const resumeAudio = async () => {
+            if (audioEngine && audioEngine.audioContext && audioEngine.audioContext.state === 'suspended') {
+                try {
+                    await audioEngine.audioContext.resume();
+                    console.log('Audio context resumed');
+                } catch (error) {
+                    console.error('Failed to resume audio context:', error);
+                }
+            }
+        };
+
+        const handleInteraction = () => {
+            resumeAudio();
+            // Remove listeners after first interaction
+            document.removeEventListener('click', handleInteraction);
+            document.removeEventListener('keydown', handleInteraction);
+        };
+
+        document.addEventListener('click', handleInteraction);
+        document.addEventListener('keydown', handleInteraction);
+
+        return () => {
+            document.removeEventListener('click', handleInteraction);
+            document.removeEventListener('keydown', handleInteraction);
+        };
+    }, [audioEngine]);
+
     // Create audio nodes when modules are added
     React.useEffect(() => {
         if (!audioEngine) return;
@@ -1127,7 +1186,11 @@ function App() {
      * @param {string} connectionId - ID of connection to remove
      */
     const handleConnectionRemove = useCallback((connectionId) => {
-        setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+        setConnections(prev => {
+            const newConnections = prev.filter(conn => conn.id !== connectionId);
+            // Audio connections will be updated via useEffect when connections state changes
+            return newConnections;
+        });
     }, []);
 
     /**
