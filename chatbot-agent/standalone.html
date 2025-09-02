@@ -28,40 +28,8 @@
     </div>
 
     <div class="main-content">
-      <div class="chat-section">
-        <div class="model-selector">
-          <label for="model-select">Select Model:</label>
-          <select id="model-select">
-            <option value="smollm">SmolLM2-135M-Instruct</option>
-            <option value="smollm360" selected>SmolLM-360M-Instruct</option>
-            <option value="lille">Nikity/lille-130m-instruct (Not Working)</option>
-            <option value="gemma">Gemma-3-270M-IT (Requires Access Token)</option>
-          </select>
-          <button id="load-model-button">Load Model</button>
-        </div>
-
-        <div class="system-prompt-section">
-          <button id="toggle-system-prompt" class="toggle-button">📝 System Prompt (Optional)</button>
-          <div id="system-prompt-container" class="system-prompt-container" style="display: none;">
-            <textarea id="system-prompt" placeholder="Enter your custom system prompt..." rows="4">You are a helpful AI assistant named SmolLM, trained by Hugging Face</textarea>
-            <div class="system-prompt-buttons">
-              <button id="save-system-prompt">Save Prompt</button>
-              <button id="reset-system-prompt">Reset to Default</button>
-            </div>
-            <p class="system-prompt-info">Customize the system prompt sent to the AI model. Changes take effect immediately for new conversations.</p>
-          </div>
-        </div>
-
-        <div class="token-section">
-          <button id="toggle-token" class="toggle-button">🔑 Hugging Face Access Token (Optional)</button>
-          <div id="token-input-container" class="token-input-container" style="display: none;">
-            <input type="password" id="hf-token" placeholder="Enter your Hugging Face access token">
-            <button id="save-token">Save Token</button>
-            <button id="clear-token">Clear Token</button>
-            <p class="token-info">Token is saved locally and used to access restricted models. Get your token from <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face Settings</a>.</p>
-          </div>
-        </div>
-
+      <!-- Left Column: Chat Interface -->
+      <div class="chat-column">
         <div id="status-bar" class="status-bar status-unloaded">
           <span id="status-text">No model loaded - please select and load a model to start chatting</span>
         </div>
@@ -70,10 +38,52 @@
           <div id="messages"></div>
           <div id="spinner" class="spinner" style="display: none;"></div>
         </div>
+
         <div class="input-area">
           <input type="text" id="message-input" placeholder="Type your message...">
           <button id="send-button">Send</button>
           <button id="clear-button">Clear Chat</button>
+        </div>
+      </div>
+
+      <!-- Right Column: Settings and Controls -->
+      <div class="settings-column">
+        <div class="settings-panel">
+          <h3>🤖 Model Settings</h3>
+
+          <div class="model-selector">
+            <label for="model-select">Select Model:</label>
+            <select id="model-select">
+              <option value="smollm">SmolLM2-135M-Instruct</option>
+              <option value="smollm360" selected>SmolLM-360M-Instruct</option>
+              <option value="lille">Nikity/lille-130m-instruct (Not Working)</option>
+              <option value="gemma">Gemma-3-270M-IT (Requires Access Token)</option>
+            </select>
+            <button id="load-model-button">Load Model</button>
+          </div>
+
+          <div class="system-prompt-section">
+            <button id="toggle-system-prompt" class="toggle-button">📝 System Prompt</button>
+            <div id="system-prompt-container" class="system-prompt-container" style="display: none;">
+              <textarea id="system-prompt" placeholder="Enter your custom system prompt..." rows="4">You are a helpful AI assistant named SmolLM, trained by Hugging Face</textarea>
+              <div class="system-prompt-buttons">
+                <button id="save-system-prompt">Save</button>
+                <button id="reset-system-prompt">Reset</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="token-section">
+            <button id="toggle-token" class="toggle-button">🔑 Access Token</button>
+            <div id="token-input-container" class="token-input-container" style="display: none;">
+              <input type="password" id="hf-token" placeholder="Enter your Hugging Face access token">
+              <div class="token-buttons">
+                <button id="save-token">Save</button>
+                <button id="clear-token">Clear</button>
+              </div>
+              <p class="token-info">Get token from <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face</a></p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
