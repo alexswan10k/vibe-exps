@@ -52,6 +52,42 @@ body {
 
 .rack h2 {
     margin-top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+}
+
+.save-btn, .load-btn {
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #666;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.save-btn:hover, .load-btn:hover {
+    background-color: #555;
+}
+
+.load-btn {
+    position: relative;
+}
+
+.load-input {
+    position: absolute;
+    left: 0;
+    top: 0;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
 }
 
 .rack-area {
@@ -1079,6 +1115,7 @@ function ConnectionLine({ connection, modules, onRemove }) {
  * @param {function} props.onConnectionRemove - Called when connection is removed
  * @param {boolean} props.isConnecting - Whether currently connecting
  * @param {string|null} props.connectionStartId - ID of connection start point
+ * @param {function} props.onLoadState - Called when loading a new state
  */
 function Rack({
     modules,
@@ -1089,9 +1126,11 @@ function Rack({
     onModuleMove,
     onConnectionRemove,
     isConnecting,
-    connectionStartId
+    connectionStartId,
+    onLoadState
 }) {
     const rackRef = useRef(null);
+    const fileInputRef = useRef(null);
 
     const handleDragOver = useCallback((e) => {
         e.preventDefault();
@@ -1108,9 +1147,310 @@ function Rack({
         }
     }, [onDrop]);
 
+    /**
+     * Save current state as JSON
+     */
+    const handleSave = useCallback(() => {
+        const state = {
+            modules: modules.map(module => ({
+                type: module.type,
+                name: module.name,
+                x: module.x,
+                y: module.y,
+                width: module.width,
+                height: module.height,
+                patchPoints: module.patchPoints.map(point => ({
+                    id: point.id,
+                    name: point.name,
+                    type: point.type,
+                    x: point.x,
+                    y: point.y
+                })),
+                controls: module.controls.map(control => ({
+                    id: control.id,
+                    name: control.name,
+                    type: control.type,
+                    value: control.value,
+                    x: control.x,
+                    y: control.y
+                }))
+            })),
+            connections: connections.map(connection => ({
+                id: connection.id,
+                fromModuleId: connection.fromModuleId,
+                fromPatchId: connection.fromPatchId,
+                toModuleId: connection.toModuleId,
+                toPatchId: connection.toPatchId
+            }))
+        };
+
+        const dataStr = JSON.stringify(state, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'modular-synth-patch.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }, [modules, connections]);
+
+    /**
+     * Handle file selection for loading
+     */
+    const handleFileSelect = useCallback((e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const state = JSON.parse(event.target.result);
+                    onLoadState(state);
+                } catch (error) {
+                    console.error('Error loading JSON file:', error);
+                    alert('Error loading file. Please check the JSON format.');
+                }
+            };
+            reader.readAsText(file);
+        }
+        // Reset file input
+        e.target.value = '';
+    }, [onLoadState]);
+
+    /**
+     * Load default preset (2 oscillators -> mixer -> filter -> vca -> output with envelopes)
+     */
+    const handleLoadDefault = useCallback(() => {
+        const defaultState = {
+            modules: [
+                // Oscillator 1
+                {
+                    type: 'oscillator',
+                    name: 'Osc 1',
+                    x: 20,
+                    y: 20,
+                    width: 140,
+                    height: 120,
+                    patchPoints: [
+                        { id: 'osc1-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
+                    ],
+                    controls: [
+                        { id: 'osc1-control-0', name: 'Frequency', type: 'potentiometer', value: 0.25, x: 20, y: 40 },
+                        { id: 'osc1-control-1', name: 'Waveform', type: 'potentiometer', value: 0.0, x: 80, y: 40 }
+                    ]
+                },
+                // Oscillator 2
+                {
+                    type: 'oscillator',
+                    name: 'Osc 2',
+                    x: 20,
+                    y: 160,
+                    width: 140,
+                    height: 120,
+                    patchPoints: [
+                        { id: 'osc2-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
+                    ],
+                    controls: [
+                        { id: 'osc2-control-0', name: 'Frequency', type: 'potentiometer', value: 0.35, x: 20, y: 40 },
+                        { id: 'osc2-control-1', name: 'Waveform', type: 'potentiometer', value: 0.33, x: 80, y: 40 }
+                    ]
+                },
+                // Mixer
+                {
+                    type: 'mixer',
+                    name: 'Mixer',
+                    x: 200,
+                    y: 20,
+                    width: 200,
+                    height: 180,
+                    patchPoints: [
+                        { id: 'mixer-patch-0', name: 'In 1', type: 'input', x: -5, y: 35 },
+                        { id: 'mixer-patch-1', name: 'In 2', type: 'input', x: -5, y: 65 },
+                        { id: 'mixer-patch-2', name: 'In 3', type: 'input', x: -5, y: 95 },
+                        { id: 'mixer-patch-3', name: 'In 4', type: 'input', x: -5, y: 125 },
+                        { id: 'mixer-patch-4', name: 'Out', type: 'output', x: 195, y: 80 }
+                    ],
+                    controls: [
+                        { id: 'mixer-control-0', name: 'Level 1', type: 'potentiometer', value: 0.8, x: 30, y: 25 },
+                        { id: 'mixer-control-1', name: 'Level 2', type: 'potentiometer', value: 0.8, x: 30, y: 55 },
+                        { id: 'mixer-control-2', name: 'Level 3', type: 'potentiometer', value: 0.0, x: 30, y: 85 },
+                        { id: 'mixer-control-3', name: 'Level 4', type: 'potentiometer', value: 0.0, x: 30, y: 115 },
+                        { id: 'mixer-control-4', name: 'Master', type: 'potentiometer', value: 0.7, x: 130, y: 70 }
+                    ]
+                },
+                // Filter Envelope
+                {
+                    type: 'envelope',
+                    name: 'Filter Env',
+                    x: 450,
+                    y: 20,
+                    width: 140,
+                    height: 160,
+                    patchPoints: [
+                        { id: 'filter-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
+                        { id: 'filter-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
+                    ],
+                    controls: [
+                        { id: 'filter-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.1, x: 20, y: 40 },
+                        { id: 'filter-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.3, x: 80, y: 40 },
+                        { id: 'filter-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.7, x: 20, y: 80 },
+                        { id: 'filter-env-control-3', name: 'Release', type: 'potentiometer', value: 0.4, x: 80, y: 80 }
+                    ]
+                },
+                // VCF Filter
+                {
+                    type: 'vcf',
+                    name: 'VCF',
+                    x: 620,
+                    y: 20,
+                    width: 140,
+                    height: 140,
+                    patchPoints: [
+                        { id: 'vcf-patch-0', name: 'In', type: 'input', x: -5, y: 40 },
+                        { id: 'vcf-patch-1', name: 'Cutoff Mod', type: 'input', x: -5, y: 80 },
+                        { id: 'vcf-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
+                    ],
+                    controls: [
+                        { id: 'vcf-control-0', name: 'Cutoff', type: 'potentiometer', value: 0.4, x: 20, y: 40 },
+                        { id: 'vcf-control-1', name: 'Resonance', type: 'potentiometer', value: 0.3, x: 80, y: 40 }
+                    ]
+                },
+                // Amp Envelope
+                {
+                    type: 'envelope',
+                    name: 'Amp Env',
+                    x: 450,
+                    y: 200,
+                    width: 140,
+                    height: 160,
+                    patchPoints: [
+                        { id: 'amp-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
+                        { id: 'amp-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
+                    ],
+                    controls: [
+                        { id: 'amp-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.05, x: 20, y: 40 },
+                        { id: 'amp-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.2, x: 80, y: 40 },
+                        { id: 'amp-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.8, x: 20, y: 80 },
+                        { id: 'amp-env-control-3', name: 'Release', type: 'potentiometer', value: 0.6, x: 80, y: 80 }
+                    ]
+                },
+                // VCA
+                {
+                    type: 'vca',
+                    name: 'VCA',
+                    x: 620,
+                    y: 180,
+                    width: 140,
+                    height: 120,
+                    patchPoints: [
+                        { id: 'vca-patch-0', name: 'Audio In', type: 'input', x: -5, y: 40 },
+                        { id: 'vca-patch-1', name: 'CV In', type: 'input', x: -5, y: 80 },
+                        { id: 'vca-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
+                    ],
+                    controls: [
+                        { id: 'vca-control-0', name: 'Level', type: 'potentiometer', value: 0.0, x: 50, y: 40 }
+                    ]
+                },
+                // Output
+                {
+                    type: 'output',
+                    name: 'Output',
+                    x: 800,
+                    y: 100,
+                    width: 140,
+                    height: 120,
+                    patchPoints: [
+                        { id: 'output-patch-0', name: 'Audio In', type: 'input', x: -5, y: 60 }
+                    ],
+                    controls: [
+                        { id: 'output-control-0', name: 'Volume', type: 'potentiometer', value: 0.9, x: 50, y: 40 }
+                    ]
+                }
+            ],
+            connections: [
+                // Osc 1 -> Mixer In 1
+                {
+                    id: 'connection-osc1-mixer1',
+                    fromModuleId: 'osc1',
+                    fromPatchId: 'osc1-patch-0',
+                    toModuleId: 'mixer',
+                    toPatchId: 'mixer-patch-0'
+                },
+                // Osc 2 -> Mixer In 2
+                {
+                    id: 'connection-osc2-mixer2',
+                    fromModuleId: 'osc2',
+                    fromPatchId: 'osc2-patch-0',
+                    toModuleId: 'mixer',
+                    toPatchId: 'mixer-patch-1'
+                },
+                // Mixer -> VCF
+                {
+                    id: 'connection-mixer-vcf',
+                    fromModuleId: 'mixer',
+                    fromPatchId: 'mixer-patch-4',
+                    toModuleId: 'vcf',
+                    toPatchId: 'vcf-patch-0'
+                },
+                // Filter Env -> VCF Cutoff Mod
+                {
+                    id: 'connection-filter-env-vcf',
+                    fromModuleId: 'filter-env',
+                    fromPatchId: 'filter-env-patch-1',
+                    toModuleId: 'vcf',
+                    toPatchId: 'vcf-patch-1'
+                },
+                // VCF -> VCA Audio In
+                {
+                    id: 'connection-vcf-vca',
+                    fromModuleId: 'vcf',
+                    fromPatchId: 'vcf-patch-2',
+                    toModuleId: 'vca',
+                    toPatchId: 'vca-patch-0'
+                },
+                // Amp Env -> VCA CV In
+                {
+                    id: 'connection-amp-env-vca',
+                    fromModuleId: 'amp-env',
+                    fromPatchId: 'amp-env-patch-1',
+                    toModuleId: 'vca',
+                    toPatchId: 'vca-patch-1'
+                },
+                // VCA -> Output
+                {
+                    id: 'connection-vca-output',
+                    fromModuleId: 'vca',
+                    fromPatchId: 'vca-patch-2',
+                    toModuleId: 'output',
+                    toPatchId: 'output-patch-0'
+                }
+            ]
+        };
+
+        onLoadState(defaultState);
+    }, [onLoadState]);
+
     return (
         <div className="rack">
-            <h2>Rack</h2>
+            <h2>
+                Rack
+                <div className="controls">
+                    <button className="save-btn" onClick={handleSave}>Save</button>
+                    <button className="load-btn" onClick={() => fileInputRef.current?.click()}>
+                        Load
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept=".json"
+                            onChange={handleFileSelect}
+                            className="load-input"
+                        />
+                    </button>
+                    <button className="save-btn" onClick={handleLoadDefault}>Default</button>
+                </div>
+            </h2>
             <div
                 ref={rackRef}
                 className="rack-area"
@@ -1164,6 +1504,282 @@ function App() {
             setAudioEngine(engine);
         });
     }, []);
+
+    // Load default preset on app start
+    React.useEffect(() => {
+        if (audioEngine && modules.length === 0) {
+            const defaultState = {
+                modules: [
+                    // Oscillator 1
+                    {
+                        type: 'oscillator',
+                        name: 'Osc 1',
+                        x: 20,
+                        y: 20,
+                        width: 140,
+                        height: 120,
+                        patchPoints: [
+                            { id: 'osc1-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
+                        ],
+                        controls: [
+                            { id: 'osc1-control-0', name: 'Frequency', type: 'potentiometer', value: 0.25, x: 20, y: 40 },
+                            { id: 'osc1-control-1', name: 'Waveform', type: 'potentiometer', value: 0.0, x: 80, y: 40 }
+                        ]
+                    },
+                    // Oscillator 2
+                    {
+                        type: 'oscillator',
+                        name: 'Osc 2',
+                        x: 20,
+                        y: 160,
+                        width: 140,
+                        height: 120,
+                        patchPoints: [
+                            { id: 'osc2-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
+                        ],
+                        controls: [
+                            { id: 'osc2-control-0', name: 'Frequency', type: 'potentiometer', value: 0.35, x: 20, y: 40 },
+                            { id: 'osc2-control-1', name: 'Waveform', type: 'potentiometer', value: 0.33, x: 80, y: 40 }
+                        ]
+                    },
+                    // Mixer
+                    {
+                        type: 'mixer',
+                        name: 'Mixer',
+                        x: 200,
+                        y: 20,
+                        width: 200,
+                        height: 180,
+                        patchPoints: [
+                            { id: 'mixer-patch-0', name: 'In 1', type: 'input', x: -5, y: 35 },
+                            { id: 'mixer-patch-1', name: 'In 2', type: 'input', x: -5, y: 65 },
+                            { id: 'mixer-patch-2', name: 'In 3', type: 'input', x: -5, y: 95 },
+                            { id: 'mixer-patch-3', name: 'In 4', type: 'input', x: -5, y: 125 },
+                            { id: 'mixer-patch-4', name: 'Out', type: 'output', x: 195, y: 80 }
+                        ],
+                        controls: [
+                            { id: 'mixer-control-0', name: 'Level 1', type: 'potentiometer', value: 0.8, x: 30, y: 25 },
+                            { id: 'mixer-control-1', name: 'Level 2', type: 'potentiometer', value: 0.8, x: 30, y: 55 },
+                            { id: 'mixer-control-2', name: 'Level 3', type: 'potentiometer', value: 0.0, x: 30, y: 85 },
+                            { id: 'mixer-control-3', name: 'Level 4', type: 'potentiometer', value: 0.0, x: 30, y: 115 },
+                            { id: 'mixer-control-4', name: 'Master', type: 'potentiometer', value: 0.7, x: 130, y: 70 }
+                        ]
+                    },
+                    // Filter Envelope
+                    {
+                        type: 'envelope',
+                        name: 'Filter Env',
+                        x: 450,
+                        y: 20,
+                        width: 140,
+                        height: 160,
+                        patchPoints: [
+                            { id: 'filter-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
+                            { id: 'filter-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
+                        ],
+                        controls: [
+                            { id: 'filter-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.1, x: 20, y: 40 },
+                            { id: 'filter-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.3, x: 80, y: 40 },
+                            { id: 'filter-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.7, x: 20, y: 80 },
+                            { id: 'filter-env-control-3', name: 'Release', type: 'potentiometer', value: 0.4, x: 80, y: 80 }
+                        ]
+                    },
+                    // VCF Filter
+                    {
+                        type: 'vcf',
+                        name: 'VCF',
+                        x: 620,
+                        y: 20,
+                        width: 140,
+                        height: 140,
+                        patchPoints: [
+                            { id: 'vcf-patch-0', name: 'In', type: 'input', x: -5, y: 40 },
+                            { id: 'vcf-patch-1', name: 'Cutoff Mod', type: 'input', x: -5, y: 80 },
+                            { id: 'vcf-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
+                        ],
+                        controls: [
+                            { id: 'vcf-control-0', name: 'Cutoff', type: 'potentiometer', value: 0.4, x: 20, y: 40 },
+                            { id: 'vcf-control-1', name: 'Resonance', type: 'potentiometer', value: 0.3, x: 80, y: 40 }
+                        ]
+                    },
+                    // Amp Envelope
+                    {
+                        type: 'envelope',
+                        name: 'Amp Env',
+                        x: 450,
+                        y: 200,
+                        width: 140,
+                        height: 160,
+                        patchPoints: [
+                            { id: 'amp-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
+                            { id: 'amp-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
+                        ],
+                        controls: [
+                            { id: 'amp-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.05, x: 20, y: 40 },
+                            { id: 'amp-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.2, x: 80, y: 40 },
+                            { id: 'amp-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.8, x: 20, y: 80 },
+                            { id: 'amp-env-control-3', name: 'Release', type: 'potentiometer', value: 0.6, x: 80, y: 80 }
+                        ]
+                    },
+                    // VCA
+                    {
+                        type: 'vca',
+                        name: 'VCA',
+                        x: 620,
+                        y: 180,
+                        width: 140,
+                        height: 120,
+                        patchPoints: [
+                            { id: 'vca-patch-0', name: 'Audio In', type: 'input', x: -5, y: 40 },
+                            { id: 'vca-patch-1', name: 'CV In', type: 'input', x: -5, y: 80 },
+                            { id: 'vca-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
+                        ],
+                        controls: [
+                            { id: 'vca-control-0', name: 'Level', type: 'potentiometer', value: 0.0, x: 50, y: 40 }
+                        ]
+                    },
+                    // Output
+                    {
+                        type: 'output',
+                        name: 'Output',
+                        x: 800,
+                        y: 100,
+                        width: 140,
+                        height: 120,
+                        patchPoints: [
+                            { id: 'output-patch-0', name: 'Audio In', type: 'input', x: -5, y: 60 }
+                        ],
+                        controls: [
+                            { id: 'output-control-0', name: 'Volume', type: 'potentiometer', value: 0.9, x: 50, y: 40 }
+                        ]
+                    }
+                ],
+                connections: [
+                    // Osc 1 -> Mixer In 1
+                    {
+                        id: 'connection-osc1-mixer1',
+                        fromModuleId: 'osc1',
+                        fromPatchId: 'osc1-patch-0',
+                        toModuleId: 'mixer',
+                        toPatchId: 'mixer-patch-0'
+                    },
+                    // Osc 2 -> Mixer In 2
+                    {
+                        id: 'connection-osc2-mixer2',
+                        fromModuleId: 'osc2',
+                        fromPatchId: 'osc2-patch-0',
+                        toModuleId: 'mixer',
+                        toPatchId: 'mixer-patch-1'
+                    },
+                    // Mixer -> VCF
+                    {
+                        id: 'connection-mixer-vcf',
+                        fromModuleId: 'mixer',
+                        fromPatchId: 'mixer-patch-4',
+                        toModuleId: 'vcf',
+                        toPatchId: 'vcf-patch-0'
+                    },
+                    // Filter Env -> VCF Cutoff Mod
+                    {
+                        id: 'connection-filter-env-vcf',
+                        fromModuleId: 'filter-env',
+                        fromPatchId: 'filter-env-patch-1',
+                        toModuleId: 'vcf',
+                        toPatchId: 'vcf-patch-1'
+                    },
+                    // VCF -> VCA Audio In
+                    {
+                        id: 'connection-vcf-vca',
+                        fromModuleId: 'vcf',
+                        fromPatchId: 'vcf-patch-2',
+                        toModuleId: 'vca',
+                        toPatchId: 'vca-patch-0'
+                    },
+                    // Amp Env -> VCA CV In
+                    {
+                        id: 'connection-amp-env-vca',
+                        fromModuleId: 'amp-env',
+                        fromPatchId: 'amp-env-patch-1',
+                        toModuleId: 'vca',
+                        toPatchId: 'vca-patch-1'
+                    },
+                    // VCA -> Output
+                    {
+                        id: 'connection-vca-output',
+                        fromModuleId: 'vca',
+                        fromPatchId: 'vca-patch-2',
+                        toModuleId: 'output',
+                        toPatchId: 'output-patch-0'
+                    }
+                ]
+            };
+
+            // Create new modules with fresh IDs
+            const newModules = defaultState.modules.map(moduleData => {
+                const template = MODULE_TEMPLATES[moduleData.type];
+                if (!template) {
+                    console.warn(`Unknown module type: ${moduleData.type}`);
+                    return null;
+                }
+
+                const moduleId = `${moduleData.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+                return {
+                    id: moduleId,
+                    ...template,
+                    x: moduleData.x,
+                    y: moduleData.y,
+                    patchPoints: template.patchPoints.map((point, index) => ({
+                        ...point,
+                        id: `${moduleId}-patch-${index}`
+                    })),
+                    controls: moduleData.controls.map((controlData, index) => ({
+                        ...template.controls[index],
+                        id: `${moduleId}-control-${index}`,
+                        value: controlData.value
+                    }))
+                };
+            }).filter(Boolean);
+
+            // Create connections with updated module IDs
+            const newConnections = defaultState.connections.map(connectionData => {
+                // Find modules by matching patch point names
+                const fromModuleIndex = defaultState.modules.findIndex(m =>
+                    m.patchPoints.some(p => p.id === connectionData.fromPatchId)
+                );
+                const toModuleIndex = defaultState.modules.findIndex(m =>
+                    m.patchPoints.some(p => p.id === connectionData.toPatchId)
+                );
+
+                if (fromModuleIndex === -1 || toModuleIndex === -1) {
+                    console.warn('Could not find modules for connection:', connectionData);
+                    return null;
+                }
+
+                const fromModule = newModules[fromModuleIndex];
+                const toModule = newModules[toModuleIndex];
+
+                if (!fromModule || !toModule) return null;
+
+                // Find patch points by name
+                const fromPatchName = defaultState.modules[fromModuleIndex].patchPoints.find(p => p.id === connectionData.fromPatchId)?.name;
+                const toPatchName = defaultState.modules[toModuleIndex].patchPoints.find(p => p.id === connectionData.toPatchId)?.name;
+
+                if (!fromPatchName || !toPatchName) return null;
+
+                const fromPatch = fromModule.patchPoints.find(p => p.name === fromPatchName);
+                const toPatch = toModule.patchPoints.find(p => p.name === toPatchName);
+
+                if (!fromPatch || !toPatch) return null;
+
+                return createConnection(fromModule.id, fromPatch.id, toModule.id, toPatch.id);
+            }).filter(Boolean);
+
+            // Update state
+            setModules(newModules);
+            setConnections(newConnections);
+        }
+    }, [audioEngine, modules.length]);
 
     // Resume audio context on user interaction
     React.useEffect(() => {
@@ -1326,6 +1942,91 @@ function App() {
     }, []);
 
     /**
+     * Handle loading a new state from JSON
+     * @param {Object} state - State object with modules and connections
+     */
+    const handleLoadState = useCallback((state) => {
+        if (!state.modules || !state.connections) {
+            console.error('Invalid state format');
+            return;
+        }
+
+        // Clear current audio nodes
+        if (audioEngine) {
+            modules.forEach(module => {
+                audioEngine.removeModule(module.id);
+            });
+        }
+
+        // Create new modules with fresh IDs
+        const newModules = state.modules.map(moduleData => {
+            const template = MODULE_TEMPLATES[moduleData.type];
+            if (!template) {
+                console.warn(`Unknown module type: ${moduleData.type}`);
+                return null;
+            }
+
+            const moduleId = `${moduleData.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+            return {
+                id: moduleId,
+                ...template,
+                x: moduleData.x,
+                y: moduleData.y,
+                patchPoints: template.patchPoints.map((point, index) => ({
+                    ...point,
+                    id: `${moduleId}-patch-${index}`
+                })),
+                controls: moduleData.controls.map((controlData, index) => ({
+                    ...template.controls[index],
+                    id: `${moduleId}-control-${index}`,
+                    value: controlData.value
+                }))
+            };
+        }).filter(Boolean);
+
+        // Create connections with updated module IDs
+        const newConnections = state.connections.map(connectionData => {
+            // Find modules by matching patch point names
+            const fromModuleIndex = state.modules.findIndex(m =>
+                m.patchPoints.some(p => p.id === connectionData.fromPatchId)
+            );
+            const toModuleIndex = state.modules.findIndex(m =>
+                m.patchPoints.some(p => p.id === connectionData.toPatchId)
+            );
+
+            if (fromModuleIndex === -1 || toModuleIndex === -1) {
+                console.warn('Could not find modules for connection:', connectionData);
+                return null;
+            }
+
+            const fromModule = newModules[fromModuleIndex];
+            const toModule = newModules[toModuleIndex];
+
+            if (!fromModule || !toModule) return null;
+
+            // Find patch points by name
+            const fromPatchName = state.modules[fromModuleIndex].patchPoints.find(p => p.id === connectionData.fromPatchId)?.name;
+            const toPatchName = state.modules[toModuleIndex].patchPoints.find(p => p.id === connectionData.toPatchId)?.name;
+
+            if (!fromPatchName || !toPatchName) return null;
+
+            const fromPatch = fromModule.patchPoints.find(p => p.name === fromPatchName);
+            const toPatch = toModule.patchPoints.find(p => p.name === toPatchName);
+
+            if (!fromPatch || !toPatch) return null;
+
+            return createConnection(fromModule.id, fromPatch.id, toModule.id, toPatch.id);
+        }).filter(Boolean);
+
+        // Update state
+        setModules(newModules);
+        setConnections(newConnections);
+        setIsConnecting(false);
+        setConnectionStart(null);
+    }, [audioEngine, modules]);
+
+    /**
      * Handle drag start from module panel
      * @param {DragEvent} e - Drag event
      * @param {string} type - Module type
@@ -1347,6 +2048,7 @@ function App() {
                 onConnectionRemove={handleConnectionRemove}
                 isConnecting={isConnecting}
                 connectionStartId={connectionStart}
+                onLoadState={handleLoadState}
             />
         </div>
     );
