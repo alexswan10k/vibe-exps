@@ -227,20 +227,21 @@
                 imageBoundary.remove();
             }
 
-            // Calculate the scaled canvas position within the centered container
+            // Calculate the image position the same way as in mouse handlers
             const containerRect = canvasContainer.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
 
-            const canvasLeft = canvasRect.left - containerRect.left;
-            const canvasTop = canvasRect.top - containerRect.top;
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
 
             imageBoundary = document.createElement('div');
             imageBoundary.className = 'image-boundary';
             imageBoundary.style.width = originalImage.width * zoomLevel + 'px';
             imageBoundary.style.height = originalImage.height * zoomLevel + 'px';
-            imageBoundary.style.left = canvasLeft + 'px';
-            imageBoundary.style.top = canvasTop + 'px';
-            imageBoundary.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px)`;
+            imageBoundary.style.left = imageLeft + 'px';
+            imageBoundary.style.top = imageTop + 'px';
+            // No transform needed since we already included the offset in position calculation
 
             canvasContainer.appendChild(imageBoundary);
         }
@@ -378,14 +379,22 @@
 
         canvas.addEventListener('mousemove', (e) => {
             const containerRect = canvasContainer.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
 
-            // Calculate coordinates relative to the actual canvas position within the scaled container
-            const canvasLeft = canvasRect.left - containerRect.left;
-            const canvasTop = canvasRect.top - containerRect.top;
+            // Calculate mouse position relative to the container
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
 
-            const x = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
-            const y = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
+            // Calculate the effective canvas position (accounting for centering and translation)
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
+
+            // The canvas is centered, so we need to find where the actual image content is
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
+
+            // Calculate coordinates relative to the image content
+            const x = (mouseX - imageLeft) / zoomLevel;
+            const y = (mouseY - imageTop) / zoomLevel;
 
             if (toolSelect.value === 'draw') {
                 ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
@@ -418,14 +427,22 @@
             if (!isDrawing) return;
 
             const containerRect = canvasContainer.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
 
-            // Calculate coordinates relative to the actual canvas position within the scaled container
-            const canvasLeft = canvasRect.left - containerRect.left;
-            const canvasTop = canvasRect.top - containerRect.top;
+            // Calculate mouse position relative to the container
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
 
-            const x = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
-            const y = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
+            // Calculate the effective canvas position (accounting for centering and translation)
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
+
+            // The canvas is centered, so we need to find where the actual image content is
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
+
+            // Calculate coordinates relative to the image content
+            const x = (mouseX - imageLeft) / zoomLevel;
+            const y = (mouseY - imageTop) / zoomLevel;
 
             ctx.lineWidth = brushSize.value;
             ctx.lineCap = 'round';
@@ -439,14 +456,22 @@
 
         function startCrop(e) {
             const containerRect = canvasContainer.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
 
-            // Calculate coordinates relative to the actual canvas position within the scaled container
-            const canvasLeft = canvasRect.left - containerRect.left;
-            const canvasTop = canvasRect.top - containerRect.top;
+            // Calculate mouse position relative to the container
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
 
-            cropStartX = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
-            cropStartY = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
+            // Calculate the effective canvas position (accounting for centering and translation)
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
+
+            // The canvas is centered, so we need to find where the actual image content is
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
+
+            // Calculate coordinates relative to the image content
+            cropStartX = (mouseX - imageLeft) / zoomLevel;
+            cropStartY = (mouseY - imageTop) / zoomLevel;
             isCropping = true;
 
             if (cropOverlay) {
@@ -462,22 +487,30 @@
             if (!isCropping) return;
 
             const containerRect = canvasContainer.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
 
-            // Calculate coordinates relative to the actual canvas position within the scaled container
-            const canvasLeft = canvasRect.left - containerRect.left;
-            const canvasTop = canvasRect.top - containerRect.top;
+            // Calculate mouse position relative to the container
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
 
-            cropEndX = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
-            cropEndY = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
+            // Calculate the effective canvas position (accounting for centering and translation)
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
+
+            // The canvas is centered, so we need to find where the actual image content is
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
+
+            // Calculate coordinates relative to the image content
+            cropEndX = (mouseX - imageLeft) / zoomLevel;
+            cropEndY = (mouseY - imageTop) / zoomLevel;
 
             const width = Math.abs(cropEndX - cropStartX);
             const height = Math.abs(cropEndY - cropStartY);
             const left = Math.min(cropStartX, cropEndX);
             const top = Math.min(cropStartY, cropEndY);
 
-            cropOverlay.style.left = (canvasLeft + left * zoomLevel + canvasOffsetX) + 'px';
-            cropOverlay.style.top = (canvasTop + top * zoomLevel + canvasOffsetY) + 'px';
+            cropOverlay.style.left = (imageLeft + left * zoomLevel) + 'px';
+            cropOverlay.style.top = (imageTop + top * zoomLevel) + 'px';
             cropOverlay.style.width = width * zoomLevel + 'px';
             cropOverlay.style.height = height * zoomLevel + 'px';
         }
