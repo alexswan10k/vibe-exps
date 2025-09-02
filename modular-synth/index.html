@@ -333,6 +333,19 @@ const MODULE_TEMPLATES = {
             { name: 'CV Level', type: 'potentiometer', x: 20, y: 40 },
             { name: 'Gate', type: 'switch', x: 80, y: 40 }
         ]
+    ),
+
+    output: createModuleTemplate(
+        'output',
+        'Output',
+        140,
+        120,
+        [
+            { name: 'Audio In', type: 'input', x: -5, y: 60 }
+        ],
+        [
+            { name: 'Volume', type: 'potentiometer', x: 50, y: 40 }
+        ]
     )
 };
 
@@ -375,6 +388,247 @@ function createConnection(fromModuleId, fromPatchId, toModuleId, toPatchId) {
     };
 }
 
+/**
+ * Audio Engine - Manages Web Audio API nodes and connections
+ */
+class AudioEngine {
+    constructor() {
+        this.audioContext = null;
+        this.audioNodes = new Map();
+        this.gainNodes = new Map();
+        this.initialized = false;
+    }
+
+    /**
+     * Initialize the audio context
+     */
+    async init() {
+        if (this.initialized) return;
+
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.initialized = true;
+        } catch (error) {
+            console.error('Failed to initialize audio context:', error);
+        }
+    }
+
+    /**
+     * Create audio node for a module
+     * @param {Module} module - Module data
+     * @returns {AudioNode|null} Created audio node
+     */
+    createAudioNode(module) {
+        if (!this.audioContext) return null;
+
+        switch (module.type) {
+            case 'oscillator':
+                const oscillator = this.audioContext.createOscillator();
+                const oscGain = this.audioContext.createGain();
+
+                oscillator.frequency.value = 440; // Default frequency
+                oscillator.type = 'sine';
+                oscGain.gain.value = 0.1; // Low volume to prevent clipping
+
+                oscillator.connect(oscGain);
+                oscillator.start();
+
+                this.audioNodes.set(module.id, oscillator);
+                this.gainNodes.set(module.id, oscGain);
+
+                return oscGain;
+
+            case 'output':
+                const outputGain = this.audioContext.createGain();
+                outputGain.gain.value = 0.5; // Default volume
+                outputGain.connect(this.audioContext.destination);
+
+                this.gainNodes.set(module.id, outputGain);
+                return outputGain;
+
+            case 'vca':
+                const vcaGain = this.audioContext.createGain();
+                vcaGain.gain.value = 0;
+
+                this.gainNodes.set(module.id, vcaGain);
+                return vcaGain;
+
+            case 'vcf':
+                const filter = this.audioContext.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 1000;
+                filter.Q.value = 1;
+
+                this.audioNodes.set(module.id, filter);
+                return filter;
+
+            case 'envelope':
+                // Simple envelope generator using gain node
+                const envGain = this.audioContext.createGain();
+                envGain.gain.value = 0;
+
+                this.gainNodes.set(module.id, envGain);
+                return envGain;
+
+            default:
+                // Generic gain node for other modules
+                const gain = this.audioContext.createGain();
+                this.gainNodes.set(module.id, gain);
+                return gain;
+        }
+    }
+
+    /**
+     * Update audio node parameters based on module controls
+     * @param {Module} module - Module data
+     */
+    updateModule(module) {
+        if (!this.audioContext) return;
+
+        const audioNode = this.audioNodes.get(module.id);
+        const gainNode = this.gainNodes.get(module.id);
+
+        switch (module.type) {
+            case 'oscillator':
+                if (audioNode) {
+                    const freqControl = module.controls.find(c => c.name === 'Frequency');
+                    if (freqControl) {
+                        // Map 0-1 to 20-2000 Hz
+                        audioNode.frequency.value = 20 + (freqControl.value * 1980);
+                    }
+
+                    const waveformControl = module.controls.find(c => c.name === 'Waveform');
+                    if (waveformControl) {
+                        // 0 = sine, 1 = square
+                        audioNode.type = waveformControl.value > 0.5 ? 'square' : 'sine';
+                    }
+                }
+                break;
+
+            case 'output':
+                if (gainNode) {
+                    const volumeControl = module.controls.find(c => c.name === 'Volume');
+                    if (volumeControl) {
+                        gainNode.gain.value = volumeControl.value;
+                    }
+                }
+                break;
+
+            case 'vcf':
+                if (audioNode) {
+                    const cutoffControl = module.controls.find(c => c.name === 'Cutoff');
+                    if (cutoffControl) {
+                        // Map 0-1 to 20-20000 Hz
+                        audioNode.frequency.value = 20 + (cutoffControl.value * 19980);
+                    }
+
+                    const resonanceControl = module.controls.find(c => c.name === 'Resonance');
+                    if (resonanceControl) {
+                        audioNode.Q.value = 0.1 + (resonanceControl.value * 20);
+                    }
+                }
+                break;
+
+            case 'vca':
+                if (gainNode) {
+                    const levelControl = module.controls.find(c => c.name === 'Level');
+                    if (levelControl) {
+                        gainNode.gain.value = levelControl.value;
+                    }
+                }
+                break;
+        }
+    }
+
+    /**
+     * Connect audio nodes based on connections
+     * @param {Module[]} modules - All modules
+     * @param {Connection[]} connections - All connections
+     */
+    updateConnections(modules, connections) {
+        if (!this.audioContext) return;
+
+        // Disconnect all existing connections first
+        this.audioNodes.forEach(node => {
+            try {
+                node.disconnect();
+            } catch (e) {
+                // Ignore disconnect errors
+            }
+        });
+
+        this.gainNodes.forEach(node => {
+            try {
+                node.disconnect();
+            } catch (e) {
+                // Ignore disconnect errors
+            }
+        });
+
+        // Reconnect based on current connections
+        connections.forEach(connection => {
+            const fromModule = modules.find(m => m.id === connection.fromModuleId);
+            const toModule = modules.find(m => m.id === connection.toModuleId);
+
+            if (!fromModule || !toModule) return;
+
+            const fromNode = this.audioNodes.get(fromModule.id) || this.gainNodes.get(fromModule.id);
+            const toNode = this.audioNodes.get(toModule.id) || this.gainNodes.get(toModule.id);
+
+            if (fromNode && toNode) {
+                try {
+                    fromNode.connect(toNode);
+                } catch (error) {
+                    console.error('Failed to connect audio nodes:', error);
+                }
+            }
+        });
+
+        // Ensure output modules are connected to destination
+        modules.forEach(module => {
+            if (module.type === 'output') {
+                const outputNode = this.gainNodes.get(module.id);
+                if (outputNode && !outputNode._connectedToDestination) {
+                    try {
+                        outputNode.connect(this.audioContext.destination);
+                        outputNode._connectedToDestination = true;
+                    } catch (error) {
+                        console.error('Failed to connect output to destination:', error);
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Remove audio node for a module
+     * @param {string} moduleId - Module ID
+     */
+    removeModule(moduleId) {
+        const audioNode = this.audioNodes.get(moduleId);
+        const gainNode = this.gainNodes.get(moduleId);
+
+        if (audioNode) {
+            try {
+                audioNode.disconnect();
+                if (audioNode.stop) audioNode.stop();
+            } catch (e) {
+                // Ignore errors
+            }
+            this.audioNodes.delete(moduleId);
+        }
+
+        if (gainNode) {
+            try {
+                gainNode.disconnect();
+            } catch (e) {
+                // Ignore errors
+            }
+            this.gainNodes.delete(moduleId);
+        }
+    }
+}
+
 const { useState, useRef, useCallback } = React;
 
 /**
@@ -388,7 +642,8 @@ function ModulePanel({ onDragStart }) {
         { type: 'vcf', name: 'VCF' },
         { type: 'vca', name: 'VCA' },
         { type: 'envelope', name: 'Envelope' },
-        { type: 'cv-gate', name: 'CV/Gate Generator' }
+        { type: 'cv-gate', name: 'CV/Gate Generator' },
+        { type: 'output', name: 'Output' }
     ];
 
     return (
@@ -737,6 +992,43 @@ function App() {
     const [isConnecting, setIsConnecting] = useState(false);
     /** @type {[string|null, function]} */
     const [connectionStart, setConnectionStart] = useState(null);
+    /** @type {[AudioEngine, function]} */
+    const [audioEngine, setAudioEngine] = useState(null);
+
+    // Initialize audio engine
+    React.useEffect(() => {
+        const engine = new AudioEngine();
+        engine.init().then(() => {
+            setAudioEngine(engine);
+        });
+    }, []);
+
+    // Create audio nodes when modules are added
+    React.useEffect(() => {
+        if (!audioEngine) return;
+
+        modules.forEach(module => {
+            if (!audioEngine.audioNodes.has(module.id) && !audioEngine.gainNodes.has(module.id)) {
+                audioEngine.createAudioNode(module);
+            }
+        });
+    }, [modules, audioEngine]);
+
+    // Update audio parameters when modules change
+    React.useEffect(() => {
+        if (!audioEngine) return;
+
+        modules.forEach(module => {
+            audioEngine.updateModule(module);
+        });
+    }, [modules, audioEngine]);
+
+    // Update audio connections when connections change
+    React.useEffect(() => {
+        if (!audioEngine) return;
+
+        audioEngine.updateConnections(modules, connections);
+    }, [connections, modules, audioEngine]);
 
     /**
      * Handle module creation from drag and drop
