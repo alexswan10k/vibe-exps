@@ -9,6 +9,11 @@ const spinner = document.getElementById('spinner');
 const clearButton = document.getElementById('clear-button');
 const modelSelect = document.getElementById('model-select');
 const loadModelButton = document.getElementById('load-model-button');
+const toggleTokenButton = document.getElementById('toggle-token');
+const tokenInputContainer = document.getElementById('token-input-container');
+const hfTokenInput = document.getElementById('hf-token');
+const saveTokenButton = document.getElementById('save-token');
+const clearTokenButton = document.getElementById('clear-token');
 
 let generator;
 let currentModel = 'smollm';
@@ -19,9 +24,17 @@ const models = {
     name: 'HuggingFaceTB/SmolLM2-135M-Instruct',
     chatTemplate: 'smollm'
   },
+  smollm360: {
+    name: 'HuggingFaceTB/SmolLM-360M-Instruct',
+    chatTemplate: 'smollm'
+  },
   lille: {
     name: 'Nikity/lille-130m-instruct',
     chatTemplate: 'lille'
+  },
+  gemma: {
+    name: 'litert-community/gemma-3-270m-it',
+    chatTemplate: 'gemma'
   }
 };
 
@@ -31,7 +44,9 @@ async function initModel(modelKey = 'smollm') {
   spinner.style.display = 'block';
   loadModelButton.disabled = true;
   try {
-    generator = await pipeline('text-generation', model.name);
+    const token = getToken();
+    const pipelineOptions = token ? { auth_token: token } : {};
+    generator = await pipeline('text-generation', model.name, pipelineOptions);
     currentModel = modelKey;
     console.log('Model loaded.');
     displayMessage(`Model ${model.name} loaded successfully.`, 'assistant');
@@ -56,6 +71,8 @@ messageInput.addEventListener('keypress', (e) => {
 function formatChatTemplate(messages) {
   if (currentModel === 'lille') {
     return formatLilleTemplate(messages);
+  } else if (currentModel === 'gemma') {
+    return formatGemmaTemplate(messages);
   } else {
     return formatSmolLMTemplate(messages);
   }
@@ -103,6 +120,29 @@ function formatLilleTemplate(messages) {
   return formatted;
 }
 
+function formatGemmaTemplate(messages) {
+  let formatted = '';
+
+  // Add system message if not present
+  if (messages.length === 0 || messages[0].role !== 'system') {
+    formatted = 'You are a helpful AI assistant.\n\n';
+  }
+
+  // Format each message
+  messages.forEach(msg => {
+    if (msg.role === 'user') {
+      formatted += `User: ${msg.content}\n\n`;
+    } else if (msg.role === 'assistant') {
+      formatted += `Assistant: ${msg.content}\n\n`;
+    }
+  });
+
+  // Add generation prompt
+  formatted += 'Assistant: ';
+
+  return formatted;
+}
+
 async function sendMessage() {
   const message = messageInput.value.trim();
   if (!message) return;
@@ -124,7 +164,7 @@ async function sendMessage() {
     console.log(prompt);
     console.log('=== END PROMPT ===');
 
-    const generationOptions = currentModel === 'lille' ? {
+    const generationOptions = (currentModel === 'lille' || currentModel === 'gemma') ? {
       max_new_tokens: 150,
       do_sample: true,
       temperature: 0.7,
@@ -159,6 +199,18 @@ async function sendMessage() {
         }
       });
       plainPrompt += '<|assistant|>';
+    } else if (currentModel === 'gemma') {
+      if (conversationHistory.length === 0 || conversationHistory[0].role !== 'system') {
+        plainPrompt = 'You are a helpful AI assistant.\n\n';
+      }
+      conversationHistory.forEach(msg => {
+        if (msg.role === 'user') {
+          plainPrompt += `User: ${msg.content}\n\n`;
+        } else if (msg.role === 'assistant') {
+          plainPrompt += `Assistant: ${msg.content}\n\n`;
+        }
+      });
+      plainPrompt += 'Assistant: ';
     } else {
       if (conversationHistory.length === 0 || conversationHistory[0].role !== 'system') {
         plainPrompt = 'system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face\n';
@@ -233,5 +285,48 @@ function clearChat() {
   conversationHistory = [];
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', initModel);
+// Token management functions
+function saveToken() {
+  const token = hfTokenInput.value.trim();
+  if (token) {
+    localStorage.setItem('hf_access_token', token);
+    displayMessage('Access token saved successfully!', 'assistant');
+    hfTokenInput.value = '';
+  } else {
+    displayMessage('Please enter a valid token.', 'assistant');
+  }
+}
+
+function clearToken() {
+  localStorage.removeItem('hf_access_token');
+  hfTokenInput.value = '';
+  displayMessage('Access token cleared.', 'assistant');
+}
+
+function loadToken() {
+  const token = localStorage.getItem('hf_access_token');
+  if (token) {
+    hfTokenInput.value = token;
+  }
+}
+
+function getToken() {
+  return localStorage.getItem('hf_access_token');
+}
+
+// Toggle token input visibility
+toggleTokenButton.addEventListener('click', () => {
+  const isVisible = tokenInputContainer.style.display !== 'none';
+  tokenInputContainer.style.display = isVisible ? 'none' : 'block';
+  toggleTokenButton.textContent = isVisible ? '🔑 Hugging Face Access Token (Optional)' : '🔑 Hide Token Settings';
+});
+
+// Token button event listeners
+saveTokenButton.addEventListener('click', saveToken);
+clearTokenButton.addEventListener('click', clearToken);
+
+// Load token on page load
+document.addEventListener('DOMContentLoaded', () => {
+  loadToken();
+  initModel();
+});

@@ -15,12 +15,15 @@
       <h2>ℹ️ About This Demo</h2>
       <p>This demo showcases running AI models directly in your browser. You can switch between:</p>
       <ul>
-        <li><strong>SmolLM2-135M-Instruct:</strong> A compact language model from Hugging Face</li>
-        <li><strong>Nikity/lille-130m-instruct:</strong> Another instruction-tuned model with custom tokenizer</li>
+        <li><strong>SmolLM2-135M-Instruct:</strong> A compact language model from Hugging Face (works without token)</li>
+        <li><strong>SmolLM-360M-Instruct:</strong> Larger SmolLM model with better performance (works without token)</li>
+        <li><strong>Nikity/lille-130m-instruct:</strong> Custom tokenizer model (currently not working)</li>
+        <li><strong>Gemma-3-270M-IT:</strong> Google's Gemma 3 model (requires Hugging Face access token)</li>
         <li><strong>Transformers.js:</strong> Running models client-side with WebAssembly and ONNX runtime</li>
         <li><strong>Local Processing:</strong> All AI computation happens in your browser - no data sent to servers</li>
         <li><strong>Hardware Acceleration:</strong> WebGPU support for faster processing when available</li>
       </ul>
+      <p><strong>Note:</strong> Some models require a Hugging Face access token for access. Use the token input section below to provide your token.</p>
       <p>This demonstrates modern web AI capabilities, running language models entirely in the browser.</p>
     </div>
 
@@ -30,9 +33,21 @@
           <label for="model-select">Select Model:</label>
           <select id="model-select">
             <option value="smollm">SmolLM2-135M-Instruct</option>
-            <option value="lille">Nikity/lille-130m-instruct</option>
+            <option value="smollm360">SmolLM-360M-Instruct</option>
+            <option value="lille">Nikity/lille-130m-instruct (Not Working)</option>
+            <option value="gemma">Gemma-3-270M-IT (Requires Access Token)</option>
           </select>
           <button id="load-model-button">Load Model</button>
+        </div>
+
+        <div class="token-section">
+          <button id="toggle-token" class="toggle-button">🔑 Hugging Face Access Token (Optional)</button>
+          <div id="token-input-container" class="token-input-container" style="display: none;">
+            <input type="password" id="hf-token" placeholder="Enter your Hugging Face access token">
+            <button id="save-token">Save Token</button>
+            <button id="clear-token">Clear Token</button>
+            <p class="token-info">Token is saved locally and used to access restricted models. Get your token from <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face Settings</a>.</p>
+          </div>
         </div>
         <div id="chat-window">
           <div id="messages"></div>
