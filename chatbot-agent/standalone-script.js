@@ -16,8 +16,9 @@ const saveTokenButton = document.getElementById('save-token');
 const clearTokenButton = document.getElementById('clear-token');
 
 let generator;
-let currentModel = 'smollm';
+let currentModel = 'smollm360';
 let conversationHistory = [];
+let isModelLoaded = false;
 
 const models = {
   smollm: {
@@ -38,24 +39,30 @@ const models = {
   }
 };
 
-async function initModel(modelKey = 'smollm') {
+async function initModel(modelKey = currentModel) {
   const model = models[modelKey];
   console.log(`Loading ${model.name} model...`);
-  spinner.style.display = 'block';
+  updateStatusBar('loading', `Loading ${model.name}...`);
   loadModelButton.disabled = true;
+  sendButton.disabled = true;
+
   try {
     const token = getToken();
     const pipelineOptions = token ? { auth_token: token } : {};
     generator = await pipeline('text-generation', model.name, pipelineOptions);
     currentModel = modelKey;
+    isModelLoaded = true;
     console.log('Model loaded.');
-    displayMessage(`Model ${model.name} loaded successfully.`, 'assistant');
+    updateStatusBar('loaded', `${model.name} loaded successfully`);
+    clearChat(); // Clear chat when new model loads
   } catch (error) {
     console.error('Error loading model:', error);
-    displayMessage('Error loading model: ' + error.message, 'assistant');
+    updateStatusBar('error', `Failed to load ${model.name}`);
+    isModelLoaded = false;
   }
-  spinner.style.display = 'none';
+
   loadModelButton.disabled = false;
+  sendButton.disabled = !isModelLoaded;
 }
 
 sendButton.addEventListener('click', sendMessage);
@@ -146,6 +153,12 @@ function formatGemmaTemplate(messages) {
 async function sendMessage() {
   const message = messageInput.value.trim();
   if (!message) return;
+
+  // Check if model is loaded
+  if (!isModelLoaded) {
+    displayMessage('Please load a model first before sending messages.', 'assistant');
+    return;
+  }
 
   console.log('=== NEW MESSAGE ===');
   console.log('User input:', message);
@@ -325,8 +338,20 @@ toggleTokenButton.addEventListener('click', () => {
 saveTokenButton.addEventListener('click', saveToken);
 clearTokenButton.addEventListener('click', clearToken);
 
-// Load token on page load
+// Status bar management
+function updateStatusBar(status, message) {
+  const statusBar = document.getElementById('status-bar');
+  const statusText = document.getElementById('status-text');
+
+  if (statusBar && statusText) {
+    statusBar.className = `status-bar status-${status}`;
+    statusText.textContent = message;
+  }
+}
+
+// Load token on page load (but don't load model automatically)
 document.addEventListener('DOMContentLoaded', () => {
   loadToken();
-  initModel();
+  updateStatusBar('unloaded', 'No model loaded - please select and load a model to start chatting');
+  sendButton.disabled = true;
 });

@@ -33,7 +33,7 @@
           <label for="model-select">Select Model:</label>
           <select id="model-select">
             <option value="smollm">SmolLM2-135M-Instruct</option>
-            <option value="smollm360">SmolLM-360M-Instruct</option>
+            <option value="smollm360" selected>SmolLM-360M-Instruct</option>
             <option value="lille">Nikity/lille-130m-instruct (Not Working)</option>
             <option value="gemma">Gemma-3-270M-IT (Requires Access Token)</option>
           </select>
@@ -49,6 +49,11 @@
             <p class="token-info">Token is saved locally and used to access restricted models. Get your token from <a href="https://huggingface.co/settings/tokens" target="_blank">Hugging Face Settings</a>.</p>
           </div>
         </div>
+
+        <div id="status-bar" class="status-bar status-unloaded">
+          <span id="status-text">No model loaded - please select and load a model to start chatting</span>
+        </div>
+
         <div id="chat-window">
           <div id="messages"></div>
           <div id="spinner" class="spinner" style="display: none;"></div>
