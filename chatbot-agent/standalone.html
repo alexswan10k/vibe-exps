@@ -9,15 +9,16 @@
 </head>
 <body>
   <div class="container">
-    <h1>Standalone Chatbot Agent with SmolLM2-135M-Instruct</h1>
+    <h1>Standalone Chatbot Agent</h1>
 
     <div class="info-panel">
       <h2>ℹ️ About This Demo</h2>
-      <p>This demo showcases running AI models directly in your browser. You're using:</p>
+      <p>This demo showcases running AI models directly in your browser. You can switch between:</p>
       <ul>
-        <li><strong>Transformers.js:</strong> Running the SmolLM2-135M-Instruct model client-side with WebAssembly and ONNX runtime</li>
+        <li><strong>SmolLM2-135M-Instruct:</strong> A compact language model from Hugging Face</li>
+        <li><strong>Nikity/lille-130m-instruct:</strong> Another instruction-tuned model with custom tokenizer</li>
+        <li><strong>Transformers.js:</strong> Running models client-side with WebAssembly and ONNX runtime</li>
         <li><strong>Local Processing:</strong> All AI computation happens in your browser - no data sent to servers</li>
-        <li><strong>ONNX Model:</strong> Using Microsoft's ONNX format with proper chat templates for conversation</li>
         <li><strong>Hardware Acceleration:</strong> WebGPU support for faster processing when available</li>
       </ul>
       <p>This demonstrates modern web AI capabilities, running language models entirely in the browser.</p>
@@ -25,6 +26,14 @@
 
     <div class="main-content">
       <div class="chat-section">
+        <div class="model-selector">
+          <label for="model-select">Select Model:</label>
+          <select id="model-select">
+            <option value="smollm">SmolLM2-135M-Instruct</option>
+            <option value="lille">Nikity/lille-130m-instruct</option>
+          </select>
+          <button id="load-model-button">Load Model</button>
+        </div>
         <div id="chat-window">
           <div id="messages"></div>
           <div id="spinner" class="spinner" style="display: none;"></div>
