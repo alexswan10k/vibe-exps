@@ -267,17 +267,18 @@
 
         // Zoom functionality
         function updateZoom() {
-            // Calculate the scaled canvas position within the centered container
+            // Calculate the image position the same way as in mouse handlers
             const containerRect = canvasContainer.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
 
-            const canvasLeft = canvasRect.left - containerRect.left;
-            const canvasTop = canvasRect.top - containerRect.top;
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
 
             canvas.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px) scale(${zoomLevel})`;
             ghostCanvas.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px) scale(${zoomLevel})`;
-            ghostCanvas.style.left = canvasLeft + 'px';
-            ghostCanvas.style.top = canvasTop + 'px';
+            ghostCanvas.style.left = imageLeft + 'px';
+            ghostCanvas.style.top = imageTop + 'px';
             zoomLevelSpan.textContent = Math.round(zoomLevel * 100) + '%';
             updateImageBoundary();
         }
