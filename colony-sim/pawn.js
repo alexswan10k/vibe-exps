@@ -147,12 +147,20 @@ class Pawn {
         // Harvest the resource
         const type = game.harvestResource(this.task.x, this.task.y);
         if (type) {
-            // Always drop the item on the ground by default
-            game.droppedResources.push({ x: this.task.x, y: this.task.y, type: type });
+            // Drop the item on the ground (will stack automatically)
+            game.dropResource(this.task.x, this.task.y, type, 1);
+
+            // Create a hauling task for the resource if storage area exists
+            if (game.storageArea) {
+                game.taskQueue.push({
+                    x: this.task.x,
+                    y: this.task.y,
+                    type: 'haul_to_storage'
+                });
+            }
 
             this.task.completed = true;
             this.task = null;
-            game.updateUI();
         } else {
             this.task.completed = true;
             this.task = null;
@@ -164,12 +172,13 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performHaulTask(game) {
-        const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
-        if (carryingType && this.canCarryItem(game, carryingType)) {
-            addToInventory(this.inventory, carryingType, 1);
+        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, false);
+        if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
+            const { type, quantity } = pickupResult;
+            addToInventory(this.inventory, type, quantity);
             // Drop the item at the pawn's current location since there's no centralized storage
-            game.droppedResources.push({ x: Math.floor(this.x), y: Math.floor(this.y), type: carryingType });
-            removeFromInventory(this.inventory, carryingType, 1);
+            game.dropResource(Math.floor(this.x), Math.floor(this.y), type, quantity);
+            removeFromInventory(this.inventory, type, quantity);
             this.task.completed = true;
             this.task = null;
         } else {
@@ -183,9 +192,10 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performHaulToStorageTask(game) {
-        const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
-        if (carryingType && this.canCarryItem(game, carryingType)) {
-            addToInventory(this.inventory, carryingType, 1);
+        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, false);
+        if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
+            const { type, quantity } = pickupResult;
+            addToInventory(this.inventory, type, quantity);
 
             // Find a storage location to drop the item
             const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
@@ -198,11 +208,10 @@ class Pawn {
             const dropY = storageStartY + Math.floor(Math.random() * (storageEndY - storageStartY + 1));
 
             // Drop the item in storage
-            game.droppedResources.push({ x: dropX, y: dropY, type: carryingType });
-            removeFromInventory(this.inventory, carryingType, 1);
+            game.dropResource(dropX, dropY, type, quantity);
+            removeFromInventory(this.inventory, type, quantity);
             this.task.completed = true;
             this.task = null;
-            game.updateUI();
         } else {
             this.task.completed = true;
             this.task = null;
@@ -216,15 +225,23 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performMineStoneTask(game) {
-        // Mine stone terrain
-        if (game.map[this.task.y][this.task.x] === 'stone') {
-            game.map[this.task.y][this.task.x] = 'dirt';
-            // Always drop the stone on the ground by default
-            game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'stone' });
+        // Mine stone terrain using standardized method
+        const type = game.mineStone(this.task.x, this.task.y);
+        if (type) {
+            // Drop the stone on the ground (will stack automatically)
+            game.dropResource(this.task.x, this.task.y, type, 1);
+
+            // Create a hauling task for the stone if storage area exists
+            if (game.storageArea) {
+                game.taskQueue.push({
+                    x: this.task.x,
+                    y: this.task.y,
+                    type: 'haul_to_storage'
+                });
+            }
 
             this.task.completed = true;
             this.task = null;
-            game.updateUI();
         } else {
             this.task.completed = true;
             this.task = null;
@@ -236,17 +253,27 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performHarvestPlantTask(game) {
-        // Harvest mature plant
-        const plant = game.plants.find(p => p.x === this.task.x && p.y === this.task.y);
-        if (plant && plant.isMature()) {
-            // Always drop the food on the ground by default
-            game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'food' });
+        // Harvest plant using standardized method
+        const type = game.harvestPlant(this.task.x, this.task.y);
+        if (type) {
+            // Drop the food on the ground (will stack automatically)
+            game.dropResource(this.task.x, this.task.y, type, 1);
 
-            game.plants.splice(game.plants.indexOf(plant), 1);
-            game.updateUI();
+            // Create a hauling task for the food if storage area exists
+            if (game.storageArea) {
+                game.taskQueue.push({
+                    x: this.task.x,
+                    y: this.task.y,
+                    type: 'haul_to_storage'
+                });
+            }
+
+            this.task.completed = true;
+            this.task = null;
+        } else {
+            this.task.completed = true;
+            this.task = null;
         }
-        this.task.completed = true;
-        this.task = null;
     }
 
     /**

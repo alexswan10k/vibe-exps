@@ -105,8 +105,10 @@ class Game {
         // Generate plants on grass
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
-                if (this.map[y][x] === 'grass' && Math.random() < 0.05) {
-                    this.plants.push(new Plant(x, y, 0));
+                if (this.map[y][x] === 'grass' && Math.random() < 0.1) {
+                    // Start plants with some growth for faster testing
+                    const initialGrowth = Math.random() < 0.3 ? 60 : Math.random() * 30;
+                    this.plants.push(new Plant(x, y, initialGrowth));
                 }
             }
         }
@@ -419,12 +421,64 @@ class Game {
         return null;
     }
 
+    harvestPlant(x, y) {
+        const plant = this.plants.find(p => p.x === x && p.y === y);
+        if (plant && plant.isMature()) {
+            this.plants.splice(this.plants.indexOf(plant), 1);
+            return 'food';
+        }
+        return null;
+    }
+
+    mineStone(x, y) {
+        if (this.map[y][x] === 'stone') {
+            this.map[y][x] = 'dirt';
+            return 'stone';
+        }
+        return null;
+    }
+
+    /**
+     * Drop a resource at the specified location, stacking if possible
+     * @param {number} x - X coordinate
+     * @param {number} y - Y coordinate
+     * @param {string} type - Type of resource
+     * @param {number} quantity - Quantity to drop (default 1)
+     */
+    dropResource(x, y, type, quantity = 1) {
+        // Try to stack with existing resources at this location
+        const existingStack = this.droppedResources.find(r => r.x === x && r.y === y && r.canStack(type, quantity));
+
+        if (existingStack) {
+            // Add to existing stack
+            const amountAdded = existingStack.addToStack(quantity);
+            if (amountAdded < quantity) {
+                // If stack is full, create a new stack with remaining quantity
+                const remaining = quantity - amountAdded;
+                this.droppedResources.push(new DroppedResource(x, y, type, remaining));
+            }
+        } else {
+            // Create new stack
+            this.droppedResources.push(new DroppedResource(x, y, type, quantity));
+        }
+
+        this.updateUI();
+    }
+
     pickupDroppedResource(x, y, addToInventory = true) {
         const droppedResource = this.droppedResources.find(r => r.x === x && r.y === y);
         if (droppedResource) {
-            this.droppedResources.splice(this.droppedResources.indexOf(droppedResource), 1);
-            this.updateUI();
-            return droppedResource.type;
+            const resourceType = droppedResource.type;
+            const quantity = droppedResource.quantity;
+
+            if (addToInventory) {
+                this.droppedResources.splice(this.droppedResources.indexOf(droppedResource), 1);
+                this.updateUI();
+                return { type: resourceType, quantity: quantity };
+            } else {
+                // For checking if pawn can carry, don't remove yet
+                return { type: resourceType, quantity: quantity };
+            }
         }
         return null;
     }
@@ -872,22 +926,58 @@ class Game {
             craftedList.appendChild(toolsItem);
         }
 
-        // Update tile inventory display (show dropped resources on tile)
+        // Update tile inventory display (show all resources and mineable things on tile)
         const tileInventoryDiv = document.getElementById('tile-inventory');
         if (this.hoveredTile) {
             const { x, y } = this.hoveredTile;
-            const droppedResourcesOnTile = this.droppedResources.filter(r => r.x === x && r.y === y);
             const tileType = this.map[y][x];
+            const standingResource = this.resources.find(r => r.x === x && r.y === y);
+            const plant = this.plants.find(p => p.x === x && p.y === y);
+            const droppedResourcesOnTile = this.droppedResources.filter(r => r.x === x && r.y === y);
+
             tileInventoryDiv.innerHTML = `<h3>Tile (${x}, ${y}) - ${tileType}</h3>`;
-            if (droppedResourcesOnTile.length === 0) {
+
+            let hasContent = false;
+
+            // Show standing resources (trees, iron deposits)
+            if (standingResource) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'resource-item';
+                itemDiv.textContent = `${standingResource.type} (standing)`;
+                tileInventoryDiv.appendChild(itemDiv);
+                hasContent = true;
+            }
+
+            // Show plants
+            if (plant) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'resource-item';
+                const growthStatus = plant.isMature() ? 'mature' : 'growing';
+                itemDiv.textContent = `plant (${growthStatus}, ${Math.round(plant.growth)}%)`;
+                tileInventoryDiv.appendChild(itemDiv);
+                hasContent = true;
+            }
+
+            // Show mineable terrain (stone)
+            if (tileType === 'stone') {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'resource-item';
+                itemDiv.textContent = 'stone (mineable)';
+                tileInventoryDiv.appendChild(itemDiv);
+                hasContent = true;
+            }
+
+            // Show dropped resources
+            for (const resource of droppedResourcesOnTile) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'resource-item';
+                itemDiv.textContent = `${resource.type} (dropped, ${resource.quantity})`;
+                tileInventoryDiv.appendChild(itemDiv);
+                hasContent = true;
+            }
+
+            if (!hasContent) {
                 tileInventoryDiv.innerHTML += '<div class="resource-item">Empty</div>';
-            } else {
-                for (const resource of droppedResourcesOnTile) {
-                    const itemDiv = document.createElement('div');
-                    itemDiv.className = 'resource-item';
-                    itemDiv.textContent = `${resource.type}: 1`;
-                    tileInventoryDiv.appendChild(itemDiv);
-                }
             }
         } else {
             tileInventoryDiv.innerHTML = '<h3>Tile Inventory</h3><div class="resource-item">Hover over a tile</div>';
