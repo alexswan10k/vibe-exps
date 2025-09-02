@@ -411,6 +411,21 @@ const MODULE_TEMPLATES = {
             { name: 'Level 4', type: 'potentiometer', x: 30, y: 115 },
             { name: 'Master', type: 'potentiometer', x: 130, y: 70 }
         ]
+    ),
+
+    sequencer: createModuleTemplate(
+        'sequencer',
+        'Sequencer',
+        220,
+        160,
+        [
+            { name: 'CV Out', type: 'output', x: 215, y: 60 },
+            { name: 'Gate Out', type: 'output', x: 215, y: 100 }
+        ],
+        [
+            { name: 'Tempo', type: 'potentiometer', x: 20, y: 30 },
+            { name: 'Play/Stop', type: 'switch', x: 100, y: 30 }
+        ]
     )
 };
 
@@ -826,6 +841,7 @@ function ModulePanel({ onDragStart }) {
         { type: 'envelope', name: 'Envelope' },
         { type: 'cv-gate', name: 'CV/Gate Generator' },
         { type: 'mixer', name: 'Mixer' },
+        { type: 'sequencer', name: 'Sequencer' },
         { type: 'output', name: 'Output' }
     ];
 
@@ -890,12 +906,23 @@ function Control({ control, onChange }) {
         onChange(control.id, value);
     }, [control.id, control.type, onChange]);
 
+    const handleInput = useCallback((e) => {
+        const value = parseFloat(e.target.value);
+        onChange(control.id, value);
+    }, [control.id, onChange]);
+
+    const handleMouseDown = useCallback((e) => {
+        // Prevent module dragging when interacting with controls
+        e.stopPropagation();
+    }, []);
+
     if (control.type === 'switch') {
         return (
             <div
                 className="switch"
                 style={{ left: control.x, top: control.y }}
                 title={control.name}
+                onMouseDown={handleMouseDown}
             >
                 <input
                     type="checkbox"
@@ -912,6 +939,7 @@ function Control({ control, onChange }) {
             className="potentiometer"
             style={{ left: control.x, top: control.y }}
             title={control.name}
+            onMouseDown={handleMouseDown}
         >
             <input
                 type="range"
@@ -919,8 +947,166 @@ function Control({ control, onChange }) {
                 max="1"
                 step="0.01"
                 value={control.value}
+                onInput={handleInput}
                 onChange={handleChange}
             />
+        </div>
+    );
+}
+
+/**
+ * SequencerModule Component - Special sequencer module with step buttons
+ * @param {Object} props
+ * @param {Module} props.module - Module data
+ * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
+ * @param {function} props.onControlChange - Called when control changes
+ * @param {function} props.onModuleMove - Called when module is moved
+ * @param {boolean} props.isConnecting - Whether currently connecting
+ * @param {string|null} props.connectionStartId - ID of connection start point
+ * @param {function} props.onStepChange - Called when step values change
+ * @param {number[]} props.stepValues - Current step values
+ * @param {number} props.currentStep - Current playing step
+ */
+function SequencerModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId, onStepChange, stepValues, currentStep }) {
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const moduleRef = useRef(null);
+
+    const handleMouseDown = useCallback((e) => {
+        if (e.target.closest('.patch-point') || e.target.closest('.potentiometer, .switch') || e.target.closest('.step-btn')) {
+            return; // Don't drag if clicking on patch points, controls, or step buttons
+        }
+
+        setIsDragging(true);
+        const rect = moduleRef.current.getBoundingClientRect();
+        setDragStart({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        });
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isDragging) return;
+
+        const rackArea = moduleRef.current.parentElement;
+        const rackRect = rackArea.getBoundingClientRect();
+
+        const newX = Math.max(0, Math.min(
+            e.clientX - rackRect.left - dragStart.x,
+            rackRect.width - module.width
+        ));
+        const newY = Math.max(0, Math.min(
+            e.clientY - rackRect.top - dragStart.y,
+            rackRect.height - module.height
+        ));
+
+        onModuleMove(module.id, newX, newY);
+    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    // Add global mouse event listeners when dragging
+    React.useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    const handleStepClick = useCallback((stepIndex) => {
+        const newValue = stepValues[stepIndex] > 0 ? 0 : 0.5; // Toggle between off and middle C
+        const newStepValues = [...stepValues];
+        newStepValues[stepIndex] = newValue;
+        onStepChange(module.id, newStepValues);
+    }, [stepValues, onStepChange, module.id]);
+
+    return (
+        <div
+            ref={moduleRef}
+            className="module"
+            style={{
+                left: module.x,
+                top: module.y,
+                width: module.width,
+                height: module.height,
+                cursor: isDragging ? 'grabbing' : 'grab'
+            }}
+            onMouseDown={handleMouseDown}
+        >
+            <div className="module-header">{module.name}</div>
+
+            {/* Step buttons */}
+            <div style={{
+                position: 'absolute',
+                top: '50px',
+                left: '10px',
+                right: '10px',
+                display: 'flex',
+                justifyContent: 'space-between'
+            }}>
+                {[0, 1, 2, 3].map(stepIndex => (
+                    <button
+                        key={stepIndex}
+                        className="step-btn"
+                        style={{
+                            width: '35px',
+                            height: '35px',
+                            backgroundColor: stepValues[stepIndex] > 0 ? '#4CAF50' : '#666',
+                            border: currentStep === stepIndex ? '2px solid #ff0' : '1px solid #888',
+                            borderRadius: '4px',
+                            color: '#fff',
+                            fontSize: '12px',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}
+                        onClick={() => handleStepClick(stepIndex)}
+                    >
+                        {stepIndex + 1}
+                    </button>
+                ))}
+            </div>
+
+            {module.patchPoints.map(patchPoint => (
+                <React.Fragment key={patchPoint.id}>
+                    <PatchPoint
+                        patchPoint={patchPoint}
+                        onMouseDown={onPatchPointMouseDown}
+                        isConnecting={isConnecting}
+                        connectionStartId={connectionStartId}
+                    />
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
+                            top: patchPoint.y - 8,
+                            fontSize: '10px',
+                            color: '#ccc',
+                            pointerEvents: 'none',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        {patchPoint.name}
+                    </div>
+                </React.Fragment>
+            ))}
+
+            {module.controls.map(control => (
+                <Control
+                    key={control.id}
+                    control={control}
+                    onChange={onControlChange}
+                />
+            ))}
         </div>
     );
 }
@@ -1111,11 +1297,14 @@ function ConnectionLine({ connection, modules, onRemove }) {
  * @param {function} props.onDrop - Called when item is dropped
  * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
  * @param {function} props.onControlChange - Called when control changes
+ * @param {function} props.onSequencerControlChange - Called when sequencer control changes
  * @param {function} props.onModuleMove - Called when module is moved
  * @param {function} props.onConnectionRemove - Called when connection is removed
  * @param {boolean} props.isConnecting - Whether currently connecting
  * @param {string|null} props.connectionStartId - ID of connection start point
  * @param {function} props.onLoadState - Called when loading a new state
+ * @param {Object} props.sequencerStates - Sequencer state for each sequencer module
+ * @param {function} props.onStepChange - Called when step values change
  */
 function Rack({
     modules,
@@ -1123,11 +1312,14 @@ function Rack({
     onDrop,
     onPatchPointMouseDown,
     onControlChange,
+    onSequencerControlChange,
     onModuleMove,
     onConnectionRemove,
     isConnecting,
     connectionStartId,
-    onLoadState
+    onLoadState,
+    sequencerStates,
+    onStepChange
 }) {
     const rackRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -1457,17 +1649,42 @@ function Rack({
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
             >
-                {modules.map(module => (
-                    <SynthModule
-                        key={module.id}
-                        module={module}
-                        onPatchPointMouseDown={onPatchPointMouseDown}
-                        onControlChange={onControlChange}
-                        onModuleMove={onModuleMove}
-                        isConnecting={isConnecting}
-                        connectionStartId={connectionStartId}
-                    />
-                ))}
+                {modules.map(module => {
+                    if (module.type === 'sequencer') {
+                        const sequencerState = sequencerStates[module.id] || {
+                            stepValues: [0.5, 0, 0.3, 0],
+                            currentStep: 0,
+                            isPlaying: false,
+                            tempo: 120
+                        };
+                        return (
+                            <SequencerModule
+                                key={module.id}
+                                module={module}
+                                onPatchPointMouseDown={onPatchPointMouseDown}
+                                onControlChange={onSequencerControlChange}
+                                onModuleMove={onModuleMove}
+                                isConnecting={isConnecting}
+                                connectionStartId={connectionStartId}
+                                onStepChange={onStepChange}
+                                stepValues={sequencerState.stepValues}
+                                currentStep={sequencerState.currentStep}
+                            />
+                        );
+                    } else {
+                        return (
+                            <SynthModule
+                                key={module.id}
+                                module={module}
+                                onPatchPointMouseDown={onPatchPointMouseDown}
+                                onControlChange={onControlChange}
+                                onModuleMove={onModuleMove}
+                                isConnecting={isConnecting}
+                                connectionStartId={connectionStartId}
+                            />
+                        );
+                    }
+                })}
 
                 {connections.map(connection => (
                     <ConnectionLine
@@ -1496,6 +1713,8 @@ function App() {
     const [connectionStart, setConnectionStart] = useState(null);
     /** @type {[AudioEngine, function]} */
     const [audioEngine, setAudioEngine] = useState(null);
+    /** @type {[Object, function]} */
+    const [sequencerStates, setSequencerStates] = useState({});
 
     // Initialize audio engine
     React.useEffect(() => {
@@ -2035,6 +2254,155 @@ function App() {
         e.dataTransfer.setData('text/plain', type);
     }, []);
 
+    /**
+     * Handle step value changes for sequencers
+     * @param {string} sequencerId - ID of the sequencer module
+     * @param {number[]} stepValues - New step values
+     */
+    const handleStepChange = useCallback((sequencerId, stepValues) => {
+        setSequencerStates(prev => ({
+            ...prev,
+            [sequencerId]: {
+                ...prev[sequencerId],
+                stepValues: stepValues
+            }
+        }));
+    }, []);
+
+    /**
+     * Handle control changes for sequencers (tempo and play/stop)
+     */
+    const handleSequencerControlChange = useCallback((controlId, value) => {
+        // Find which sequencer this control belongs to
+        const sequencerModule = modules.find(module =>
+            module.type === 'sequencer' &&
+            module.controls.some(control => control.id === controlId)
+        );
+
+        if (!sequencerModule) return;
+
+        const control = sequencerModule.controls.find(c => c.id === controlId);
+        if (!control) return;
+
+        if (control.name === 'Tempo') {
+            // Map 0-1 to 60-240 BPM
+            const tempo = 60 + (value * 180);
+            setSequencerStates(prev => ({
+                ...prev,
+                [sequencerModule.id]: {
+                    ...prev[sequencerModule.id],
+                    tempo: tempo
+                }
+            }));
+        } else if (control.name === 'Play/Stop') {
+            const isPlaying = value === 1;
+            setSequencerStates(prev => ({
+                ...prev,
+                [sequencerModule.id]: {
+                    ...prev[sequencerModule.id],
+                    isPlaying: isPlaying,
+                    currentStep: isPlaying ? prev[sequencerModule.id]?.currentStep || 0 : 0
+                }
+            }));
+        }
+
+        // Also update the module control value
+        handleControlChange(controlId, value);
+    }, [modules, handleControlChange]);
+
+    // Sequencer timing logic
+    React.useEffect(() => {
+        const intervals = new Map();
+
+        Object.entries(sequencerStates).forEach(([sequencerId, state]) => {
+            if (state.isPlaying && state.tempo) {
+                const intervalMs = (60 / state.tempo) * 1000; // Convert BPM to milliseconds per step
+
+                if (!intervals.has(sequencerId)) {
+                    const interval = setInterval(() => {
+                        setSequencerStates(prev => {
+                            const currentState = prev[sequencerId];
+                            if (!currentState || !currentState.isPlaying) return prev;
+
+                            const nextStep = (currentState.currentStep + 1) % 4;
+                            const stepValue = currentState.stepValues[nextStep];
+
+                            // Update CV and gate outputs
+                            if (audioEngine) {
+                                // CV output (pitch)
+                                const cvGain = audioEngine.gainNodes.get(`${sequencerId}-cv`);
+                                if (cvGain) {
+                                    cvGain.gain.value = stepValue; // 0-1 range for pitch
+                                }
+
+                                // Gate output (trigger)
+                                const gateGain = audioEngine.gainNodes.get(`${sequencerId}-gate`);
+                                if (gateGain) {
+                                    gateGain.gain.value = stepValue > 0 ? 1 : 0; // Gate on/off
+                                }
+                            }
+
+                            return {
+                                ...prev,
+                                [sequencerId]: {
+                                    ...currentState,
+                                    currentStep: nextStep
+                                }
+                            };
+                        });
+                    }, intervalMs);
+
+                    intervals.set(sequencerId, interval);
+                }
+            } else {
+                // Stop playing
+                const interval = intervals.get(sequencerId);
+                if (interval) {
+                    clearInterval(interval);
+                    intervals.delete(sequencerId);
+                }
+            }
+        });
+
+        // Cleanup intervals on unmount
+        return () => {
+            intervals.forEach(interval => clearInterval(interval));
+        };
+    }, [sequencerStates, audioEngine]);
+
+    // Initialize sequencer states when modules are created
+    React.useEffect(() => {
+        const sequencerModules = modules.filter(module => module.type === 'sequencer');
+
+        setSequencerStates(prev => {
+            const newStates = { ...prev };
+
+            sequencerModules.forEach(module => {
+                if (!newStates[module.id]) {
+                    newStates[module.id] = {
+                        stepValues: [0.5, 0, 0.3, 0], // Default step values
+                        currentStep: 0,
+                        isPlaying: false,
+                        tempo: 120
+                    };
+                }
+
+                // Create CV and gate output nodes
+                if (audioEngine && !audioEngine.gainNodes.has(`${module.id}-cv`)) {
+                    const cvGain = audioEngine.audioContext.createGain();
+                    cvGain.gain.value = 0;
+                    audioEngine.gainNodes.set(`${module.id}-cv`, cvGain);
+
+                    const gateGain = audioEngine.audioContext.createGain();
+                    gateGain.gain.value = 0;
+                    audioEngine.gainNodes.set(`${module.id}-gate`, gateGain);
+                }
+            });
+
+            return newStates;
+        });
+    }, [modules, audioEngine]);
+
     return (
         <div className="container">
             <ModulePanel onDragStart={handleDragStart} />
@@ -2044,11 +2412,14 @@ function App() {
                 onDrop={handleModuleDrop}
                 onPatchPointMouseDown={handlePatchPointMouseDown}
                 onControlChange={handleControlChange}
+                onSequencerControlChange={handleSequencerControlChange}
                 onModuleMove={handleModuleMove}
                 onConnectionRemove={handleConnectionRemove}
                 isConnecting={isConnecting}
                 connectionStartId={connectionStart}
                 onLoadState={handleLoadState}
+                sequencerStates={sequencerStates}
+                onStepChange={handleStepChange}
             />
         </div>
     );
