@@ -1,3 +1,26 @@
+/**
+ * @typedef {Object} InventoryItem
+ * @property {string} tag - The item type identifier
+ * @property {number} quantity - The quantity of this item
+ */
+
+/**
+ * @typedef {Object} ItemProperties
+ * @property {number} weight - The weight per unit of the item
+ * @property {number} cost - The cost per unit of the item
+ */
+
+/**
+ * @typedef {Object} Task
+ * @property {number} x - X coordinate of the task
+ * @property {number} y - Y coordinate of the task
+ * @property {string} type - Type of task (chop, mine, haul, etc.)
+ * @property {Object} [resource] - Associated resource object
+ * @property {Object} [plant] - Associated plant object
+ * @property {Object} [destination] - Destination coordinates for hauling
+ * @property {boolean} [completed] - Whether the task is completed
+ */
+
 class Game {
     constructor() {
         this.canvas = document.getElementById('game-canvas');
@@ -45,6 +68,12 @@ class Game {
         }
 
         // Helper methods for inventory management
+        /**
+         * Add items to an inventory
+         * @param {InventoryItem[]} inventory - The inventory array to modify
+         * @param {string} tag - The item type to add
+         * @param {number} quantity - The quantity to add (default: 1)
+         */
         this.addToInventory = (inventory, tag, quantity = 1) => {
             const existingItem = inventory.find(item => item.tag === tag);
             if (existingItem) {
@@ -54,6 +83,13 @@ class Game {
             }
         };
 
+        /**
+         * Remove items from an inventory
+         * @param {InventoryItem[]} inventory - The inventory array to modify
+         * @param {string} tag - The item type to remove
+         * @param {number} quantity - The quantity to remove (default: 1)
+         * @returns {boolean} True if items were successfully removed
+         */
         this.removeFromInventory = (inventory, tag, quantity = 1) => {
             const itemIndex = inventory.findIndex(item => item.tag === tag);
             if (itemIndex > -1) {
@@ -67,11 +103,24 @@ class Game {
             return false;
         };
 
+        /**
+         * Get the quantity of a specific item in an inventory
+         * @param {InventoryItem[]} inventory - The inventory array to check
+         * @param {string} tag - The item type to check
+         * @returns {number} The quantity of the item (0 if not found)
+         */
         this.getInventoryQuantity = (inventory, tag) => {
             const item = inventory.find(item => item.tag === tag);
             return item ? item.quantity : 0;
         };
 
+        /**
+         * Check if an inventory has at least a certain quantity of an item
+         * @param {InventoryItem[]} inventory - The inventory array to check
+         * @param {string} tag - The item type to check
+         * @param {number} quantity - The minimum quantity required (default: 1)
+         * @returns {boolean} True if the inventory has enough of the item
+         */
         this.hasInventoryItem = (inventory, tag, quantity = 1) => {
             return this.getInventoryQuantity(inventory, tag) >= quantity;
         };
@@ -894,6 +943,26 @@ class Game {
             craftedItem.textContent = `${item.tag}: ${item.quantity}`;
             craftedList.appendChild(craftedItem);
         }
+
+        // Update tile inventory display
+        const tileInventoryDiv = document.getElementById('tile-inventory');
+        if (this.hoveredTile) {
+            const { x, y } = this.hoveredTile;
+            const tileInventory = this.tileInventories[y][x];
+            tileInventoryDiv.innerHTML = `<h3>Tile (${x}, ${y})</h3>`;
+            if (tileInventory.length === 0) {
+                tileInventoryDiv.innerHTML += '<div class="resource-item">Empty</div>';
+            } else {
+                for (const item of tileInventory) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'resource-item';
+                    itemDiv.textContent = `${item.tag}: ${item.quantity}`;
+                    tileInventoryDiv.appendChild(itemDiv);
+                }
+            }
+        } else {
+            tileInventoryDiv.innerHTML = '<h3>Tile Inventory</h3><div class="resource-item">Hover over a tile</div>';
+        }
     }
 
     getNearestAvailableTask(pawn) {
@@ -1033,9 +1102,9 @@ class Pawn {
                     this.task = null;
                 }
             } else if (this.task.type === 'move_to_storage') {
-                // Drop all items from inventory at storage
+                // Transfer all items from pawn inventory to central storage
                 for (const item of this.inventory) {
-                    game.droppedResources.push(new DroppedResource(this.task.x, this.task.y, item.tag));
+                    game.addToInventory(game.resourcesInventory, item.tag, item.quantity);
                 }
                 this.inventory = [];
                 this.task.completed = true;
