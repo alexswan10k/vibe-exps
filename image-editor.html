@@ -112,6 +112,8 @@
                 <input type="file" id="fileInput" accept="image/*" style="display: none;">
                 <button id="loadBtn">Load Image</button>
                 <button id="pasteBtn">Paste Image</button>
+                <button id="undoBtn" disabled>Undo</button>
+                <button id="redoBtn" disabled>Redo</button>
                 <button id="saveBtn" disabled>Save as PNG</button>
             </div>
 
@@ -166,6 +168,7 @@
                 <li><strong>Adjust:</strong> Use color picker and brush size slider for drawing</li>
                 <li><strong>Rescale:</strong> Enter a percentage and click "Rescale" to change image size</li>
                 <li><strong>Zoom:</strong> Use the + and - buttons or mouse wheel to zoom in/out on the canvas</li>
+                <li><strong>Undo/Redo:</strong> Click "Undo" to revert the last action, "Redo" to restore an undone action</li>
                 <li><strong>Save:</strong> Click "Save as PNG" to download your edited image</li>
             </ul>
         </div>
@@ -177,6 +180,8 @@
         const fileInput = document.getElementById('fileInput');
         const loadBtn = document.getElementById('loadBtn');
         const pasteBtn = document.getElementById('pasteBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
         const saveBtn = document.getElementById('saveBtn');
         const toolSelect = document.getElementById('toolSelect');
         const colorPicker = document.getElementById('colorPicker');
@@ -207,6 +212,90 @@
         let dragStartY = 0;
         let canvasOffsetX = 0;
         let canvasOffsetY = 0;
+
+        // History system for undo/redo
+        let history = [];
+        let historyIndex = -1;
+        const maxHistorySize = 50;
+
+        // Function to save current canvas state to history
+        function saveToHistory() {
+            // Remove any history after current index (for when we undo then make new changes)
+            history = history.slice(0, historyIndex + 1);
+
+            // Create a snapshot of current canvas state
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const state = {
+                imageData: imageData,
+                width: canvas.width,
+                height: canvas.height,
+                originalImage: originalImage ? {
+                    src: originalImage.src,
+                    width: originalImage.width,
+                    height: originalImage.height
+                } : null
+            };
+
+            history.push(state);
+            historyIndex++;
+
+            // Limit history size
+            if (history.length > maxHistorySize) {
+                history.shift();
+                historyIndex--;
+            }
+
+            updateUndoRedoButtons();
+        }
+
+        // Function to restore canvas state from history
+        function restoreFromHistory(state) {
+            canvas.width = state.width;
+            canvas.height = state.height;
+            ghostCanvas.width = state.width;
+            ghostCanvas.height = state.height;
+
+            ctx.putImageData(state.imageData, 0, 0);
+
+            if (state.originalImage) {
+                originalImage = new Image();
+                originalImage.src = state.originalImage.src;
+                originalImage.width = state.originalImage.width;
+                originalImage.height = state.originalImage.height;
+            } else {
+                originalImage = null;
+            }
+
+            fitToViewport();
+        }
+
+        // Undo function
+        function undo() {
+            if (historyIndex > 0) {
+                historyIndex--;
+                restoreFromHistory(history[historyIndex]);
+                updateUndoRedoButtons();
+            }
+        }
+
+        // Redo function
+        function redo() {
+            if (historyIndex < history.length - 1) {
+                historyIndex++;
+                restoreFromHistory(history[historyIndex]);
+                updateUndoRedoButtons();
+            }
+        }
+
+        // Update undo/redo button states
+        function updateUndoRedoButtons() {
+            undoBtn.disabled = historyIndex <= 0;
+            redoBtn.disabled = historyIndex >= history.length - 1;
+        }
+
+        // Add event listeners for undo/redo buttons
+        undoBtn.addEventListener('click', undo);
+        redoBtn.addEventListener('click', redo);
 
         // Clone stamp variables
         let cloneOffsetX = 0;
@@ -363,6 +452,7 @@
                 ctx.drawImage(img, 0, 0);
                 fitToViewport();
                 saveBtn.disabled = false;
+                saveToHistory(); // Save state after loading image
             };
             img.src = URL.createObjectURL(blob);
         }
@@ -499,6 +589,7 @@
             if (toolSelect.value === 'draw') {
                 isDrawing = false;
                 ctx.beginPath();
+                saveToHistory(); // Save state after drawing
             } else if (toolSelect.value === 'crop') {
                 endCrop();
             } else if (toolSelect.value === 'clone' && e.button === 2) {
@@ -508,8 +599,10 @@
             } else if (toolSelect.value === 'clone' && e.button === 0) {
                 // Left click release - stop cloning
                 isCloning = false;
+                saveToHistory(); // Save state after cloning
             } else if (toolSelect.value === 'blur') {
                 isBlurring = false;
+                saveToHistory(); // Save state after blurring
             }
         });
 
@@ -635,6 +728,7 @@
                 originalImage.src = tempCanvas.toDataURL();
 
                 fitToViewport();
+                saveToHistory(); // Save state after cropping
             }
 
             cropOverlay.remove();
@@ -677,6 +771,7 @@
             originalImage.src = rescaledCanvas.toDataURL();
 
             fitToViewport();
+            saveToHistory(); // Save state after rescaling
         });
 
         // Save as PNG
