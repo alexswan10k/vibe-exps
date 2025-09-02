@@ -14,9 +14,9 @@ class Game {
         this.resources = [];
         this.buildings = [];
         this.tasks = [];
-        this.resourcesInventory = { wood: 0, stone: 0, iron: 0 };
+        this.resourcesInventory = []; // Now an array of {tag, quantity}
         this.buildMode = null;
-        this.craftedItems = { food: 0, tools: 0 };
+        this.craftedItems = []; // Now an array of {tag, quantity}
         this.taskQueue = [];
         this.droppedResources = [];
         this.plants = [];
@@ -25,6 +25,56 @@ class Game {
         this.isSelectingArea = false;
         this.selectionStart = null;
         this.currentTaskType = null;
+
+        // Central item lookup
+        this.itemLookup = {
+            wood: { weight: 1, cost: 5 },
+            stone: { weight: 2, cost: 10 },
+            iron: { weight: 3, cost: 15 },
+            food: { weight: 0.5, cost: 3 },
+            tools: { weight: 1.5, cost: 20 }
+        };
+
+        // Initialize tile inventories
+        this.tileInventories = [];
+        for (let y = 0; y < this.mapHeight; y++) {
+            this.tileInventories[y] = [];
+            for (let x = 0; x < this.mapWidth; x++) {
+                this.tileInventories[y][x] = [];
+            }
+        }
+
+        // Helper methods for inventory management
+        this.addToInventory = (inventory, tag, quantity = 1) => {
+            const existingItem = inventory.find(item => item.tag === tag);
+            if (existingItem) {
+                existingItem.quantity += quantity;
+            } else {
+                inventory.push({ tag, quantity });
+            }
+        };
+
+        this.removeFromInventory = (inventory, tag, quantity = 1) => {
+            const itemIndex = inventory.findIndex(item => item.tag === tag);
+            if (itemIndex > -1) {
+                const item = inventory[itemIndex];
+                item.quantity -= quantity;
+                if (item.quantity <= 0) {
+                    inventory.splice(itemIndex, 1);
+                }
+                return true;
+            }
+            return false;
+        };
+
+        this.getInventoryQuantity = (inventory, tag) => {
+            const item = inventory.find(item => item.tag === tag);
+            return item ? item.quantity : 0;
+        };
+
+        this.hasInventoryItem = (inventory, tag, quantity = 1) => {
+            return this.getInventoryQuantity(inventory, tag) >= quantity;
+        };
 
         // Sprite sheet properties
         this.spriteSheet = null;
@@ -320,19 +370,19 @@ class Game {
         if (this.buildMode === 'wall') {
             for (let y = startY; y <= endY; y++) {
                 for (let x = startX; x <= endX; x++) {
-                    if (this.resourcesInventory.wood >= 1) {
+                    if (this.hasInventoryItem(this.resourcesInventory, 'wood', 1)) {
                         this.buildings.push(new Building(x, y, 'wall'));
-                        this.resourcesInventory.wood -= 1;
+                        this.removeFromInventory(this.resourcesInventory, 'wood', 1);
                     }
                 }
             }
             this.updateUI();
         } else if (this.buildMode === 'table') {
-            if (this.resourcesInventory.wood >= 5) {
+            if (this.hasInventoryItem(this.resourcesInventory, 'wood', 5)) {
                 const centerX = Math.floor((startX + endX) / 2);
                 const centerY = Math.floor((startY + endY) / 2);
                 this.buildings.push(new Building(centerX, centerY, 'table'));
-                this.resourcesInventory.wood -= 5;
+                this.removeFromInventory(this.resourcesInventory, 'wood', 5);
                 this.updateUI();
             }
         }
@@ -409,9 +459,9 @@ class Game {
 
 
     buildAt(x, y, type) {
-        if (this.resourcesInventory.wood >= 5) {
+        if (this.hasInventoryItem(this.resourcesInventory, 'wood', 5)) {
             this.buildings.push(new Building(x, y, type));
-            this.resourcesInventory.wood -= 5;
+            this.removeFromInventory(this.resourcesInventory, 'wood', 5);
             this.updateUI();
         }
     }
@@ -430,7 +480,7 @@ class Game {
         const droppedResource = this.droppedResources.find(r => r.x === x && r.y === y);
         if (droppedResource) {
             if (addToInventory) {
-                this.resourcesInventory[droppedResource.type] = (this.resourcesInventory[droppedResource.type] || 0) + 1;
+                this.addToInventory(this.resourcesInventory, droppedResource.type, 1);
             }
             this.droppedResources.splice(this.droppedResources.indexOf(droppedResource), 1);
             this.updateUI();
@@ -464,19 +514,20 @@ class Game {
         const recipe = recipes[itemType];
         if (!recipe) return false;
 
+        // Check if we have enough resources
         for (const [resource, amount] of Object.entries(recipe)) {
-            if (!this.resourcesInventory[resource] || this.resourcesInventory[resource] < amount) {
+            if (!this.hasInventoryItem(this.resourcesInventory, resource, amount)) {
                 return false;
             }
         }
 
         // Consume resources
         for (const [resource, amount] of Object.entries(recipe)) {
-            this.resourcesInventory[resource] -= amount;
+            this.removeFromInventory(this.resourcesInventory, resource, amount);
         }
 
         // Add crafted item
-        this.craftedItems[itemType] = (this.craftedItems[itemType] || 0) + 1;
+        this.addToInventory(this.craftedItems, itemType, 1);
         this.updateUI();
         return true;
     }
@@ -827,20 +878,20 @@ class Game {
         // Update resource list
         const resourceList = document.getElementById('resource-list');
         resourceList.innerHTML = '';
-        for (const [type, amount] of Object.entries(this.resourcesInventory)) {
+        for (const item of this.resourcesInventory) {
             const resourceItem = document.createElement('div');
             resourceItem.className = 'resource-item';
-            resourceItem.textContent = `${type}: ${amount}`;
+            resourceItem.textContent = `${item.tag}: ${item.quantity}`;
             resourceList.appendChild(resourceItem);
         }
 
         // Update crafted items list
         const craftedList = document.getElementById('crafted-list');
         craftedList.innerHTML = '';
-        for (const [type, amount] of Object.entries(this.craftedItems)) {
+        for (const item of this.craftedItems) {
             const craftedItem = document.createElement('div');
             craftedItem.className = 'resource-item';
-            craftedItem.textContent = `${type}: ${amount}`;
+            craftedItem.textContent = `${item.tag}: ${item.quantity}`;
             craftedList.appendChild(craftedItem);
         }
     }
@@ -879,7 +930,7 @@ class Pawn {
         this.sleep = 100;
         this.task = null;
         this.speed = 0.05;
-        this.carrying = null;
+        this.inventory = []; // Array of {tag, quantity}
     }
 
     update(game) {
@@ -888,7 +939,7 @@ class Pawn {
         this.sleep = Math.max(0, this.sleep - 0.05);
 
         // Handle critical needs
-        if (this.hunger < 20 && game.craftedItems.food > 0) {
+        if (this.hunger < 20 && game.hasInventoryItem(game.craftedItems, 'food', 1)) {
             this.eat(game);
         } else if (this.sleep < 20) {
             this.sleepAction();
@@ -919,8 +970,8 @@ class Pawn {
     }
 
     eat(game) {
-        if (game.craftedItems.food > 0) {
-            game.craftedItems.food--;
+        if (game.hasInventoryItem(game.craftedItems, 'food', 1)) {
+            game.removeFromInventory(game.craftedItems, 'food', 1);
             this.hunger = Math.min(100, this.hunger + 50);
         }
     }
@@ -945,7 +996,7 @@ class Pawn {
                 // Harvest the resource
                 const type = game.harvestResource(this.task.x, this.task.y);
                 if (type) {
-                    this.carrying = type;
+                    game.addToInventory(this.inventory, type, 1);
                     if (game.storageArea) {
                         const centerX = Math.floor((game.storageArea.start.x + game.storageArea.end.x) / 2);
                         const centerY = Math.floor((game.storageArea.start.y + game.storageArea.end.y) / 2);
@@ -953,8 +1004,8 @@ class Pawn {
                         this.task.y = centerY;
                         this.task.type = 'move_to_storage';
                     } else {
-                        game.resourcesInventory[this.carrying] = (game.resourcesInventory[this.carrying] || 0) + 1;
-                        this.carrying = null;
+                        game.addToInventory(game.resourcesInventory, type, 1);
+                        game.removeFromInventory(this.inventory, type, 1);
                         this.task.completed = true;
                         this.task = null;
                     }
@@ -964,34 +1015,36 @@ class Pawn {
                 }
                 game.updateUI();
             } else if (this.task.type === 'haul') {
-                if (!this.carrying) {
-                    this.carrying = game.pickupDroppedResource(this.task.x, this.task.y, false);
-                    if (this.carrying && this.task.destination) {
+                const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
+                if (carryingType) {
+                    game.addToInventory(this.inventory, carryingType, 1);
+                    if (this.task.destination) {
                         this.task.x = this.task.destination.x;
                         this.task.y = this.task.destination.y;
                         this.task.type = 'move_to_storage';
-                    } else if (this.carrying) {
-                        // Add to inventory
-                        game.resourcesInventory[this.carrying] = (game.resourcesInventory[this.carrying] || 0) + 1;
-                        this.carrying = null;
-                        this.task.completed = true;
-                        this.task = null;
                     } else {
+                        game.addToInventory(game.resourcesInventory, carryingType, 1);
+                        game.removeFromInventory(this.inventory, carryingType, 1);
                         this.task.completed = true;
                         this.task = null;
                     }
+                } else {
+                    this.task.completed = true;
+                    this.task = null;
                 }
             } else if (this.task.type === 'move_to_storage') {
-                // Drop at storage
-                game.droppedResources.push(new DroppedResource(this.task.x, this.task.y, this.carrying));
-                this.carrying = null;
+                // Drop all items from inventory at storage
+                for (const item of this.inventory) {
+                    game.droppedResources.push(new DroppedResource(this.task.x, this.task.y, item.tag));
+                }
+                this.inventory = [];
                 this.task.completed = true;
                 this.task = null;
             } else if (this.task.type === 'mine_stone') {
                 // Mine stone terrain
                 if (game.map[this.task.y][this.task.x] === 'stone') {
                     game.map[this.task.y][this.task.x] = 'dirt';
-                    this.carrying = 'stone';
+                    game.addToInventory(this.inventory, 'stone', 1);
                     if (game.storageArea) {
                         const centerX = Math.floor((game.storageArea.start.x + game.storageArea.end.x) / 2);
                         const centerY = Math.floor((game.storageArea.start.y + game.storageArea.end.y) / 2);
@@ -999,8 +1052,8 @@ class Pawn {
                         this.task.y = centerY;
                         this.task.type = 'move_to_storage';
                     } else {
-                        game.resourcesInventory[this.carrying] = (game.resourcesInventory[this.carrying] || 0) + 1;
-                        this.carrying = null;
+                        game.addToInventory(game.resourcesInventory, 'stone', 1);
+                        game.removeFromInventory(this.inventory, 'stone', 1);
                         this.task.completed = true;
                         this.task = null;
                     }
@@ -1013,7 +1066,7 @@ class Pawn {
                 // Harvest mature plant
                 const plant = game.plants.find(p => p.x === this.task.x && p.y === this.task.y);
                 if (plant && plant.growth >= 50) {
-                    game.craftedItems.food = (game.craftedItems.food || 0) + 1;
+                    game.addToInventory(game.craftedItems, 'food', 1);
                     game.plants.splice(game.plants.indexOf(plant), 1);
                     game.updateUI();
                 }
