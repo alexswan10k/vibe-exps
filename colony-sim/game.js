@@ -20,9 +20,7 @@ class Game {
         this.resources = [];
         this.buildings = [];
         this.tasks = [];
-        this.resourcesInventory = []; // Array of {tag, quantity}
         this.buildMode = null;
-        this.craftedItems = []; // Array of {tag, quantity}
         this.taskQueue = [];
         this.droppedResources = [];
         this.plants = [];
@@ -41,14 +39,7 @@ class Game {
             tools: { weight: 1.5, cost: 20 }
         };
 
-        // Initialize tile inventories
-        this.tileInventories = [];
-        for (let y = 0; y < this.mapHeight; y++) {
-            this.tileInventories[y] = [];
-            for (let x = 0; x < this.mapWidth; x++) {
-                this.tileInventories[y][x] = [];
-            }
-        }
+
 
         // Sprite sheet properties
         this.spriteSheet = null;
@@ -162,10 +153,6 @@ class Game {
             this.setTaskMode('harvest_plant');
         });
 
-        document.getElementById('haul-resources').addEventListener('click', () => {
-            this.setTaskMode('haul');
-        });
-
         document.getElementById('build-wall').addEventListener('click', () => {
             this.buildMode = 'wall';
             this.currentTaskType = null;
@@ -181,6 +168,8 @@ class Game {
         document.getElementById('build-storage').addEventListener('click', () => {
             this.setStorageMode();
         });
+
+
 
         document.getElementById('craft-food').addEventListener('click', () => {
             this.craftItem('food');
@@ -208,6 +197,8 @@ class Game {
         this.buildMode = null;
         this.canvas.style.cursor = 'crosshair';
     }
+
+
 
     handleMouseDown(e) {
         if (this.currentTaskType || this.buildMode) {
@@ -263,28 +254,7 @@ class Game {
         const startY = Math.min(this.areaSelection.start.y, this.areaSelection.end.y);
         const endY = Math.max(this.areaSelection.start.y, this.areaSelection.end.y);
 
-        if (this.currentTaskType === 'haul') {
-            // For hauling, look for dropped resources in the area
-            for (let y = startY; y <= endY; y++) {
-                for (let x = startX; x <= endX; x++) {
-                    const droppedResource = this.droppedResources.find(r => r.x === x && r.y === y);
-                    if (droppedResource) {
-                        const task = {
-                            x: x,
-                            y: y,
-                            type: this.currentTaskType,
-                            resource: droppedResource
-                        };
-                        if (this.storageArea) {
-                            const centerX = Math.floor((this.storageArea.start.x + this.storageArea.end.x) / 2);
-                            const centerY = Math.floor((this.storageArea.start.y + this.storageArea.end.y) / 2);
-                            task.destination = { x: centerX, y: centerY };
-                        }
-                        this.taskQueue.push(task);
-                    }
-                }
-            }
-        } else if (this.currentTaskType === 'mine_stone') {
+        if (this.currentTaskType === 'mine_stone') {
             // For mining stone, look for stone terrain
             for (let y = startY; y <= endY; y++) {
                 for (let x = startX; x <= endX; x++) {
@@ -342,20 +312,26 @@ class Game {
         const endY = Math.max(this.areaSelection.start.y, this.areaSelection.end.y);
 
         if (this.buildMode === 'wall') {
-            for (let y = startY; y <= endY; y++) {
-                for (let x = startX; x <= endX; x++) {
-                    if (hasInventoryItem(this.resourcesInventory, 'wood', 1)) {
-                        this.buildings.push(new Building(x, y, 'wall'));
-                        removeFromInventory(this.resourcesInventory, 'wood', 1);
+            // Find a pawn with wood to build walls
+            const builderPawn = this.pawns.find(pawn => hasInventoryItem(pawn.inventory, 'wood', 1));
+            if (builderPawn) {
+                for (let y = startY; y <= endY; y++) {
+                    for (let x = startX; x <= endX; x++) {
+                        if (hasInventoryItem(builderPawn.inventory, 'wood', 1)) {
+                            this.buildings.push(new Building(x, y, 'wall'));
+                            removeFromInventory(builderPawn.inventory, 'wood', 1);
+                        }
                     }
                 }
             }
             this.updateUI();
         } else if (this.buildMode === 'table') {
-            if (hasInventoryItem(this.resourcesInventory, 'wood', 5)) {
+            // Find a pawn with enough wood to build a table
+            const builderPawn = this.pawns.find(pawn => hasInventoryItem(pawn.inventory, 'wood', 5));
+            if (builderPawn) {
                 const center = getAreaCenter(this.areaSelection);
                 this.buildings.push(new Building(center.x, center.y, 'table'));
-                removeFromInventory(this.resourcesInventory, 'wood', 5);
+                removeFromInventory(builderPawn.inventory, 'wood', 5);
                 this.updateUI();
             }
         }
@@ -431,13 +407,7 @@ class Game {
 
 
 
-    buildAt(x, y, type) {
-        if (hasInventoryItem(this.resourcesInventory, 'wood', 5)) {
-            this.buildings.push(new Building(x, y, type));
-            removeFromInventory(this.resourcesInventory, 'wood', 5);
-            this.updateUI();
-        }
-    }
+
 
     harvestResource(x, y) {
         const resource = this.resources.find(r => r.x === x && r.y === y);
@@ -452,9 +422,6 @@ class Game {
     pickupDroppedResource(x, y, addToInventory = true) {
         const droppedResource = this.droppedResources.find(r => r.x === x && r.y === y);
         if (droppedResource) {
-            if (addToInventory) {
-                addToInventory(this.resourcesInventory, droppedResource.type, 1);
-            }
             this.droppedResources.splice(this.droppedResources.indexOf(droppedResource), 1);
             this.updateUI();
             return droppedResource.type;
@@ -487,20 +454,31 @@ class Game {
         const recipe = recipes[itemType];
         if (!recipe) return false;
 
-        // Check if we have enough resources
-        for (const [resource, amount] of Object.entries(recipe)) {
-            if (!hasInventoryItem(this.resourcesInventory, resource, amount)) {
-                return false;
+        // Find a pawn with enough resources to craft
+        let craftingPawn = null;
+        for (const pawn of this.pawns) {
+            let hasAllResources = true;
+            for (const [resource, amount] of Object.entries(recipe)) {
+                if (!hasInventoryItem(pawn.inventory, resource, amount)) {
+                    hasAllResources = false;
+                    break;
+                }
+            }
+            if (hasAllResources) {
+                craftingPawn = pawn;
+                break;
             }
         }
 
-        // Consume resources
+        if (!craftingPawn) return false;
+
+        // Consume resources from pawn's inventory
         for (const [resource, amount] of Object.entries(recipe)) {
-            removeFromInventory(this.resourcesInventory, resource, amount);
+            removeFromInventory(craftingPawn.inventory, resource, amount);
         }
 
-        // Add crafted item
-        addToInventory(this.craftedItems, itemType, 1);
+        // Add crafted item to pawn's inventory
+        addToInventory(craftingPawn.inventory, itemType, 1);
         this.updateUI();
         return true;
     }
@@ -848,39 +826,64 @@ class Game {
             }
         }
 
-        // Update resource list
+        // Update pawn inventories
         const resourceList = document.getElementById('resource-list');
-        resourceList.innerHTML = '';
-        for (const item of this.resourcesInventory) {
-            const resourceItem = document.createElement('div');
-            resourceItem.className = 'resource-item';
-            resourceItem.textContent = `${item.tag}: ${item.quantity}`;
-            resourceList.appendChild(resourceItem);
+        resourceList.innerHTML = '<h3>Pawn Inventories</h3>';
+        for (const pawn of this.pawns) {
+            if (pawn.inventory.length > 0) {
+                const pawnHeader = document.createElement('div');
+                pawnHeader.className = 'resource-item';
+                pawnHeader.style.fontWeight = 'bold';
+                pawnHeader.textContent = `${pawn.name}:`;
+                resourceList.appendChild(pawnHeader);
+
+                for (const item of pawn.inventory) {
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'resource-item';
+                    itemDiv.style.marginLeft = '10px';
+                    itemDiv.textContent = `${item.tag}: ${item.quantity}`;
+                    resourceList.appendChild(itemDiv);
+                }
+            }
         }
 
-        // Update crafted items list
+        // Update crafted items list (now shows all crafted items across pawns)
         const craftedList = document.getElementById('crafted-list');
-        craftedList.innerHTML = '';
-        for (const item of this.craftedItems) {
-            const craftedItem = document.createElement('div');
-            craftedItem.className = 'resource-item';
-            craftedItem.textContent = `${item.tag}: ${item.quantity}`;
-            craftedList.appendChild(craftedItem);
+        craftedList.innerHTML = '<h3>All Crafted Items</h3>';
+        let totalFood = 0;
+        let totalTools = 0;
+        for (const pawn of this.pawns) {
+            for (const item of pawn.inventory) {
+                if (item.tag === 'food') totalFood += item.quantity;
+                if (item.tag === 'tools') totalTools += item.quantity;
+            }
+        }
+        if (totalFood > 0) {
+            const foodItem = document.createElement('div');
+            foodItem.className = 'resource-item';
+            foodItem.textContent = `food: ${totalFood}`;
+            craftedList.appendChild(foodItem);
+        }
+        if (totalTools > 0) {
+            const toolsItem = document.createElement('div');
+            toolsItem.className = 'resource-item';
+            toolsItem.textContent = `tools: ${totalTools}`;
+            craftedList.appendChild(toolsItem);
         }
 
-        // Update tile inventory display
+        // Update tile inventory display (show dropped resources on tile)
         const tileInventoryDiv = document.getElementById('tile-inventory');
         if (this.hoveredTile) {
             const { x, y } = this.hoveredTile;
-            const tileInventory = this.tileInventories[y][x];
+            const droppedResourcesOnTile = this.droppedResources.filter(r => r.x === x && r.y === y);
             tileInventoryDiv.innerHTML = `<h3>Tile (${x}, ${y})</h3>`;
-            if (tileInventory.length === 0) {
+            if (droppedResourcesOnTile.length === 0) {
                 tileInventoryDiv.innerHTML += '<div class="resource-item">Empty</div>';
             } else {
-                for (const item of tileInventory) {
+                for (const resource of droppedResourcesOnTile) {
                     const itemDiv = document.createElement('div');
                     itemDiv.className = 'resource-item';
-                    itemDiv.textContent = `${item.tag}: ${item.quantity}`;
+                    itemDiv.textContent = `${resource.type}: 1`;
                     tileInventoryDiv.appendChild(itemDiv);
                 }
             }

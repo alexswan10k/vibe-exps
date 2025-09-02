@@ -28,7 +28,7 @@ class Pawn {
         this.sleep = Math.max(0, this.sleep - 0.05);
 
         // Handle critical needs
-        if (this.hunger < 20 && hasInventoryItem(game.craftedItems, 'food', 1)) {
+        if (this.hunger < 20 && hasInventoryItem(this.inventory, 'food', 1)) {
             this.eat(game);
         } else if (this.sleep < 20) {
             this.sleepAction();
@@ -47,12 +47,18 @@ class Pawn {
                     }
                 }
             } else {
-                // Idle behavior - wander randomly
-                if (Math.random() < 0.01) {
-                    this.x += (Math.random() - 0.5) * 2;
-                    this.y += (Math.random() - 0.5) * 2;
-                    this.x = clamp(this.x, 0, game.mapWidth - 1);
-                    this.y = clamp(this.y, 0, game.mapHeight - 1);
+                // Check for implicit hauling tasks
+                const haulingTask = this.findImplicitHaulingTask(game);
+                if (haulingTask) {
+                    this.assignTask(haulingTask);
+                } else {
+                    // Idle behavior - wander randomly
+                    if (Math.random() < 0.01) {
+                        this.x += (Math.random() - 0.5) * 2;
+                        this.y += (Math.random() - 0.5) * 2;
+                        this.x = clamp(this.x, 0, game.mapWidth - 1);
+                        this.y = clamp(this.y, 0, game.mapHeight - 1);
+                    }
                 }
             }
         }
@@ -63,8 +69,8 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     eat(game) {
-        if (hasInventoryItem(game.craftedItems, 'food', 1)) {
-            removeFromInventory(game.craftedItems, 'food', 1);
+        if (hasInventoryItem(this.inventory, 'food', 1)) {
+            removeFromInventory(this.inventory, 'food', 1);
             this.hunger = Math.min(100, this.hunger + 50);
         }
     }
@@ -117,8 +123,8 @@ class Pawn {
             case 'haul':
                 this.performHaulTask(game);
                 break;
-            case 'move_to_storage':
-                this.performStorageTask(game);
+            case 'haul_to_storage':
+                this.performHaulToStorageTask(game);
                 break;
             case 'mine_stone':
                 this.performMineStoneTask(game);
@@ -141,17 +147,16 @@ class Pawn {
         const type = game.harvestResource(this.task.x, this.task.y);
         if (type) {
             addToInventory(this.inventory, type, 1);
-            if (game.storageArea) {
-                const center = getAreaCenter(game.storageArea);
-                this.task.x = center.x;
-                this.task.y = center.y;
-                this.task.type = 'move_to_storage';
-            } else {
-                addToInventory(game.resourcesInventory, type, 1);
+
+            // If there's a storage area, keep the item in inventory for hauling
+            // Otherwise, drop it on the tile
+            if (!game.storageArea) {
+                game.droppedResources.push({ x: this.task.x, y: this.task.y, type: type });
                 removeFromInventory(this.inventory, type, 1);
-                this.task.completed = true;
-                this.task = null;
             }
+
+            this.task.completed = true;
+            this.task = null;
             game.updateUI();
         } else {
             this.task.completed = true;
@@ -167,16 +172,11 @@ class Pawn {
         const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
         if (carryingType) {
             addToInventory(this.inventory, carryingType, 1);
-            if (this.task.destination) {
-                this.task.x = this.task.destination.x;
-                this.task.y = this.task.destination.y;
-                this.task.type = 'move_to_storage';
-            } else {
-                addToInventory(game.resourcesInventory, carryingType, 1);
-                removeFromInventory(this.inventory, carryingType, 1);
-                this.task.completed = true;
-                this.task = null;
-            }
+            // Drop the item at the pawn's current location since there's no centralized storage
+            game.droppedResources.push({ x: Math.floor(this.x), y: Math.floor(this.y), type: carryingType });
+            removeFromInventory(this.inventory, carryingType, 1);
+            this.task.completed = true;
+            this.task = null;
         } else {
             this.task.completed = true;
             this.task = null;
@@ -184,18 +184,37 @@ class Pawn {
     }
 
     /**
-     * Perform storage task (transfer items to central storage)
+     * Perform hauling to storage task
      * @param {Game} game - Reference to the game instance
      */
-    performStorageTask(game) {
-        // Transfer all items from pawn inventory to central storage
-        for (const item of this.inventory) {
-            addToInventory(game.resourcesInventory, item.tag, item.quantity);
+    performHaulToStorageTask(game) {
+        const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
+        if (carryingType) {
+            addToInventory(this.inventory, carryingType, 1);
+
+            // Find a storage location to drop the item
+            const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
+            const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
+            const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
+            const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
+
+            // Pick a random spot in the storage area
+            const dropX = storageStartX + Math.floor(Math.random() * (storageEndX - storageStartX + 1));
+            const dropY = storageStartY + Math.floor(Math.random() * (storageEndY - storageStartY + 1));
+
+            // Drop the item in storage
+            game.droppedResources.push({ x: dropX, y: dropY, type: carryingType });
+            removeFromInventory(this.inventory, carryingType, 1);
+            this.task.completed = true;
+            this.task = null;
+            game.updateUI();
+        } else {
+            this.task.completed = true;
+            this.task = null;
         }
-        this.inventory = [];
-        this.task.completed = true;
-        this.task = null;
     }
+
+
 
     /**
      * Perform stone mining task
@@ -206,17 +225,16 @@ class Pawn {
         if (game.map[this.task.y][this.task.x] === 'stone') {
             game.map[this.task.y][this.task.x] = 'dirt';
             addToInventory(this.inventory, 'stone', 1);
-            if (game.storageArea) {
-                const center = getAreaCenter(game.storageArea);
-                this.task.x = center.x;
-                this.task.y = center.y;
-                this.task.type = 'move_to_storage';
-            } else {
-                addToInventory(game.resourcesInventory, 'stone', 1);
+
+            // If there's a storage area, keep the item in inventory for hauling
+            // Otherwise, drop it on the tile
+            if (!game.storageArea) {
+                game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'stone' });
                 removeFromInventory(this.inventory, 'stone', 1);
-                this.task.completed = true;
-                this.task = null;
             }
+
+            this.task.completed = true;
+            this.task = null;
             game.updateUI();
         } else {
             this.task.completed = true;
@@ -232,11 +250,63 @@ class Pawn {
         // Harvest mature plant
         const plant = game.plants.find(p => p.x === this.task.x && p.y === this.task.y);
         if (plant && plant.isMature()) {
-            addToInventory(game.craftedItems, 'food', 1);
+            addToInventory(this.inventory, 'food', 1);
+
+            // If there's a storage area, keep the food in inventory for hauling
+            // Otherwise, drop it on the tile
+            if (!game.storageArea) {
+                game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'food' });
+                removeFromInventory(this.inventory, 'food', 1);
+            }
+
             game.plants.splice(game.plants.indexOf(plant), 1);
             game.updateUI();
         }
         this.task.completed = true;
         this.task = null;
+    }
+
+    /**
+     * Find implicit hauling tasks based on priorities
+     * @param {Game} game - Reference to the game instance
+     * @returns {Task|null} - The hauling task to perform
+     */
+    findImplicitHaulingTask(game) {
+        if (!game.storageArea) return null;
+
+        // Find the nearest dropped resource
+        let nearestResource = null;
+        let minDistance = Infinity;
+
+        for (const resource of game.droppedResources) {
+            const distance = calculateDistance(this.x, this.y, resource.x, resource.y);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestResource = resource;
+            }
+        }
+
+        if (nearestResource) {
+            // Check if the resource is already in the storage area
+            const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
+            const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
+            const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
+            const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
+
+            const isInStorage = nearestResource.x >= storageStartX && nearestResource.x <= storageEndX &&
+                               nearestResource.y >= storageStartY && nearestResource.y <= storageEndY;
+
+            if (!isInStorage) {
+                // Create a hauling task to pick up the resource
+                return {
+                    x: nearestResource.x,
+                    y: nearestResource.y,
+                    type: 'haul_to_storage',
+                    resource: nearestResource
+                };
+            }
+        }
+
+        return null;
     }
 }
