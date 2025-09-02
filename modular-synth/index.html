@@ -346,6 +346,23 @@ const MODULE_TEMPLATES = {
         [
             { name: 'Volume', type: 'potentiometer', x: 50, y: 40 }
         ]
+    ),
+
+    mixer: createModuleTemplate(
+        'mixer',
+        'Mixer',
+        160,
+        140,
+        [
+            { name: 'In 1', type: 'input', x: -5, y: 40 },
+            { name: 'In 2', type: 'input', x: -5, y: 80 },
+            { name: 'Out', type: 'output', x: 155, y: 60 }
+        ],
+        [
+            { name: 'Level 1', type: 'potentiometer', x: 30, y: 30 },
+            { name: 'Level 2', type: 'potentiometer', x: 30, y: 70 },
+            { name: 'Master', type: 'potentiometer', x: 100, y: 50 }
+        ]
     )
 };
 
@@ -362,9 +379,19 @@ function createModule(type, x, y) {
         throw new Error(`Unknown module type: ${type}`);
     }
 
+    const moduleId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
     return {
-        id: `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: moduleId,
         ...template,
+        patchPoints: template.patchPoints.map((point, index) => ({
+            ...point,
+            id: `${moduleId}-patch-${index}`
+        })),
+        controls: template.controls.map((control, index) => ({
+            ...control,
+            id: `${moduleId}-control-${index}`
+        })),
         x,
         y
     };
@@ -673,6 +700,7 @@ function ModulePanel({ onDragStart }) {
         { type: 'vca', name: 'VCA' },
         { type: 'envelope', name: 'Envelope' },
         { type: 'cv-gate', name: 'CV/Gate Generator' },
+        { type: 'mixer', name: 'Mixer' },
         { type: 'output', name: 'Output' }
     ];
 
@@ -850,13 +878,28 @@ function SynthModule({ module, onPatchPointMouseDown, onControlChange, onModuleM
             <div className="module-header">{module.name}</div>
 
             {module.patchPoints.map(patchPoint => (
-                <PatchPoint
-                    key={patchPoint.id}
-                    patchPoint={patchPoint}
-                    onMouseDown={onPatchPointMouseDown}
-                    isConnecting={isConnecting}
-                    connectionStartId={connectionStartId}
-                />
+                <React.Fragment key={patchPoint.id}>
+                    <PatchPoint
+                        patchPoint={patchPoint}
+                        onMouseDown={onPatchPointMouseDown}
+                        isConnecting={isConnecting}
+                        connectionStartId={connectionStartId}
+                    />
+                    <div
+                        style={{
+                            position: 'absolute',
+                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
+                            top: patchPoint.y - 8,
+                            fontSize: '10px',
+                            color: '#ccc',
+                            pointerEvents: 'none',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 'bold'
+                        }}
+                    >
+                        {patchPoint.name}
+                    </div>
+                </React.Fragment>
             ))}
 
             {module.controls.map(control => (
