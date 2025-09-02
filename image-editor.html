@@ -61,10 +61,21 @@
         }
         .canvas-container {
             position: relative;
-            display: inline-block;
+            display: flex;
+            justify-content: center;
+            align-items: center;
             border: 2px solid #ddd;
             border-radius: 4px;
             overflow: hidden;
+            min-width: 800px;
+            min-height: 600px;
+            margin: 0 auto;
+        }
+        .image-boundary {
+            position: absolute;
+            border: 2px solid #ff6b6b;
+            pointer-events: none;
+            box-sizing: border-box;
         }
         canvas {
             display: block;
@@ -100,6 +111,8 @@
 
         <div class="toolbar">
             <div class="tool-group">
+                <input type="file" id="fileInput" accept="image/*" style="display: none;">
+                <button id="loadBtn">Load Image</button>
                 <button id="pasteBtn">Paste Image</button>
                 <button id="saveBtn" disabled>Save as PNG</button>
             </div>
@@ -129,6 +142,7 @@
             </div>
 
             <div class="zoom-controls">
+                <button id="fitBtn">Fit</button>
                 <button id="zoomInBtn">+</button>
                 <button id="zoomOutBtn">-</button>
                 <span id="zoomLevel">100%</span>
@@ -143,6 +157,7 @@
         <div class="instructions">
             <p><strong>Instructions:</strong></p>
             <ul>
+                <li><strong>Load Image:</strong> Click "Load Image" to select and load an image file from your local device</li>
                 <li><strong>Paste Image:</strong> Click "Paste Image" button or simply press <kbd>Ctrl</kbd>+<kbd>V</kbd> to load an image from your clipboard</li>
                 <li><strong>Draw:</strong> Select "Draw" tool, then click and drag to paint on the image</li>
                 <li><strong>Crop:</strong> Select "Crop" tool, then click and drag to choose an area - crop applies automatically when you release</li>
@@ -157,6 +172,8 @@
     <script>
         const canvas = document.getElementById('imageCanvas');
         const ctx = canvas.getContext('2d');
+        const fileInput = document.getElementById('fileInput');
+        const loadBtn = document.getElementById('loadBtn');
         const pasteBtn = document.getElementById('pasteBtn');
         const saveBtn = document.getElementById('saveBtn');
         const toolSelect = document.getElementById('toolSelect');
@@ -170,6 +187,7 @@
         const ghostCtx = ghostCanvas.getContext('2d');
         const zoomInBtn = document.getElementById('zoomInBtn');
         const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const fitBtn = document.getElementById('fitBtn');
         const zoomLevelSpan = document.getElementById('zoomLevel');
 
         let originalImage = null;
@@ -181,6 +199,7 @@
         let cropEndY = 0;
         let isCropping = false;
         let cropOverlay = null;
+        let imageBoundary = null;
 
         // Update brush size display
         brushSize.addEventListener('input', () => {
@@ -197,11 +216,52 @@
             ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
         });
 
+        // Function to update image boundary
+        function updateImageBoundary() {
+            if (!originalImage) return;
+
+            if (imageBoundary) {
+                imageBoundary.remove();
+            }
+
+            // Calculate the scaled canvas position within the centered container
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            const canvasLeft = canvasRect.left - containerRect.left;
+            const canvasTop = canvasRect.top - containerRect.top;
+
+            imageBoundary = document.createElement('div');
+            imageBoundary.className = 'image-boundary';
+            imageBoundary.style.width = originalImage.width * zoomLevel + 'px';
+            imageBoundary.style.height = originalImage.height * zoomLevel + 'px';
+            imageBoundary.style.left = canvasLeft + 'px';
+            imageBoundary.style.top = canvasTop + 'px';
+
+            canvasContainer.appendChild(imageBoundary);
+        }
+
+        // Function to fit image to viewport
+        function fitToViewport() {
+            if (!originalImage) return;
+
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const containerWidth = containerRect.width - 40; // Account for padding/border
+            const containerHeight = containerRect.height - 40;
+
+            const scaleX = containerWidth / originalImage.width;
+            const scaleY = containerHeight / originalImage.height;
+            zoomLevel = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 100%
+
+            updateZoom();
+        }
+
         // Zoom functionality
         function updateZoom() {
             canvas.style.transform = `scale(${zoomLevel})`;
             ghostCanvas.style.transform = `scale(${zoomLevel})`;
             zoomLevelSpan.textContent = Math.round(zoomLevel * 100) + '%';
+            updateImageBoundary();
         }
 
         zoomInBtn.addEventListener('click', () => {
@@ -224,6 +284,10 @@
             updateZoom();
         });
 
+        fitBtn.addEventListener('click', () => {
+            fitToViewport();
+        });
+
         // Function to load image from blob
         function loadImageFromBlob(blob) {
             const img = new Image();
@@ -234,12 +298,23 @@
                 ghostCanvas.width = img.width;
                 ghostCanvas.height = img.height;
                 ctx.drawImage(img, 0, 0);
-                zoomLevel = 1;
-                updateZoom();
+                fitToViewport();
                 saveBtn.disabled = false;
             };
             img.src = URL.createObjectURL(blob);
         }
+
+        // Load image from file
+        loadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                loadImageFromBlob(file);
+            }
+        });
 
         // Paste image from clipboard (button click)
         pasteBtn.addEventListener('click', async () => {
@@ -285,9 +360,15 @@
         });
 
         canvas.addEventListener('mousemove', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / zoomLevel;
-            const y = (e.clientY - rect.top) / zoomLevel;
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            // Calculate coordinates relative to the actual canvas position within the scaled container
+            const canvasLeft = canvasRect.left - containerRect.left;
+            const canvasTop = canvasRect.top - containerRect.top;
+
+            const x = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
+            const y = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
 
             if (toolSelect.value === 'draw') {
                 ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
@@ -319,9 +400,15 @@
         function draw(e) {
             if (!isDrawing) return;
 
-            const rect = canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / zoomLevel;
-            const y = (e.clientY - rect.top) / zoomLevel;
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            // Calculate coordinates relative to the actual canvas position within the scaled container
+            const canvasLeft = canvasRect.left - containerRect.left;
+            const canvasTop = canvasRect.top - containerRect.top;
+
+            const x = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
+            const y = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
 
             ctx.lineWidth = brushSize.value;
             ctx.lineCap = 'round';
@@ -334,9 +421,15 @@
         }
 
         function startCrop(e) {
-            const rect = canvas.getBoundingClientRect();
-            cropStartX = (e.clientX - rect.left) / zoomLevel;
-            cropStartY = (e.clientY - rect.top) / zoomLevel;
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            // Calculate coordinates relative to the actual canvas position within the scaled container
+            const canvasLeft = canvasRect.left - containerRect.left;
+            const canvasTop = canvasRect.top - containerRect.top;
+
+            cropStartX = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
+            cropStartY = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
             isCropping = true;
 
             if (cropOverlay) {
@@ -351,17 +444,23 @@
         function updateCrop(e) {
             if (!isCropping) return;
 
-            const rect = canvas.getBoundingClientRect();
-            cropEndX = (e.clientX - rect.left) / zoomLevel;
-            cropEndY = (e.clientY - rect.top) / zoomLevel;
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            // Calculate coordinates relative to the actual canvas position within the scaled container
+            const canvasLeft = canvasRect.left - containerRect.left;
+            const canvasTop = canvasRect.top - containerRect.top;
+
+            cropEndX = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
+            cropEndY = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
 
             const width = Math.abs(cropEndX - cropStartX);
             const height = Math.abs(cropEndY - cropStartY);
             const left = Math.min(cropStartX, cropEndX);
             const top = Math.min(cropStartY, cropEndY);
 
-            cropOverlay.style.left = left * zoomLevel + 'px';
-            cropOverlay.style.top = top * zoomLevel + 'px';
+            cropOverlay.style.left = (canvasLeft + left * zoomLevel) + 'px';
+            cropOverlay.style.top = (canvasTop + top * zoomLevel) + 'px';
             cropOverlay.style.width = width * zoomLevel + 'px';
             cropOverlay.style.height = height * zoomLevel + 'px';
         }
@@ -385,8 +484,17 @@
                 ghostCanvas.width = cropWidth;
                 ghostCanvas.height = cropHeight;
                 ctx.putImageData(imageData, 0, 0);
-                zoomLevel = 1;
-                updateZoom();
+
+                // Update originalImage to reflect the cropped image
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = cropWidth;
+                tempCanvas.height = cropHeight;
+                tempCtx.putImageData(imageData, 0, 0);
+                originalImage = new Image();
+                originalImage.src = tempCanvas.toDataURL();
+
+                fitToViewport();
             }
 
             cropOverlay.remove();
@@ -419,8 +527,16 @@
             // Draw scaled image with interpolation
             ctx.drawImage(tempCanvas, 0, 0, newWidth, newHeight);
 
-            zoomLevel = 1;
-            updateZoom();
+            // Update originalImage to reflect the rescaled image
+            const rescaledCanvas = document.createElement('canvas');
+            const rescaledCtx = rescaledCanvas.getContext('2d');
+            rescaledCanvas.width = newWidth;
+            rescaledCanvas.height = newHeight;
+            rescaledCtx.drawImage(canvas, 0, 0);
+            originalImage = new Image();
+            originalImage.src = rescaledCanvas.toDataURL();
+
+            fitToViewport();
         });
 
         // Save as PNG
