@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modular Synth Prototype</title>
+    <style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #222;
+    color: #fff;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.module-panel {
+    width: 200px;
+    background-color: #333;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.module-panel h2 {
+    margin-top: 0;
+}
+
+.module-item {
+    background-color: #444;
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: grab;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.module-item:hover {
+    background-color: #555;
+}
+
+.rack {
+    flex: 1;
+    background-color: #111;
+    padding: 20px;
+    box-sizing: border-box;
+    position: relative;
+}
+
+.rack h2 {
+    margin-top: 0;
+}
+
+.rack-area {
+    height: calc(100% - 40px);
+    background-color: #000;
+    border: 1px solid #444;
+    position: relative;
+    overflow: hidden;
+}
+
+.module {
+    position: absolute;
+    background-color: #333;
+    border: 1px solid #666;
+    border-radius: 5px;
+    padding: 10px;
+    min-width: 120px;
+    min-height: 100px;
+    cursor: move;
+}
+
+.module-header {
+    background-color: #444;
+    padding: 5px;
+    margin: -10px -10px 10px -10px;
+    border-radius: 5px 5px 0 0;
+    cursor: move;
+}
+
+.patch-point {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: #888;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.patch-point:hover {
+    background-color: #aaa;
+}
+
+.patch-point.active {
+    background-color: #ff0;
+    box-shadow: 0 0 10px #ff0;
+}
+
+.connection {
+    position: absolute;
+    pointer-events: none;
+    stroke: #0f0;
+    stroke-width: 2;
+    fill: none;
+}
+
+.potentiometer {
+    width: 30px;
+    height: 30px;
+    background-color: #666;
+    border-radius: 50%;
+    margin: 5px;
+    cursor: pointer;
+    position: relative;
+}
+
+.potentiometer input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: #666;
+    outline: none;
+    border-radius: 2px;
+}
+
+.potentiometer input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.potentiometer input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+.switch {
+    width: 40px;
+    height: 20px;
+    background-color: #666;
+    border-radius: 10px;
+    margin: 5px;
+    cursor: pointer;
+    position: relative;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: #fff;
+    border-radius: 50%;
+    transition: left 0.2s;
+}
+
+.switch input:checked + .slider {
+    left: 22px;
+}
+    </style>
+    <!-- React from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+/**
+ * @typedef {Object} PatchPoint
+ * @property {string} id - Unique identifier for the patch point
+ * @property {string} name - Display name of the patch point
+ * @property {'input'|'output'} type - Whether this is an input or output
+ * @property {number} x - X position relative to module
+ * @property {number} y - Y position relative to module
+ */
+
+/**
+ * @typedef {Object} Control
+ * @property {string} id - Unique identifier for the control
+ * @property {string} name - Display name of the control
+ * @property {'potentiometer'|'switch'} type - Type of control
+ * @property {number} value - Current value (0-1 for potentiometers, 0/1 for switches)
+ * @property {number} x - X position relative to module
+ * @property {number} y - Y position relative to module
+ */
+
+/**
+ * @typedef {Object} Module
+ * @property {string} id - Unique identifier
+ * @property {string} type - Module type (oscillator, vcf, etc.)
+ * @property {string} name - Display name
+ * @property {number} x - X position on rack
+ * @property {number} y - Y position on rack
+ * @property {number} width - Module width
+ * @property {number} height - Module height
+ * @property {PatchPoint[]} patchPoints - Array of patch points
+ * @property {Control[]} controls - Array of controls
+ */
+
+/**
+ * @typedef {Object} Connection
+ * @property {string} id - Unique identifier
+ * @property {string} fromModuleId - ID of source module
+ * @property {string} fromPatchId - ID of source patch point
+ * @property {string} toModuleId - ID of destination module
+ * @property {string} toPatchId - ID of destination patch point
+ */
+
+/**
+ * Creates a module definition with JSDoc types
+ * @param {string} type - Module type
+ * @param {string} name - Display name
+ * @param {number} width - Module width
+ * @param {number} height - Module height
+ * @param {PatchPoint[]} patchPoints - Patch points array
+ * @param {Control[]} controls - Controls array
+ * @returns {Omit<Module, 'id' | 'x' | 'y'>} Module template
+ */
+function createModuleTemplate(type, name, width, height, patchPoints, controls) {
+    return {
+        type,
+        name,
+        width,
+        height,
+        patchPoints: patchPoints.map((point, index) => ({
+            ...point,
+            id: `${type}-patch-${index}`
+        })),
+        controls: controls.map((control, index) => ({
+            ...control,
+            id: `${type}-control-${index}`,
+            value: control.type === 'switch' ? 0 : 0.5
+        }))
+    };
+}
+
+// Module templates
+const MODULE_TEMPLATES = {
+    oscillator: createModuleTemplate(
+        'oscillator',
+        'Oscillator',
+        140,
+        120,
+        [
+            { name: 'Out', type: 'output', x: 135, y: 60 }
+        ],
+        [
+            { name: 'Frequency', type: 'potentiometer', x: 20, y: 40 },
+            { name: 'Waveform', type: 'switch', x: 80, y: 40 }
+        ]
+    ),
+
+    vcf: createModuleTemplate(
+        'vcf',
+        'VCF',
+        140,
+        140,
+        [
+            { name: 'In', type: 'input', x: -5, y: 40 },
+            { name: 'Cutoff Mod', type: 'input', x: -5, y: 80 },
+            { name: 'Out', type: 'output', x: 135, y: 60 }
+        ],
+        [
+            { name: 'Cutoff', type: 'potentiometer', x: 20, y: 40 },
+            { name: 'Resonance', type: 'potentiometer', x: 80, y: 40 }
+        ]
+    ),
+
+    vca: createModuleTemplate(
+        'vca',
+        'VCA',
+        140,
+        120,
+        [
+            { name: 'Audio In', type: 'input', x: -5, y: 40 },
+            { name: 'CV In', type: 'input', x: -5, y: 80 },
+            { name: 'Out', type: 'output', x: 135, y: 60 }
+        ],
+        [
+            { name: 'Level', type: 'potentiometer', x: 50, y: 40 }
+        ]
+    ),
+
+    envelope: createModuleTemplate(
+        'envelope',
+        'Envelope',
+        140,
+        160,
+        [
+            { name: 'Gate', type: 'input', x: -5, y: 80 },
+            { name: 'Out', type: 'output', x: 135, y: 80 }
+        ],
+        [
+            { name: 'Attack', type: 'potentiometer', x: 20, y: 40 },
+            { name: 'Decay', type: 'potentiometer', x: 80, y: 40 },
+            { name: 'Sustain', type: 'potentiometer', x: 20, y: 80 },
+            { name: 'Release', type: 'potentiometer', x: 80, y: 80 }
+        ]
+    ),
+
+    'cv-gate': createModuleTemplate(
+        'cv-gate',
+        'CV/Gate Generator',
+        140,
+        120,
+        [
+            { name: 'CV Out', type: 'output', x: 135, y: 40 },
+            { name: 'Gate Out', type: 'output', x: 135, y: 80 }
+        ],
+        [
+            { name: 'CV Level', type: 'potentiometer', x: 20, y: 40 },
+            { name: 'Gate', type: 'switch', x: 80, y: 40 }
+        ]
+    )
+};
+
+/**
+ * Creates a new module instance
+ * @param {string} type - Module type
+ * @param {number} x - X position
+ * @param {number} y - Y position
+ * @returns {Module} New module instance
+ */
+function createModule(type, x, y) {
+    const template = MODULE_TEMPLATES[type];
+    if (!template) {
+        throw new Error(`Unknown module type: ${type}`);
+    }
+
+    return {
+        id: `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        ...template,
+        x,
+        y
+    };
+}
+
+/**
+ * Creates a new connection
+ * @param {string} fromModuleId - Source module ID
+ * @param {string} fromPatchId - Source patch point ID
+ * @param {string} toModuleId - Destination module ID
+ * @param {string} toPatchId - Destination patch point ID
+ * @returns {Connection} New connection
+ */
+function createConnection(fromModuleId, fromPatchId, toModuleId, toPatchId) {
+    return {
+        id: `connection-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        fromModuleId,
+        fromPatchId,
+        toModuleId,
+        toPatchId
+    };
+}
+
+const { useState, useRef, useCallback } = React;
+
+/**
+ * ModulePanel Component - Shows available modules to drag
+ * @param {Object} props
+ * @param {function} props.onDragStart - Called when dragging starts
+ */
+function ModulePanel({ onDragStart }) {
+    const availableModules = [
+        { type: 'oscillator', name: 'Oscillator' },
+        { type: 'vcf', name: 'VCF' },
+        { type: 'vca', name: 'VCA' },
+        { type: 'envelope', name: 'Envelope' },
+        { type: 'cv-gate', name: 'CV/Gate Generator' }
+    ];
+
+    return (
+        <div className="module-panel">
+            <h2>Modules</h2>
+            {availableModules.map(module => (
+                <div
+                    key={module.type}
+                    className="module-item"
+                    draggable
+                    onDragStart={(e) => onDragStart(e, module.type)}
+                >
+                    {module.name}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/**
+ * PatchPoint Component - Individual connection point on modules
+ * @param {Object} props
+ * @param {import('./modules.js').PatchPoint} props.patchPoint - Patch point data
+ * @param {function} props.onMouseDown - Called when mouse down on patch point
+ * @param {boolean} props.isConnecting - Whether currently connecting
+ * @param {string|null} props.connectionStartId - ID of connection start point
+ */
+function PatchPoint({ patchPoint, onMouseDown, isConnecting, connectionStartId }) {
+    const handleMouseDown = useCallback((e) => {
+        e.stopPropagation();
+        onMouseDown(patchPoint.id);
+    }, [patchPoint.id, onMouseDown]);
+
+    const isActive = isConnecting && connectionStartId === patchPoint.id;
+
+    return (
+        <div
+            className={`patch-point ${patchPoint.type} ${isActive ? 'active' : ''}`}
+            style={{
+                left: patchPoint.x,
+                top: patchPoint.y,
+                transform: 'translate(-50%, -50%)'
+            }}
+            onMouseDown={handleMouseDown}
+            title={patchPoint.name}
+        />
+    );
+}
+
+/**
+ * Control Component - Potentiometer or switch
+ * @param {Object} props
+ * @param {import('./modules.js').Control} props.control - Control data
+ * @param {function} props.onChange - Called when control value changes
+ */
+function Control({ control, onChange }) {
+    const handleChange = useCallback((e) => {
+        const value = control.type === 'switch'
+            ? (e.target.checked ? 1 : 0)
+            : parseFloat(e.target.value);
+        onChange(control.id, value);
+    }, [control.id, control.type, onChange]);
+
+    if (control.type === 'switch') {
+        return (
+            <div
+                className="switch"
+                style={{ left: control.x, top: control.y }}
+                title={control.name}
+            >
+                <input
+                    type="checkbox"
+                    checked={control.value === 1}
+                    onChange={handleChange}
+                />
+                <span className="slider"></span>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            className="potentiometer"
+            style={{ left: control.x, top: control.y }}
+            title={control.name}
+        >
+            <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                value={control.value}
+                onChange={handleChange}
+            />
+        </div>
+    );
+}
+
+/**
+ * Module Component - Individual synth module
+ * @param {Object} props
+ * @param {Module} props.module - Module data
+ * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
+ * @param {function} props.onControlChange - Called when control changes
+ * @param {function} props.onModuleMove - Called when module is moved
+ * @param {boolean} props.isConnecting - Whether currently connecting
+ * @param {string|null} props.connectionStartId - ID of connection start point
+ */
+function SynthModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId }) {
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+    const moduleRef = useRef(null);
+
+    const handleMouseDown = useCallback((e) => {
+        if (e.target.closest('.patch-point') || e.target.closest('.potentiometer, .switch')) {
+            return; // Don't drag if clicking on patch points or controls
+        }
+
+        setIsDragging(true);
+        const rect = moduleRef.current.getBoundingClientRect();
+        setDragStart({
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        });
+    }, []);
+
+    const handleMouseMove = useCallback((e) => {
+        if (!isDragging) return;
+
+        const rackArea = moduleRef.current.parentElement;
+        const rackRect = rackArea.getBoundingClientRect();
+
+        const newX = Math.max(0, Math.min(
+            e.clientX - rackRect.left - dragStart.x,
+            rackRect.width - module.width
+        ));
+        const newY = Math.max(0, Math.min(
+            e.clientY - rackRect.top - dragStart.y,
+            rackRect.height - module.height
+        ));
+
+        onModuleMove(module.id, newX, newY);
+    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    // Add global mouse event listeners when dragging
+    React.useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            return () => {
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
+        }
+    }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    return (
+        <div
+            ref={moduleRef}
+            className="module"
+            style={{
+                left: module.x,
+                top: module.y,
+                width: module.width,
+                height: module.height,
+                cursor: isDragging ? 'grabbing' : 'grab'
+            }}
+            onMouseDown={handleMouseDown}
+        >
+            <div className="module-header">{module.name}</div>
+
+            {module.patchPoints.map(patchPoint => (
+                <PatchPoint
+                    key={patchPoint.id}
+                    patchPoint={patchPoint}
+                    onMouseDown={onPatchPointMouseDown}
+                    isConnecting={isConnecting}
+                    connectionStartId={connectionStartId}
+                />
+            ))}
+
+            {module.controls.map(control => (
+                <Control
+                    key={control.id}
+                    control={control}
+                    onChange={onControlChange}
+                />
+            ))}
+        </div>
+    );
+}
+
+/**
+ * ConnectionLine Component - Visual connection between modules
+ * @param {Object} props
+ * @param {Connection} props.connection - Connection data
+ * @param {Module[]} props.modules - All modules
+ * @param {function} props.onRemove - Called when connection is clicked for removal
+ */
+function ConnectionLine({ connection, modules, onRemove }) {
+    const getPatchPointPosition = useCallback((moduleId, patchId) => {
+        const module = modules.find(m => m.id === moduleId);
+        if (!module) return null;
+
+        const patchPoint = module.patchPoints.find(p => p.id === patchId);
+        if (!patchPoint) return null;
+
+        return {
+            x: module.x + patchPoint.x,
+            y: module.y + patchPoint.y
+        };
+    }, [modules]);
+
+    const fromPos = getPatchPointPosition(connection.fromModuleId, connection.fromPatchId);
+    const toPos = getPatchPointPosition(connection.toModuleId, connection.toPatchId);
+
+    if (!fromPos || !toPos) return null;
+
+    const dx = toPos.x - fromPos.x;
+    const dy = toPos.y - fromPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Create curved path
+    const midX = (fromPos.x + toPos.x) / 2;
+    const midY = (fromPos.y + toPos.y) / 2;
+    const controlOffset = Math.abs(dx) > Math.abs(dy) ? Math.abs(dx) * 0.3 : Math.abs(dy) * 0.3;
+
+    const pathData = `M ${fromPos.x} ${fromPos.y} Q ${midX} ${fromPos.y} ${midX} ${midY} Q ${midX} ${toPos.y} ${toPos.x} ${toPos.y}`;
+
+    return (
+        <svg
+            className="connection"
+            style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                pointerEvents: 'none',
+                zIndex: 1
+            }}
+        >
+            <path
+                d={pathData}
+                stroke="#0f0"
+                strokeWidth="2"
+                fill="none"
+                style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(connection.id);
+                }}
+            />
+        </svg>
+    );
+}
+
+/**
+ * Rack Component - Main synthesis area
+ * @param {Object} props
+ * @param {Module[]} props.modules - Array of modules
+ * @param {Connection[]} props.connections - Array of connections
+ * @param {function} props.onDrop - Called when item is dropped
+ * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
+ * @param {function} props.onControlChange - Called when control changes
+ * @param {function} props.onModuleMove - Called when module is moved
+ * @param {function} props.onConnectionRemove - Called when connection is removed
+ * @param {boolean} props.isConnecting - Whether currently connecting
+ * @param {string|null} props.connectionStartId - ID of connection start point
+ */
+function Rack({
+    modules,
+    connections,
+    onDrop,
+    onPatchPointMouseDown,
+    onControlChange,
+    onModuleMove,
+    onConnectionRemove,
+    isConnecting,
+    connectionStartId
+}) {
+    const rackRef = useRef(null);
+
+    const handleDragOver = useCallback((e) => {
+        e.preventDefault();
+    }, []);
+
+    const handleDrop = useCallback((e) => {
+        e.preventDefault();
+        const type = e.dataTransfer.getData('text/plain');
+        if (type && rackRef.current) {
+            const rect = rackRef.current.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            onDrop(type, x, y);
+        }
+    }, [onDrop]);
+
+    return (
+        <div className="rack">
+            <h2>Rack</h2>
+            <div
+                ref={rackRef}
+                className="rack-area"
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+            >
+                {modules.map(module => (
+                    <SynthModule
+                        key={module.id}
+                        module={module}
+                        onPatchPointMouseDown={onPatchPointMouseDown}
+                        onControlChange={onControlChange}
+                        onModuleMove={onModuleMove}
+                        isConnecting={isConnecting}
+                        connectionStartId={connectionStartId}
+                    />
+                ))}
+
+                {connections.map(connection => (
+                    <ConnectionLine
+                        key={connection.id}
+                        connection={connection}
+                        modules={modules}
+                        onRemove={onConnectionRemove}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Main App Component
+ */
+function App() {
+    /** @type {[Module[], function]} */
+    const [modules, setModules] = useState([]);
+    /** @type {[Connection[], function]} */
+    const [connections, setConnections] = useState([]);
+    /** @type {[boolean, function]} */
+    const [isConnecting, setIsConnecting] = useState(false);
+    /** @type {[string|null, function]} */
+    const [connectionStart, setConnectionStart] = useState(null);
+
+    /**
+     * Handle module creation from drag and drop
+     * @param {string} type - Module type
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     */
+    const handleModuleDrop = useCallback((type, x, y) => {
+        try {
+            const newModule = createModule(type, x, y);
+            setModules(prev => [...prev, newModule]);
+        } catch (error) {
+            console.error('Error creating module:', error);
+        }
+    }, []);
+
+    /**
+     * Handle patch point mouse down for connections
+     * @param {string} patchPointId - ID of clicked patch point
+     */
+    const handlePatchPointMouseDown = useCallback((patchPointId) => {
+        if (!isConnecting) {
+            // Start connection
+            setIsConnecting(true);
+            setConnectionStart(patchPointId);
+        } else {
+            // Complete connection
+            if (connectionStart && connectionStart !== patchPointId) {
+                // Find modules and patch points
+                let fromModule = null;
+                let fromPatch = null;
+                let toModule = null;
+                let toPatch = null;
+
+                for (const module of modules) {
+                    const fromPatchPoint = module.patchPoints.find(p => p.id === connectionStart);
+                    const toPatchPoint = module.patchPoints.find(p => p.id === patchPointId);
+
+                    if (fromPatchPoint) {
+                        fromModule = module;
+                        fromPatch = fromPatchPoint;
+                    }
+                    if (toPatchPoint) {
+                        toModule = module;
+                        toPatch = toPatchPoint;
+                    }
+                }
+
+                if (fromModule && fromPatch && toModule && toPatch) {
+                    // Validate connection (output to input)
+                    if (fromPatch.type === 'output' && toPatch.type === 'input') {
+                        const newConnection = createConnection(
+                            fromModule.id,
+                            fromPatch.id,
+                            toModule.id,
+                            toPatch.id
+                        );
+                        setConnections(prev => [...prev, newConnection]);
+                    }
+                }
+            }
+
+            setIsConnecting(false);
+            setConnectionStart(null);
+        }
+    }, [isConnecting, connectionStart, modules]);
+
+    /**
+     * Handle control value changes
+     * @param {string} controlId - ID of control
+     * @param {number} value - New value
+     */
+    const handleControlChange = useCallback((controlId, value) => {
+        setModules(prev => prev.map(module => ({
+            ...module,
+            controls: module.controls.map(control =>
+                control.id === controlId ? { ...control, value } : control
+            )
+        })));
+    }, []);
+
+    /**
+     * Handle module movement
+     * @param {string} moduleId - ID of module
+     * @param {number} x - New X position
+     * @param {number} y - New Y position
+     */
+    const handleModuleMove = useCallback((moduleId, x, y) => {
+        setModules(prev => prev.map(module =>
+            module.id === moduleId ? { ...module, x, y } : module
+        ));
+    }, []);
+
+    /**
+     * Handle connection removal
+     * @param {string} connectionId - ID of connection to remove
+     */
+    const handleConnectionRemove = useCallback((connectionId) => {
+        setConnections(prev => prev.filter(conn => conn.id !== connectionId));
+    }, []);
+
+    /**
+     * Handle drag start from module panel
+     * @param {DragEvent} e - Drag event
+     * @param {string} type - Module type
+     */
+    const handleDragStart = useCallback((e, type) => {
+        e.dataTransfer.setData('text/plain', type);
+    }, []);
+
+    return (
+        <div className="container">
+            <ModulePanel onDragStart={handleDragStart} />
+            <Rack
+                modules={modules}
+                connections={connections}
+                onDrop={handleModuleDrop}
+                onPatchPointMouseDown={handlePatchPointMouseDown}
+                onControlChange={handleControlChange}
+                onModuleMove={handleModuleMove}
+                onConnectionRemove={handleConnectionRemove}
+                isConnecting={isConnecting}
+                connectionStartId={connectionStart}
+            />
+        </div>
+    );
+}
+
+// Render the React app
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+    </script>
+</body>
+</html>
