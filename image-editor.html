@@ -214,6 +214,7 @@
         let isSettingCloneOffset = false;
         let cloneStartX = 0;
         let cloneStartY = 0;
+        let isCloning = false;
 
         // Blur tool variables
         let isBlurring = false;
@@ -471,6 +472,9 @@
                 ghostCtx.strokeStyle = 'rgba(255,0,0,0.5)';
                 ghostCtx.lineWidth = 1;
                 ghostCtx.stroke();
+            } else if (toolSelect.value === 'clone' && isCloning) {
+                // Continuous cloning while mouse is held down
+                applyCloneStamp(x, y);
             } else if (toolSelect.value === 'blur') {
                 ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
                 ghostCtx.beginPath();
@@ -501,6 +505,9 @@
                 // Right click release - stop setting offset
                 isSettingCloneOffset = false;
                 ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+            } else if (toolSelect.value === 'clone' && e.button === 0) {
+                // Left click release - stop cloning
+                isCloning = false;
             } else if (toolSelect.value === 'blur') {
                 isBlurring = false;
             }
@@ -741,64 +748,103 @@
                 cloneStartY = y;
                 cloneOffsetX = 0;
                 cloneOffsetY = 0;
-            } else if (e.button === 0) { // Left click - apply clone stamp
-                if (isSettingCloneOffset) {
-                    // Apply clone stamp using the current offset
+            } else if (e.button === 0) { // Left click - start continuous cloning
+                // Start cloning if we have an offset set (either currently setting or previously set)
+                if (isSettingCloneOffset || (cloneOffsetX !== 0 || cloneOffsetY !== 0)) {
+                    isCloning = true;
                     applyCloneStamp(x, y);
                 }
             }
         }
 
-        function applyCloneStamp(x, y) {
-            const sourceX = x - cloneOffsetX;
-            const sourceY = y - cloneOffsetY;
+        function applyCloneStamp(centerX, centerY) {
+            const sourceX = centerX - cloneOffsetX;
+            const sourceY = centerY - cloneOffsetY;
 
-            // Get the brush size for the clone stamp area
-            const stampSize = parseInt(brushSize.value);
+            // Get the brush radius
+            const brushRadius = parseInt(brushSize.value) / 2;
 
-            // Calculate the source area bounds
-            const sourceStartX = Math.floor(sourceX - stampSize / 2);
-            const sourceStartY = Math.floor(sourceY - stampSize / 2);
-            const sourceEndX = sourceStartX + stampSize;
-            const sourceEndY = sourceStartY + stampSize;
+            // Calculate the area to work with (brush area + some padding)
+            const workRadius = brushRadius + 2; // Extra padding for smooth edges
+            const startX = Math.max(0, Math.floor(centerX - workRadius));
+            const startY = Math.max(0, Math.floor(centerY - workRadius));
+            const endX = Math.min(canvas.width, Math.ceil(centerX + workRadius));
+            const endY = Math.min(canvas.height, Math.ceil(centerY + workRadius));
 
-            // Calculate the destination area bounds
-            const destStartX = Math.floor(x - stampSize / 2);
-            const destStartY = Math.floor(y - stampSize / 2);
-            const destEndX = destStartX + stampSize;
-            const destEndY = destStartY + stampSize;
+            const width = endX - startX;
+            const height = endY - startY;
 
-            // Check if source area is completely outside canvas
-            if (sourceEndX <= 0 || sourceStartX >= canvas.width ||
-                sourceEndY <= 0 || sourceStartY >= canvas.height) {
-                console.log('Source area is outside canvas bounds');
-                return;
+            if (width <= 0 || height <= 0) return;
+
+            // Get the current destination image data
+            const destImageData = ctx.getImageData(startX, startY, width, height);
+            const destData = destImageData.data;
+
+            // Create a new array for the blended result
+            const resultData = new Uint8ClampedArray(destData);
+
+            // Apply circular cloning with blending
+            for (let i = 0; i < height; i++) {
+                for (let j = 0; j < width; j++) {
+                    const pixelX = startX + j;
+                    const pixelY = startY + i;
+
+                    // Calculate distance from center
+                    const distanceFromCenter = Math.sqrt(
+                        (pixelX - centerX) * (pixelX - centerX) +
+                        (pixelY - centerY) * (pixelY - centerY)
+                    );
+
+                    // Only process pixels within the brush radius
+                    if (distanceFromCenter <= brushRadius) {
+                        // Calculate corresponding source pixel
+                        const sourcePixelX = Math.round(sourceX + (pixelX - centerX));
+                        const sourcePixelY = Math.round(sourceY + (pixelY - centerY));
+
+                        // Check if source pixel is within canvas bounds
+                        if (sourcePixelX >= 0 && sourcePixelX < canvas.width &&
+                            sourcePixelY >= 0 && sourcePixelY < canvas.height) {
+
+                            // Get source pixel color
+                            const sourceImageData = ctx.getImageData(sourcePixelX, sourcePixelY, 1, 1);
+                            const sourceR = sourceImageData.data[0];
+                            const sourceG = sourceImageData.data[1];
+                            const sourceB = sourceImageData.data[2];
+                            const sourceA = sourceImageData.data[3];
+
+                            // Get destination pixel color
+                            const destIndex = (i * width + j) * 4;
+                            const destR = destData[destIndex];
+                            const destG = destData[destIndex + 1];
+                            const destB = destData[destIndex + 2];
+                            const destA = destData[destIndex + 3];
+
+                            // Calculate opacity based on distance from center (softer edges)
+                            let opacity = 0.8; // Base opacity
+                            if (distanceFromCenter > brushRadius * 0.8) {
+                                // Fade out near the edge
+                                opacity *= (brushRadius - distanceFromCenter) / (brushRadius * 0.2);
+                            }
+
+                            // Blend source and destination
+                            const blendedR = Math.round(sourceR * opacity + destR * (1 - opacity));
+                            const blendedG = Math.round(sourceG * opacity + destG * (1 - opacity));
+                            const blendedB = Math.round(sourceB * opacity + destB * (1 - opacity));
+                            const blendedA = Math.max(sourceA, destA); // Keep the higher alpha
+
+                            // Update result
+                            resultData[destIndex] = blendedR;
+                            resultData[destIndex + 1] = blendedG;
+                            resultData[destIndex + 2] = blendedB;
+                            resultData[destIndex + 3] = blendedA;
+                        }
+                    }
+                }
             }
 
-            // Clamp source area to canvas bounds
-            const clampedSourceStartX = Math.max(0, sourceStartX);
-            const clampedSourceStartY = Math.max(0, sourceStartY);
-            const clampedSourceEndX = Math.min(canvas.width, sourceEndX);
-            const clampedSourceEndY = Math.min(canvas.height, sourceEndY);
-
-            // Calculate actual size of the area we can copy
-            const actualWidth = clampedSourceEndX - clampedSourceStartX;
-            const actualHeight = clampedSourceEndY - clampedSourceStartY;
-
-            if (actualWidth <= 0 || actualHeight <= 0) {
-                console.log('No valid area to copy');
-                return;
-            }
-
-            // Get the image data from the valid source area
-            const imageData = ctx.getImageData(clampedSourceStartX, clampedSourceStartY, actualWidth, actualHeight);
-
-            // Calculate where to place it in the destination
-            const destOffsetX = clampedSourceStartX - sourceStartX;
-            const destOffsetY = clampedSourceStartY - sourceStartY;
-
-            // Place the image data at the destination
-            ctx.putImageData(imageData, destStartX + destOffsetX, destStartY + destOffsetY);
+            // Apply the blended result
+            const resultImageData = new ImageData(resultData, width, height);
+            ctx.putImageData(resultImageData, startX, startY);
         }
 
         // Blur tool functionality (brush-based)
