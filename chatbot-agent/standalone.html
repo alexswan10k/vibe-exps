@@ -40,6 +40,18 @@
           <button id="load-model-button">Load Model</button>
         </div>
 
+        <div class="system-prompt-section">
+          <button id="toggle-system-prompt" class="toggle-button">📝 System Prompt (Optional)</button>
+          <div id="system-prompt-container" class="system-prompt-container" style="display: none;">
+            <textarea id="system-prompt" placeholder="Enter your custom system prompt..." rows="4">You are a helpful AI assistant named SmolLM, trained by Hugging Face</textarea>
+            <div class="system-prompt-buttons">
+              <button id="save-system-prompt">Save Prompt</button>
+              <button id="reset-system-prompt">Reset to Default</button>
+            </div>
+            <p class="system-prompt-info">Customize the system prompt sent to the AI model. Changes take effect immediately for new conversations.</p>
+          </div>
+        </div>
+
         <div class="token-section">
           <button id="toggle-token" class="toggle-button">🔑 Hugging Face Access Token (Optional)</button>
           <div id="token-input-container" class="token-input-container" style="display: none;">

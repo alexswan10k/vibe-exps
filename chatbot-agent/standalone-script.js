@@ -15,6 +15,12 @@ const hfTokenInput = document.getElementById('hf-token');
 const saveTokenButton = document.getElementById('save-token');
 const clearTokenButton = document.getElementById('clear-token');
 
+const toggleSystemPromptButton = document.getElementById('toggle-system-prompt');
+const systemPromptContainer = document.getElementById('system-prompt-container');
+const systemPromptTextarea = document.getElementById('system-prompt');
+const saveSystemPromptButton = document.getElementById('save-system-prompt');
+const resetSystemPromptButton = document.getElementById('reset-system-prompt');
+
 let generator;
 let currentModel = 'smollm360';
 let conversationHistory = [];
@@ -88,9 +94,9 @@ function formatChatTemplate(messages) {
 function formatSmolLMTemplate(messages) {
   let formatted = '';
 
-  // If first message is not system, add default system message
+  // If first message is not system, add custom system message
   if (messages.length === 0 || messages[0].role !== 'system') {
-    formatted = '<|im_start|>system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face<|im_end|>\n';
+    formatted = `<|im_start|>system\n${getSystemPrompt()}<|im_end|>\n`;
   }
 
   // Format each message
@@ -109,7 +115,7 @@ function formatLilleTemplate(messages) {
 
   // Add system message if not present
   if (messages.length === 0 || messages[0].role !== 'system') {
-    formatted += '<|user|>You are a helpful AI assistant.<|assistant|>';
+    formatted += `<|user|>${getSystemPrompt()}<|assistant|>`;
   }
 
   // Format each message
@@ -132,7 +138,7 @@ function formatGemmaTemplate(messages) {
 
   // Add system message if not present
   if (messages.length === 0 || messages[0].role !== 'system') {
-    formatted = 'You are a helpful AI assistant.\n\n';
+    formatted = `${getSystemPrompt()}\n\n`;
   }
 
   // Format each message
@@ -202,7 +208,7 @@ async function sendMessage() {
     if (currentModel === 'lille') {
       plainPrompt = '<|startoftext|>';
       if (conversationHistory.length === 0 || conversationHistory[0].role !== 'system') {
-        plainPrompt += '<|user|>You are a helpful AI assistant.<|assistant|>';
+        plainPrompt += `<|user|>${getSystemPrompt()}<|assistant|>`;
       }
       conversationHistory.forEach(msg => {
         if (msg.role === 'user') {
@@ -214,7 +220,7 @@ async function sendMessage() {
       plainPrompt += '<|assistant|>';
     } else if (currentModel === 'gemma') {
       if (conversationHistory.length === 0 || conversationHistory[0].role !== 'system') {
-        plainPrompt = 'You are a helpful AI assistant.\n\n';
+        plainPrompt = `${getSystemPrompt()}\n\n`;
       }
       conversationHistory.forEach(msg => {
         if (msg.role === 'user') {
@@ -226,7 +232,7 @@ async function sendMessage() {
       plainPrompt += 'Assistant: ';
     } else {
       if (conversationHistory.length === 0 || conversationHistory[0].role !== 'system') {
-        plainPrompt = 'system\nYou are a helpful AI assistant named SmolLM, trained by Hugging Face\n';
+        plainPrompt = `system\n${getSystemPrompt()}\n`;
       }
       conversationHistory.forEach(msg => {
         plainPrompt += `${msg.role}\n${msg.content}\n`;
@@ -327,6 +333,40 @@ function getToken() {
   return localStorage.getItem('hf_access_token');
 }
 
+// System prompt management functions
+function saveSystemPrompt() {
+  const prompt = systemPromptTextarea.value.trim();
+  if (prompt) {
+    localStorage.setItem('custom_system_prompt', prompt);
+    displayMessage('System prompt saved successfully!', 'assistant');
+  } else {
+    displayMessage('Please enter a valid system prompt.', 'assistant');
+  }
+}
+
+function resetSystemPrompt() {
+  const defaultPrompt = 'You are a helpful AI assistant named SmolLM, trained by Hugging Face';
+  systemPromptTextarea.value = defaultPrompt;
+  localStorage.setItem('custom_system_prompt', defaultPrompt);
+  displayMessage('System prompt reset to default.', 'assistant');
+}
+
+function loadSystemPrompt() {
+  const savedPrompt = localStorage.getItem('custom_system_prompt');
+  if (savedPrompt) {
+    systemPromptTextarea.value = savedPrompt;
+  } else {
+    // Set default if not saved
+    const defaultPrompt = 'You are a helpful AI assistant named SmolLM, trained by Hugging Face';
+    systemPromptTextarea.value = defaultPrompt;
+    localStorage.setItem('custom_system_prompt', defaultPrompt);
+  }
+}
+
+function getSystemPrompt() {
+  return localStorage.getItem('custom_system_prompt') || 'You are a helpful AI assistant named SmolLM, trained by Hugging Face';
+}
+
 // Toggle token input visibility
 toggleTokenButton.addEventListener('click', () => {
   const isVisible = tokenInputContainer.style.display !== 'none';
@@ -337,6 +377,17 @@ toggleTokenButton.addEventListener('click', () => {
 // Token button event listeners
 saveTokenButton.addEventListener('click', saveToken);
 clearTokenButton.addEventListener('click', clearToken);
+
+// System prompt button event listeners
+saveSystemPromptButton.addEventListener('click', saveSystemPrompt);
+resetSystemPromptButton.addEventListener('click', resetSystemPrompt);
+
+// Toggle system prompt visibility
+toggleSystemPromptButton.addEventListener('click', () => {
+  const isVisible = systemPromptContainer.style.display !== 'none';
+  systemPromptContainer.style.display = isVisible ? 'none' : 'block';
+  toggleSystemPromptButton.textContent = isVisible ? '📝 System Prompt (Optional)' : '📝 Hide System Prompt';
+});
 
 // Status bar management
 function updateStatusBar(status, message) {
@@ -349,9 +400,10 @@ function updateStatusBar(status, message) {
   }
 }
 
-// Load token on page load (but don't load model automatically)
+// Load token and system prompt on page load (but don't load model automatically)
 document.addEventListener('DOMContentLoaded', () => {
   loadToken();
+  loadSystemPrompt();
   updateStatusBar('unloaded', 'No model loaded - please select and load a model to start chatting');
   sendButton.disabled = true;
 });
