@@ -86,8 +86,6 @@
         }
         #ghostCanvas {
             position: absolute;
-            top: 0;
-            left: 0;
             pointer-events: none;
         }
         .instructions {
@@ -200,6 +198,11 @@
         let isCropping = false;
         let cropOverlay = null;
         let imageBoundary = null;
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let canvasOffsetX = 0;
+        let canvasOffsetY = 0;
 
         // Update brush size display
         brushSize.addEventListener('input', () => {
@@ -237,6 +240,7 @@
             imageBoundary.style.height = originalImage.height * zoomLevel + 'px';
             imageBoundary.style.left = canvasLeft + 'px';
             imageBoundary.style.top = canvasTop + 'px';
+            imageBoundary.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px)`;
 
             canvasContainer.appendChild(imageBoundary);
         }
@@ -253,13 +257,26 @@
             const scaleY = containerHeight / originalImage.height;
             zoomLevel = Math.min(scaleX, scaleY, 1); // Don't scale up beyond 100%
 
+            // Reset canvas offset when fitting
+            canvasOffsetX = 0;
+            canvasOffsetY = 0;
+
             updateZoom();
         }
 
         // Zoom functionality
         function updateZoom() {
-            canvas.style.transform = `scale(${zoomLevel})`;
-            ghostCanvas.style.transform = `scale(${zoomLevel})`;
+            // Calculate the scaled canvas position within the centered container
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            const canvasLeft = canvasRect.left - containerRect.left;
+            const canvasTop = canvasRect.top - containerRect.top;
+
+            canvas.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px) scale(${zoomLevel})`;
+            ghostCanvas.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px) scale(${zoomLevel})`;
+            ghostCanvas.style.left = canvasLeft + 'px';
+            ghostCanvas.style.top = canvasTop + 'px';
             zoomLevelSpan.textContent = Math.round(zoomLevel * 100) + '%';
             updateImageBoundary();
         }
@@ -367,8 +384,8 @@
             const canvasLeft = canvasRect.left - containerRect.left;
             const canvasTop = canvasRect.top - containerRect.top;
 
-            const x = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
-            const y = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
+            const x = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
+            const y = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
 
             if (toolSelect.value === 'draw') {
                 ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
@@ -407,8 +424,8 @@
             const canvasLeft = canvasRect.left - containerRect.left;
             const canvasTop = canvasRect.top - containerRect.top;
 
-            const x = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
-            const y = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
+            const x = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
+            const y = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
 
             ctx.lineWidth = brushSize.value;
             ctx.lineCap = 'round';
@@ -428,8 +445,8 @@
             const canvasLeft = canvasRect.left - containerRect.left;
             const canvasTop = canvasRect.top - containerRect.top;
 
-            cropStartX = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
-            cropStartY = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
+            cropStartX = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
+            cropStartY = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
             isCropping = true;
 
             if (cropOverlay) {
@@ -451,16 +468,16 @@
             const canvasLeft = canvasRect.left - containerRect.left;
             const canvasTop = canvasRect.top - containerRect.top;
 
-            cropEndX = (e.clientX - containerRect.left - canvasLeft) / zoomLevel;
-            cropEndY = (e.clientY - containerRect.top - canvasTop) / zoomLevel;
+            cropEndX = (e.clientX - containerRect.left - canvasLeft + canvasOffsetX) / zoomLevel;
+            cropEndY = (e.clientY - containerRect.top - canvasTop + canvasOffsetY) / zoomLevel;
 
             const width = Math.abs(cropEndX - cropStartX);
             const height = Math.abs(cropEndY - cropStartY);
             const left = Math.min(cropStartX, cropEndX);
             const top = Math.min(cropStartY, cropEndY);
 
-            cropOverlay.style.left = (canvasLeft + left * zoomLevel) + 'px';
-            cropOverlay.style.top = (canvasTop + top * zoomLevel) + 'px';
+            cropOverlay.style.left = (canvasLeft + left * zoomLevel + canvasOffsetX) + 'px';
+            cropOverlay.style.top = (canvasTop + top * zoomLevel + canvasOffsetY) + 'px';
             cropOverlay.style.width = width * zoomLevel + 'px';
             cropOverlay.style.height = height * zoomLevel + 'px';
         }
@@ -546,6 +563,38 @@
             link.href = canvas.toDataURL('image/png');
             link.click();
         });
+
+        // Middle click drag functionality
+        canvasContainer.addEventListener('mousedown', (e) => {
+            if (e.button === 1) { // Middle mouse button
+                e.preventDefault();
+                isDragging = true;
+                dragStartX = e.clientX - canvasOffsetX;
+                dragStartY = e.clientY - canvasOffsetY;
+                canvasContainer.style.cursor = 'grabbing';
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                canvasOffsetX = e.clientX - dragStartX;
+                canvasOffsetY = e.clientY - dragStartY;
+                updateCanvasPosition();
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (e.button === 1) { // Middle mouse button
+                isDragging = false;
+                canvasContainer.style.cursor = '';
+            }
+        });
+
+        function updateCanvasPosition() {
+            canvas.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px) scale(${zoomLevel})`;
+            ghostCanvas.style.transform = `translate(${canvasOffsetX}px, ${canvasOffsetY}px) scale(${zoomLevel})`;
+            updateImageBoundary();
+        }
 
         // Prevent context menu on right click
         canvas.addEventListener('contextmenu', (e) => {
