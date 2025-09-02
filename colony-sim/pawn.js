@@ -16,6 +16,7 @@ class Pawn {
         this.task = null;
         this.speed = 0.05;
         this.inventory = []; // Array of {tag, quantity}
+        this.maxWeight = 50; // Maximum weight a pawn can carry
     }
 
     /**
@@ -146,14 +147,8 @@ class Pawn {
         // Harvest the resource
         const type = game.harvestResource(this.task.x, this.task.y);
         if (type) {
-            addToInventory(this.inventory, type, 1);
-
-            // If there's a storage area, keep the item in inventory for hauling
-            // Otherwise, drop it on the tile
-            if (!game.storageArea) {
-                game.droppedResources.push({ x: this.task.x, y: this.task.y, type: type });
-                removeFromInventory(this.inventory, type, 1);
-            }
+            // Always drop the item on the ground by default
+            game.droppedResources.push({ x: this.task.x, y: this.task.y, type: type });
 
             this.task.completed = true;
             this.task = null;
@@ -170,7 +165,7 @@ class Pawn {
      */
     performHaulTask(game) {
         const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
-        if (carryingType) {
+        if (carryingType && this.canCarryItem(game, carryingType)) {
             addToInventory(this.inventory, carryingType, 1);
             // Drop the item at the pawn's current location since there's no centralized storage
             game.droppedResources.push({ x: Math.floor(this.x), y: Math.floor(this.y), type: carryingType });
@@ -189,7 +184,7 @@ class Pawn {
      */
     performHaulToStorageTask(game) {
         const carryingType = game.pickupDroppedResource(this.task.x, this.task.y, false);
-        if (carryingType) {
+        if (carryingType && this.canCarryItem(game, carryingType)) {
             addToInventory(this.inventory, carryingType, 1);
 
             // Find a storage location to drop the item
@@ -224,14 +219,8 @@ class Pawn {
         // Mine stone terrain
         if (game.map[this.task.y][this.task.x] === 'stone') {
             game.map[this.task.y][this.task.x] = 'dirt';
-            addToInventory(this.inventory, 'stone', 1);
-
-            // If there's a storage area, keep the item in inventory for hauling
-            // Otherwise, drop it on the tile
-            if (!game.storageArea) {
-                game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'stone' });
-                removeFromInventory(this.inventory, 'stone', 1);
-            }
+            // Always drop the stone on the ground by default
+            game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'stone' });
 
             this.task.completed = true;
             this.task = null;
@@ -250,20 +239,39 @@ class Pawn {
         // Harvest mature plant
         const plant = game.plants.find(p => p.x === this.task.x && p.y === this.task.y);
         if (plant && plant.isMature()) {
-            addToInventory(this.inventory, 'food', 1);
-
-            // If there's a storage area, keep the food in inventory for hauling
-            // Otherwise, drop it on the tile
-            if (!game.storageArea) {
-                game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'food' });
-                removeFromInventory(this.inventory, 'food', 1);
-            }
+            // Always drop the food on the ground by default
+            game.droppedResources.push({ x: this.task.x, y: this.task.y, type: 'food' });
 
             game.plants.splice(game.plants.indexOf(plant), 1);
             game.updateUI();
         }
         this.task.completed = true;
         this.task = null;
+    }
+
+    /**
+     * Calculate the current weight of the pawn's inventory
+     * @param {Game} game - Reference to the game instance
+     * @returns {number} - Current total weight
+     */
+    getCurrentWeight(game) {
+        let totalWeight = 0;
+        for (const item of this.inventory) {
+            const itemWeight = game.itemLookup[item.tag]?.weight || 1;
+            totalWeight += itemWeight * item.quantity;
+        }
+        return totalWeight;
+    }
+
+    /**
+     * Check if the pawn can carry an additional item
+     * @param {Game} game - Reference to the game instance
+     * @param {string} itemType - The type of item to check
+     * @returns {boolean} - Whether the pawn can carry the item
+     */
+    canCarryItem(game, itemType) {
+        const itemWeight = game.itemLookup[itemType]?.weight || 1;
+        return this.getCurrentWeight(game) + itemWeight <= this.maxWeight;
     }
 
     /**
@@ -274,15 +282,17 @@ class Pawn {
     findImplicitHaulingTask(game) {
         if (!game.storageArea) return null;
 
-        // Find the nearest dropped resource
+        // Find the nearest dropped resource that we can carry
         let nearestResource = null;
         let minDistance = Infinity;
 
         for (const resource of game.droppedResources) {
-            const distance = calculateDistance(this.x, this.y, resource.x, resource.y);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestResource = resource;
+            if (this.canCarryItem(game, resource.type)) {
+                const distance = calculateDistance(this.x, this.y, resource.x, resource.y);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestResource = resource;
+                }
             }
         }
 

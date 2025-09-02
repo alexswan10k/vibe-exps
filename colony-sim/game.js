@@ -561,17 +561,17 @@ class Game {
                 // Add a border to show it's queued
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(screenX + 2 * this.zoom, screenY + 2 * this.zoom, tileSizeZoomed - 4 * this.zoom, tileSizeZoomed - 4 * this.zoom);
+                this.ctx.strokeRect(screenX + 6 * this.zoom, screenY + 6 * this.zoom, tileSizeZoomed - 12 * this.zoom, tileSizeZoomed - 12 * this.zoom);
                 // Draw appropriate icon
                 if (resource.type === 'tree') {
-                    this.drawChopIcon(screenX + 2 * this.zoom, screenY + 20 * this.zoom);
+                    this.drawChopIcon(screenX + 6 * this.zoom, screenY + 20 * this.zoom);
                 } else {
-                    this.drawMineIcon(screenX + 2 * this.zoom, screenY + 20 * this.zoom);
+                    this.drawMineIcon(screenX + 6 * this.zoom, screenY + 20 * this.zoom);
                 }
             }
 
             this.ctx.fillStyle = baseColor;
-            this.ctx.fillRect(screenX + 4 * this.zoom, screenY + 4 * this.zoom, tileSizeZoomed - 8 * this.zoom, tileSizeZoomed - 8 * this.zoom);
+            this.ctx.fillRect(screenX + 8 * this.zoom, screenY + 8 * this.zoom, tileSizeZoomed - 16 * this.zoom, tileSizeZoomed - 16 * this.zoom);
         }
 
         // Render dropped resources
@@ -594,13 +594,13 @@ class Game {
                 // Add a border to show it's queued
                 this.ctx.strokeStyle = '#f1c40f';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(screenX + 6 * this.zoom, screenY + 6 * this.zoom, tileSizeZoomed - 12 * this.zoom, tileSizeZoomed - 12 * this.zoom);
+                this.ctx.strokeRect(screenX + 10 * this.zoom, screenY + 10 * this.zoom, tileSizeZoomed - 20 * this.zoom, tileSizeZoomed - 20 * this.zoom);
                 // Draw haul icon
-                this.drawHaulIcon(screenX + 6 * this.zoom, screenY + 20 * this.zoom);
+                this.drawHaulIcon(screenX + 10 * this.zoom, screenY + 20 * this.zoom);
             }
 
             this.ctx.fillStyle = baseColor;
-            this.ctx.fillRect(screenX + 8 * this.zoom, screenY + 8 * this.zoom, tileSizeZoomed - 16 * this.zoom, tileSizeZoomed - 16 * this.zoom);
+            this.ctx.fillRect(screenX + 12 * this.zoom, screenY + 12 * this.zoom, tileSizeZoomed - 24 * this.zoom, tileSizeZoomed - 24 * this.zoom);
         }
 
         // Render plants
@@ -775,8 +775,9 @@ class Game {
                 pawnList.appendChild(pawnItem);
             }
             const pawn = this.pawns[i];
+            const currentWeight = pawn.getCurrentWeight(this);
             const taskText = pawn.task ? ` - Task: ${pawn.task.type} (${pawn.task.x}, ${pawn.task.y})` : ' - Idle';
-            pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}${taskText}`;
+            pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}, Weight: ${currentWeight}/${pawn.maxWeight}${taskText}`;
             pawnItem.dataset.pawnIndex = i;
         }
         for (let i = this.pawns.length; i < existingItems.length; i++) {
@@ -876,7 +877,8 @@ class Game {
         if (this.hoveredTile) {
             const { x, y } = this.hoveredTile;
             const droppedResourcesOnTile = this.droppedResources.filter(r => r.x === x && r.y === y);
-            tileInventoryDiv.innerHTML = `<h3>Tile (${x}, ${y})</h3>`;
+            const tileType = this.map[y][x];
+            tileInventoryDiv.innerHTML = `<h3>Tile (${x}, ${y}) - ${tileType}</h3>`;
             if (droppedResourcesOnTile.length === 0) {
                 tileInventoryDiv.innerHTML += '<div class="resource-item">Empty</div>';
             } else {
