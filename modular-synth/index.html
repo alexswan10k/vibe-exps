@@ -359,17 +359,21 @@ const MODULE_TEMPLATES = {
     mixer: createModuleTemplate(
         'mixer',
         'Mixer',
-        160,
-        140,
+        200,
+        180,
         [
-            { name: 'In 1', type: 'input', x: -5, y: 40 },
-            { name: 'In 2', type: 'input', x: -5, y: 80 },
-            { name: 'Out', type: 'output', x: 155, y: 60 }
+            { name: 'In 1', type: 'input', x: -5, y: 35 },
+            { name: 'In 2', type: 'input', x: -5, y: 65 },
+            { name: 'In 3', type: 'input', x: -5, y: 95 },
+            { name: 'In 4', type: 'input', x: -5, y: 125 },
+            { name: 'Out', type: 'output', x: 195, y: 80 }
         ],
         [
-            { name: 'Level 1', type: 'potentiometer', x: 30, y: 30 },
-            { name: 'Level 2', type: 'potentiometer', x: 30, y: 70 },
-            { name: 'Master', type: 'potentiometer', x: 100, y: 50 }
+            { name: 'Level 1', type: 'potentiometer', x: 30, y: 25 },
+            { name: 'Level 2', type: 'potentiometer', x: 30, y: 55 },
+            { name: 'Level 3', type: 'potentiometer', x: 30, y: 85 },
+            { name: 'Level 4', type: 'potentiometer', x: 30, y: 115 },
+            { name: 'Master', type: 'potentiometer', x: 130, y: 70 }
         ]
     )
 };
@@ -498,21 +502,29 @@ class AudioEngine {
                 return filter;
 
             case 'mixer':
-                // Create mixer with two input channels and master output
+                // Create mixer with four input channels and master output
                 const mixerInput1 = this.audioContext.createGain();
                 const mixerInput2 = this.audioContext.createGain();
+                const mixerInput3 = this.audioContext.createGain();
+                const mixerInput4 = this.audioContext.createGain();
                 const mixerMaster = this.audioContext.createGain();
 
                 mixerInput1.gain.value = 0.5; // Default level 1
                 mixerInput2.gain.value = 0.5; // Default level 2
+                mixerInput3.gain.value = 0.5; // Default level 3
+                mixerInput4.gain.value = 0.5; // Default level 4
                 mixerMaster.gain.value = 0.5; // Default master
 
                 mixerInput1.connect(mixerMaster);
                 mixerInput2.connect(mixerMaster);
+                mixerInput3.connect(mixerMaster);
+                mixerInput4.connect(mixerMaster);
 
                 // Store references for updating
                 this.audioNodes.set(`${module.id}-input1`, mixerInput1);
                 this.audioNodes.set(`${module.id}-input2`, mixerInput2);
+                this.audioNodes.set(`${module.id}-input3`, mixerInput3);
+                this.audioNodes.set(`${module.id}-input4`, mixerInput4);
                 this.gainNodes.set(module.id, mixerMaster);
 
                 return mixerMaster;
@@ -603,10 +615,14 @@ class AudioEngine {
                 // Update mixer input levels and master
                 const mixerInput1 = this.audioNodes.get(`${module.id}-input1`);
                 const mixerInput2 = this.audioNodes.get(`${module.id}-input2`);
+                const mixerInput3 = this.audioNodes.get(`${module.id}-input3`);
+                const mixerInput4 = this.audioNodes.get(`${module.id}-input4`);
                 const mixerMaster = this.gainNodes.get(module.id);
 
                 const level1Control = module.controls.find(c => c.name === 'Level 1');
                 const level2Control = module.controls.find(c => c.name === 'Level 2');
+                const level3Control = module.controls.find(c => c.name === 'Level 3');
+                const level4Control = module.controls.find(c => c.name === 'Level 4');
                 const masterControl = module.controls.find(c => c.name === 'Master');
 
                 if (mixerInput1 && level1Control) {
@@ -614,6 +630,12 @@ class AudioEngine {
                 }
                 if (mixerInput2 && level2Control) {
                     mixerInput2.gain.value = level2Control.value;
+                }
+                if (mixerInput3 && level3Control) {
+                    mixerInput3.gain.value = level3Control.value;
+                }
+                if (mixerInput4 && level4Control) {
+                    mixerInput4.gain.value = level4Control.value;
                 }
                 if (mixerMaster && masterControl) {
                     mixerMaster.gain.value = masterControl.value;
@@ -682,6 +704,10 @@ class AudioEngine {
                         toNode = this.audioNodes.get(`${toModule.id}-input1`);
                     } else if (toPatchPoint.name === 'In 2') {
                         toNode = this.audioNodes.get(`${toModule.id}-input2`);
+                    } else if (toPatchPoint.name === 'In 3') {
+                        toNode = this.audioNodes.get(`${toModule.id}-input3`);
+                    } else if (toPatchPoint.name === 'In 4') {
+                        toNode = this.audioNodes.get(`${toModule.id}-input4`);
                     }
                 }
                 // Fallback to master if patch point not found
