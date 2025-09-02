@@ -120,6 +120,8 @@
                 <select id="toolSelect">
                     <option value="draw">Draw</option>
                     <option value="crop">Crop</option>
+                    <option value="clone">Clone Stamp</option>
+                    <option value="blur">Blur</option>
                 </select>
             </div>
 
@@ -159,6 +161,8 @@
                 <li><strong>Paste Image:</strong> Click "Paste Image" button or simply press <kbd>Ctrl</kbd>+<kbd>V</kbd> to load an image from your clipboard</li>
                 <li><strong>Draw:</strong> Select "Draw" tool, then click and drag to paint on the image</li>
                 <li><strong>Crop:</strong> Select "Crop" tool, then click and drag to choose an area - crop applies automatically when you release</li>
+                <li><strong>Clone Stamp:</strong> Select "Clone Stamp" tool, right-click and drag to set the offset distance, then left-click to stamp pixels from the offset location</li>
+                <li><strong>Blur:</strong> Select "Blur" tool, then click and drag to blur pixels within the brush circle (brush size affects blur area)</li>
                 <li><strong>Adjust:</strong> Use color picker and brush size slider for drawing</li>
                 <li><strong>Rescale:</strong> Enter a percentage and click "Rescale" to change image size</li>
                 <li><strong>Zoom:</strong> Use the + and - buttons or mouse wheel to zoom in/out on the canvas</li>
@@ -203,6 +207,21 @@
         let dragStartY = 0;
         let canvasOffsetX = 0;
         let canvasOffsetY = 0;
+
+        // Clone stamp variables
+        let cloneOffsetX = 0;
+        let cloneOffsetY = 0;
+        let isSettingCloneOffset = false;
+        let cloneStartX = 0;
+        let cloneStartY = 0;
+
+        // Blur tool variables
+        let isBlurring = false;
+        let blurStartX = 0;
+        let blurStartY = 0;
+        let blurEndX = 0;
+        let blurEndY = 0;
+        let blurOverlay = null;
 
         // Update brush size display
         brushSize.addEventListener('input', () => {
@@ -307,6 +326,30 @@
             fitToViewport();
         });
 
+        // Function to create default canvas
+        function createDefaultCanvas() {
+            const defaultWidth = 800;
+            const defaultHeight = 600;
+
+            // Create a white background
+            canvas.width = defaultWidth;
+            canvas.height = defaultHeight;
+            ghostCanvas.width = defaultWidth;
+            ghostCanvas.height = defaultHeight;
+
+            // Fill with white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, defaultWidth, defaultHeight);
+
+            // Create a simple placeholder image
+            originalImage = new Image();
+            originalImage.width = defaultWidth;
+            originalImage.height = defaultHeight;
+
+            fitToViewport();
+            saveBtn.disabled = false;
+        }
+
         // Function to load image from blob
         function loadImageFromBlob(blob) {
             const img = new Image();
@@ -375,6 +418,10 @@
                 draw(e);
             } else if (toolSelect.value === 'crop') {
                 startCrop(e);
+            } else if (toolSelect.value === 'clone') {
+                handleCloneClick(e);
+            } else if (toolSelect.value === 'blur') {
+                startBlur(e);
             }
         });
 
@@ -404,6 +451,33 @@
                 ghostCtx.strokeStyle = 'rgba(0,0,0,0.5)';
                 ghostCtx.lineWidth = 1;
                 ghostCtx.stroke();
+            } else if (toolSelect.value === 'clone' && isSettingCloneOffset) {
+                // Update clone offset while right-click dragging
+                cloneOffsetX = x - cloneStartX;
+                cloneOffsetY = y - cloneStartY;
+
+                // Show preview on ghost canvas
+                ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+                ghostCtx.beginPath();
+                ghostCtx.arc(x, y, brushSize.value / 2, 0, 2 * Math.PI);
+                ghostCtx.strokeStyle = 'rgba(255,0,0,0.8)';
+                ghostCtx.lineWidth = 2;
+                ghostCtx.stroke();
+
+                // Draw line from start to current position
+                ghostCtx.beginPath();
+                ghostCtx.moveTo(cloneStartX, cloneStartY);
+                ghostCtx.lineTo(x, y);
+                ghostCtx.strokeStyle = 'rgba(255,0,0,0.5)';
+                ghostCtx.lineWidth = 1;
+                ghostCtx.stroke();
+            } else if (toolSelect.value === 'blur') {
+                ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+                ghostCtx.beginPath();
+                ghostCtx.arc(x, y, brushSize.value / 2, 0, 2 * Math.PI);
+                ghostCtx.strokeStyle = 'rgba(255,107,107,0.8)';
+                ghostCtx.lineWidth = 2;
+                ghostCtx.stroke();
             } else {
                 ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
             }
@@ -412,15 +486,23 @@
                 draw(e);
             } else if (isCropping && toolSelect.value === 'crop') {
                 updateCrop(e);
+            } else if (isBlurring && toolSelect.value === 'blur') {
+                applyBrushBlur(e);
             }
         });
 
-        canvas.addEventListener('mouseup', () => {
+        canvas.addEventListener('mouseup', (e) => {
             if (toolSelect.value === 'draw') {
                 isDrawing = false;
                 ctx.beginPath();
             } else if (toolSelect.value === 'crop') {
                 endCrop();
+            } else if (toolSelect.value === 'clone' && e.button === 2) {
+                // Right click release - stop setting offset
+                isSettingCloneOffset = false;
+                ghostCtx.clearRect(0, 0, ghostCanvas.width, ghostCanvas.height);
+            } else if (toolSelect.value === 'blur') {
+                isBlurring = false;
             }
         });
 
@@ -634,6 +716,176 @@
         canvas.addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
+
+        // Initialize with default canvas
+        createDefaultCanvas();
+
+        // Clone stamp functionality
+        function handleCloneClick(e) {
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
+
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
+
+            const x = (mouseX - imageLeft) / zoomLevel;
+            const y = (mouseY - imageTop) / zoomLevel;
+
+            if (e.button === 2) { // Right click - start setting offset
+                e.preventDefault();
+                isSettingCloneOffset = true;
+                cloneStartX = x;
+                cloneStartY = y;
+                cloneOffsetX = 0;
+                cloneOffsetY = 0;
+            } else if (e.button === 0) { // Left click - apply clone stamp
+                if (isSettingCloneOffset) {
+                    // Apply clone stamp using the current offset
+                    applyCloneStamp(x, y);
+                }
+            }
+        }
+
+        function applyCloneStamp(x, y) {
+            const sourceX = x - cloneOffsetX;
+            const sourceY = y - cloneOffsetY;
+
+            // Get the brush size for the clone stamp area
+            const stampSize = parseInt(brushSize.value);
+
+            // Calculate the source area bounds
+            const sourceStartX = Math.floor(sourceX - stampSize / 2);
+            const sourceStartY = Math.floor(sourceY - stampSize / 2);
+            const sourceEndX = sourceStartX + stampSize;
+            const sourceEndY = sourceStartY + stampSize;
+
+            // Calculate the destination area bounds
+            const destStartX = Math.floor(x - stampSize / 2);
+            const destStartY = Math.floor(y - stampSize / 2);
+            const destEndX = destStartX + stampSize;
+            const destEndY = destStartY + stampSize;
+
+            // Check if source area is completely outside canvas
+            if (sourceEndX <= 0 || sourceStartX >= canvas.width ||
+                sourceEndY <= 0 || sourceStartY >= canvas.height) {
+                console.log('Source area is outside canvas bounds');
+                return;
+            }
+
+            // Clamp source area to canvas bounds
+            const clampedSourceStartX = Math.max(0, sourceStartX);
+            const clampedSourceStartY = Math.max(0, sourceStartY);
+            const clampedSourceEndX = Math.min(canvas.width, sourceEndX);
+            const clampedSourceEndY = Math.min(canvas.height, sourceEndY);
+
+            // Calculate actual size of the area we can copy
+            const actualWidth = clampedSourceEndX - clampedSourceStartX;
+            const actualHeight = clampedSourceEndY - clampedSourceStartY;
+
+            if (actualWidth <= 0 || actualHeight <= 0) {
+                console.log('No valid area to copy');
+                return;
+            }
+
+            // Get the image data from the valid source area
+            const imageData = ctx.getImageData(clampedSourceStartX, clampedSourceStartY, actualWidth, actualHeight);
+
+            // Calculate where to place it in the destination
+            const destOffsetX = clampedSourceStartX - sourceStartX;
+            const destOffsetY = clampedSourceStartY - sourceStartY;
+
+            // Place the image data at the destination
+            ctx.putImageData(imageData, destStartX + destOffsetX, destStartY + destOffsetY);
+        }
+
+        // Blur tool functionality (brush-based)
+        function startBlur(e) {
+            isBlurring = true;
+            applyBrushBlur(e);
+        }
+
+        function applyBrushBlur(e) {
+            if (!isBlurring) return;
+
+            const containerRect = canvasContainer.getBoundingClientRect();
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
+
+            const canvasCenterX = containerRect.width / 2;
+            const canvasCenterY = containerRect.height / 2;
+            const imageLeft = canvasCenterX - (originalImage.width * zoomLevel) / 2 + canvasOffsetX;
+            const imageTop = canvasCenterY - (originalImage.height * zoomLevel) / 2 + canvasOffsetY;
+
+            const centerX = (mouseX - imageLeft) / zoomLevel;
+            const centerY = (mouseY - imageTop) / zoomLevel;
+
+            const brushRadius = parseInt(brushSize.value) / 2;
+            const blurRadius = 1; // Smaller blur radius for brush
+
+            // Calculate the area to blur (brush area + blur radius)
+            const blurAreaSize = brushRadius + blurRadius;
+            const startX = Math.max(0, Math.floor(centerX - blurAreaSize));
+            const startY = Math.max(0, Math.floor(centerY - blurAreaSize));
+            const endX = Math.min(canvas.width, Math.ceil(centerX + blurAreaSize));
+            const endY = Math.min(canvas.height, Math.ceil(centerY + blurAreaSize));
+
+            const width = endX - startX;
+            const height = endY - startY;
+
+            if (width <= 0 || height <= 0) return;
+
+            const imageData = ctx.getImageData(startX, startY, width, height);
+            const data = imageData.data;
+            const blurredData = new Uint8ClampedArray(data);
+
+            // Apply blur only to pixels within the brush circle
+            for (let i = 0; i < height; i++) {
+                for (let j = 0; j < width; j++) {
+                    const pixelX = startX + j;
+                    const pixelY = startY + i;
+
+                    // Check if pixel is within brush circle
+                    const distanceFromCenter = Math.sqrt(
+                        (pixelX - centerX) * (pixelX - centerX) +
+                        (pixelY - centerY) * (pixelY - centerY)
+                    );
+
+                    if (distanceFromCenter <= brushRadius) {
+                        let r = 0, g = 0, b = 0, a = 0;
+                        let count = 0;
+
+                        // Apply blur to this pixel
+                        for (let di = -blurRadius; di <= blurRadius; di++) {
+                            for (let dj = -blurRadius; dj <= blurRadius; dj++) {
+                                const ni = i + di;
+                                const nj = j + dj;
+
+                                if (ni >= 0 && ni < height && nj >= 0 && nj < width) {
+                                    const index = (ni * width + nj) * 4;
+                                    r += data[index];
+                                    g += data[index + 1];
+                                    b += data[index + 2];
+                                    a += data[index + 3];
+                                    count++;
+                                }
+                            }
+                        }
+
+                        const index = (i * width + j) * 4;
+                        blurredData[index] = r / count;
+                        blurredData[index + 1] = g / count;
+                        blurredData[index + 2] = b / count;
+                        blurredData[index + 3] = a / count;
+                    }
+                }
+            }
+
+            const blurredImageData = new ImageData(blurredData, width, height);
+            ctx.putImageData(blurredImageData, startX, startY);
+        }
     </script>
 </body>
 </html>
