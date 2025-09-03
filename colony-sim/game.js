@@ -29,6 +29,8 @@ class Game {
         this.isSelectingArea = false;
         this.selectionStart = null;
         this.currentTaskType = null;
+        this.modeIndicator = document.getElementById('mode-indicator');
+        this.cancelHint = document.getElementById('cancel-hint');
 
         // Central item lookup
         this.itemLookup = {
@@ -138,6 +140,7 @@ class Game {
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
+        this.canvas.addEventListener('contextmenu', (e) => this.handleRightClick(e));
 
         document.getElementById('chop-trees').addEventListener('click', () => {
             this.setTaskMode('chop');
@@ -159,12 +162,16 @@ class Game {
             this.buildMode = 'wall';
             this.currentTaskType = null;
             this.canvas.style.cursor = 'crosshair';
+            this.updateModeIndicator();
+            this.updateButtonStates();
         });
 
         document.getElementById('build-table').addEventListener('click', () => {
             this.buildMode = 'table';
             this.currentTaskType = null;
             this.canvas.style.cursor = 'crosshair';
+            this.updateModeIndicator();
+            this.updateButtonStates();
         });
 
         document.getElementById('build-storage').addEventListener('click', () => {
@@ -192,12 +199,16 @@ class Game {
         this.currentTaskType = taskType;
         this.buildMode = null;
         this.canvas.style.cursor = 'crosshair';
+        this.updateModeIndicator();
+        this.updateButtonStates();
     }
 
     setStorageMode() {
         this.currentTaskType = 'storage';
         this.buildMode = null;
         this.canvas.style.cursor = 'crosshair';
+        this.updateModeIndicator();
+        this.updateButtonStates();
     }
 
 
@@ -234,16 +245,22 @@ class Game {
                 this.areaSelection = null;
                 this.currentTaskType = null;
                 this.canvas.style.cursor = 'default';
+                this.updateModeIndicator();
+                this.updateButtonStates();
             } else if (this.buildMode) {
                 this.buildInArea();
                 this.areaSelection = null;
                 this.buildMode = null;
                 this.canvas.style.cursor = 'default';
+                this.updateModeIndicator();
+                this.updateButtonStates();
             } else {
                 this.createTasksFromArea();
                 this.areaSelection = null;
                 this.currentTaskType = null;
                 this.canvas.style.cursor = 'default';
+                this.updateModeIndicator();
+                this.updateButtonStates();
             }
         }
     }
@@ -358,6 +375,119 @@ class Game {
             case 'd':
                 this.camera.x = Math.min((this.mapWidth * this.tileSize * this.zoom) - this.canvas.width, this.camera.x + moveSpeed);
                 break;
+            case 'Escape':
+                this.cancelSelection();
+                console.log('ESC key cancel triggered');
+                break;
+        }
+    }
+
+    handleRightClick(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.cancelSelection();
+        console.log('Right-click cancel triggered');
+    }
+
+    cancelSelection() {
+        if (this.isSelectingArea || this.currentTaskType || this.buildMode) {
+            this.isSelectingArea = false;
+            this.areaSelection = null;
+            this.selectionStart = null;
+            this.currentTaskType = null;
+            this.buildMode = null;
+            this.canvas.style.cursor = 'default';
+            this.updateModeIndicator();
+            this.updateButtonStates();
+        }
+    }
+
+    updateModeIndicator() {
+        if (!this.modeIndicator || !this.cancelHint) return;
+
+        if (this.currentTaskType || this.buildMode) {
+            let modeText = 'Mode: ';
+            let description = '';
+
+            if (this.currentTaskType) {
+                switch (this.currentTaskType) {
+                    case 'chop':
+                        modeText += 'Chop Trees';
+                        description = 'Click and drag to select trees to chop';
+                        break;
+                    case 'mine':
+                        modeText += 'Mine Iron';
+                        description = 'Click and drag to select iron deposits to mine';
+                        break;
+                    case 'mine_stone':
+                        modeText += 'Mine Stone';
+                        description = 'Click and drag to select stone tiles to mine';
+                        break;
+                    case 'harvest_plant':
+                        modeText += 'Harvest Plants';
+                        description = 'Click and drag to select mature plants to harvest';
+                        break;
+                    case 'storage':
+                        modeText += 'Set Storage Area';
+                        description = 'Click and drag to set the storage area for pawns';
+                        break;
+                }
+            } else if (this.buildMode) {
+                switch (this.buildMode) {
+                    case 'wall':
+                        modeText += 'Build Wall';
+                        description = 'Click and drag to select area for wall construction';
+                        break;
+                    case 'table':
+                        modeText += 'Build Crafting Table';
+                        description = 'Click and drag to select area for crafting table';
+                        break;
+                }
+            }
+
+            this.modeIndicator.querySelector('.mode-text').textContent = modeText;
+            this.modeIndicator.querySelector('.mode-description').textContent = description;
+            this.modeIndicator.classList.add('active');
+            this.cancelHint.classList.add('active');
+        } else {
+            this.modeIndicator.classList.remove('active');
+            this.cancelHint.classList.remove('active');
+        }
+    }
+
+    updateButtonStates() {
+        // Reset all buttons
+        const buttons = document.querySelectorAll('#commands button');
+        buttons.forEach(button => button.classList.remove('active'));
+
+        // Highlight active button
+        if (this.currentTaskType) {
+            switch (this.currentTaskType) {
+                case 'chop':
+                    document.getElementById('chop-trees').classList.add('active');
+                    break;
+                case 'mine':
+                    document.getElementById('mine-iron').classList.add('active');
+                    break;
+                case 'mine_stone':
+                    document.getElementById('mine-stone').classList.add('active');
+                    break;
+                case 'harvest_plant':
+                    document.getElementById('harvest-plants').classList.add('active');
+                    break;
+                case 'storage':
+                    document.getElementById('build-storage').classList.add('active');
+                    break;
+            }
+        } else if (this.buildMode) {
+            switch (this.buildMode) {
+                case 'wall':
+                    document.getElementById('build-wall').classList.add('active');
+                    break;
+                case 'table':
+                    document.getElementById('build-table').classList.add('active');
+                    break;
+            }
         }
     }
 

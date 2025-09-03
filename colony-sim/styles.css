@@ -1,13 +1,11 @@
-* {
+/* Existing styles... */
+body {
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-}
-
-body {
     font-family: Arial, sans-serif;
     background-color: #2c3e50;
     color: #ecf0f1;
+    overflow: hidden;
 }
 
 #game-container {
@@ -18,40 +16,64 @@ body {
 #game-canvas {
     flex: 1;
     background-color: #34495e;
-    border: 2px solid #ecf0f1;
+    cursor: default;
 }
 
 #ui-panel {
-    width: 600px;
+    width: 400px;
     background-color: #34495e;
-    border-left: 2px solid #ecf0f1;
-    padding: 20px;
+    padding: 10px;
     overflow-y: auto;
-    display: flex;
-    gap: 20px;
+    border-left: 2px solid #3498db;
 }
 
 #left-column, #right-column {
-    flex: 1;
+    margin-bottom: 20px;
 }
 
-#ui-panel h3 {
-    margin-bottom: 10px;
+h3 {
     color: #3498db;
+    margin-top: 0;
+    margin-bottom: 10px;
 }
 
-#pawn-list, #resource-list, #crafted-list, #task-list {
-    margin-bottom: 20px;
+button {
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    margin: 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    width: 100%;
+    text-align: left;
 }
 
-#legend {
-    margin-bottom: 20px;
+button:hover {
+    background-color: #2980b9;
+}
+
+button:active {
+    background-color: #21618c;
+}
+
+button.active {
+    background-color: #e74c3c;
+    box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+}
+
+.resource-item {
+    background-color: #2c3e50;
+    padding: 5px;
+    margin: 2px 0;
+    border-radius: 3px;
+    border-left: 3px solid #3498db;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    margin-bottom: 5px;
+    margin: 5px 0;
 }
 
 .legend-color {
@@ -61,30 +83,81 @@ body {
     border: 1px solid #ecf0f1;
 }
 
-.pawn-item, .resource-item {
-    background-color: #2c3e50;
-    padding: 10px;
-    margin-bottom: 5px;
-    border-radius: 5px;
-}
-
-button {
-    display: block;
-    width: 100%;
-    padding: 10px;
-    margin-bottom: 10px;
-    background-color: #3498db;
-    color: #ecf0f1;
-    border: none;
-    border-radius: 5px;
+.pawn-item {
     cursor: pointer;
-    transition: background-color 0.3s;
+    padding: 5px;
+    margin: 2px 0;
+    background-color: #2c3e50;
+    border-radius: 3px;
+    border-left: 3px solid #f39c12;
 }
 
-button:hover {
-    background-color: #2980b9;
+.pawn-item:hover {
+    background-color: #34495e;
 }
 
-button:active {
-    background-color: #21618c;
+/* New styles for mode indicator */
+#mode-indicator {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(52, 73, 94, 0.9);
+    color: #ecf0f1;
+    padding: 10px 15px;
+    border-radius: 5px;
+    border: 2px solid #3498db;
+    font-weight: bold;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+#mode-indicator.active {
+    display: block;
+}
+
+#mode-indicator .mode-text {
+    font-size: 16px;
+}
+
+#mode-indicator .mode-description {
+    font-size: 12px;
+    color: #bdc3c7;
+    margin-top: 5px;
+}
+
+#cancel-hint {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    background-color: rgba(231, 76, 60, 0.9);
+    color: #ecf0f1;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 12px;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+#cancel-hint.active {
+    display: block;
+}
+
+/* Enhanced cursor styles */
+.selection-mode {
+    cursor: crosshair !important;
+}
+
+.selection-active {
+    cursor: copy !important;
+}
+
+/* Selection feedback */
+.selection-preview {
+    position: absolute;
+    border: 2px solid #f1c40f;
+    background-color: rgba(241, 196, 15, 0.2);
+    pointer-events: none;
+    z-index: 999;
 }
