@@ -90,6 +90,9 @@ button.active {
     background-color: #2c3e50;
     border-radius: 3px;
     border-left: 3px solid #f39c12;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
 }
 
 .pawn-item:hover {
@@ -160,4 +163,30 @@ button.active {
     background-color: rgba(241, 196, 15, 0.2);
     pointer-events: none;
     z-index: 999;
+}
+
+/* Task queue collapsible styles */
+.toggle-btn {
+    background: none;
+    border: none;
+    color: #3498db;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0;
+    margin-left: 10px;
+    width: auto;
+}
+
+.toggle-btn:hover {
+    color: #2980b9;
+}
+
+#task-queue h3 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+#task-list.collapsed {
+    display: none;
 }

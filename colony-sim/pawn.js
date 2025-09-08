@@ -17,6 +17,7 @@ class Pawn {
         this.speed = 0.05;
         this.inventory = []; // Array of {tag, quantity}
         this.maxWeight = 50; // Maximum weight a pawn can carry
+        this.taskCooldown = 0; // Frames to wait before implicit hauling after task completion
     }
 
     /**
@@ -24,6 +25,9 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     update(game) {
+        // Update cooldown
+        this.taskCooldown = Math.max(0, this.taskCooldown - 1);
+
         // Decrease needs over time
         this.hunger = Math.max(0, this.hunger - 0.1);
         this.sleep = Math.max(0, this.sleep - 0.05);
@@ -136,6 +140,7 @@ class Pawn {
             default:
                 this.task.completed = true;
                 this.task = null;
+                this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
 
@@ -155,15 +160,18 @@ class Pawn {
                 game.taskQueue.push({
                     x: this.task.x,
                     y: this.task.y,
-                    type: 'haul_to_storage'
+                    type: 'haul_to_storage',
+                    pickedUp: false
                 });
             }
 
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         } else {
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
 
@@ -172,7 +180,7 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performHaulTask(game) {
-        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, false);
+        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, true);
         if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
             const { type, quantity } = pickupResult;
             addToInventory(this.inventory, type, quantity);
@@ -181,9 +189,11 @@ class Pawn {
             removeFromInventory(this.inventory, type, quantity);
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         } else {
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
 
@@ -192,29 +202,44 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performHaulToStorageTask(game) {
-        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, false);
-        if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
-            const { type, quantity } = pickupResult;
-            addToInventory(this.inventory, type, quantity);
+        if (!this.task.pickedUp) {
+            // Pick up the resource
+            const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, true);
+            if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
+                const { type, quantity } = pickupResult;
+                addToInventory(this.inventory, type, quantity);
 
-            // Find a storage location to drop the item
-            const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
-            const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
-            const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
-            const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
+                // Find a storage location to move to
+                const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
+                const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
+                const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
+                const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
 
-            // Pick a random spot in the storage area
-            const dropX = storageStartX + Math.floor(Math.random() * (storageEndX - storageStartX + 1));
-            const dropY = storageStartY + Math.floor(Math.random() * (storageEndY - storageStartY + 1));
+                // Pick a random spot in the storage area
+                const dropX = storageStartX + Math.floor(Math.random() * (storageEndX - storageStartX + 1));
+                const dropY = storageStartY + Math.floor(Math.random() * (storageEndY - storageStartY + 1));
 
-            // Drop the item in storage
-            game.dropResource(dropX, dropY, type, quantity);
-            removeFromInventory(this.inventory, type, quantity);
-            this.task.completed = true;
-            this.task = null;
+                // Update task to move to storage location
+                this.task.x = dropX;
+                this.task.y = dropY;
+                this.task.pickedUp = true;
+            } else {
+                // Can't pick up, cancel task
+                this.task.completed = true;
+                this.task = null;
+                this.taskCooldown = 60;
+            }
         } else {
+            // Drop the resource in storage
+            // Find the resource in inventory (assuming we only carry one type at a time for simplicity)
+            if (this.inventory.length > 0) {
+                const item = this.inventory[0];
+                game.dropResource(Math.floor(this.x), Math.floor(this.y), item.tag, item.quantity);
+                removeFromInventory(this.inventory, item.tag, item.quantity);
+            }
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
 
@@ -231,20 +256,15 @@ class Pawn {
             // Drop the stone on the ground (will stack automatically)
             game.dropResource(this.task.x, this.task.y, type, 1);
 
-            // Create a hauling task for the stone if storage area exists
-            if (game.storageArea) {
-                game.taskQueue.push({
-                    x: this.task.x,
-                    y: this.task.y,
-                    type: 'haul_to_storage'
-                });
-            }
+            // Stone will be hauled implicitly by idle pawns, not automatically
 
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         } else {
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
 
@@ -264,15 +284,18 @@ class Pawn {
                 game.taskQueue.push({
                     x: this.task.x,
                     y: this.task.y,
-                    type: 'haul_to_storage'
+                    type: 'haul_to_storage',
+                    pickedUp: false
                 });
             }
 
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         } else {
             this.task.completed = true;
             this.task = null;
+            this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
 
@@ -307,7 +330,7 @@ class Pawn {
      * @returns {Task|null} - The hauling task to perform
      */
     findImplicitHaulingTask(game) {
-        if (!game.storageArea) return null;
+        if (!game.storageArea || this.taskCooldown > 0) return null;
 
         // Find the nearest dropped resource that we can carry
         let nearestResource = null;
@@ -339,7 +362,8 @@ class Pawn {
                     x: nearestResource.x,
                     y: nearestResource.y,
                     type: 'haul_to_storage',
-                    resource: nearestResource
+                    resource: nearestResource,
+                    pickedUp: false
                 };
             }
         }

@@ -1,119 +1,159 @@
-# Colony Simulator
+# Colony Simulation Game
 
-A real-time colony simulation game built with HTML5 Canvas and JavaScript. Manage a group of pawns as they gather resources, build structures, and develop their colony.
+A modular colony management simulation game built with vanilla JavaScript, featuring resource gathering, crafting, and pawn AI.
 
-## Features
+## 🏗️ Architecture
 
-### Core Gameplay
-- **Pawn Management**: Control multiple pawns with individual hunger, sleep, and inventory stats
-- **Resource Gathering**: Chop trees for wood, mine iron deposits, and harvest plants
-- **Building Construction**: Build walls, crafting tables, and storage areas
+This project uses a clean modular architecture with separation of concerns:
+
+### Core Files
+- **`types.js`** - JSDoc type definitions for better IDE support and documentation
+- **`utils.js`** - Utility functions for inventory management and common operations
+- **`entities.js`** - Game entity classes (Resource, Building, DroppedResource, Plant)
+
+### Manager Classes
+- **`input-manager.js`** - Handles all user input (mouse, keyboard, wheel events)
+- **`renderer.js`** - Manages all game rendering (map, resources, pawns, buildings)
+- **`ui-manager.js`** - Handles UI updates and DOM manipulation
+- **`task-manager.js`** - Manages task creation, assignment, and resource operations
+
+### Game Logic
+- **`pawn.js`** - Pawn class with AI behavior and inventory management
+- **`game.js`** - Main Game class that orchestrates all managers
+- **`main.js`** - Entry point that initializes the game
+
+## 🎮 Gameplay Features
+
+- **Resource Management**: Gather wood, iron, stone, and food
+- **Pawn AI**: Intelligent colonists that automatically perform tasks
+- **Building System**: Construct walls, crafting tables, and storage areas
 - **Crafting System**: Create food and tools from gathered resources
-- **Task Queue System**: Assign and manage tasks for efficient colony management
+- **Task Queue**: Assign and manage work for your pawns
+- **Real-time Updates**: Live UI showing pawn status, resources, and tasks
 
-### Terrain & Resources
-- **Dynamic Map**: Procedurally generated terrain with grass, dirt, and stone tiles
-- **Natural Resources**: Trees, iron deposits, and growing plants
-- **Visual Feedback**: Hover over tiles to see terrain type and dropped resources
-- **Sprite-based Rendering**: Custom terrain sprites for enhanced visuals
+## 🚀 Getting Started
 
-### User Interface
-- **Real-time UI**: Live updates of pawn status, task queues, and resource inventories
-- **Interactive Controls**: Click and drag to select areas for tasks
-- **Camera Controls**: WASD movement and mouse wheel zoom
-- **Detailed Information**: Hover over tiles to see contents and terrain type
+1. **Prerequisites**: Modern web browser with JavaScript enabled
+2. **Setup**: Open `index.html` in your browser
+3. **Controls**:
+   - **Mouse**: Click and drag to select areas for tasks
+   - **Keyboard**: WASD or arrow keys to move camera
+   - **Mouse Wheel**: Zoom in/out
+   - **ESC or Right-click**: Cancel current action
 
-## How to Play
+## 📁 File Structure
 
-### Getting Started
-1. Open `index.html` in your web browser
-2. The game starts with 3 pawns and a procedurally generated map
+```
+colony-sim/
+├── index.html          # Main HTML file
+├── styles.css          # Game styling
+├── terrain.png         # Sprite sheet for terrain
+├── types.js           # JSDoc type definitions
+├── utils.js           # Utility functions
+├── entities.js        # Game entity classes
+├── pawn.js            # Pawn AI and behavior
+├── input-manager.js   # Input handling system
+├── renderer.js        # Rendering system
+├── ui-manager.js      # UI management system
+├── task-manager.js    # Task and resource management
+├── game.js            # Main game orchestration
+├── main.js            # Application entry point
+└── README.md          # This file
+```
 
-### Basic Controls
-- **Movement**: WASD keys to move camera
-- **Zoom**: Mouse wheel to zoom in/out
-- **Task Selection**: Click buttons to select different tasks
-- **Area Selection**: Click and drag to select areas for tasks
+## 🔧 Technical Details
 
-### Available Tasks
-- **Chop Trees**: Select areas with trees to harvest wood
-- **Mine Iron**: Select areas with iron deposits to gather iron
-- **Mine Stone**: Select stone terrain to mine stone
-- **Harvest Plants**: Select areas with mature plants (green) to harvest
-- **Build Wall**: Select areas to build defensive walls
-- **Build Crafting Table**: Place crafting tables for item production
-- **Build Storage**: Designate storage areas for resource management
+### Modular Design Benefits
+- **Maintainability**: Each module has a single responsibility
+- **Testability**: Individual components can be tested in isolation
+- **Extensibility**: New features can be added without affecting existing code
+- **Readability**: Clear separation makes code easier to understand
+
+### JSDoc Type System
+All classes and methods include comprehensive JSDoc comments with type annotations for:
+- Better IDE autocomplete and error detection
+- Automatic documentation generation
+- Improved code maintainability
+
+### Game Loop
+The game runs on a continuous loop that:
+1. Updates game state (pawn AI, plant growth, task completion)
+2. Renders the game world
+3. Updates the user interface
+
+## 🎯 Game Mechanics
+
+### Pawns
+- Have hunger, sleep, and carrying capacity needs
+- Automatically find and complete tasks from the queue
+- Can carry limited weight of resources
+- Will eat food and rest when needs are critical
+
+### Resources
+- **Trees**: Provide wood when chopped
+- **Iron Deposits**: Provide iron when mined
+- **Stone Terrain**: Can be mined for stone
+- **Plants**: Grow over time and provide food when harvested
+
+### Tasks
+- **Chop Trees**: Select tree areas to harvest wood
+- **Mine Iron**: Select iron deposits to gather iron
+- **Mine Stone**: Select stone tiles to mine stone
+- **Harvest Plants**: Select mature plants to gather food
+- **Build Structures**: Construct walls, tables, and storage areas
 
 ### Crafting
-- **Food**: Craft from wood (1:1 ratio)
-- **Tools**: Craft from iron and wood (2:1 ratio)
+- **Food**: Requires 1 wood
+- **Tools**: Requires 2 iron + 1 wood
 
-### Pawn Management
-- Pawns have hunger and sleep needs that decrease over time
-- Each pawn has weight limits for carrying resources
-- Click on pawn names in the UI to focus camera on them
+## 🛠️ Development
 
-## Game Mechanics
+### Adding New Features
+1. Identify which manager should handle the new functionality
+2. Add the feature to the appropriate manager class
+3. Update the Game class if needed to integrate the new feature
+4. Add JSDoc type definitions for any new types
 
-### Resource System
-- Resources are dropped on tiles when harvested
-- Pawns automatically pick up nearby dropped resources
-- Storage areas help organize resource management
+### Code Style
+- Use JSDoc comments for all classes and public methods
+- Follow consistent naming conventions
+- Keep functions focused on single responsibilities
+- Use descriptive variable and function names
 
-### Task Priority
-- Tasks are queued and assigned to the nearest available pawn
-- Queued tasks show visual indicators on the map
-- Pawns work through tasks automatically
+## 📝 API Reference
 
-### Terrain Interaction
-- Different terrain types affect gameplay
-- Plants grow on grass tiles over time
-- Stone terrain can be mined for stone resources
+### Game Class
+Main orchestration class that manages the entire game.
 
-## Technical Details
+```javascript
+const game = new Game(config);
+```
 
-### Architecture
-- **Modular Design**: Separate files for game logic, entities, utilities, and UI
-- **Object-Oriented**: Classes for Game, Pawn, Resource, Building, and Plant entities
-- **Canvas Rendering**: Efficient tile-based rendering with zoom and camera support
+### Manager Classes
+Each manager handles a specific aspect of the game:
 
-### Files Structure
-- `index.html` - Main HTML file with UI layout
-- `game.js` - Core game logic and rendering
-- `pawn.js` - Pawn entity and AI behavior
-- `entities.js` - Resource, Building, and Plant classes
-- `types.js` - Type definitions and constants
-- `utils.js` - Utility functions and helper methods
-- `main.js` - Game initialization
-- `styles.css` - UI styling and layout
-- `terrain.png` - Sprite sheet for terrain tiles
+```javascript
+// Input handling
+game.inputManager.handleMouseDown(event);
 
-### Performance
-- Efficient rendering with viewport culling
-- Optimized game loop with requestAnimationFrame
-- Modular code structure for maintainability
+// Rendering
+game.renderer.render();
 
-## Browser Compatibility
+// UI updates
+game.uiManager.updateUI();
 
-Works in all modern browsers that support:
-- HTML5 Canvas
-- ES6 JavaScript features
-- CSS Grid and Flexbox
+// Task management
+game.taskManager.craftItem('food');
+```
 
-## Development
+## 🤝 Contributing
 
-The game was built iteratively using AI-assisted development tools, demonstrating the potential for rapid prototyping and iterative game development.
+When contributing to this project:
+1. Follow the existing modular structure
+2. Add JSDoc comments to new code
+3. Test changes thoroughly
+4. Update this README if adding new features
 
-## Future Enhancements
+## 📄 License
 
-Potential areas for expansion:
-- More building types
-- Advanced pawn AI behaviors
-- Multiplayer support
-- Save/load game states
-- Additional resources and crafting recipes
-- Weather and seasonal systems
-
-## License
-
-This project is part of the Vibe Experiments collection. Feel free to explore, modify, and learn from the codebase!
+This project is open source and available under the MIT License.
