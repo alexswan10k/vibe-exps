@@ -24,8 +24,14 @@
         <section id="peopleSection" class="section active">
             <h2>Manage People</h2>
             <form id="addPersonForm">
-                <input type="text" id="personName" placeholder="Person Name" required>
-                <input type="number" id="initialBalance" placeholder="Initial Balance" step="0.01" value="0">
+                <div>
+                    <label for="personName">Person Name:</label>
+                    <input type="text" id="personName" placeholder="Enter person's name" required>
+                </div>
+                <div>
+                    <label for="initialBalance">Initial Balance ($):</label>
+                    <input type="number" id="initialBalance" placeholder="0.00" step="0.01" value="0">
+                </div>
                 <button type="submit">Add Person</button>
             </form>
             <div id="peopleList"></div>
@@ -35,26 +41,44 @@
         <section id="expensesSection" class="section">
             <h2>Add Expense</h2>
             <form id="addExpenseForm">
-                <select id="expensePayee" required>
-                    <option value="">Select Payee</option>
-                </select>
-                <input type="number" id="expenseAmount" placeholder="Amount" step="0.01" required>
-                <input type="text" id="expenseDescription" placeholder="Description" required>
-                <input type="date" id="expenseDate" required>
-                <select id="expenseIcon">
-                    <option value="💡">💡 Utilities</option>
-                    <option value="🍽️">🍽️ Food</option>
-                    <option value="🚗">🚗 Transportation</option>
-                    <option value="🎬">🎬 Entertainment</option>
-                    <option value="🛒">🛒 Shopping</option>
-                    <option value="🏥">🏥 Medical</option>
-                    <option value="📦">📦 Other</option>
-                </select>
-                <select id="expenseTemplate">
-                    <option value="">Custom Split</option>
-                    <option value="equal">Equal Split</option>
-                    <option value="water">Water Bill (50/50)</option>
-                </select>
+                <div>
+                    <label for="expensePayee">Who Paid:</label>
+                    <select id="expensePayee" required>
+                        <option value="">Select Payee</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="expenseAmount">Amount ($):</label>
+                    <input type="number" id="expenseAmount" placeholder="0.00" step="0.01" required>
+                </div>
+                <div>
+                    <label for="expenseDescription">Description:</label>
+                    <input type="text" id="expenseDescription" placeholder="What was purchased?" required>
+                </div>
+                <div>
+                    <label for="expenseDate">Date:</label>
+                    <input type="date" id="expenseDate" required>
+                </div>
+                <div>
+                    <label for="expenseIcon">Category:</label>
+                    <select id="expenseIcon">
+                        <option value="💡">💡 Utilities</option>
+                        <option value="🍽️">🍽️ Food</option>
+                        <option value="🚗">🚗 Transportation</option>
+                        <option value="🎬">🎬 Entertainment</option>
+                        <option value="🛒">🛒 Shopping</option>
+                        <option value="🏥">🏥 Medical</option>
+                        <option value="📦">📦 Other</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="expenseTemplate">Split Method:</label>
+                    <select id="expenseTemplate">
+                        <option value="">Custom Split</option>
+                        <option value="equal">Equal Split</option>
+                        <option value="water">Water Bill (50/50)</option>
+                    </select>
+                </div>
                 <div id="splitInputs"></div>
                 <button type="submit">Add Expense</button>
             </form>
@@ -65,15 +89,30 @@
         <section id="paymentsSection" class="section">
             <h2>Make Payment</h2>
             <form id="addPaymentForm">
-                <select id="paymentFrom" required>
-                    <option value="">From</option>
-                </select>
-                <select id="paymentTo" required>
-                    <option value="">To</option>
-                </select>
-                <input type="number" id="paymentAmount" placeholder="Amount" step="0.01" required>
-                <input type="text" id="paymentDescription" placeholder="Description" required>
-                <input type="date" id="paymentDate" required>
+                <div>
+                    <label for="paymentFrom">From:</label>
+                    <select id="paymentFrom" required>
+                        <option value="">Select Person</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="paymentTo">To:</label>
+                    <select id="paymentTo" required>
+                        <option value="">Select Person</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="paymentAmount">Amount ($):</label>
+                    <input type="number" id="paymentAmount" placeholder="0.00" step="0.01" required>
+                </div>
+                <div>
+                    <label for="paymentDescription">Description:</label>
+                    <input type="text" id="paymentDescription" placeholder="Payment description" required>
+                </div>
+                <div>
+                    <label for="paymentDate">Date:</label>
+                    <input type="date" id="paymentDate" required>
+                </div>
                 <button type="submit">Make Payment</button>
             </form>
         </section>
@@ -88,18 +127,32 @@
         <section id="ledgerSection" class="section">
             <h2>Transaction Ledger</h2>
             <div id="ledgerFilters">
-                <select id="ledgerTypeFilter">
-                    <option value="">All Types</option>
-                    <option value="expense">Expenses</option>
-                    <option value="payment">Payments</option>
-                </select>
-                <select id="ledgerPersonFilter">
-                    <option value="">All People</option>
-                </select>
-                <input type="date" id="ledgerStartDate">
-                <input type="date" id="ledgerEndDate">
-                <button id="applyFilters">Apply Filters</button>
-                <button id="clearFilters">Clear Filters</button>
+                <div>
+                    <label for="ledgerTypeFilter">Transaction Type:</label>
+                    <select id="ledgerTypeFilter">
+                        <option value="">All Types</option>
+                        <option value="expense">Expenses</option>
+                        <option value="payment">Payments</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="ledgerPersonFilter">Person:</label>
+                    <select id="ledgerPersonFilter">
+                        <option value="">All People</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="ledgerStartDate">Start Date:</label>
+                    <input type="date" id="ledgerStartDate">
+                </div>
+                <div>
+                    <label for="ledgerEndDate">End Date:</label>
+                    <input type="date" id="ledgerEndDate">
+                </div>
+                <div>
+                    <button id="applyFilters">Apply Filters</button>
+                    <button id="clearFilters">Clear Filters</button>
+                </div>
             </div>
             <div id="ledgerList"></div>
             <div id="ledgerPagination">
@@ -113,7 +166,10 @@
         <section id="importExportSection" class="section">
             <h2>Import/Export Data</h2>
             <button id="exportData">Export to JSON</button>
-            <input type="file" id="importFile" accept=".json">
+            <div>
+                <label for="importFile">Import JSON File:</label>
+                <input type="file" id="importFile" accept=".json">
+            </div>
             <button id="importData">Import from JSON</button>
         </section>
     </main>
@@ -124,21 +180,36 @@
             <span class="close" onclick="document.getElementById('editExpenseModal').style.display='none'">&times;</span>
             <h2>Edit Expense</h2>
             <form id="editExpenseForm">
-                <select id="editExpensePayee" required>
-                    <option value="">Select Payee</option>
-                </select>
-                <input type="number" id="editExpenseAmount" placeholder="Amount" step="0.01" required>
-                <input type="text" id="editExpenseDescription" placeholder="Description" required>
-                <input type="date" id="editExpenseDate" required>
-                <select id="editExpenseIcon">
-                    <option value="💡">💡 Utilities</option>
-                    <option value="🍽️">🍽️ Food</option>
-                    <option value="🚗">🚗 Transportation</option>
-                    <option value="🎬">🎬 Entertainment</option>
-                    <option value="🛒">🛒 Shopping</option>
-                    <option value="🏥">🏥 Medical</option>
-                    <option value="📦">📦 Other</option>
-                </select>
+                <div>
+                    <label for="editExpensePayee">Who Paid:</label>
+                    <select id="editExpensePayee" required>
+                        <option value="">Select Payee</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="editExpenseAmount">Amount ($):</label>
+                    <input type="number" id="editExpenseAmount" placeholder="0.00" step="0.01" required>
+                </div>
+                <div>
+                    <label for="editExpenseDescription">Description:</label>
+                    <input type="text" id="editExpenseDescription" placeholder="What was purchased?" required>
+                </div>
+                <div>
+                    <label for="editExpenseDate">Date:</label>
+                    <input type="date" id="editExpenseDate" required>
+                </div>
+                <div>
+                    <label for="editExpenseIcon">Category:</label>
+                    <select id="editExpenseIcon">
+                        <option value="💡">💡 Utilities</option>
+                        <option value="🍽️">🍽️ Food</option>
+                        <option value="🚗">🚗 Transportation</option>
+                        <option value="🎬">🎬 Entertainment</option>
+                        <option value="🛒">🛒 Shopping</option>
+                        <option value="🏥">🏥 Medical</option>
+                        <option value="📦">📦 Other</option>
+                    </select>
+                </div>
                 <div id="editSplitInputs"></div>
                 <button type="submit">Update Expense</button>
             </form>
@@ -151,18 +222,30 @@
             <span class="close" onclick="document.getElementById('repeatExpenseModal').style.display='none'">&times;</span>
             <h2>Repeat Expense</h2>
             <form id="repeatExpenseForm">
-                <input type="number" id="repeatAmount" placeholder="Total Amount" step="0.01" required>
-                <input type="text" id="repeatDescription" placeholder="Description" required>
-                <input type="date" id="repeatDate" required>
-                <select id="repeatIcon">
-                    <option value="💡">💡 Utilities</option>
-                    <option value="🍽️">🍽️ Food</option>
-                    <option value="🚗">🚗 Transportation</option>
-                    <option value="🎬">🎬 Entertainment</option>
-                    <option value="🛒">🛒 Shopping</option>
-                    <option value="🏥">🏥 Medical</option>
-                    <option value="📦">📦 Other</option>
-                </select>
+                <div>
+                    <label for="repeatAmount">Total Amount ($):</label>
+                    <input type="number" id="repeatAmount" placeholder="0.00" step="0.01" required>
+                </div>
+                <div>
+                    <label for="repeatDescription">Description:</label>
+                    <input type="text" id="repeatDescription" placeholder="What was purchased?" required>
+                </div>
+                <div>
+                    <label for="repeatDate">Date:</label>
+                    <input type="date" id="repeatDate" required>
+                </div>
+                <div>
+                    <label for="repeatIcon">Category:</label>
+                    <select id="repeatIcon">
+                        <option value="💡">💡 Utilities</option>
+                        <option value="🍽️">🍽️ Food</option>
+                        <option value="🚗">🚗 Transportation</option>
+                        <option value="🎬">🎬 Entertainment</option>
+                        <option value="🛒">🛒 Shopping</option>
+                        <option value="🏥">🏥 Medical</option>
+                        <option value="📦">📦 Other</option>
+                    </select>
+                </div>
                 <p><em>Split proportions will be maintained from the original expense</em></p>
                 <button type="submit">Confirm & Add Expense</button>
             </form>
