@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Freelancer Time Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Freelancer Time Tracker</h1>
+
+        <div class="section">
+            <h2>Projects</h2>
+            <div class="project-form">
+                <input type="text" id="project-name" placeholder="Project name">
+                <button id="add-project">Add Project</button>
+            </div>
+            <ul id="projects-list"></ul>
+        </div>
+
+        <div class="section">
+            <h2>Log Time</h2>
+            <form id="time-entry-form">
+                <select id="project-select" required>
+                    <option value="">Select Project</option>
+                </select>
+                <input type="date" id="entry-date" required>
+                <input type="number" id="hours" step="0.25" min="0" placeholder="Hours" required>
+                <input type="text" id="description" placeholder="Description">
+                <button type="submit">Log Time</button>
+            </form>
+        </div>
+
+        <div class="section">
+            <h2>Time Entries</h2>
+            <div class="filters">
+                <select id="filter-project">
+                    <option value="">All Projects</option>
+                </select>
+                <input type="month" id="filter-month">
+                <button id="filter-btn">Filter</button>
+                <button id="clear-filter">Clear Filter</button>
+            </div>
+            <table id="entries-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Project</th>
+                        <th>Hours</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="entries-body"></tbody>
+            </table>
+            <div class="summary">
+                <p>Total Hours: <span id="total-hours">0</span></p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Data Management</h2>
+            <button id="export-csv">Export to CSV</button>
+            <input type="file" id="import-csv" accept=".csv">
+            <button id="import-btn">Import from CSV</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
