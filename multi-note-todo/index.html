@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Note Todo App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📝 Multi-Note Todo App</h1>
+            <button id="addNoteBtn" class="btn primary">Add New Note</button>
+        </header>
+
+        <div id="notesContainer" class="notes-container">
+            <!-- Notes will be dynamically added here -->
+        </div>
+    </div>
+
+    <!-- Modal for adding notes -->
+    <div id="noteModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Add New Note</h2>
+            <input type="text" id="noteTitle" placeholder="Enter note title..." maxlength="50">
+            <button id="saveNoteBtn" class="btn primary">Save Note</button>
+        </div>
+    </div>
+
+    <!-- Modal for adding todos -->
+    <div id="todoModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Add Todo to <span id="currentNoteTitle"></span></h2>
+            <input type="text" id="todoText" placeholder="Enter todo item..." maxlength="100">
+            <button id="saveTodoBtn" class="btn primary">Add Todo</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
