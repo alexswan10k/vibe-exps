@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Event</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Create Event</h1>
+    <form id="eventForm">
+      <div class="form-group">
+        <label for="title">Title:</label>
+        <input type="text" id="title" required>
+      </div>
+      <div class="form-group">
+        <label for="date">Date:</label>
+        <input type="date" id="date" required>
+      </div>
+      <div class="form-group">
+        <label for="time">Time:</label>
+        <input type="time" id="time">
+      </div>
+      <div class="form-group">
+        <label for="location">Location:</label>
+        <input type="text" id="location">
+      </div>
+      <div class="form-group">
+        <label for="description">Description:</label>
+        <textarea id="description"></textarea>
+      </div>
+      <button type="submit">Generate Link</button>
+      <button type="button" id="backBtn">Back</button>
+    </form>
+    <div id="linkDisplay" style="display: none;">
+      <p>Invitation Link:</p>
+      <input type="text" id="invitationLink" readonly>
+      <button id="copyBtn">Copy Link</button>
+    </div>
+    <div id="message"></div>
+  </div>
+  <script src="script.js"></script>
+  <script>
+    document.getElementById('eventForm').addEventListener('submit', handleCreateEvent);
+    document.getElementById('backBtn').addEventListener('click', () => {
+      window.location.href = 'index.html';
+    });
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      const linkInput = document.getElementById('invitationLink');
+      linkInput.select();
+      document.execCommand('copy');
+      showMessage('Link copied to clipboard!', 'success');
+    });
+  </script>
+</body>
+</html>
