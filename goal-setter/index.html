@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Goal Setter - Personal Goal Tracking</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 Goal Setter</h1>
+            <p>Track your personal goals and celebrate your progress!</p>
+        </header>
+
+        <div class="goal-form-section">
+            <h2>Add New Goal</h2>
+            <form id="goal-form">
+                <div class="form-group">
+                    <input type="text" id="goal-title" placeholder="Enter your goal..." required>
+                    <select id="goal-parent">
+                        <option value="">Top Level Goal</option>
+                    </select>
+                    <button type="submit" id="add-goal-btn">Add Goal</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Inline Add Sub-goal Modal -->
+        <div id="inline-add-modal" class="modal">
+            <div class="modal-content small-modal">
+                <div class="modal-header">
+                    <h3>Add Sub-goal</h3>
+                    <span class="close-modal" id="close-inline-add">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <input type="text" id="inline-subgoal-title" placeholder="Enter sub-goal title..." required>
+                    <div class="modal-actions">
+                        <button id="add-inline-subgoal-btn">Add Sub-goal</button>
+                        <button id="cancel-inline-add-btn">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="goals-section">
+            <div class="section-header">
+                <h2>Your Goals</h2>
+                <div class="stats">
+                    <span id="total-goals">0</span> goals •
+                    <span id="completed-goals">0</span> completed
+                </div>
+            </div>
+
+            <div id="goals-list" class="goals-list">
+                <!-- Goals will be dynamically added here -->
+            </div>
+        </div>
+
+        <div class="motivation-section">
+            <h3>💪 Keep Going!</h3>
+            <p>"The journey of a thousand miles begins with a single step." - Lao Tzu</p>
+        </div>
+    </div>
+
+    <!-- Goal Edit Modal -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edit Goal</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="edit-goal-title" placeholder="Goal title">
+                <div class="progress-controls">
+                    <label for="edit-progress">Progress:</label>
+                    <input type="number" id="edit-progress" min="0" max="100" value="0">
+                    <span>%</span>
+                </div>
+                <div class="modal-actions">
+                    <button id="save-edit-btn">Save Changes</button>
+                    <button id="cancel-edit-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- React from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <script src="script.js"></script>
+</body>
+</html>
