@@ -273,6 +273,64 @@ class NeuralNetwork {
         mutateMatrix(this.biasH);
         mutateMatrix(this.biasO);
     }
+
+    // Save neural network to localStorage
+    save(key) {
+        try {
+            const data = {
+                inputSize: this.inputSize,
+                hiddenSize: this.hiddenSize,
+                outputSize: this.outputSize,
+                weightsIH: this.weightsIH,
+                weightsHO: this.weightsHO,
+                biasH: this.biasH,
+                biasO: this.biasO,
+                learningRate: this.learningRate
+            };
+            localStorage.setItem(key, JSON.stringify(data));
+            console.log(`🧠 Neural network saved to localStorage: ${key}`);
+            return true;
+        } catch (error) {
+            console.error('Failed to save neural network:', error);
+            return false;
+        }
+    }
+
+    // Load neural network from localStorage
+    static load(key) {
+        try {
+            const data = JSON.parse(localStorage.getItem(key));
+            if (!data) {
+                console.log(`No saved neural network found for: ${key}`);
+                return null;
+            }
+
+            const network = new NeuralNetwork(data.inputSize, data.hiddenSize, data.outputSize);
+            network.weightsIH = data.weightsIH;
+            network.weightsHO = data.weightsHO;
+            network.biasH = data.biasH;
+            network.biasO = data.biasO;
+            network.learningRate = data.learningRate;
+
+            console.log(`🧠 Neural network loaded from localStorage: ${key}`);
+            return network;
+        } catch (error) {
+            console.error(`Failed to load neural network ${key}:`, error);
+            return null;
+        }
+    }
+
+    // Delete neural network from localStorage
+    static delete(key) {
+        try {
+            localStorage.removeItem(key);
+            console.log(`🧠 Neural network deleted from localStorage: ${key}`);
+            return true;
+        } catch (error) {
+            console.error('Failed to delete neural network:', error);
+            return false;
+        }
+    }
 }
 
 class Fish {
@@ -541,7 +599,11 @@ class Angelfish extends Fish {
 class SmartFish extends Fish {
     constructor(x, y, team = null) {
         super(x, y);
-        this.brain = new NeuralNetwork(14, 10, 4); // 14 inputs, 10 hidden, 4 outputs
+
+        // Try to load neural network from localStorage, fallback to new network
+        const storageKey = team ? `aquarium-${team}-brain` : 'aquarium-brain';
+        this.brain = NeuralNetwork.load(storageKey) || new NeuralNetwork(14, 10, 4);
+
         this.fitness = 0;
         this.lifetime = 0;
         this.lastDecision = [0, 0, 0, 0];
@@ -551,11 +613,22 @@ class SmartFish extends Fish {
         // Error tracking for visualization
         this.errorHistory = [];
         this.maxErrorHistory = 100; // Keep last 100 error values
+
+        // Auto-save timer
+        this.lastSaveTime = Date.now();
+        this.saveInterval = 30000; // Save every 30 seconds
     }
 
     update() {
         this.lifetime++;
         this.decisionCooldown--;
+
+        // Auto-save neural network periodically
+        if (Date.now() - this.lastSaveTime > this.saveInterval) {
+            const storageKey = this.team ? `aquarium-${this.team}-brain` : 'aquarium-brain';
+            this.brain.save(storageKey);
+            this.lastSaveTime = Date.now();
+        }
 
         // Update hunger
         this.hunger += 0.5;
@@ -1346,7 +1419,7 @@ function trainAdversarialFish(currentPreyCount, currentPredatorCount) {
         prey.brain.learningRate = learningRates.preySurvival;
         const error = prey.brain.train(prey.getSensoryInputs(), reward);
         prey.errorHistory.push(error);
-        if (prey.errorHistory.length > prey.maxErrorHistory) {
+        if (prey.errorHistory.length > prey.CamaxErrorHistory) {
             prey.errorHistory.shift();
         }
         addToTrainingLog('adversarial prey survival');
@@ -1841,6 +1914,64 @@ debugButton.addEventListener('click', () => {
     debugButton.textContent = showDebugWeights ? 'Hide Debug' : 'Debug Weights';
 });
 controlsDiv.appendChild(debugButton);
+
+// Add reset button
+const resetButton = document.createElement('button');
+resetButton.textContent = '🔄 Reset Everything';
+resetButton.style.backgroundColor = '#ff4444';
+resetButton.style.color = 'white';
+resetButton.addEventListener('click', () => {
+    if (confirm('This will delete all saved neural networks and reset the simulation. Are you sure?')) {
+        resetEverything();
+    }
+});
+controlsDiv.appendChild(resetButton);
+
+// Reset everything function
+function resetEverything() {
+    console.log('🔄 Resetting everything...');
+
+    // Clear all localStorage
+    try {
+        localStorage.clear();
+        console.log('🗑️ Cleared all localStorage data');
+    } catch (error) {
+        console.error('Failed to clear localStorage:', error);
+    }
+
+    // Reset global variables
+    fish = [];
+    bubbles = [];
+    plants = [];
+    trainingLog = [];
+    currentRound = 0;
+    predatorScore = 0;
+    preyScore = 0;
+    roundActive = false;
+    roundWinner = null;
+    gameTime = 0;
+
+    // Clear training data
+    trainingData = [];
+    currentTrainingExample = null;
+    trainingStep = 0;
+
+    // Reinitialize plants
+    for (let i = 0; i < 8; i++) {
+        plants.push(new Plant(Math.random() * canvas.width, canvas.height - Math.random() * 200 - 100));
+    }
+
+    // Update training log display
+    updateTrainingLogDisplay();
+
+    // Restart adversarial training
+    setTimeout(() => {
+        startAdversarialTraining();
+    }, 500);
+
+    addToTrainingLog('🔄 Everything reset - starting fresh!');
+    console.log('✅ Reset complete - starting fresh simulation');
+}
 
 // Initialize plants
 for (let i = 0; i < 8; i++) {
