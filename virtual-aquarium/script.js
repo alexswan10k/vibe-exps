@@ -5,7 +5,7 @@ let fish = [];
 let bubbles = [];
 let plants = [];
 let showNeuralNetwork = false;
-let showDebugWeights = false;
+let showDebugWeights = true; // Enable debug window by default
 let trainingMode = 'adversarial'; // Always adversarial for automatic gameplay
 let trainingData = [];
 let currentTrainingExample = null;
@@ -541,7 +541,7 @@ class Angelfish extends Fish {
 class SmartFish extends Fish {
     constructor(x, y, team = null) {
         super(x, y);
-        this.brain = new NeuralNetwork(6, 8, 4); // 6 inputs, 8 hidden, 4 outputs
+        this.brain = new NeuralNetwork(14, 10, 4); // 14 inputs, 10 hidden, 4 outputs
         this.fitness = 0;
         this.lifetime = 0;
         this.lastDecision = [0, 0, 0, 0];
@@ -622,14 +622,83 @@ class SmartFish extends Fish {
             }
         }
 
+        // Find nearest predator and prey
+        let nearestPredator = null;
+        let nearestPredatorDistance = Infinity;
+        let nearestPrey = null;
+        let nearestPreyDistance = Infinity;
+
+        for (const otherFish of fish) {
+            if (otherFish === this) continue;
+
+            const distance = Math.sqrt((this.x - otherFish.x) ** 2 + (this.y - otherFish.y) ** 2);
+
+            if (otherFish instanceof SmartFish) {
+                if (otherFish.team === 'predator' && distance < nearestPredatorDistance) {
+                    nearestPredatorDistance = distance;
+                    nearestPredator = otherFish;
+                }
+                if (otherFish.team === 'prey' && distance < nearestPreyDistance) {
+                    nearestPreyDistance = distance;
+                    nearestPrey = otherFish;
+                }
+            }
+        }
+
+        // Count nearby fish (within 100px) - teammates and enemies for social behavior
+        let nearbyFishCount = 0;
+        let nearbyTeammates = 0; // Same team fish (social cohesion)
+        let nearbyEnemies = 0;   // Opposite team fish (threat/opportunity awareness)
+
+        for (const otherFish of fish) {
+            if (otherFish === this) continue;
+
+            const distance = Math.sqrt((this.x - otherFish.x) ** 2 + (this.y - otherFish.y) ** 2);
+            if (distance < 100) {
+                nearbyFishCount++;
+
+                if (otherFish instanceof SmartFish) {
+                    if (otherFish.team === this.team) {
+                        nearbyTeammates++; // Allies nearby
+                    } else {
+                        nearbyEnemies++;   // Rivals nearby
+                    }
+                }
+            }
+        }
+
+        // Distance to boundaries
+        const distToLeft = this.x;
+        const distToRight = canvas.width - this.x;
+        const distToTop = this.y;
+        const distToBottom = canvas.height - this.y;
+        const minBoundaryDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+        // Current movement direction (normalized angle)
+        const currentAngle = Math.atan2(this.dy, this.dx) / (Math.PI * 2) + 0.5; // 0-1 range
+
+        // Time since last ate (normalized) - urgency indicator
+        const timeSinceAte = (Date.now() - this.lastAte) / 10000; // Normalize to reasonable scale
+
         // Sensory inputs (normalized to 0-1)
         const inputs = [
-            this.hunger / this.maxHunger, // Hunger level
-            this.energy / this.maxEnergy, // Energy level
-            nearestPlant ? Math.min(nearestDistance / 200, 1) : 1, // Distance to nearest plant
-            nearestPlant ? (nearestPlant.x - this.x) / canvas.width + 0.5 : 0.5, // Relative X position of plant
-            nearestPlant ? (nearestPlant.y - this.y) / canvas.height + 0.5 : 0.5, // Relative Y position of plant
-            Math.random() * 0.1 // Small random noise for exploration
+            this.hunger / this.maxHunger, // 0: Hunger level (primary drive)
+            this.energy / this.maxEnergy, // 1: Energy level (reproduction readiness)
+            nearestPlant ? Math.min(nearestDistance / 200, 1) : 1, // 2: Distance to nearest plant (food proximity)
+            nearestPlant ? (nearestPlant.x - this.x) / canvas.width + 0.5 : 0.5, // 3: Relative X position of plant
+            nearestPlant ? (nearestPlant.y - this.y) / canvas.height + 0.5 : 0.5, // 4: Relative Y position of plant
+
+            // Social and environmental awareness
+            nearestPredator ? Math.min(nearestPredatorDistance / 300, 1) : 1, // 5: Distance to nearest predator (threat level)
+            nearestPrey ? Math.min(nearestPreyDistance / 300, 1) : 1, // 6: Distance to nearest prey (hunting opportunity)
+            nearestPredator ? (Math.atan2(nearestPredator.y - this.y, nearestPredator.x - this.x) / (Math.PI * 2) + 0.5) : 0.5, // 7: Direction to predator
+            nearestPrey ? (Math.atan2(nearestPrey.y - this.y, nearestPrey.x - this.x) / (Math.PI * 2) + 0.5) : 0.5, // 8: Direction to prey
+            Math.min(nearbyFishCount / 10, 1), // 9: Number of nearby fish (crowding awareness)
+            Math.min(minBoundaryDist / 50, 1), // 10: Distance to nearest boundary (wall avoidance)
+            currentAngle, // 11: Current movement direction (momentum)
+            Math.min(timeSinceAte, 1), // 12: Time since last ate (feeding urgency)
+            Math.min(nearbyTeammates / 5, 1), // 13: Nearby teammates (social cohesion)
+            Math.min(nearbyEnemies / 5, 1) // 14: Nearby enemies (threat/opportunity awareness)
         ];
 
         return inputs;
@@ -727,21 +796,24 @@ class SmartFish extends Fish {
         const startX = this.x + 30;
         const startY = this.y - 40;
         const nodeRadius = 3;
+        const inputs = this.getSensoryInputs();
 
-        // Draw input layer (6 nodes)
-        for (let i = 0; i < 6; i++) {
-            const x = startX;
-            const y = startY + i * 8;
-            ctx.fillStyle = `rgb(${Math.floor(this.getSensoryInputs()[i] * 255)}, 100, 100)`;
+        // Draw input layer (14 nodes, arranged in two columns)
+        for (let i = 0; i < 14; i++) {
+            const col = i < 7 ? 0 : 1;
+            const row = i < 7 ? i : i - 7;
+            const x = startX + col * 8;
+            const y = startY + row * 6;
+            ctx.fillStyle = `rgb(${Math.floor(inputs[i] * 255)}, 100, 100)`;
             ctx.beginPath();
             ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Draw hidden layer (8 nodes)
-        for (let i = 0; i < 8; i++) {
-            const x = startX + 25;
-            const y = startY + i * 6;
+        // Draw hidden layer (10 nodes)
+        for (let i = 0; i < 10; i++) {
+            const x = startX + 35;
+            const y = startY + i * 5;
             ctx.fillStyle = `rgb(100, ${Math.floor(this.hiddenActivations[i] * 255)}, 100)`;
             ctx.beginPath();
             ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
@@ -750,7 +822,7 @@ class SmartFish extends Fish {
 
         // Draw output layer (4 nodes)
         for (let i = 0; i < 4; i++) {
-            const x = startX + 50;
+            const x = startX + 60;
             const y = startY + 10 + i * 8;
             ctx.fillStyle = `rgb(100, 100, ${Math.floor(this.lastDecision[i] * 255)})`;
             ctx.beginPath();
@@ -762,25 +834,30 @@ class SmartFish extends Fish {
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
         ctx.lineWidth = 1;
 
-        // Input to hidden connections
-        for (let i = 0; i < 6; i++) {
-            for (let j = 0; j < 8; j++) {
-                if (Math.random() < 0.3) { // Only draw some connections for clarity
+        // Input to hidden connections (sample only)
+        for (let i = 0; i < 14; i++) {
+            const inputCol = i < 7 ? 0 : 1;
+            const inputRow = i < 7 ? i : i - 7;
+            const inputX = startX + inputCol * 8;
+            const inputY = startY + inputRow * 6;
+
+            for (let j = 0; j < 10; j++) {
+                if (Math.random() < 0.15) { // Only draw some connections for clarity
                     ctx.beginPath();
-                    ctx.moveTo(startX, startY + i * 8);
-                    ctx.lineTo(startX + 25, startY + j * 6);
+                    ctx.moveTo(inputX, inputY);
+                    ctx.lineTo(startX + 35, startY + j * 5);
                     ctx.stroke();
                 }
             }
         }
 
         // Hidden to output connections
-        for (let i = 0; i < 8; i++) {
+        for (let i = 0; i < 10; i++) {
             for (let j = 0; j < 4; j++) {
-                if (Math.random() < 0.5) {
+                if (Math.random() < 0.4) {
                     ctx.beginPath();
-                    ctx.moveTo(startX + 25, startY + i * 6);
-                    ctx.lineTo(startX + 50, startY + 10 + j * 8);
+                    ctx.moveTo(startX + 35, startY + i * 5);
+                    ctx.lineTo(startX + 60, startY + 10 + j * 8);
                     ctx.stroke();
                 }
             }
@@ -1413,66 +1490,144 @@ function drawDebugWeights() {
     const preyFish = smartFish.filter(f => f.team === 'prey');
     const predatorFish = smartFish.filter(f => f.team === 'predator');
 
+    // Draw panels side by side, ensuring they fit within canvas
+    const panelWidth = 400;
+    const totalWidth = panelWidth * 2;
+    const startX = Math.max(0, (canvas.width - totalWidth) / 2);
+
     // Draw prey panel (left side)
     if (preyFish.length > 0) {
         const prey = preyFish[0];
-        drawBrainPanel(prey, canvas.width - 700, 10, 'Prey Brain', 'blue');
+        drawBrainPanel(prey, startX, 10, 'Prey Brain', 'blue');
     }
 
     // Draw predator panel (right side)
     if (predatorFish.length > 0) {
         const predator = predatorFish[0];
-        drawBrainPanel(predator, canvas.width - 350, 10, 'Predator Brain', 'red');
+        drawBrainPanel(predator, startX + panelWidth, 10, 'Predator Brain', 'red');
     }
 }
 
 function drawBrainPanel(fish, x, y, title, color) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-    ctx.fillRect(x, y, 340, 550);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
+    ctx.fillRect(x, y, 400, 750);
 
+    // Title
     ctx.fillStyle = color;
-    ctx.font = '16px Arial';
+    ctx.font = '18px Arial';
     ctx.fillText(title, x + 10, y + 25);
 
     // Draw weight matrices
     drawWeightMatrices(fish, x + 10, y + 40);
 
-    // Current inputs and outputs at bottom
-    let currentY = y + 480;
-    const lineHeight = 14;
+    // Visual Inputs and Outputs Section
+    let currentY = y + 370;
+    const barWidth = 150;
+    const barHeight = 12;
+    const barSpacing = 16; // Reduced spacing for more compact layout
 
+    // Inputs Section
     ctx.fillStyle = 'cyan';
-    ctx.font = '11px Arial';
-    ctx.fillText('Inputs:', x + 10, currentY);
-    currentY += lineHeight;
+    ctx.font = '14px Arial';
+    ctx.fillText('🧠 Neural Inputs:', x + 10, currentY);
+    currentY += 20;
 
-    ctx.fillStyle = 'white';
-    ctx.font = '9px Arial';
     const inputs = fish.getSensoryInputs();
-    const inputLabels = ['Hunger', 'Energy', 'Dist', 'RelX', 'RelY', 'Noise'];
+    const inputLabels = [
+        '🍽️ Hunger', '⚡ Energy', '🌱 Plant Dist', '📍 Plant X', '📍 Plant Y', '🎲 Noise',
+        '🦈 Pred Dist', '🐟 Prey Dist', '🧭 Pred Dir', '🧭 Prey Dir', '👥 Nearby Fish',
+        '🏗️ Boundary', '🌀 Move Dir', '⏰ Time Ate', '🤝 Teammates', '⚔️ Enemies'
+    ];
+
     for (let i = 0; i < inputs.length; i++) {
-        const inputColor = inputs[i] > 0.5 ? 'lightgreen' : inputs[i] < 0.3 ? 'pink' : 'yellow';
-        ctx.fillStyle = inputColor;
-        ctx.fillText(`${inputLabels[i]}: ${inputs[i].toFixed(2)}`, x + 10, currentY);
-        currentY += lineHeight;
+        const value = inputs[i];
+        const barX = x + 10;
+        const barY = currentY;
+
+        // Background bar
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // Value bar
+        const barColor = value > 0.7 ? '#00ff00' : value > 0.5 ? '#ffff00' : value > 0.3 ? '#ffa500' : '#ff4444';
+        ctx.fillStyle = barColor;
+        ctx.fillRect(barX, barY, barWidth * value, barHeight);
+
+        // Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+        // Label and value
+        ctx.fillStyle = 'white';
+        ctx.font = '10px Arial';
+        const label = inputLabels[i] || `Input${i}`;
+        ctx.fillText(label, barX + barWidth + 8, barY + 9);
+
+        ctx.fillStyle = barColor;
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText(value.toFixed(2), barX + barWidth * value - 20, barY + 9);
+
+        currentY += barSpacing;
     }
 
-    currentY += 8;
-    ctx.fillStyle = 'cyan';
-    ctx.font = '11px Arial';
-    ctx.fillText('Outputs:', x + 10, currentY);
-    currentY += lineHeight;
+    // Outputs Section
+    currentY += 10;
+    ctx.fillStyle = 'lime';
+    ctx.font = '14px Arial';
+    ctx.fillText('🎯 Neural Outputs:', x + 10, currentY);
+    currentY += 20;
+
+    const outputLabels = ['🏃 Move X', '🏃 Move Y', '🍴 Eat', '👶 Reproduce'];
+
+    for (let i = 0; i < fish.lastDecision.length; i++) {
+        const value = fish.lastDecision[i];
+        const barX = x + 10;
+        const barY = currentY;
+
+        // Background bar
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+
+        // Value bar
+        const barColor = value > 0.7 ? '#00ff00' : value > 0.5 ? '#ffff00' : value > 0.3 ? '#ffa500' : '#ff4444';
+        ctx.fillStyle = barColor;
+        ctx.fillRect(barX, barY, barWidth * value, barHeight);
+
+        // Border
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+        // Label and value
+        ctx.fillStyle = 'white';
+        ctx.font = '10px Arial';
+        ctx.fillText(outputLabels[i], barX + barWidth + 8, barY + 9);
+
+        ctx.fillStyle = barColor;
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText(value.toFixed(2), barX + barWidth * value - 20, barY + 9);
+
+        currentY += barSpacing;
+    }
+
+    // Decision Summary
+    currentY += 15;
+    ctx.fillStyle = 'yellow';
+    ctx.font = '12px Arial';
+    ctx.fillText('📊 Current Decision:', x + 10, currentY);
+    currentY += 18;
+
+    const [moveX, moveY, eat, reproduce] = fish.lastDecision;
+    const speed = 1 + moveX * 1.5;
+    const angle = (moveY - 0.5) * Math.PI * 2;
+    const direction = Math.round((angle * 180 / Math.PI + 360) % 360);
 
     ctx.fillStyle = 'white';
-    ctx.font = '9px Arial';
-    const outputLabels = ['MoveX', 'MoveY', 'Eat', 'Reprod'];
-    for (let i = 0; i < fish.lastDecision.length; i++) {
-        const outputValue = fish.lastDecision[i];
-        const outputColor = outputValue > 0.5 ? 'lightgreen' : outputValue < 0.3 ? 'pink' : 'yellow';
-        ctx.fillStyle = outputColor;
-        ctx.fillText(`${outputLabels[i]}: ${outputValue.toFixed(2)}`, x + 10, currentY);
-        currentY += lineHeight;
-    }
+    ctx.font = '10px Arial';
+    ctx.fillText(`Speed: ${speed.toFixed(1)} | Direction: ${direction}°`, x + 10, currentY);
+    currentY += 14;
+    ctx.fillText(`Eat: ${eat > 0.5 ? 'YES' : 'NO'} | Reproduce: ${reproduce > 0.7 ? 'YES' : 'NO'}`, x + 10, currentY);
 }
 
 function drawWeightMatrices(fish, x, y) {
