@@ -330,9 +330,37 @@ function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, han
     );
 }
 
-function Inventory({ inventory, updateInventory }) {
+function Inventory({ inventory, updateInventory, recipes, calendar }) {
     const [newItem, setNewItem] = useState('');
     const [newQuantity, setNewQuantity] = useState(1);
+
+    const getAllIngredients = () => {
+        const ingredients = new Set();
+        recipes.forEach(recipe => {
+            if (recipe.ingredients) {
+                recipe.ingredients.forEach(ing => ingredients.add(ing.name));
+            }
+        });
+        return Array.from(ingredients);
+    };
+
+    const getRecipesUsingIngredient = (ingredient) => {
+        return recipes.filter(recipe => recipe.ingredients && recipe.ingredients.some(ing => ing.name === ingredient));
+    };
+
+    const allIngredients = getAllIngredients();
+    const neededIngredients = new Set();
+    Object.values(calendar).forEach(recipeId => {
+        if (recipeId) {
+            const recipe = recipes.find(r => r.id == recipeId);
+            if (recipe && recipe.ingredients) {
+                recipe.ingredients.forEach(ing => neededIngredients.add(ing.name));
+            }
+        }
+    });
+    const inventoryItemsWithStock = Object.keys(inventory).filter(item => (inventory[item] || 0) > 0);
+    const missingNeededItems = Array.from(neededIngredients).filter(item => (inventory[item] || 0) === 0);
+    const allItems = [...new Set([...inventoryItemsWithStock, ...missingNeededItems])].sort();
 
     const handleAddItem = (e) => {
         e.preventDefault();
@@ -356,10 +384,6 @@ function Inventory({ inventory, updateInventory }) {
     };
 
     const handleRemoveItem = (item) => {
-        const updated = { ...inventory };
-        delete updated[item];
-        // Since we can't directly set inventory, we'll need to pass a function
-        // For now, setting to 0 will effectively remove it from calculations
         updateInventory(item, 0);
     };
 
@@ -381,31 +405,38 @@ function Inventory({ inventory, updateInventory }) {
             React.createElement('button', { type: 'submit' }, 'Add Item')
         ),
         React.createElement('ul', null,
-            Object.entries(inventory).map(([item, quantity]) =>
-                quantity > 0 && React.createElement('li', { key: item, className: 'inventory-item' },
+            allItems.map(item => {
+                const quantity = inventory[item] || 0;
+                const usingRecipes = getRecipesUsingIngredient(item);
+                const isMissing = quantity === 0;
+                const recipeText = usingRecipes.length > 0 ? `Used in: ${usingRecipes.map(r => r.name).join(', ')}` : 'Not used in any recipes';
+                return React.createElement('li', { key: item, className: `inventory-item ${isMissing ? 'missing-ingredient' : ''}` },
                     React.createElement('span', null, item),
-                    React.createElement('div', { className: 'quantity-controls' },
+                    React.createElement('div', { className: 'recipe-usage' }, recipeText),
+                    React.createElement('div', { className: 'inventory-controls' },
+                        React.createElement('div', { className: 'quantity-controls' },
+                            React.createElement('button', {
+                                onClick: () => handleDecrement(item, quantity),
+                                className: 'quantity-btn'
+                            }, '-'),
+                            React.createElement('input', {
+                                type: 'number',
+                                value: quantity,
+                                onChange: (e) => handleUpdateQuantity(item, e.target.value),
+                                min: '0',
+                                className: 'quantity-input'
+                            }),
+                            React.createElement('button', {
+                                onClick: () => handleIncrement(item, quantity),
+                                className: 'quantity-btn'
+                            }, '+')
+                        ),
                         React.createElement('button', {
-                            onClick: () => handleDecrement(item, quantity),
-                            className: 'quantity-btn'
-                        }, '-'),
-                        React.createElement('input', {
-                            type: 'number',
-                            value: quantity,
-                            onChange: (e) => handleUpdateQuantity(item, e.target.value),
-                            min: '0',
-                            className: 'quantity-input'
-                        }),
-                        React.createElement('button', {
-                            onClick: () => handleIncrement(item, quantity),
-                            className: 'quantity-btn'
-                        }, '+')
-                    ),
-                    React.createElement('button', {
-                        onClick: () => handleRemoveItem(item)
-                    }, 'Remove')
-                )
-            )
+                            onClick: () => handleRemoveItem(item)
+                        }, 'Remove')
+                    )
+                );
+            })
         )
     );
 }
@@ -853,7 +884,13 @@ function App() {
     };
 
     const updateInventory = (item, quantity) => {
-        setInventory({ ...inventory, [item]: quantity });
+        const newInv = { ...inventory };
+        if (quantity <= 0) {
+            delete newInv[item];
+        } else {
+            newInv[item] = quantity;
+        }
+        setInventory(newInv);
     };
 
     const toggleSelectShoppingItem = (item) => {
@@ -1095,7 +1132,9 @@ For the method, provide numbered steps that are easy to follow.`
             ),
             activeTab === 'inventory' && React.createElement(Inventory, {
                 inventory,
-                updateInventory
+                updateInventory,
+                recipes,
+                calendar
             }),
             activeTab === 'shopping' && React.createElement(ShoppingList, {
                 shoppingList,
