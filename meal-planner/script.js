@@ -345,7 +345,11 @@ function Inventory({ inventory, updateInventory, recipes, calendar }) {
     };
 
     const getRecipesUsingIngredient = (ingredient) => {
-        return recipes.filter(recipe => recipe.ingredients && recipe.ingredients.some(ing => ing.name === ingredient));
+        const allUsing = recipes.filter(recipe => recipe.ingredients && recipe.ingredients.some(ing => ing.name === ingredient));
+        const allocatedRecipeIds = new Set(Object.values(calendar).filter(id => id));
+        const allocated = allUsing.filter(recipe => allocatedRecipeIds.has(recipe.id));
+        const other = allUsing.filter(recipe => !allocatedRecipeIds.has(recipe.id));
+        return { allocated, other };
     };
 
     const allIngredients = getAllIngredients();
@@ -407,9 +411,19 @@ function Inventory({ inventory, updateInventory, recipes, calendar }) {
         React.createElement('ul', null,
             allItems.map(item => {
                 const quantity = inventory[item] || 0;
-                const usingRecipes = getRecipesUsingIngredient(item);
+                const { allocated, other } = getRecipesUsingIngredient(item);
                 const isMissing = quantity === 0;
-                const recipeText = usingRecipes.length > 0 ? `Used in: ${usingRecipes.map(r => r.name).join(', ')}` : 'Not used in any recipes';
+                let recipeText = '';
+                if (allocated.length > 0) {
+                    recipeText += `This week: ${allocated.map(r => r.name).join(', ')}`;
+                }
+                if (other.length > 0) {
+                    if (recipeText) recipeText += ' | ';
+                    recipeText += `Other recipes: ${other.map(r => r.name).join(', ')}`;
+                }
+                if (!recipeText) {
+                    recipeText = 'Not used in any recipes';
+                }
                 return React.createElement('li', { key: item, className: `inventory-item ${isMissing ? 'missing-ingredient' : ''}` },
                     React.createElement('span', null, item),
                     React.createElement('div', { className: 'recipe-usage' }, recipeText),
