@@ -7,6 +7,8 @@ function App() {
     const [selectedShoppingItems, setSelectedShoppingItems] = useState([]);
     const [showCookModal, setShowCookModal] = useState(false);
     const [cookingRecipe, setCookingRecipe] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingRecipe, setEditingRecipe] = useState(null);
     const [activeTab, setActiveTab] = useState('calendar');
     const [calendar, setCalendar] = useState({
         Monday: null,
@@ -191,6 +193,25 @@ function App() {
                 )
             )
         ),
+        showEditModal && editingRecipe && React.createElement('div', { className: 'modal-overlay' },
+            React.createElement('div', { className: 'modal edit-modal' },
+                React.createElement('h2', null, 'Edit Recipe'),
+                React.createElement(EditRecipeForm, {
+                    recipe: editingRecipe,
+                    inventory,
+                    recipes,
+                    onSave: (recipeData) => {
+                        updateRecipe(editingRecipe.id, recipeData);
+                        setShowEditModal(false);
+                        setEditingRecipe(null);
+                    },
+                    onCancel: () => {
+                        setShowEditModal(false);
+                        setEditingRecipe(null);
+                    }
+                })
+            )
+        ),
         React.createElement('div', { className: 'tabs' },
             React.createElement('button', {
                 className: (activeTab === 'calendar' || activeTab === 'recipes') ? 'tab active' : 'tab',
@@ -212,7 +233,11 @@ function App() {
                 inventory,
                 addRecipe,
                 updateRecipe,
-                deleteRecipe
+                deleteRecipe,
+                onEditRecipe: (recipe) => {
+                    setEditingRecipe(recipe);
+                    setShowEditModal(true);
+                }
             })
         ),
         activeTab === 'inventory' && React.createElement(Inventory, {
@@ -291,26 +316,8 @@ function IngredientDropdown({ value, suggestions, onChange, placeholder }) {
     );
 }
 
-function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe }) {
+function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe, onEditRecipe }) {
     const [newRecipe, setNewRecipe] = useState('');
-    const [editingRecipe, setEditingRecipe] = useState(null);
-    const [recipeForm, setRecipeForm] = useState({
-        name: '',
-        ingredients: []
-    });
-
-    // Get all known ingredients from recipes and inventory
-    const getAllIngredients = () => {
-        const recipeIngredients = new Set();
-        recipes.forEach(recipe => {
-            if (recipe.ingredients) {
-                recipe.ingredients.forEach(ing => {
-                    if (ing.name) recipeIngredients.add(ing.name);
-                });
-            }
-        });
-        return Array.from(recipeIngredients).concat(Object.keys(inventory)).filter((item, index, arr) => arr.indexOf(item) === index);
-    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -318,40 +325,6 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe 
             addRecipe({ name: newRecipe, ingredients: [] });
             setNewRecipe('');
         }
-    };
-
-    const handleEditRecipe = (recipe) => {
-        setEditingRecipe(recipe.id);
-        setRecipeForm({
-            name: recipe.name,
-            ingredients: recipe.ingredients || []
-        });
-    };
-
-    const handleSaveRecipe = () => {
-        updateRecipe(editingRecipe, recipeForm);
-        setEditingRecipe(null);
-        setRecipeForm({ name: '', ingredients: [] });
-    };
-
-    const addIngredient = () => {
-        setRecipeForm({
-            ...recipeForm,
-            ingredients: [...recipeForm.ingredients, { name: '', quantity: 1, unit: '' }]
-        });
-    };
-
-    const updateIngredient = (index, field, value) => {
-        const updatedIngredients = [...recipeForm.ingredients];
-        updatedIngredients[index][field] = value;
-        setRecipeForm({ ...recipeForm, ingredients: updatedIngredients });
-    };
-
-    const removeIngredient = (index) => {
-        setRecipeForm({
-            ...recipeForm,
-            ingredients: recipeForm.ingredients.filter((_, i) => i !== index)
-        });
     };
 
     return React.createElement('div', { className: 'recipe-list' },
@@ -370,69 +343,9 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe 
                 React.createElement(RecipeItem, {
                     key: recipe.id,
                     recipe,
-                    onEdit: handleEditRecipe,
+                    onEdit: onEditRecipe,
                     onDelete: deleteRecipe
                 })
-            )
-        ),
-        editingRecipe && React.createElement('div', { className: 'recipe-editor' },
-            React.createElement('h3', null, 'Edit Recipe'),
-            React.createElement('input', {
-                type: 'text',
-                value: recipeForm.name,
-                onChange: (e) => setRecipeForm({ ...recipeForm, name: e.target.value }),
-                onKeyDown: (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveRecipe();
-                    }
-                },
-                placeholder: 'Recipe name'
-            }),
-            React.createElement('h4', null, 'Ingredients'),
-            recipeForm.ingredients.map((ing, index) =>
-                React.createElement('div', { key: index, className: 'ingredient-row' },
-                    React.createElement(IngredientDropdown, {
-                        value: ing.name,
-                        suggestions: getAllIngredients(),
-                        onChange: (value) => updateIngredient(index, 'name', value),
-                        placeholder: 'Ingredient name'
-                    }),
-                    React.createElement('input', {
-                        type: 'number',
-                        value: ing.quantity,
-                        onChange: (e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0),
-                        placeholder: 'Quantity',
-                        onKeyDown: (e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveRecipe();
-                            }
-                        }
-                    }),
-                    React.createElement('input', {
-                        type: 'text',
-                        value: ing.unit,
-                        onChange: (e) => updateIngredient(index, 'unit', e.target.value),
-                        placeholder: 'Unit',
-                        onKeyDown: (e) => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveRecipe();
-                            }
-                        }
-                    }),
-                    React.createElement('button', {
-                        onClick: () => removeIngredient(index)
-                    }, 'Remove')
-                )
-            ),
-            React.createElement('button', { onClick: addIngredient }, 'Add Ingredient'),
-            React.createElement('div', null,
-                React.createElement('button', { onClick: handleSaveRecipe }, 'Save'),
-                React.createElement('button', {
-                    onClick: () => setEditingRecipe(null)
-                }, 'Cancel')
             )
         )
     );
@@ -499,8 +412,10 @@ function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleC
 
 function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, handleCook }) {
     const recipe = recipeId ? getRecipeById(recipeId) : null;
+    const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const isCurrentDay = day === currentDay;
     return React.createElement('div', {
-        className: 'day-slot',
+        className: `day-slot ${isCurrentDay ? 'current-day' : ''}`,
         onDrop: (e) => handleDrop(e, day),
         onDragOver: handleDragOver
     },
@@ -589,6 +504,94 @@ function Inventory({ inventory, updateInventory }) {
                     }, 'Remove')
                 )
             )
+        )
+    );
+}
+
+function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
+    const [recipeForm, setRecipeForm] = useState({
+        name: recipe.name,
+        ingredients: recipe.ingredients || []
+    });
+
+    // Get all known ingredients from recipes and inventory
+    const getAllIngredients = () => {
+        const recipeIngredients = new Set();
+        recipes.forEach(r => {
+            if (r.ingredients) {
+                r.ingredients.forEach(ing => {
+                    if (ing.name) recipeIngredients.add(ing.name);
+                });
+            }
+        });
+        return Array.from(recipeIngredients).concat(Object.keys(inventory)).filter((item, index, arr) => arr.indexOf(item) === index);
+    };
+
+    const handleSave = () => {
+        onSave(recipeForm);
+    };
+
+    const addIngredient = () => {
+        setRecipeForm({
+            ...recipeForm,
+            ingredients: [...recipeForm.ingredients, { name: '', quantity: 1, unit: '' }]
+        });
+    };
+
+    const updateIngredient = (index, field, value) => {
+        const updatedIngredients = [...recipeForm.ingredients];
+        updatedIngredients[index][field] = value;
+        setRecipeForm({ ...recipeForm, ingredients: updatedIngredients });
+    };
+
+    const removeIngredient = (index) => {
+        setRecipeForm({
+            ...recipeForm,
+            ingredients: recipeForm.ingredients.filter((_, i) => i !== index)
+        });
+    };
+
+    return React.createElement('div', { className: 'edit-recipe-form' },
+        React.createElement('input', {
+            type: 'text',
+            value: recipeForm.name,
+            onChange: (e) => setRecipeForm({ ...recipeForm, name: e.target.value }),
+            placeholder: 'Recipe name',
+            className: 'recipe-name-input'
+        }),
+        React.createElement('h4', null, 'Ingredients'),
+        React.createElement('div', { className: 'ingredients-list' },
+            recipeForm.ingredients.map((ing, index) =>
+                React.createElement('div', { key: index, className: 'ingredient-row' },
+                    React.createElement(IngredientDropdown, {
+                        value: ing.name,
+                        suggestions: getAllIngredients(),
+                        onChange: (value) => updateIngredient(index, 'name', value),
+                        placeholder: 'Ingredient name'
+                    }),
+                    React.createElement('input', {
+                        type: 'number',
+                        value: ing.quantity,
+                        onChange: (e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0),
+                        placeholder: 'Quantity'
+                    }),
+                    React.createElement('input', {
+                        type: 'text',
+                        value: ing.unit,
+                        onChange: (e) => updateIngredient(index, 'unit', e.target.value),
+                        placeholder: 'Unit'
+                    }),
+                    React.createElement('button', {
+                        onClick: () => removeIngredient(index),
+                        className: 'remove-ingredient-btn'
+                    }, 'Remove')
+                )
+            )
+        ),
+        React.createElement('button', { onClick: addIngredient, className: 'add-ingredient-btn' }, 'Add Ingredient'),
+        React.createElement('div', { className: 'modal-buttons' },
+            React.createElement('button', { onClick: handleSave }, 'Save'),
+            React.createElement('button', { onClick: onCancel }, 'Cancel')
         )
     );
 }
