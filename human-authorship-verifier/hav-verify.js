@@ -1,0 +1,346 @@
+/**
+ * Human Authorship Verifier - Core Verification Library
+ * Provides cryptographic verification of human-authored content
+ */
+
+class HumanAuthorshipVerifier {
+    constructor(options = {}) {
+        this.options = {
+            timeout: options.timeout || 10000,
+            checkFingerprint: options.checkFingerprint !== false,
+            allowUnsigned: options.allowUnsigned || false,
+            ...options
+        };
+    }
+
+    /**
+     * Main verification function
+     * @param {HTMLElement|string} input - DOM element or HTML string to verify
+     * @param {Object} options - Override default options
+     * @returns {Promise<Object>} Verification result
+     */
+    async verify(input, options = {}) {
+        const opts = { ...this.options, ...options };
+        const result = {
+            isValid: false,
+            details: {
+                signatureValid: false,
+                textMatches: false,
+                logAccessible: false,
+                fingerprint: null,
+                reconstructedText: '',
+                errors: [],
+                warnings: []
+            }
+        };
+
+        try {
+            // Parse input
+            const element = this._parseInput(input);
+            if (!element) {
+                result.details.errors.push('Invalid input: must be DOM element or HTML string');
+                return result;
+            }
+
+            // Extract data attributes
+            const data = this._extractDataAttributes(element);
+            if (!data) {
+                if (!opts.allowUnsigned) {
+                    result.details.errors.push('No authorship data found');
+                }
+                return result;
+            }
+
+            // Fetch log file
+            const logData = await this._fetchLog(data.logUrl, opts.timeout);
+            if (!logData) {
+                result.details.errors.push('Could not fetch event log');
+                return result;
+            }
+            result.details.logAccessible = true;
+
+            // Verify signature
+            const signatureValid = await this._verifySignature(logData, data.signature, data.publicKey);
+            result.details.signatureValid = signatureValid;
+
+            if (!signatureValid) {
+                result.details.errors.push('Invalid signature');
+                return result;
+            }
+
+            // Reconstruct text from log
+            const reconstructedText = this._reconstructText(logData.log);
+            result.details.reconstructedText = reconstructedText;
+
+            // Get displayed text
+            const displayedText = this._getDisplayedText(element);
+
+            // Compare texts
+            result.details.textMatches = reconstructedText === displayedText;
+
+            if (!result.details.textMatches) {
+                result.details.errors.push('Displayed text does not match log reconstruction');
+                return result;
+            }
+
+            // Extract fingerprint if present
+            if (opts.checkFingerprint && data.fingerprint) {
+                result.details.fingerprint = data.fingerprint;
+            }
+
+            // Check for additional security features
+            this._checkSecurityFeatures(logData, result.details);
+
+            // Final validation
+            result.isValid = result.details.signatureValid && result.details.textMatches && result.details.logAccessible;
+
+        } catch (error) {
+            result.details.errors.push(`Verification error: ${error.message}`);
+            console.error('HAV Verification error:', error);
+        }
+
+        return result;
+    }
+
+    /**
+     * Parse input into DOM element
+     * @private
+     */
+    _parseInput(input) {
+        if (input instanceof HTMLElement) {
+            return input;
+        }
+
+        if (typeof input === 'string') {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(input, 'text/html');
+            // Find the first element with authorship data
+            const elements = doc.querySelectorAll('[data-hav-key]');
+            return elements.length > 0 ? elements[0] : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Extract authorship data from element attributes
+     * @private
+     */
+    _extractDataAttributes(element) {
+        const keyAttr = element.getAttribute('data-hav-key');
+        const logAttr = element.getAttribute('data-hav-log');
+        const sigAttr = element.getAttribute('data-hav-signature');
+        const fpAttr = element.getAttribute('data-hav-fingerprint');
+
+        if (!keyAttr || !logAttr || !sigAttr) {
+            console.warn('Missing required authorship attributes:', {
+                hasKey: !!keyAttr,
+                hasLog: !!logAttr,
+                hasSignature: !!sigAttr
+            });
+            return null;
+        }
+
+        // Clean up the key attribute - remove any extra quotes or escaping
+        let cleanKeyAttr = keyAttr.trim();
+
+        // Handle common JSON formatting issues
+        if (cleanKeyAttr.startsWith('"') && cleanKeyAttr.endsWith('"')) {
+            try {
+                cleanKeyAttr = JSON.parse(cleanKeyAttr);
+            } catch (e) {
+                // If parsing fails, try to clean it up
+                cleanKeyAttr = cleanKeyAttr.slice(1, -1);
+            }
+        }
+
+        // If it's still a string, try to parse it as JSON
+        if (typeof cleanKeyAttr === 'string') {
+            try {
+                const publicKey = JSON.parse(cleanKeyAttr);
+                return {
+                    publicKey,
+                    logUrl: logAttr,
+                    signature: sigAttr,
+                    fingerprint: fpAttr
+                };
+            } catch (error) {
+                console.error('Error parsing public key JSON:', error);
+                console.error('Raw key attribute:', keyAttr);
+                console.error('Cleaned key attribute:', cleanKeyAttr);
+                return null;
+            }
+        } else {
+            // If it's already an object, use it directly
+            return {
+                publicKey: cleanKeyAttr,
+                logUrl: logAttr,
+                signature: sigAttr,
+                fingerprint: fpAttr
+            };
+        }
+    }
+
+    /**
+     * Fetch and parse log file
+     * @private
+     */
+    async _fetchLog(url, timeout) {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+
+            // Validate log structure
+            if (!Array.isArray(data.log) || typeof data.timestamp !== 'number') {
+                throw new Error('Invalid log file structure');
+            }
+
+            return data;
+        } catch (error) {
+            console.error('Error fetching log:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Verify cryptographic signature using core library
+     * @private
+     */
+    async _verifySignature(logData, signature, publicKeyJwk) {
+        try {
+            // Use core library for verification
+            const result = window.HAVCore.verifyLog(logData.log, '', signature, publicKeyJwk, logData);
+            return result.details.signatureValid;
+        } catch (error) {
+            console.error('Signature verification error:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Reconstruct text from event log using core library
+     * @private
+     */
+    _reconstructText(log) {
+        try {
+            // Use core library for text reconstruction
+            return window.HAVCore.reconstructText(log);
+        } catch (error) {
+            console.error('Text reconstruction error:', error);
+            return '';
+        }
+    }
+
+    /**
+     * Get displayed text from element
+     * @private
+     */
+    _getDisplayedText(element) {
+        // For text elements, get text content
+        if (element.textContent) {
+            return element.textContent.trim();
+        }
+
+        // For input/textarea elements
+        if (element.value) {
+            return element.value.trim();
+        }
+
+        return '';
+    }
+
+    /**
+     * Check additional security features
+     * @private
+     */
+    _checkSecurityFeatures(logData, details) {
+        // Check for reasonable timestamp
+        const now = Date.now();
+        const logTime = logData.timestamp;
+
+        if (Math.abs(now - logTime) > 365 * 24 * 60 * 60 * 1000) { // 1 year
+            details.warnings.push('Log timestamp is unusually old or in the future');
+        }
+
+        // Check for minimum number of events (suggests human typing)
+        if (logData.log.length < 3) {
+            details.warnings.push('Very few events logged - may not indicate human authorship');
+        }
+
+        // Check for realistic typing patterns
+        const keyEvents = logData.log.filter(e => e.type === 'keydown' || e.type === 'keyup');
+        if (keyEvents.length > 0) {
+            const avgInterval = this._calculateAverageInterval(keyEvents);
+            if (avgInterval < 50) { // Less than 50ms between keystrokes
+                details.warnings.push('Unusually fast typing detected');
+            }
+        }
+    }
+
+    /**
+     * Calculate average interval between events
+     * @private
+     */
+    _calculateAverageInterval(events) {
+        if (events.length < 2) return 0;
+
+        const intervals = [];
+        for (let i = 1; i < events.length; i++) {
+            intervals.push(events[i].time - events[i-1].time);
+        }
+
+        return intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+    }
+
+    /**
+     * Batch verify multiple elements
+     * @param {HTMLElement[]} elements - Array of elements to verify
+     * @param {Object} options - Verification options
+     * @returns {Promise<Object[]>} Array of verification results
+     */
+    async verifyBatch(elements, options = {}) {
+        const results = await Promise.allSettled(
+            elements.map(element => this.verify(element, options))
+        );
+
+        return results.map((result, index) => ({
+            element: elements[index],
+            success: result.status === 'fulfilled',
+            result: result.status === 'fulfilled' ? result.value : null,
+            error: result.status === 'rejected' ? result.reason : null
+        }));
+    }
+}
+
+// Export for different environments
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = HumanAuthorshipVerifier;
+} else if (typeof window !== 'undefined') {
+    window.HumanAuthorshipVerifier = HumanAuthorshipVerifier;
+}
+
+// Convenience function for quick verification
+async function verifyAuthorship(input, options = {}) {
+    const verifier = new HumanAuthorshipVerifier(options);
+    return await verifier.verify(input, options);
+}
+
+// Export convenience function
+if (typeof window !== 'undefined') {
+    window.verifyAuthorship = verifyAuthorship;
+}

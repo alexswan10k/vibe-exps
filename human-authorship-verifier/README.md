@@ -9,6 +9,9 @@ A comprehensive system for cryptographically verifying human authorship of text 
 - **Anonymous User Fingerprints**: User-defined identifiers hashed for privacy
 - **Key Pair Management**: Generate, export, and import cryptographic keys
 - **Live HTML Generation**: Real-time output for web publishing
+- **Tamper-Proof Verification**: Text hash included in signature for enhanced security
+- **Scriptable API**: JavaScript library for programmatic verification
+- **Web Verification Interface**: Standalone verification tool
 - **Cross-Platform**: Works in any modern web browser
 
 ## Quick Start
@@ -18,7 +21,7 @@ A comprehensive system for cryptographically verifying human authorship of text 
 3. (Optional) Set your user fingerprint for anonymous identification
 4. Type your text - keystrokes are automatically logged
 5. Copy the generated HTML output
-6. Host the eventlog.txt file at a public URL
+6. Host the eventlog.json file at a public URL
 7. Update the `data-hav-log` attribute to point to your hosted log
 8. Publish the HTML on your website
 
@@ -45,30 +48,40 @@ While typing, the following events are logged:
 - `keyup`: Key released with timestamp
 - `diff`: Text changes (added/removed characters) with timestamp
 
+### Enhanced Security Features
+
+- **Text Hash Verification**: SHA-256 hash of final text included in signed data
+- **Timestamp Validation**: Prevents replay attacks with timestamp checking
+- **Behavioral Analysis**: Detects suspicious typing patterns
+- **Multi-Layer Verification**: Combines cryptographic, behavioral, and temporal checks
+
 ### Output Format
 
 The verifiable text is embedded as an HTML element with data attributes:
 
 ```html
-<p data-hav-key="publickeyjson" data-hav-log="eventlog.txt" data-hav-signature="base64signature" data-hav-fingerprint="fingerprint">The authored text here.</p>
+<p data-hav-key="publickeyjson" data-hav-log="eventlog.json" data-hav-signature="base64signature" data-hav-fingerprint="fingerprint">The authored text here.</p>
 ```
 
 - `data-hav-key`: JSON string of the author's public key (JWK format)
 - `data-hav-log`: URL pointing to the JSON event log file
-- `data-hav-signature`: Base64-encoded RSA-PSS signature of the log content
+- `data-hav-signature`: Base64-encoded RSA-PSS signature of the signed data
 - `data-hav-fingerprint`: SHA-256 hash of user's anonymous identifier (optional)
 
 ### Log File Format
 
-The log is a JSON array of events:
+The log is a JSON object containing the event log, text hash, and timestamp:
 
 ```json
-[
-  {"type": "keydown", "key": "H", "time": 1234567890123},
-  {"type": "keyup", "key": "H", "time": 1234567890130},
-  {"type": "diff", "change": {"added": "H", "pos": 0}, "time": 1234567890135},
-  ...
-]
+{
+  "log": [
+    {"type": "keydown", "key": "H", "time": 1234567890123},
+    {"type": "keyup", "key": "H", "time": 1234567890130},
+    {"type": "diff", "change": {"added": "H", "pos": 0}, "time": 1234567890135}
+  ],
+  "textHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
+  "timestamp": 1234567890123
+}
 ```
 
 ## User Interface
@@ -204,9 +217,182 @@ Use RSA-PSS verification with SHA-256 to verify the log content against the sign
 - The system assumes honest log hosting for full security guarantees
 - Multiple verification methods (signature + fingerprint + behavioral data) provide layered security
 
+## Verification Tools
+
+### Web Verification Interface (`verify.html`)
+
+A standalone web application for verifying human-authored content:
+
+**Features:**
+- **Single Verification**: Paste HTML containing authorship data for verification
+- **URL Verification**: Enter a URL to fetch and verify remote content
+- **Batch Verification**: Verify multiple elements at once
+- **Detailed Results**: Comprehensive verification report with errors and warnings
+- **Real-time Feedback**: Live verification status and progress indicators
+
+**Usage:**
+1. Open `verify.html` in your web browser
+2. Choose verification method (single, URL, or batch)
+3. Input your content or URL
+4. Review the detailed verification results
+
+### Scriptable API (`hav-verify.js`)
+
+A JavaScript library for programmatic verification of human-authored content.
+
+**Installation:**
+```html
+<script src="hav-verify.js"></script>
+```
+
+**Basic Usage:**
+```javascript
+// Verify a DOM element
+const result = await verifyAuthorship(document.getElementById('myElement'));
+if (result.isValid) {
+    console.log('✓ Authorship verified!');
+} else {
+    console.log('✗ Verification failed:', result.details.errors);
+}
+
+// Verify HTML string
+const html = '<p data-hav-key="..." data-hav-log="..." data-hav-signature="...">Hello world</p>';
+const result = await verifyAuthorship(html);
+
+// Advanced usage with options
+const result = await verifyAuthorship(element, {
+    timeout: 10000,
+    checkFingerprint: true,
+    allowUnsigned: false
+});
+```
+
+**Class-based API:**
+```javascript
+const verifier = new HumanAuthorshipVerifier({
+    timeout: 15000,
+    checkFingerprint: true
+});
+
+// Single verification
+const result = await verifier.verify(element);
+
+// Batch verification
+const results = await verifier.verifyBatch([element1, element2, element3]);
+```
+
+**Verification Result Format:**
+```javascript
+{
+    isValid: true,
+    details: {
+        signatureValid: true,
+        textMatches: true,
+        logAccessible: true,
+        fingerprint: "abc123...",
+        reconstructedText: "Hello world",
+        errors: [],
+        warnings: ["Log timestamp is unusually old"]
+    }
+}
+```
+
+**API Methods:**
+- `verify(input, options)`: Verify a single element or HTML string
+- `verifyBatch(elements, options)`: Verify multiple elements
+- `verifyAuthorship(input, options)`: Convenience function for quick verification
+
+## Core Library API (`hav-core.js`)
+
+The core library provides simple, low-level functions for signing and verification without DOM dependencies.
+
+### Key Generation
+```javascript
+const { generateKeyPair } = require('./hav-core');
+
+// Generate RSA key pair
+const { publicKey, privateKey } = generateKeyPair();
+// Returns JWK objects for both keys
+```
+
+### Signing Content
+```javascript
+const { signLog } = require('./hav-core');
+
+// Sign log data with private key
+const log = [
+  { type: 'diff', change: { added: 'Hello', pos: 0 }, time: Date.now() }
+];
+const text = "Hello World";
+
+const { signature, signedData } = signLog(log, text, privateKey);
+// signature: Base64-encoded signature string
+// signedData: The exact data that was signed (for verification)
+```
+
+### Verifying Content
+```javascript
+const { verifyLog } = require('./hav-core');
+
+// Verify signed content
+const result = verifyLog(log, text, signature, publicKey, signedData);
+
+if (result.isValid) {
+  console.log('✅ Content verified!');
+  console.log('Reconstructed text:', result.details.reconstructedText);
+} else {
+  console.log('❌ Verification failed:', result.details.errors);
+}
+```
+
+### API Reference
+
+#### `generateKeyPair()`
+- **Returns**: `{ publicKey, privateKey }` - JWK objects
+- **Purpose**: Generate RSA-2048 key pair for signing
+
+#### `signLog(log, text, privateKey)`
+- **Parameters**:
+  - `log`: Array of log events
+  - `text`: The text content string
+  - `privateKey`: JWK private key object
+- **Returns**: `{ signature, signedData }`
+- **Purpose**: Sign log data with private key
+
+#### `verifyLog(log, text, signature, publicKey, signedData?)`
+- **Parameters**:
+  - `log`: Array of log events
+  - `text`: The text content string
+  - `signature`: Base64 signature string
+  - `publicKey`: JWK public key object
+  - `signedData`: Optional exact signed data (for testing)
+- **Returns**: Verification result object
+- **Purpose**: Verify signed content
+
+#### `reconstructText(log)`
+- **Parameters**: `log` - Array of log events
+- **Returns**: Reconstructed text string
+- **Purpose**: Rebuild text from log events
+
 ## Implementation
 
-See `index.html` for a reference implementation using Web Crypto API.
+All HTML pages now use the same core library (`hav-core.js`) for consistent signing and verification:
+
+- **`index.html`** - Authoring interface using `hav-core.js` for key generation and signing
+- **`verify.html`** - Verification interface using `hav-core.js` for signature verification
+- **`hav-core.js`** - Core library with signing/verification functions (Node.js and browser compatible)
+- **`hav-verify.js`** - Browser wrapper library that uses `hav-core.js` internally
+
+All implementations use the Web Crypto API for cryptographic operations.
+
+## Cross-Platform Compatibility
+
+The core library (`hav-core.js`) automatically detects the runtime environment:
+
+- **Browser Environment**: Uses `crypto.subtle` API for Web Crypto operations
+- **Node.js Environment**: Uses Node.js `crypto` module for cryptographic operations
+
+This ensures consistent behavior across different JavaScript runtimes while maintaining optimal performance for each platform.
 
 ## Limitations
 

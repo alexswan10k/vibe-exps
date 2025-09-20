@@ -4,6 +4,7 @@
     <title>Human Authorship Verifier</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="hav-core.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -126,31 +127,20 @@
         let privateKey = null;
         let publicKey = null;
 
-        // Utility functions
+        // Utility functions using core library
         async function generateKeys() {
             try {
-                const keyPair = await crypto.subtle.generateKey(
-                    {
-                        name: 'RSA-PSS',
-                        modulusLength: 2048,
-                        publicExponent: new Uint8Array([1, 0, 1]),
-                        hash: 'SHA-256',
-                    },
-                    true,
-                    ['sign', 'verify']
-                );
+                // Use core library to generate keys
+                const keyPair = await window.HAVCore.generateKeyPair();
 
                 privateKey = keyPair.privateKey;
                 publicKey = keyPair.publicKey;
 
-                // Export and store
-                const privateJwk = await crypto.subtle.exportKey('jwk', privateKey);
-                const publicJwk = await crypto.subtle.exportKey('jwk', publicKey);
+                // Store in localStorage
+                localStorage.setItem('privateKey', JSON.stringify(keyPair.privateKey));
+                localStorage.setItem('publicKey', JSON.stringify(keyPair.publicKey));
 
-                localStorage.setItem('privateKey', JSON.stringify(privateJwk));
-                localStorage.setItem('publicKey', JSON.stringify(publicJwk));
-
-                return { privateKey, publicKey, publicJwk };
+                return { privateKey: keyPair.privateKey, publicKey: keyPair.publicKey, publicJwk: keyPair.publicKey };
             } catch (error) {
                 console.error('Error generating keys:', error);
                 throw error;
@@ -162,6 +152,7 @@
                 const privateJwk = JSON.parse(privateJwkStr);
                 const publicJwk = JSON.parse(publicJwkStr);
 
+                // Use Web Crypto API directly for importing (core library is Node.js focused)
                 privateKey = await crypto.subtle.importKey(
                     'jwk',
                     privateJwk,
@@ -183,7 +174,7 @@
                     ['verify']
                 );
 
-                return { privateKey, publicKey, publicJwk };
+                return { privateKey, publicKey, publicJwk: publicJwk };
             } catch (error) {
                 console.error('Error importing keys:', error);
                 throw error;
@@ -205,6 +196,15 @@
                 dataBuffer
             );
             return btoa(String.fromCharCode(...new Uint8Array(signature)));
+        }
+
+        // Generate hash of text for tamper-proof verification
+        async function generateTextHash(text) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(text.trim());
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
         function getDiff(oldStr, newStr) {
@@ -292,11 +292,23 @@
                     }
 
                     try {
-                        const logStr = JSON.stringify(log, null, 2);
-                        const sig = await signData(logStr);
+                        // Generate hash of the final text for tamper-proof verification
+                        const textHash = await generateTextHash(text);
+
+                        // Create signed data structure that includes both log and text hash
+                        const signedData = {
+                            log: log,
+                            textHash: textHash,
+                            timestamp: Date.now()
+                        };
+
+                        const signedDataStr = JSON.stringify(signedData, null, 2);
+                        const sig = await signData(signedDataStr);
                         setSignature(sig);
 
-                        const html = `<p data-hav-key="${publicKeyStr}" data-hav-log="eventlog.txt" data-hav-signature="${sig}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
+                        // Properly escape the JSON string for HTML attributes
+                        const escapedPublicKey = publicKeyStr.replace(/"/g, '"');
+                        const html = `<p data-hav-key="${escapedPublicKey}" data-hav-log="eventlog.json" data-hav-signature="${sig}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
                         setEmbedHtml(html);
                     } catch (error) {
                         console.error('Error generating output:', error);
@@ -350,17 +362,34 @@
                 }]);
             };
 
-            const downloadLog = () => {
-                const logStr = JSON.stringify(log, null, 2);
-                const blob = new Blob([logStr], {type: 'text/plain'});
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'eventlog.txt';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+            const downloadLog = async () => {
+                if (!text.trim()) {
+                    alert('No text to create log for');
+                    return;
+                }
+
+                try {
+                    // Generate the same data structure used for signing
+                    const textHash = await generateTextHash(text);
+                    const logData = {
+                        log: log,
+                        textHash: textHash,
+                        timestamp: Date.now()
+                    };
+
+                    const logStr = JSON.stringify(logData, null, 2);
+                    const blob = new Blob([logStr], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'eventlog.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    alert('Error creating log file: ' + error.message);
+                }
             };
 
             const copyToClipboard = async () => {
@@ -662,6 +691,20 @@
 
             return React.createElement('div', { className: 'container' },
                 React.createElement('h1', null, 'Human Authorship Verifier'),
+                React.createElement('div', { style: { textAlign: 'center', marginBottom: '20px' } },
+                    React.createElement('a', {
+                        href: 'verify.html',
+                        style: {
+                            color: '#2196F3',
+                            textDecoration: 'none',
+                            fontSize: '14px',
+                            padding: '8px 16px',
+                            border: '1px solid #2196F3',
+                            borderRadius: '4px',
+                            backgroundColor: 'transparent'
+                        }
+                    }, '🔍 Open Verification Tool')
+                ),
 
                 // Key Management Section
                 React.createElement('div', { className: 'section' },

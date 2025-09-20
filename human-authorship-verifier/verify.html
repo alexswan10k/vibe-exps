@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Human Authorship Verifier - Verification Tool</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="hav-core.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            color: #555;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        textarea:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.secondary {
+            background-color: #2196F3;
+        }
+        button.secondary:hover {
+            background-color: #0b7dda;
+        }
+        button.danger {
+            background-color: #f44336;
+        }
+        button.danger:hover {
+            background-color: #da190b;
+        }
+        .button-group {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .status-message {
+            padding: 10px;
+            background-color: #e8f5e8;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status-error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        .status-warning {
+            background-color: #fff3e0;
+            color: #ef6c00;
+        }
+        .verification-result {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+            margin: 20px 0;
+        }
+        .result-valid {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .result-invalid {
+            border-color: #dc3545;
+            background-color: #f8d7da;
+        }
+        .result-details {
+            margin: 10px 0;
+        }
+        .result-details strong {
+            display: inline-block;
+            width: 150px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-valid {
+            background-color: #28a745;
+            color: white;
+        }
+        .badge-invalid {
+            background-color: #dc3545;
+            color: white;
+        }
+        .badge-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            border-bottom: none;
+        }
+        .tab.active {
+            background-color: white;
+            border-bottom: 2px solid #4CAF50;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .url-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .url-input input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+        .batch-results {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .batch-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .batch-item.valid {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+        .batch-item.invalid {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // React App Component
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('single');
+            const [input, setInput] = useState('');
+            const [url, setUrl] = useState('');
+            const [isVerifying, setIsVerifying] = useState(false);
+            const [result, setResult] = useState(null);
+            const [batchResults, setBatchResults] = useState([]);
+            const verifySingle = async () => {
+                if (!input.trim()) {
+                    alert('Please enter HTML to verify');
+                    return;
+                }
+
+                setIsVerifying(true);
+                setResult(null);
+
+                try {
+                    // Parse HTML to extract authorship data
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(input, 'text/html');
+                    const element = doc.querySelector('[data-hav-key]');
+
+                    if (!element) {
+                        throw new Error('No element with authorship data found');
+                    }
+
+                    // Extract data attributes
+                    const publicKeyStr = element.getAttribute('data-hav-key');
+                    const signature = element.getAttribute('data-hav-signature');
+                    const logUrl = element.getAttribute('data-hav-log');
+
+                    if (!publicKeyStr || !signature || !logUrl) {
+                        throw new Error('Missing required authorship attributes');
+                    }
+
+                    // Parse public key
+                    const publicKey = JSON.parse(publicKeyStr);
+
+                    // Fetch log data
+                    const response = await fetch(logUrl);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch log: ${response.status}`);
+                    }
+                    const logData = await response.json();
+
+                    // Extract text content
+                    const text = element.textContent?.trim() || '';
+
+                    // Verify using core library
+                    const verificationResult = await window.HAVCore.verifyLog(logData.log, text, signature, publicKey);
+                    setResult(verificationResult);
+                } catch (error) {
+                    setResult({
+                        isValid: false,
+                        details: {
+                            errors: [`Verification failed: ${error.message}`],
+                            warnings: []
+                        }
+                    });
+                }
+
+                setIsVerifying(false);
+            };
+
+            const verifyFromUrl = async () => {
+                if (!url.trim()) {
+                    alert('Please enter a URL');
+                    return;
+                }
+
+                setIsVerifying(true);
+                setResult(null);
+
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Failed to fetch URL: ${response.status}`);
+                    }
+                    const html = await response.text();
+
+                    // Parse HTML to extract authorship data
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const element = doc.querySelector('[data-hav-key]');
+
+                    if (!element) {
+                        throw new Error('No element with authorship data found');
+                    }
+
+                    // Extract data attributes
+                    const publicKeyStr = element.getAttribute('data-hav-key');
+                    const signature = element.getAttribute('data-hav-signature');
+                    const logUrl = element.getAttribute('data-hav-log');
+
+                    if (!publicKeyStr || !signature || !logUrl) {
+                        throw new Error('Missing required authorship attributes');
+                    }
+
+                    // Parse public key
+                    const publicKey = JSON.parse(publicKeyStr);
+
+                    // Fetch log data
+                    const logResponse = await fetch(logUrl);
+                    if (!logResponse.ok) {
+                        throw new Error(`Failed to fetch log: ${logResponse.status}`);
+                    }
+                    const logData = await logResponse.json();
+
+                    // Extract text content
+                    const text = element.textContent?.trim() || '';
+
+                    // Verify using core library
+                    const verificationResult = await window.HAVCore.verifyLog(logData.log, text, signature, publicKey);
+                    setResult(verificationResult);
+                } catch (error) {
+                    setResult({
+                        isValid: false,
+                        details: {
+                            errors: [`Verification failed: ${error.message}`],
+                            warnings: []
+                        }
+                    });
+                }
+
+                setIsVerifying(false);
+            };
+
+            const verifyBatch = async () => {
+                if (!input.trim()) {
+                    alert('Please enter HTML containing multiple elements to verify');
+                    return;
+                }
+
+                setIsVerifying(true);
+                setBatchResults([]);
+
+                try {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(input, 'text/html');
+                    const elements = Array.from(doc.querySelectorAll('[data-hav-key]'));
+
+                    if (elements.length === 0) {
+                        alert('No elements with authorship data found');
+                        setIsVerifying(false);
+                        return;
+                    }
+
+                    const results = [];
+
+                    for (let i = 0; i < elements.length; i++) {
+                        const element = elements[i];
+                        try {
+                            // Extract data attributes
+                            const publicKeyStr = element.getAttribute('data-hav-key');
+                            const signature = element.getAttribute('data-hav-signature');
+                            const logUrl = element.getAttribute('data-hav-log');
+
+                            if (!publicKeyStr || !signature || !logUrl) {
+                                results.push({
+                                    element,
+                                    success: false,
+                                    result: null,
+                                    error: 'Missing required authorship attributes'
+                                });
+                                continue;
+                            }
+
+                            // Parse public key
+                            const publicKey = JSON.parse(publicKeyStr);
+
+                            // Fetch log data
+                            const logResponse = await fetch(logUrl);
+                            if (!logResponse.ok) {
+                                results.push({
+                                    element,
+                                    success: false,
+                                    result: null,
+                                    error: `Failed to fetch log: ${logResponse.status}`
+                                });
+                                continue;
+                            }
+                            const logData = await logResponse.json();
+
+                            // Extract text content
+                            const text = element.textContent?.trim() || '';
+
+                            // Verify using core library
+                            const verificationResult = await window.HAVCore.verifyLog(logData.log, text, signature, publicKey);
+                            results.push({
+                                element,
+                                success: true,
+                                result: verificationResult,
+                                error: null
+                            });
+                        } catch (error) {
+                            results.push({
+                                element,
+                                success: false,
+                                result: null,
+                                error: error.message
+                            });
+                        }
+                    }
+
+                    setBatchResults(results);
+                } catch (error) {
+                    setBatchResults([{
+                        element: null,
+                        success: false,
+                        result: null,
+                        error: error.message
+                    }]);
+                }
+
+                setIsVerifying(false);
+            };
+
+            const clearAll = () => {
+                setInput('');
+                setUrl('');
+                setResult(null);
+                setBatchResults([]);
+            };
+
+            const renderResult = (result) => {
+                if (!result) return null;
+
+                const statusClass = result.isValid ? 'result-valid' : 'result-invalid';
+                const statusText = result.isValid ? '✓ VERIFIED' : '✗ NOT VERIFIED';
+
+                return React.createElement('div', { className: `verification-result ${statusClass}` },
+                    React.createElement('h3', null, statusText),
+                    React.createElement('div', { className: 'result-details' },
+                        React.createElement('p', null,
+                            React.createElement('strong', null, 'Signature Valid:'),
+                            React.createElement('span', { className: `badge ${result.details.signatureValid ? 'badge-valid' : 'badge-invalid'}` },
+                                result.details.signatureValid ? 'YES' : 'NO'
+                            )
+                        ),
+                        React.createElement('p', null,
+                            React.createElement('strong', null, 'Text Matches:'),
+                            React.createElement('span', { className: `badge ${result.details.textMatches ? 'badge-valid' : 'badge-invalid'}` },
+                                result.details.textMatches ? 'YES' : 'NO'
+                            )
+                        ),
+                        React.createElement('p', null,
+                            React.createElement('strong', null, 'Log Accessible:'),
+                            React.createElement('span', { className: `badge ${result.details.logAccessible ? 'badge-valid' : 'badge-invalid'}` },
+                                result.details.logAccessible ? 'YES' : 'NO'
+                            )
+                        ),
+                        result.details.fingerprint && React.createElement('p', null,
+                            React.createElement('strong', null, 'Fingerprint:'),
+                            React.createElement('code', null, result.details.fingerprint.substring(0, 16) + '...')
+                        ),
+                        result.details.reconstructedText && React.createElement('p', null,
+                            React.createElement('strong', null, 'Reconstructed Text:'),
+                            React.createElement('br', null),
+                            React.createElement('em', null, `"${result.details.reconstructedText}"`)
+                        )
+                    ),
+                    result.details.errors.length > 0 && React.createElement('div', { className: 'status-message status-error' },
+                        React.createElement('strong', null, 'Errors:'),
+                        React.createElement('ul', null,
+                            result.details.errors.map((error, index) =>
+                                React.createElement('li', { key: index }, error)
+                            )
+                        )
+                    ),
+                    result.details.warnings.length > 0 && React.createElement('div', { className: 'status-message status-warning' },
+                        React.createElement('strong', null, 'Warnings:'),
+                        React.createElement('ul', null,
+                            result.details.warnings.map((warning, index) =>
+                                React.createElement('li', { key: index }, warning)
+                            )
+                        )
+                    )
+                );
+            };
+
+            const renderBatchResults = () => {
+                if (batchResults.length === 0) return null;
+
+                return React.createElement('div', { className: 'batch-results' },
+                    React.createElement('h3', null, `Batch Results (${batchResults.length} items)`),
+                    batchResults.map((item, index) => {
+                        const statusClass = item.success && item.result?.isValid ? 'valid' : 'invalid';
+                        const statusText = item.success && item.result?.isValid ? '✓ Verified' : '✗ Failed';
+
+                        return React.createElement('div', { key: index, className: `batch-item ${statusClass}` },
+                            React.createElement('strong', null, `Item ${index + 1}: ${statusText}`),
+                            item.success ? renderResult(item.result) : React.createElement('p', null, `Error: ${item.error}`)
+                        );
+                    })
+                );
+            };
+
+            return React.createElement('div', { className: 'container' },
+                React.createElement('h1', null, 'Human Authorship Verifier'),
+
+                // Tabs
+                React.createElement('div', { className: 'tabs' },
+                    React.createElement('div', {
+                        className: `tab ${activeTab === 'single' ? 'active' : ''}`,
+                        onClick: () => setActiveTab('single')
+                    }, 'Single Verification'),
+                    React.createElement('div', {
+                        className: `tab ${activeTab === 'url' ? 'active' : ''}`,
+                        onClick: () => setActiveTab('url')
+                    }, 'Verify from URL'),
+                    React.createElement('div', {
+                        className: `tab ${activeTab === 'batch' ? 'active' : ''}`,
+                        onClick: () => setActiveTab('batch')
+                    }, 'Batch Verification')
+                ),
+
+                // Single Verification Tab
+                React.createElement('div', { className: `tab-content ${activeTab === 'single' ? 'active' : ''}` },
+                    React.createElement('div', { className: 'section' },
+                        React.createElement('h2', null, 'Paste HTML to Verify'),
+                        React.createElement('textarea', {
+                            value: input,
+                            onChange: (e) => setInput(e.target.value),
+                            placeholder: 'Paste HTML containing data-hav-* attributes here...',
+                            rows: 8
+                        })
+                    ),
+                    React.createElement('div', { className: 'button-group' },
+                        React.createElement('button', {
+                            onClick: verifySingle,
+                            disabled: isVerifying
+                        }, isVerifying ? 'Verifying...' : 'Verify Authorship'),
+                        React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All')
+                    ),
+                    isVerifying && React.createElement('div', { className: 'loading' },
+                        React.createElement('div', { className: 'spinner' }),
+                        React.createElement('p', null, 'Verifying authorship...')
+                    ),
+                    result && renderResult(result)
+                ),
+
+                // URL Verification Tab
+                React.createElement('div', { className: `tab-content ${activeTab === 'url' ? 'active' : ''}` },
+                    React.createElement('div', { className: 'section' },
+                        React.createElement('h2', null, 'Verify from URL'),
+                        React.createElement('div', { className: 'url-input' },
+                            React.createElement('input', {
+                                type: 'url',
+                                value: url,
+                                onChange: (e) => setUrl(e.target.value),
+                                placeholder: 'https://example.com/page.html'
+                            }),
+                            React.createElement('button', {
+                                onClick: verifyFromUrl,
+                                disabled: isVerifying
+                            }, isVerifying ? 'Loading...' : 'Verify')
+                        )
+                    ),
+                    isVerifying && React.createElement('div', { className: 'loading' },
+                        React.createElement('div', { className: 'spinner' }),
+                        React.createElement('p', null, 'Fetching and verifying...')
+                    ),
+                    result && renderResult(result)
+                ),
+
+                // Batch Verification Tab
+                React.createElement('div', { className: `tab-content ${activeTab === 'batch' ? 'active' : ''}` },
+                    React.createElement('div', { className: 'section' },
+                        React.createElement('h2', null, 'Batch Verification'),
+                        React.createElement('p', null, 'Paste HTML containing multiple elements with authorship data to verify them all at once.'),
+                        React.createElement('textarea', {
+                            value: input,
+                            onChange: (e) => setInput(e.target.value),
+                            placeholder: 'Paste HTML with multiple data-hav-* elements...',
+                            rows: 8
+                        })
+                    ),
+                    React.createElement('div', { className: 'button-group' },
+                        React.createElement('button', {
+                            onClick: verifyBatch,
+                            disabled: isVerifying
+                        }, isVerifying ? 'Verifying...' : 'Verify Batch'),
+                        React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All')
+                    ),
+                    isVerifying && React.createElement('div', { className: 'loading' },
+                        React.createElement('div', { className: 'spinner' }),
+                        React.createElement('p', null, 'Verifying batch...')
+                    ),
+                    renderBatchResults()
+                )
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(React.createElement(App), document.getElementById('root'));
+    </script>
+</body>
+</html>
