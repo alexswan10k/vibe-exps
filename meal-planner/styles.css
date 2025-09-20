@@ -323,6 +323,16 @@ button:active {
     flex: 1;
 }
 
+.shopping-item input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.shopping-item button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    font-size: 14px;
+}
+
 .inventory-item input {
     width: 80px;
     margin: 0 15px;
@@ -433,4 +443,96 @@ button:active {
 
 .dropdown-item:last-child {
     border-bottom: none;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: white;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.modal h2 {
+    color: #2c3e50;
+    margin-bottom: 15px;
+    font-size: 1.5rem;
+}
+
+.modal p {
+    margin-bottom: 20px;
+    color: #34495e;
+}
+
+.modal ul {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 25px;
+}
+
+.modal li {
+    padding: 8px 0;
+    border-bottom: 1px solid #ecf0f1;
+    color: #2c3e50;
+}
+
+.modal li:last-child {
+    border-bottom: none;
+}
+
+.insufficient-ingredient {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+.inventory-status {
+    font-size: 0.9em;
+    color: #7f8c8d;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 15px;
+    justify-content: flex-end;
+}
+
+.modal-buttons button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.modal-buttons button:first-child {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+}
+
+.modal-buttons button:last-child {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+}
+
+.modal-buttons button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
 }

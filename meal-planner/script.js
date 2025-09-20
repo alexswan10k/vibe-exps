@@ -4,6 +4,9 @@ function App() {
     const [recipes, setRecipes] = useState([]);
     const [inventory, setInventory] = useState({});
     const [shoppingList, setShoppingList] = useState({});
+    const [selectedShoppingItems, setSelectedShoppingItems] = useState([]);
+    const [showCookModal, setShowCookModal] = useState(false);
+    const [cookingRecipe, setCookingRecipe] = useState(null);
     const [activeTab, setActiveTab] = useState('calendar');
     const [calendar, setCalendar] = useState({
         Monday: null,
@@ -104,7 +107,48 @@ function App() {
         setInventory({ ...inventory, [item]: quantity });
     };
 
+    const toggleSelectShoppingItem = (item) => {
+        setSelectedShoppingItems(prev =>
+            prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]
+        );
+    };
 
+
+
+    const transferSelectedToInventory = () => {
+        const newInventory = { ...inventory };
+        selectedShoppingItems.forEach(item => {
+            newInventory[item] = (newInventory[item] || 0) + shoppingList[item];
+        });
+        setInventory(newInventory);
+        const newList = { ...shoppingList };
+        selectedShoppingItems.forEach(item => delete newList[item]);
+        setShoppingList(newList);
+        setSelectedShoppingItems([]);
+    };
+
+    const handleCook = (recipe) => {
+        setCookingRecipe(recipe);
+        setShowCookModal(true);
+    };
+
+    const confirmCook = () => {
+        if (cookingRecipe && cookingRecipe.ingredients) {
+            const newInventory = { ...inventory };
+            cookingRecipe.ingredients.forEach(ing => {
+                const current = newInventory[ing.name] || 0;
+                newInventory[ing.name] = Math.max(0, current - ing.quantity);
+            });
+            setInventory(newInventory);
+        }
+        setShowCookModal(false);
+        setCookingRecipe(null);
+    };
+
+    const cancelCook = () => {
+        setShowCookModal(false);
+        setCookingRecipe(null);
+    };
 
     const handleDrop = (e, day) => {
         e.preventDefault();
@@ -120,6 +164,33 @@ function App() {
 
     return React.createElement('div', { className: 'app' },
         React.createElement('h1', null, 'Meal Planner'),
+        showCookModal && cookingRecipe && React.createElement('div', { className: 'modal-overlay' },
+            React.createElement('div', { className: 'modal' },
+                React.createElement('h2', null, `Cook ${cookingRecipe.name}?`),
+                React.createElement('p', null, 'This will consume the following ingredients from your inventory:'),
+                React.createElement('ul', null,
+                    cookingRecipe.ingredients.map((ing, index) => {
+                        const available = inventory[ing.name] || 0;
+                        const required = ing.quantity;
+                        const isInsufficient = available < required;
+                        const isMissing = available === 0;
+                        return React.createElement('li', {
+                            key: index,
+                            className: isInsufficient ? 'insufficient-ingredient' : ''
+                        },
+                            React.createElement('span', null, `${ing.name}: ${required} ${ing.unit || ''}`),
+                            React.createElement('span', { className: 'inventory-status' },
+                                ` (Available: ${available}${isMissing ? ' - MISSING' : isInsufficient ? ' - INSUFFICIENT' : ''})`
+                            )
+                        );
+                    })
+                ),
+                React.createElement('div', { className: 'modal-buttons' },
+                    React.createElement('button', { onClick: confirmCook }, 'Confirm'),
+                    React.createElement('button', { onClick: cancelCook }, 'Cancel')
+                )
+            )
+        ),
         React.createElement('div', { className: 'tabs' },
             React.createElement('button', {
                 className: (activeTab === 'calendar' || activeTab === 'recipes') ? 'tab active' : 'tab',
@@ -135,7 +206,7 @@ function App() {
             }, 'Shopping List')
         ),
         (activeTab === 'calendar' || activeTab === 'recipes') && React.createElement('div', { className: 'main-content' },
-            React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById }),
+            React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook }),
             React.createElement(RecipeList, {
                 recipes,
                 inventory,
@@ -149,7 +220,10 @@ function App() {
             updateInventory
         }),
         activeTab === 'shopping' && React.createElement(ShoppingList, {
-            shoppingList
+            shoppingList,
+            selectedShoppingItems,
+            toggleSelectShoppingItem,
+            transferSelectedToInventory
         })
     );
 }
@@ -402,7 +476,7 @@ function RecipeItem({ recipe, onEdit, onDelete }) {
     );
 }
 
-function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById }) {
+function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleCook }) {
     const days = Object.keys(calendar);
 
     return React.createElement('div', { className: 'calendar' },
@@ -415,14 +489,15 @@ function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById }) {
                     recipeId: calendar[day],
                     getRecipeById,
                     handleDrop,
-                    handleDragOver
+                    handleDragOver,
+                    handleCook
                 })
             )
         )
     );
 }
 
-function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver }) {
+function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, handleCook }) {
     const recipe = recipeId ? getRecipeById(recipeId) : null;
     return React.createElement('div', {
         className: 'day-slot',
@@ -430,7 +505,11 @@ function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver }) {
         onDragOver: handleDragOver
     },
         React.createElement('h3', null, day),
-        recipe ? React.createElement('p', null, recipe.name) : React.createElement('p', null, 'Drop recipe here')
+        recipe ? React.createElement('p', null, recipe.name) : React.createElement('p', null, 'Drop recipe here'),
+        recipe && React.createElement('button', {
+            onClick: () => handleCook(recipe),
+            style: { marginTop: '10px', width: '100%' }
+        }, 'Cook')
     );
 }
 
@@ -514,17 +593,26 @@ function Inventory({ inventory, updateInventory }) {
     );
 }
 
-function ShoppingList({ shoppingList }) {
+function ShoppingList({ shoppingList, selectedShoppingItems, toggleSelectShoppingItem, transferSelectedToInventory }) {
     return React.createElement('div', { className: 'shopping-list' },
         React.createElement('h2', null, 'Shopping List'),
         React.createElement('ul', null,
             Object.entries(shoppingList).map(([item, quantity]) =>
                 React.createElement('li', { key: item, className: 'shopping-item' },
+                    React.createElement('input', {
+                        type: 'checkbox',
+                        checked: selectedShoppingItems.includes(item),
+                        onChange: () => toggleSelectShoppingItem(item)
+                    }),
                     React.createElement('span', null, `${item}: ${quantity}`)
                 )
             )
         ),
-        Object.keys(shoppingList).length === 0 && React.createElement('p', null, 'No items needed. Your shopping list updates automatically based on your meal plan and inventory.')
+        Object.keys(shoppingList).length === 0 && React.createElement('p', null, 'No items needed. Your shopping list updates automatically based on your meal plan and inventory.'),
+        selectedShoppingItems.length > 0 && React.createElement('button', {
+            onClick: transferSelectedToInventory,
+            style: { marginTop: '20px' }
+        }, 'Transfer Selected to Inventory')
     );
 }
 

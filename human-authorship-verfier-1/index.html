@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Text Provenance Prototype</title>
+</head>
+<body>
+    <textarea id="input" placeholder="Type here..." rows="10" cols="50"></textarea>
+    <button onclick="generateOutput()">Generate Output</button>
+    <button onclick="copyToClipboard()">Copy to Clipboard</button>
+    <button onclick="reconstructText()">Reconstruct Text</button>
+    <div id="output"></div>
+
+    <script>
+        let log = [];
+        let lastValue = '';
+        const input = document.getElementById('input');
+
+        input.addEventListener('keydown', e => {
+            log.push({type: 'keydown', key: e.key, time: Date.now()});
+        });
+
+        input.addEventListener('keyup', e => {
+            log.push({type: 'keyup', key: e.key, time: Date.now()});
+        });
+
+        input.addEventListener('input', e => {
+            const currentValue = input.value;
+            const diff = getDiff(lastValue, currentValue);
+            log.push({type: 'diff', change: diff, time: Date.now()});
+            lastValue = currentValue;
+        });
+
+        function getDiff(oldStr, newStr) {
+            if (oldStr.length < newStr.length) {
+                return {added: newStr.slice(oldStr.length), pos: oldStr.length};
+            } else if (oldStr.length > newStr.length) {
+                return {removed: oldStr.slice(newStr.length), pos: newStr.length};
+            }
+            return {unchanged: true};
+        }
+
+        function reconstructText() {
+            let text = '';
+            log.forEach(entry => {
+                if (entry.type === 'diff' && !entry.change.unchanged) {
+                    if (entry.change.added) {
+                        text += entry.change.added;
+                    } else if (entry.change.removed) {
+                        text = text.slice(0, entry.change.pos);
+                    }
+                }
+            });
+            alert('Reconstructed text: ' + text);
+            return text;
+        }
+
+        function generateOutput() {
+            const text = input.value;
+            const logStr = JSON.stringify(log, null, 2);
+            const checksum = btoa(text + logStr);
+
+            const embedHtml = `
+                <div>
+                    <p>${text}</p>
+                    <details>
+                        <summary>View Provenance</summary>
+                        <pre>${logStr}</pre>
+                        <p>Checksum: ${checksum}</p>
+                    </details>
+                </div>
+            `;
+            document.getElementById('output').innerHTML = embedHtml;
+            return embedHtml;
+        }
+
+        function copyToClipboard() {
+            const embedHtml = generateOutput();
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(embedHtml).then(() => {
+                    alert('HTML copied to clipboard!');
+                }).catch(err => {
+                    alert('Failed to copy: ' + err + '. Try serving over HTTPS or localhost.');
+                });
+            } else {
+                // Fallback: Create a temporary textarea to copy text
+                const tempTextArea = document.createElement('textarea');
+                tempTextArea.value = embedHtml;
+                document.body.appendChild(tempTextArea);
+                tempTextArea.select();
+                try {
+                    document.execCommand('copy');
+                    alert('HTML copied to clipboard!');
+                } catch (err) {
+                    alert('Failed to copy: ' + err + '. Try serving over HTTPS or localhost.');
+                }
+                document.body.removeChild(tempTextArea);
+            }
+        }
+    </script>
+</body>
+</html>
