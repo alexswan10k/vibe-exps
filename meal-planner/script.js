@@ -19,6 +19,9 @@ function App() {
         Saturday: null,
         Sunday: null
     });
+    const [lmStudioEndpoint, setLmStudioEndpoint] = useState('http://localhost:1234');
+    const [lmStudioModel, setLmStudioModel] = useState('qwen/qwen3-4b-thinking-2507');
+    const [aiMode, setAiMode] = useState(false);
 
     // Helper function to get current recipe by ID
     const getRecipeById = (id) => {
@@ -42,6 +45,14 @@ function App() {
         if (storedShoppingList) {
             setShoppingList(JSON.parse(storedShoppingList));
         }
+        const storedEndpoint = localStorage.getItem('lmStudioEndpoint');
+        if (storedEndpoint) {
+            setLmStudioEndpoint(storedEndpoint);
+        }
+        const storedModel = localStorage.getItem('lmStudioModel');
+        if (storedModel) {
+            setLmStudioModel(storedModel);
+        }
     }, []);
 
     useEffect(() => {
@@ -59,6 +70,14 @@ function App() {
     useEffect(() => {
         localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
     }, [shoppingList]);
+
+    useEffect(() => {
+        localStorage.setItem('lmStudioEndpoint', lmStudioEndpoint);
+    }, [lmStudioEndpoint]);
+
+    useEffect(() => {
+        localStorage.setItem('lmStudioModel', lmStudioModel);
+    }, [lmStudioModel]);
 
     // Auto-generate shopping list when inventory or calendar changes
     useEffect(() => {
@@ -90,7 +109,8 @@ function App() {
         const newRecipe = {
             id: Date.now(),
             name: recipeData.name,
-            ingredients: recipeData.ingredients || []
+            ingredients: recipeData.ingredients || [],
+            method: recipeData.method || []
         };
         setRecipes([...recipes, newRecipe]);
     };
@@ -164,54 +184,130 @@ function App() {
         e.preventDefault();
     };
 
+    const generateRecipeWithAI = async (prompt) => {
+        try {
+            const response = await fetch(`${lmStudioEndpoint}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: lmStudioModel,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: `Generate a recipe based on: "${prompt}"
+
+IMPORTANT INSTRUCTIONS:
+- All ingredient names must be in lowercase
+- Use simple, unambiguous ingredient names that can be found in a grocery store
+- Avoid compound ingredients - break them down to basic items
+- Use standard grocery product names (e.g., "chicken breast" not "chicken", "olive oil" not "oil")
+- Include specific quantities and units that make sense for shopping
+- Focus on actual purchasable items for a shopping list
+- Provide clear, step-by-step cooking method/instructions
+
+Examples of good ingredient names:
+- "chicken breast" (not "chicken")
+- "olive oil" (not "oil")
+- "brown rice" (not "rice")
+- "canned tomatoes" (not "tomatoes")
+- "garlic cloves" (not "garlic")
+
+For the method, provide numbered steps that are easy to follow.`
+                        }
+                    ],
+                    response_format: {
+                        type: "json_schema",
+                        json_schema: {
+                            name: "recipe_response",
+                            strict: false,
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    name: {
+                                        type: "string",
+                                        description: "The name of the recipe"
+                                    },
+                                    ingredients: {
+                                        type: "array",
+                                        description: "List of ingredients with name, quantity, and unit",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                name: {
+                                                    type: "string",
+                                                    description: "Name of the ingredient"
+                                                },
+                                                quantity: {
+                                                    type: "number",
+                                                    description: "Quantity of the ingredient"
+                                                },
+                                                unit: {
+                                                    type: "string",
+                                                    description: "Unit of measurement (cups, tbsp, etc.)"
+                                                }
+                                            },
+                                            required: ["name", "quantity", "unit"]
+                                        }
+                                    },
+                                    method: {
+                                        type: "array",
+                                        description: "Step-by-step cooking instructions",
+                                        items: {
+                                            type: "string",
+                                            description: "A single cooking instruction step"
+                                        }
+                                    }
+                                },
+                                required: ["name", "ingredients"]
+                            }
+                        }
+                    },
+                    temperature: 0.7,
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const content = data.choices[0].message.content.trim();
+
+            // Try to parse the JSON response
+            const recipeData = JSON.parse(content);
+
+            // Validate the structure (method is now optional)
+            if (!recipeData.name || !Array.isArray(recipeData.ingredients)) {
+                throw new Error('Invalid recipe format received from AI. Missing name or ingredients array.');
+            }
+
+            // Ensure method is an array if it exists
+            if (recipeData.method && !Array.isArray(recipeData.method)) {
+                recipeData.method = [];
+            }
+
+            // Add the recipe
+            addRecipe(recipeData);
+            return { success: true };
+
+        } catch (error) {
+            console.error('AI generation error:', error);
+            // Check if it's a CORS error
+            if (error.message.includes('CORS') || error.message.includes('Access-Control')) {
+                return {
+                    success: false,
+                    error: 'CORS Error: Please run the meal planner through a local web server. Try: python -m http.server 8000'
+                };
+            }
+            return { success: false, error: error.message };
+        }
+    };
+
     return React.createElement('div', { className: 'app' },
         React.createElement('h1', null, 'Meal Planner'),
-        showCookModal && cookingRecipe && React.createElement('div', { className: 'modal-overlay' },
-            React.createElement('div', { className: 'modal' },
-                React.createElement('h2', null, `Cook ${cookingRecipe.name}?`),
-                React.createElement('p', null, 'This will consume the following ingredients from your inventory:'),
-                React.createElement('ul', null,
-                    cookingRecipe.ingredients.map((ing, index) => {
-                        const available = inventory[ing.name] || 0;
-                        const required = ing.quantity;
-                        const isInsufficient = available < required;
-                        const isMissing = available === 0;
-                        return React.createElement('li', {
-                            key: index,
-                            className: isInsufficient ? 'insufficient-ingredient' : ''
-                        },
-                            React.createElement('span', null, `${ing.name}: ${required} ${ing.unit || ''}`),
-                            React.createElement('span', { className: 'inventory-status' },
-                                ` (Available: ${available}${isMissing ? ' - MISSING' : isInsufficient ? ' - INSUFFICIENT' : ''})`
-                            )
-                        );
-                    })
-                ),
-                React.createElement('div', { className: 'modal-buttons' },
-                    React.createElement('button', { onClick: confirmCook }, 'Confirm'),
-                    React.createElement('button', { onClick: cancelCook }, 'Cancel')
-                )
-            )
-        ),
-        showEditModal && editingRecipe && React.createElement('div', { className: 'modal-overlay' },
-            React.createElement('div', { className: 'modal edit-modal' },
-                React.createElement('h2', null, 'Edit Recipe'),
-                React.createElement(EditRecipeForm, {
-                    recipe: editingRecipe,
-                    inventory,
-                    recipes,
-                    onSave: (recipeData) => {
-                        updateRecipe(editingRecipe.id, recipeData);
-                        setShowEditModal(false);
-                        setEditingRecipe(null);
-                    },
-                    onCancel: () => {
-                        setShowEditModal(false);
-                        setEditingRecipe(null);
-                    }
-                })
-            )
-        ),
         React.createElement('div', { className: 'tabs' },
             React.createElement('button', {
                 className: (activeTab === 'calendar' || activeTab === 'recipes') ? 'tab active' : 'tab',
@@ -237,7 +333,14 @@ function App() {
                 onEditRecipe: (recipe) => {
                     setEditingRecipe(recipe);
                     setShowEditModal(true);
-                }
+                },
+                lmStudioEndpoint,
+                lmStudioModel,
+                aiMode,
+                setLmStudioEndpoint,
+                setLmStudioModel,
+                setAiMode,
+                generateRecipeWithAI
             })
         ),
         activeTab === 'inventory' && React.createElement(Inventory, {
@@ -316,10 +419,15 @@ function IngredientDropdown({ value, suggestions, onChange, placeholder }) {
     );
 }
 
-function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe, onEditRecipe }) {
+function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe, onEditRecipe, lmStudioEndpoint, lmStudioModel, aiMode, setLmStudioEndpoint, setLmStudioModel, setAiMode, generateRecipeWithAI }) {
     const [newRecipe, setNewRecipe] = useState('');
+    const [aiPrompt, setAiPrompt] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [showPasteModal, setShowPasteModal] = useState(false);
+    const [pastedResult, setPastedResult] = useState('');
 
-    const handleSubmit = (e) => {
+    const handleManualSubmit = (e) => {
         e.preventDefault();
         if (newRecipe.trim()) {
             addRecipe({ name: newRecipe, ingredients: [] });
@@ -327,9 +435,108 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe,
         }
     };
 
+    const copyPromptToClipboard = async () => {
+        const prompt = `Generate a recipe based on: "${aiPrompt || 'your recipe description here'}"\n\nIMPORTANT INSTRUCTIONS:\n- All ingredient names must be in lowercase\n- Use simple, unambiguous ingredient names that can be found in a grocery store\n- Avoid compound ingredients - break them down to basic items\n- Use standard grocery product names (e.g., "chicken breast" not "chicken", "olive oil" not "oil")\n- Include specific quantities and units that make sense for shopping\n- Focus on actual purchasable items for a shopping list\n- Provide clear, step-by-step cooking method/instructions\n\nExamples of good ingredient names:\n- "chicken breast" (not "chicken")\n- "olive oil" (not "oil")\n- "brown rice" (not "rice")\n- "canned tomatoes" (not "tomatoes")\n- "garlic cloves" (not "garlic")\n\nFor the method, provide numbered steps that are easy to follow.\n\nReturn ONLY valid JSON in this exact format:\n{\n  "name": "Recipe Name Here",\n  "ingredients": [\n    {"name": "ingredient name", "quantity": 2, "unit": "cups"},\n    {"name": "another ingredient", "quantity": 1, "unit": "tbsp"}\n  ],\n  "method": [\n    "Step 1 instruction",\n    "Step 2 instruction"\n  ]\n}\n\nNo additional text or explanation.`;
+
+        try {
+            await navigator.clipboard.writeText(prompt);
+            alert('Prompt copied to clipboard! Paste it into your preferred LLM (ChatGPT, Claude, etc.)');
+        } catch (error) {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = prompt;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('Prompt copied to clipboard! Paste it into your preferred LLM (ChatGPT, Claude, etc.)');
+        }
+    };
+
+    const handlePasteResult = () => {
+        if (pastedResult.trim()) {
+            try {
+                const recipeData = JSON.parse(pastedResult.trim());
+
+                // Validate the structure (method is now optional)
+                if (!recipeData.name || !Array.isArray(recipeData.ingredients)) {
+                    throw new Error('Invalid recipe format. Please ensure the JSON has name and ingredients array.');
+                }
+
+                // Ensure method is an array if it exists
+                if (recipeData.method && !Array.isArray(recipeData.method)) {
+                    recipeData.method = [];
+                }
+
+                // Add the recipe
+                addRecipe(recipeData);
+                setPastedResult('');
+                setShowPasteModal(false);
+                alert('Recipe imported successfully!');
+            } catch (error) {
+                alert(`Failed to parse recipe: ${error.message}`);
+            }
+        }
+    };
+
+    const handleAISubmit = async (e) => {
+        e.preventDefault();
+        if (aiPrompt.trim() && !isGenerating) {
+            setIsGenerating(true);
+            try {
+                const result = await generateRecipeWithAI(aiPrompt.trim());
+                if (result.success) {
+                    setAiPrompt('');
+                } else {
+                    alert(`Failed to generate recipe: ${result.error}`);
+                }
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            } finally {
+                setIsGenerating(false);
+            }
+        }
+    };
+
     return React.createElement('div', { className: 'recipe-list' },
         React.createElement('h2', null, 'Recipes'),
-        React.createElement('form', { onSubmit: handleSubmit },
+        React.createElement('div', { className: 'ai-settings-toggle' },
+            React.createElement('div', { className: 'mode-toggle' },
+                React.createElement('button', {
+                    className: !aiMode ? 'mode-btn active' : 'mode-btn',
+                    onClick: () => setAiMode(false)
+                }, 'Manual'),
+                React.createElement('button', {
+                    className: aiMode ? 'mode-btn active' : 'mode-btn',
+                    onClick: () => setAiMode(true)
+                }, 'AI Generate')
+            ),
+            aiMode && React.createElement('button', {
+                onClick: () => setShowSettings(!showSettings),
+                className: 'settings-toggle-btn'
+            }, showSettings ? 'Hide Settings' : 'Show AI Settings')
+        ),
+        showSettings && React.createElement('div', { className: 'ai-settings' },
+            React.createElement('div', { className: 'setting-row' },
+                React.createElement('label', null, 'LMStudio Endpoint:'),
+                React.createElement('input', {
+                    type: 'text',
+                    value: lmStudioEndpoint,
+                    onChange: (e) => setLmStudioEndpoint(e.target.value),
+                    placeholder: 'http://localhost:1234'
+                })
+            ),
+            React.createElement('div', { className: 'setting-row' },
+                React.createElement('label', null, 'Model:'),
+                React.createElement('input', {
+                    type: 'text',
+                    value: lmStudioModel,
+                    onChange: (e) => setLmStudioModel(e.target.value),
+                    placeholder: 'google/gemma-3-4b'
+                })
+            )
+        ),
+        !aiMode ? React.createElement('form', { onSubmit: handleManualSubmit },
             React.createElement('input', {
                 type: 'text',
                 value: newRecipe,
@@ -337,6 +544,49 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe,
                 placeholder: 'Add new recipe'
             }),
             React.createElement('button', { type: 'submit' }, 'Add')
+        ) : React.createElement('div', { className: 'ai-form-container' },
+            React.createElement('form', { onSubmit: handleAISubmit },
+                React.createElement('input', {
+                    type: 'text',
+                    value: aiPrompt,
+                    onChange: (e) => setAiPrompt(e.target.value),
+                    placeholder: 'Describe the recipe you want (e.g., "Italian pasta with tomatoes")',
+                    disabled: isGenerating
+                }),
+                React.createElement('div', { className: 'ai-buttons' },
+                    React.createElement('button', {
+                        type: 'button',
+                        onClick: copyPromptToClipboard,
+                        className: 'copy-prompt-btn'
+                    }, '📋 Copy Prompt'),
+                    React.createElement('button', {
+                        type: 'button',
+                        onClick: () => setShowPasteModal(true),
+                        className: 'paste-result-btn'
+                    }, '📥 Paste Result'),
+                    React.createElement('button', {
+                        type: 'submit',
+                        disabled: isGenerating || !aiPrompt.trim()
+                    }, isGenerating ? 'Generating...' : 'Generate Recipe')
+                )
+            ),
+            showPasteModal && React.createElement('div', { className: 'modal-overlay' },
+                React.createElement('div', { className: 'modal paste-modal' },
+                    React.createElement('h2', null, 'Paste LLM Result'),
+                    React.createElement('p', null, 'Paste the JSON response from your preferred LLM (ChatGPT, Claude, etc.)'),
+                    React.createElement('textarea', {
+                        value: pastedResult,
+                        onChange: (e) => setPastedResult(e.target.value),
+                        placeholder: 'Paste the JSON response here...',
+                        rows: 15,
+                        className: 'paste-textarea'
+                    }),
+                    React.createElement('div', { className: 'modal-buttons' },
+                        React.createElement('button', { onClick: handlePasteResult }, 'Import Recipe'),
+                        React.createElement('button', { onClick: () => { setShowPasteModal(false); setPastedResult(''); } }, 'Cancel')
+                    )
+                )
+            )
         ),
         React.createElement('ul', null,
             recipes.map(recipe =>
@@ -511,7 +761,8 @@ function Inventory({ inventory, updateInventory }) {
 function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
     const [recipeForm, setRecipeForm] = useState({
         name: recipe.name,
-        ingredients: recipe.ingredients || []
+        ingredients: recipe.ingredients || [],
+        method: recipe.method || []
     });
 
     // Get all known ingredients from recipes and inventory
@@ -548,6 +799,26 @@ function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
         setRecipeForm({
             ...recipeForm,
             ingredients: recipeForm.ingredients.filter((_, i) => i !== index)
+        });
+    };
+
+    const addMethodStep = () => {
+        setRecipeForm({
+            ...recipeForm,
+            method: [...recipeForm.method, '']
+        });
+    };
+
+    const updateMethodStep = (index, value) => {
+        const updatedMethod = [...recipeForm.method];
+        updatedMethod[index] = value;
+        setRecipeForm({ ...recipeForm, method: updatedMethod });
+    };
+
+    const removeMethodStep = (index) => {
+        setRecipeForm({
+            ...recipeForm,
+            method: recipeForm.method.filter((_, i) => i !== index)
         });
     };
 
@@ -589,6 +860,25 @@ function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
             )
         ),
         React.createElement('button', { onClick: addIngredient, className: 'add-ingredient-btn' }, 'Add Ingredient'),
+        React.createElement('h4', null, 'Method'),
+        React.createElement('div', { className: 'method-list' },
+            recipeForm.method.map((step, index) =>
+                React.createElement('div', { key: index, className: 'method-row' },
+                    React.createElement('span', { className: 'step-number' }, `${index + 1}.`),
+                    React.createElement('textarea', {
+                        value: step,
+                        onChange: (e) => updateMethodStep(index, e.target.value),
+                        placeholder: 'Enter cooking instruction',
+                        rows: 2
+                    }),
+                    React.createElement('button', {
+                        onClick: () => removeMethodStep(index),
+                        className: 'remove-method-btn'
+                    }, 'Remove')
+                )
+            )
+        ),
+        React.createElement('button', { onClick: addMethodStep, className: 'add-method-btn' }, 'Add Step'),
         React.createElement('div', { className: 'modal-buttons' },
             React.createElement('button', { onClick: handleSave }, 'Save'),
             React.createElement('button', { onClick: onCancel }, 'Cancel')
@@ -628,6 +918,506 @@ function ShoppingList({ shoppingList, selectedShoppingItems, toggleSelectShoppin
             onClick: transferSelectedToInventory,
             style: { marginTop: '20px' }
         }, 'Transfer Selected to Inventory')
+    );
+}
+
+// Modal Manager Component - renders modals outside the main app hierarchy
+function ModalManager({ showCookModal, cookingRecipe, showEditModal, editingRecipe, showPasteModal, pastedResult, inventory, recipes, confirmCook, cancelCook, updateRecipe, addRecipe, setShowCookModal, setShowEditModal, setShowPasteModal, setPastedResult }) {
+    const handlePasteResult = () => {
+        if (pastedResult.trim()) {
+            try {
+                const recipeData = JSON.parse(pastedResult.trim());
+
+                // Validate the structure (method is now optional)
+                if (!recipeData.name || !Array.isArray(recipeData.ingredients)) {
+                    throw new Error('Invalid recipe format. Please ensure the JSON has name and ingredients array.');
+                }
+
+                // Ensure method is an array if it exists
+                if (recipeData.method && !Array.isArray(recipeData.method)) {
+                    recipeData.method = [];
+                }
+
+                // Add the recipe
+                addRecipe(recipeData);
+                setPastedResult('');
+                setShowPasteModal(false);
+                alert('Recipe imported successfully!');
+            } catch (error) {
+                alert(`Failed to parse recipe: ${error.message}`);
+            }
+        }
+    };
+
+    const handleOverlayClick = (e, closeFunction) => {
+        // Only close if clicking directly on the overlay, not on modal content
+        if (e.target === e.currentTarget) {
+            closeFunction();
+        }
+    };
+
+    return React.createElement(React.Fragment, null,
+        showCookModal && cookingRecipe && React.createElement('div', {
+            className: 'modal-overlay',
+            onClick: (e) => handleOverlayClick(e, () => setShowCookModal(false))
+        },
+            React.createElement('div', { className: 'modal cook-modal' },
+                React.createElement('h2', null, `Cook ${cookingRecipe.name}?`),
+                React.createElement('p', null, 'This will consume the following ingredients from your inventory:'),
+                React.createElement('ul', null,
+                    cookingRecipe.ingredients.map((ing, index) => {
+                        const available = inventory[ing.name] || 0;
+                        const required = ing.quantity;
+                        const isInsufficient = available < required;
+                        const isMissing = available === 0;
+                        return React.createElement('li', {
+                            key: index,
+                            className: isInsufficient ? 'insufficient-ingredient' : ''
+                        },
+                            React.createElement('span', null, `${ing.name}: ${required} ${ing.unit || ''}`),
+                            React.createElement('span', { className: 'inventory-status' },
+                                ` (Available: ${available}${isMissing ? ' - MISSING' : isInsufficient ? ' - INSUFFICIENT' : ''})`
+                            )
+                        );
+                    })
+                ),
+                cookingRecipe.method && cookingRecipe.method.length > 0 && React.createElement('div', { className: 'cook-method' },
+                    React.createElement('h3', null, 'Cooking Method:'),
+                    React.createElement('ol', null,
+                        cookingRecipe.method.map((step, index) =>
+                            React.createElement('li', { key: index, className: 'method-step' }, step)
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'modal-buttons' },
+                    React.createElement('button', { onClick: confirmCook }, 'Confirm'),
+                    React.createElement('button', { onClick: cancelCook }, 'Cancel')
+                )
+            )
+        ),
+        showEditModal && editingRecipe && React.createElement('div', {
+            className: 'modal-overlay',
+            onClick: (e) => handleOverlayClick(e, () => setShowEditModal(false))
+        },
+            React.createElement('div', { className: 'modal edit-modal' },
+                React.createElement('h2', null, 'Edit Recipe'),
+                React.createElement(EditRecipeForm, {
+                    recipe: editingRecipe,
+                    inventory,
+                    recipes,
+                    onSave: (recipeData) => {
+                        updateRecipe(editingRecipe.id, recipeData);
+                        setShowEditModal(false);
+                    },
+                    onCancel: () => {
+                        setShowEditModal(false);
+                    }
+                })
+            )
+        ),
+        showPasteModal && React.createElement('div', {
+            className: 'modal-overlay',
+            onClick: (e) => handleOverlayClick(e, () => { setShowPasteModal(false); setPastedResult(''); })
+        },
+            React.createElement('div', { className: 'modal paste-modal' },
+                React.createElement('h2', null, 'Paste LLM Result'),
+                React.createElement('p', null, 'Paste the JSON response from your preferred LLM (ChatGPT, Claude, etc.)'),
+                React.createElement('textarea', {
+                    value: pastedResult,
+                    onChange: (e) => setPastedResult(e.target.value),
+                    placeholder: 'Paste the JSON response here...',
+                    rows: 15,
+                    className: 'paste-textarea'
+                }),
+                React.createElement('div', { className: 'modal-buttons' },
+                    React.createElement('button', { onClick: handlePasteResult }, 'Import Recipe'),
+                    React.createElement('button', { onClick: () => { setShowPasteModal(false); setPastedResult(''); } }, 'Cancel')
+                )
+            )
+        )
+    );
+}
+
+// Main App Component
+function App() {
+    const [recipes, setRecipes] = useState([]);
+    const [inventory, setInventory] = useState({});
+    const [shoppingList, setShoppingList] = useState({});
+    const [selectedShoppingItems, setSelectedShoppingItems] = useState([]);
+    const [showCookModal, setShowCookModal] = useState(false);
+    const [cookingRecipe, setCookingRecipe] = useState(null);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingRecipe, setEditingRecipe] = useState(null);
+    const [activeTab, setActiveTab] = useState('calendar');
+    const [calendar, setCalendar] = useState({
+        Monday: null,
+        Tuesday: null,
+        Wednesday: null,
+        Thursday: null,
+        Friday: null,
+        Saturday: null,
+        Sunday: null
+    });
+    const [lmStudioEndpoint, setLmStudioEndpoint] = useState('http://localhost:1234');
+    const [lmStudioModel, setLmStudioModel] = useState('qwen/qwen3-4b-thinking-2507');
+    const [aiMode, setAiMode] = useState(false);
+    const [showPasteModal, setShowPasteModal] = useState(false);
+    const [pastedResult, setPastedResult] = useState('');
+
+    // Helper function to get current recipe by ID
+    const getRecipeById = (id) => {
+        return recipes.find(recipe => recipe.id == id);
+    };
+
+    useEffect(() => {
+        const storedRecipes = localStorage.getItem('recipes');
+        if (storedRecipes) {
+            setRecipes(JSON.parse(storedRecipes));
+        }
+        const storedCalendar = localStorage.getItem('calendar');
+        if (storedCalendar) {
+            setCalendar(JSON.parse(storedCalendar));
+        }
+        const storedInventory = localStorage.getItem('inventory');
+        if (storedInventory) {
+            setInventory(JSON.parse(storedInventory));
+        }
+        const storedShoppingList = localStorage.getItem('shoppingList');
+        if (storedShoppingList) {
+            setShoppingList(JSON.parse(storedShoppingList));
+        }
+        const storedEndpoint = localStorage.getItem('lmStudioEndpoint');
+        if (storedEndpoint) {
+            setLmStudioEndpoint(storedEndpoint);
+        }
+        const storedModel = localStorage.getItem('lmStudioModel');
+        if (storedModel) {
+            setLmStudioModel(storedModel);
+        }
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('recipes', JSON.stringify(recipes));
+    }, [recipes]);
+
+    useEffect(() => {
+        localStorage.setItem('calendar', JSON.stringify(calendar));
+    }, [calendar]);
+
+    useEffect(() => {
+        localStorage.setItem('inventory', JSON.stringify(inventory));
+    }, [inventory]);
+
+    useEffect(() => {
+        localStorage.setItem('shoppingList', JSON.stringify(shoppingList));
+    }, [shoppingList]);
+
+    useEffect(() => {
+        localStorage.setItem('lmStudioEndpoint', lmStudioEndpoint);
+    }, [lmStudioEndpoint]);
+
+    useEffect(() => {
+        localStorage.setItem('lmStudioModel', lmStudioModel);
+    }, [lmStudioModel]);
+
+    // Auto-generate shopping list when inventory or calendar changes
+    useEffect(() => {
+        const needed = {};
+        Object.values(calendar).forEach(recipeId => {
+            if (recipeId) {
+                const recipe = getRecipeById(recipeId);
+                if (recipe && recipe.ingredients) {
+                    recipe.ingredients.forEach(ing => {
+                        const current = inventory[ing.name] || 0;
+                        const required = needed[ing.name] || 0;
+                        needed[ing.name] = required + ing.quantity;
+                    });
+                }
+            }
+        });
+
+        const shopping = {};
+        Object.entries(needed).forEach(([item, neededQty]) => {
+            const available = inventory[item] || 0;
+            if (neededQty > available) {
+                shopping[item] = neededQty - available;
+            }
+        });
+        setShoppingList(shopping);
+    }, [inventory, calendar, recipes]);
+
+    const addRecipe = (recipeData) => {
+        const newRecipe = {
+            id: Date.now(),
+            name: recipeData.name,
+            ingredients: recipeData.ingredients || [],
+            method: recipeData.method || []
+        };
+        setRecipes([...recipes, newRecipe]);
+    };
+
+    const updateRecipe = (id, recipeData) => {
+        setRecipes(recipes.map(recipe =>
+            recipe.id === id ? { ...recipe, ...recipeData } : recipe
+        ));
+    };
+
+    const deleteRecipe = (id) => {
+        setRecipes(recipes.filter(recipe => recipe.id !== id));
+    };
+
+    const updateInventory = (item, quantity) => {
+        setInventory({ ...inventory, [item]: quantity });
+    };
+
+    const toggleSelectShoppingItem = (item) => {
+        setSelectedShoppingItems(prev =>
+            prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]
+        );
+    };
+
+
+
+    const transferSelectedToInventory = () => {
+        const newInventory = { ...inventory };
+        selectedShoppingItems.forEach(item => {
+            newInventory[item] = (newInventory[item] || 0) + shoppingList[item];
+        });
+        setInventory(newInventory);
+        const newList = { ...shoppingList };
+        selectedShoppingItems.forEach(item => delete newList[item]);
+        setShoppingList(newList);
+        setSelectedShoppingItems([]);
+    };
+
+    const handleCook = (recipe) => {
+        setCookingRecipe(recipe);
+        setShowCookModal(true);
+    };
+
+    const confirmCook = () => {
+        if (cookingRecipe && cookingRecipe.ingredients) {
+            const newInventory = { ...inventory };
+            cookingRecipe.ingredients.forEach(ing => {
+                const current = newInventory[ing.name] || 0;
+                newInventory[ing.name] = Math.max(0, current - ing.quantity);
+            });
+            setInventory(newInventory);
+        }
+        setShowCookModal(false);
+        setCookingRecipe(null);
+    };
+
+    const cancelCook = () => {
+        setShowCookModal(false);
+        setCookingRecipe(null);
+    };
+
+    const handleDrop = (e, day) => {
+        e.preventDefault();
+        const recipeId = e.dataTransfer.getData('text/plain');
+        if (recipeId) {
+            setCalendar({ ...calendar, [day]: recipeId });
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+    };
+
+    const generateRecipeWithAI = async (prompt) => {
+        try {
+            const response = await fetch(`${lmStudioEndpoint}/v1/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: lmStudioModel,
+                    messages: [
+                        {
+                            role: 'user',
+                            content: `Generate a recipe based on: "${prompt}"
+
+IMPORTANT INSTRUCTIONS:
+- All ingredient names must be in lowercase
+- Use simple, unambiguous ingredient names that can be found in a grocery store
+- Avoid compound ingredients - break them down to basic items
+- Use standard grocery product names (e.g., "chicken breast" not "chicken", "olive oil" not "oil")
+- Include specific quantities and units that make sense for shopping
+- Focus on actual purchasable items for a shopping list
+- Provide clear, step-by-step cooking method/instructions
+
+Examples of good ingredient names:
+- "chicken breast" (not "chicken")
+- "olive oil" (not "oil")
+- "brown rice" (not "rice")
+- "canned tomatoes" (not "tomatoes")
+- "garlic cloves" (not "garlic")
+
+For the method, provide numbered steps that are easy to follow.`
+                        }
+                    ],
+                    response_format: {
+                        type: "json_schema",
+                        json_schema: {
+                            name: "recipe_response",
+                            strict: false,
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    name: {
+                                        type: "string",
+                                        description: "The name of the recipe"
+                                    },
+                                    ingredients: {
+                                        type: "array",
+                                        description: "List of ingredients with name, quantity, and unit",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                name: {
+                                                    type: "string",
+                                                    description: "Name of the ingredient"
+                                                },
+                                                quantity: {
+                                                    type: "number",
+                                                    description: "Quantity of the ingredient"
+                                                },
+                                                unit: {
+                                                    type: "string",
+                                                    description: "Unit of measurement (cups, tbsp, etc.)"
+                                                }
+                                            },
+                                            required: ["name", "quantity", "unit"]
+                                        }
+                                    },
+                                    method: {
+                                        type: "array",
+                                        description: "Step-by-step cooking instructions",
+                                        items: {
+                                            type: "string",
+                                            description: "A single cooking instruction step"
+                                        }
+                                    }
+                                },
+                                required: ["name", "ingredients"]
+                            }
+                        }
+                    },
+                    temperature: 0.7,
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const content = data.choices[0].message.content.trim();
+
+            // Try to parse the JSON response
+            const recipeData = JSON.parse(content);
+
+            // Validate the structure (method is now optional)
+            if (!recipeData.name || !Array.isArray(recipeData.ingredients)) {
+                throw new Error('Invalid recipe format received from AI. Missing name or ingredients array.');
+            }
+
+            // Ensure method is an array if it exists
+            if (recipeData.method && !Array.isArray(recipeData.method)) {
+                recipeData.method = [];
+            }
+
+            // Add the recipe
+            addRecipe(recipeData);
+            return { success: true };
+
+        } catch (error) {
+            console.error('AI generation error:', error);
+            // Check if it's a CORS error
+            if (error.message.includes('CORS') || error.message.includes('Access-Control')) {
+                return {
+                    success: false,
+                    error: 'CORS Error: Please run the meal planner through a local web server. Try: python -m http.server 8000'
+                };
+            }
+            return { success: false, error: error.message };
+        }
+    };
+
+    return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'app' },
+            React.createElement('h1', null, 'Meal Planner'),
+            React.createElement('div', { className: 'tabs' },
+                React.createElement('button', {
+                    className: (activeTab === 'calendar' || activeTab === 'recipes') ? 'tab active' : 'tab',
+                    onClick: () => setActiveTab('calendar')
+                }, 'Meal Planner'),
+                React.createElement('button', {
+                    className: activeTab === 'inventory' ? 'tab active' : 'tab',
+                    onClick: () => setActiveTab('inventory')
+                }, 'Inventory'),
+                React.createElement('button', {
+                    className: activeTab === 'shopping' ? 'tab active' : 'tab',
+                    onClick: () => setActiveTab('shopping')
+                }, 'Shopping List')
+            ),
+            (activeTab === 'calendar' || activeTab === 'recipes') && React.createElement('div', { className: 'main-content' },
+                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook }),
+                React.createElement(RecipeList, {
+                    recipes,
+                    inventory,
+                    addRecipe,
+                    updateRecipe,
+                    deleteRecipe,
+                    onEditRecipe: (recipe) => {
+                        setEditingRecipe(recipe);
+                        setShowEditModal(true);
+                    },
+                    lmStudioEndpoint,
+                    lmStudioModel,
+                    aiMode,
+                    setLmStudioEndpoint,
+                    setLmStudioModel,
+                    setAiMode,
+                    generateRecipeWithAI,
+                    setShowPasteModal
+                })
+            ),
+            activeTab === 'inventory' && React.createElement(Inventory, {
+                inventory,
+                updateInventory
+            }),
+            activeTab === 'shopping' && React.createElement(ShoppingList, {
+                shoppingList,
+                selectedShoppingItems,
+                toggleSelectShoppingItem,
+                transferSelectedToInventory
+            })
+        ),
+        ReactDOM.createPortal(
+            React.createElement(ModalManager, {
+                showCookModal,
+                cookingRecipe,
+                showEditModal,
+                editingRecipe,
+                showPasteModal,
+                pastedResult,
+                inventory,
+                recipes,
+                confirmCook,
+                cancelCook,
+                updateRecipe,
+                addRecipe,
+                setShowCookModal,
+                setShowEditModal,
+                setShowPasteModal,
+                setPastedResult
+            }),
+            document.body
+        )
     );
 }
 
