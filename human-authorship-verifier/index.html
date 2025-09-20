@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Human Authorship Verifier</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            color: #555;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        textarea:focus {
+            border-color: #4CAF50;
+            outline: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.secondary {
+            background-color: #2196F3;
+        }
+        button.secondary:hover {
+            background-color: #0b7dda;
+        }
+        button.danger {
+            background-color: #f44336;
+        }
+        button.danger:hover {
+            background-color: #da190b;
+        }
+        .button-group {
+            text-align: center;
+            margin: 20px 0;
+        }
+        .status-message {
+            padding: 10px;
+            background-color: #e8f5e8;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .key-display {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            margin: 10px 0;
+        }
+        .key-display pre {
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 12px;
+        }
+        .output-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .output-section h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        .live-output {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: #666;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        // Global crypto variables
+        let privateKey = null;
+        let publicKey = null;
+
+        // Utility functions
+        async function generateKeys() {
+            try {
+                const keyPair = await crypto.subtle.generateKey(
+                    {
+                        name: 'RSA-PSS',
+                        modulusLength: 2048,
+                        publicExponent: new Uint8Array([1, 0, 1]),
+                        hash: 'SHA-256',
+                    },
+                    true,
+                    ['sign', 'verify']
+                );
+
+                privateKey = keyPair.privateKey;
+                publicKey = keyPair.publicKey;
+
+                // Export and store
+                const privateJwk = await crypto.subtle.exportKey('jwk', privateKey);
+                const publicJwk = await crypto.subtle.exportKey('jwk', publicKey);
+
+                localStorage.setItem('privateKey', JSON.stringify(privateJwk));
+                localStorage.setItem('publicKey', JSON.stringify(publicJwk));
+
+                return { privateKey, publicKey, publicJwk };
+            } catch (error) {
+                console.error('Error generating keys:', error);
+                throw error;
+            }
+        }
+
+        async function importKeys(privateJwkStr, publicJwkStr) {
+            try {
+                const privateJwk = JSON.parse(privateJwkStr);
+                const publicJwk = JSON.parse(publicJwkStr);
+
+                privateKey = await crypto.subtle.importKey(
+                    'jwk',
+                    privateJwk,
+                    {
+                        name: 'RSA-PSS',
+                        hash: 'SHA-256',
+                    },
+                    false,
+                    ['sign']
+                );
+                publicKey = await crypto.subtle.importKey(
+                    'jwk',
+                    publicJwk,
+                    {
+                        name: 'RSA-PSS',
+                        hash: 'SHA-256',
+                    },
+                    false,
+                    ['verify']
+                );
+
+                return { privateKey, publicKey, publicJwk };
+            } catch (error) {
+                console.error('Error importing keys:', error);
+                throw error;
+            }
+        }
+
+        async function signData(data) {
+            if (!privateKey) {
+                throw new Error('No private key available. Generate keys first.');
+            }
+            const encoder = new TextEncoder();
+            const dataBuffer = encoder.encode(data);
+            const signature = await crypto.subtle.sign(
+                {
+                    name: 'RSA-PSS',
+                    saltLength: 32, // 256 bits for SHA-256
+                },
+                privateKey,
+                dataBuffer
+            );
+            return btoa(String.fromCharCode(...new Uint8Array(signature)));
+        }
+
+        function getDiff(oldStr, newStr) {
+            if (oldStr.length < newStr.length) {
+                return {added: newStr.slice(oldStr.length), pos: oldStr.length};
+            } else if (oldStr.length > newStr.length) {
+                return {removed: oldStr.slice(newStr.length), pos: newStr.length};
+            }
+            return {unchanged: true};
+        }
+
+        // Generate user-defined fingerprint from personal identifier
+        async function generateUserFingerprint(identifier) {
+            if (!identifier || identifier.trim() === '') {
+                return '';
+            }
+
+            // Hash the user identifier for anonymity
+            const encoder = new TextEncoder();
+            const data = encoder.encode(identifier.trim().toLowerCase());
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            return hashHex;
+        }
+
+        // React App Component
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [text, setText] = useState('');
+            const [log, setLog] = useState([]);
+            const [lastValue, setLastValue] = useState('');
+            const [keys, setKeys] = useState(null);
+            const [publicKeyStr, setPublicKeyStr] = useState('');
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [signature, setSignature] = useState('');
+            const [embedHtml, setEmbedHtml] = useState('');
+            const [userIdentifier, setUserIdentifier] = useState('');
+            const [fingerprint, setFingerprint] = useState('');
+            const [showFingerprint, setShowFingerprint] = useState(false);
+
+            // Load keys on mount
+            useEffect(() => {
+                const loadKeys = async () => {
+                    const storedPrivate = localStorage.getItem('privateKey');
+                    const storedPublic = localStorage.getItem('publicKey');
+                    if (storedPrivate && storedPublic) {
+                        try {
+                            const result = await importKeys(storedPrivate, storedPublic);
+                            setKeys(result);
+                            setPublicKeyStr(JSON.stringify(result.publicJwk));
+                        } catch (error) {
+                            console.error('Failed to load keys:', error);
+                        }
+                    }
+                };
+                loadKeys();
+            }, []);
+
+            // Load user identifier and generate fingerprint on mount
+            useEffect(() => {
+                const storedIdentifier = localStorage.getItem('userIdentifier') || '';
+                setUserIdentifier(storedIdentifier);
+
+                const generateFingerprint = async () => {
+                    try {
+                        const fp = await generateUserFingerprint(storedIdentifier);
+                        setFingerprint(fp);
+                    } catch (error) {
+                        console.error('Error generating fingerprint:', error);
+                    }
+                };
+                generateFingerprint();
+            }, []);
+
+            // Generate signature and HTML when text or log changes
+            useEffect(() => {
+                const generateLiveOutput = async () => {
+                    if (!text.trim() || !keys || log.length === 0) {
+                        setSignature('');
+                        setEmbedHtml('');
+                        return;
+                    }
+
+                    try {
+                        const logStr = JSON.stringify(log, null, 2);
+                        const sig = await signData(logStr);
+                        setSignature(sig);
+
+                        const html = `<p data-hav-key="${publicKeyStr}" data-hav-log="eventlog.txt" data-hav-signature="${sig}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
+                        setEmbedHtml(html);
+                    } catch (error) {
+                        console.error('Error generating output:', error);
+                    }
+                };
+
+                generateLiveOutput();
+            }, [text, log, keys, publicKeyStr, fingerprint]);
+
+            const handleGenerateKeys = async () => {
+                setIsGenerating(true);
+                try {
+                    const result = await generateKeys();
+                    setKeys(result);
+                    setPublicKeyStr(JSON.stringify(result.publicJwk));
+                } catch (error) {
+                    alert('Error generating keys: ' + error.message);
+                }
+                setIsGenerating(false);
+            };
+
+            const handleTextChange = (e) => {
+                const newValue = e.target.value;
+                const diff = getDiff(lastValue, newValue);
+
+                if (diff.added || diff.removed) {
+                    setLog(prevLog => [...prevLog, {
+                        type: 'diff',
+                        change: diff,
+                        time: Date.now()
+                    }]);
+                }
+
+                setText(newValue);
+                setLastValue(newValue);
+            };
+
+            const handleKeyDown = (e) => {
+                setLog(prevLog => [...prevLog, {
+                    type: 'keydown',
+                    key: e.key,
+                    time: Date.now()
+                }]);
+            };
+
+            const handleKeyUp = (e) => {
+                setLog(prevLog => [...prevLog, {
+                    type: 'keyup',
+                    key: e.key,
+                    time: Date.now()
+                }]);
+            };
+
+            const downloadLog = () => {
+                const logStr = JSON.stringify(log, null, 2);
+                const blob = new Blob([logStr], {type: 'text/plain'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'eventlog.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            const copyToClipboard = async () => {
+                if (!embedHtml) return;
+
+                try {
+                    if (navigator.clipboard && window.isSecureContext) {
+                        await navigator.clipboard.writeText(embedHtml);
+                        alert('HTML copied to clipboard!');
+                    } else {
+                        // Fallback
+                        const tempTextArea = document.createElement('textarea');
+                        tempTextArea.value = embedHtml;
+                        document.body.appendChild(tempTextArea);
+                        tempTextArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tempTextArea);
+                        alert('HTML copied to clipboard!');
+                    }
+                } catch (error) {
+                    alert('Failed to copy: ' + error.message);
+                }
+            };
+
+            const [showLog, setShowLog] = useState(false);
+
+            const toggleLog = () => {
+                setShowLog(!showLog);
+            };
+
+            const exportKeyPair = async () => {
+                if (!keys) {
+                    alert('No keys available to export.');
+                    return;
+                }
+
+                try {
+                    const privateJwk = await crypto.subtle.exportKey('jwk', privateKey);
+                    const publicJwk = await crypto.subtle.exportKey('jwk', publicKey);
+
+                    const keyPairData = {
+                        privateKey: privateJwk,
+                        publicKey: publicJwk,
+                        exportedAt: new Date().toISOString(),
+                        note: 'Keep this file secure - it contains your private key!'
+                    };
+
+                    const keyPairJson = JSON.stringify(keyPairData, null, 2);
+
+                    // Create download
+                    const blob = new Blob([keyPairJson], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'key-pair-backup.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    alert('Key pair exported successfully! Keep this file secure - it contains your private key.');
+                } catch (error) {
+                    alert('Error exporting key pair: ' + error.message);
+                }
+            };
+
+            const exportPrivateKey = async () => {
+                if (!keys) {
+                    alert('No private key available to export.');
+                    return;
+                }
+
+                try {
+                    const privateJwk = await crypto.subtle.exportKey('jwk', privateKey);
+                    const privateKeyData = JSON.stringify(privateJwk, null, 2);
+
+                    // Create download
+                    const blob = new Blob([privateKeyData], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'private-key-backup.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    alert('Private key exported successfully! Keep this file secure.');
+                } catch (error) {
+                    alert('Error exporting private key: ' + error.message);
+                }
+            };
+
+            const exportPublicKey = async () => {
+                if (!keys) {
+                    alert('No public key available to export.');
+                    return;
+                }
+
+                try {
+                    const publicJwk = await crypto.subtle.exportKey('jwk', publicKey);
+                    const publicKeyData = JSON.stringify(publicJwk, null, 2);
+
+                    // Create download
+                    const blob = new Blob([publicKeyData], {type: 'application/json'});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'public-key.json';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    alert('Public key exported successfully! Share this file for verification.');
+                } catch (error) {
+                    alert('Error exporting public key: ' + error.message);
+                }
+            };
+
+            const importPublicKey = () => {
+                // Create file input
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.json';
+                fileInput.style.display = 'none';
+
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    try {
+                        const text = await file.text();
+                        const keyData = JSON.parse(text);
+
+                        // Check if it's a valid public key file
+                        if (!keyData.n || !keyData.e || keyData.d) {
+                            throw new Error('Invalid public key file format');
+                        }
+
+                        const publicKeyStr = JSON.stringify(keyData);
+
+                        // Clear existing public key only (keep private key if it exists)
+                        publicKey = null;
+                        localStorage.removeItem('publicKey');
+
+                        // Import the public key
+                        publicKey = await crypto.subtle.importKey(
+                            'jwk',
+                            keyData,
+                            {
+                                name: 'RSA-PSS',
+                                hash: 'SHA-256',
+                            },
+                            false,
+                            ['verify']
+                        );
+
+                        // Update state
+                        setKeys(prevKeys => prevKeys ? {...prevKeys, publicKey} : {publicKey});
+                        setPublicKeyStr(publicKeyStr);
+
+                        alert('Public key imported successfully from file!');
+                    } catch (error) {
+                        alert('Error importing public key: ' + error.message);
+                    }
+                };
+
+                // Trigger file selection
+                document.body.appendChild(fileInput);
+                fileInput.click();
+                document.body.removeChild(fileInput);
+            };
+
+            const importKeyPair = () => {
+                // Create file input
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.json';
+                fileInput.style.display = 'none';
+
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    try {
+                        const text = await file.text();
+                        const keyPairData = JSON.parse(text);
+
+                        // Check if it's a valid key pair file
+                        if (!keyPairData.privateKey || !keyPairData.publicKey) {
+                            throw new Error('Invalid key pair file format. Expected privateKey and publicKey fields.');
+                        }
+
+                        const privateKeyStr = JSON.stringify(keyPairData.privateKey);
+                        const publicKeyStr = JSON.stringify(keyPairData.publicKey);
+
+                        // Clear existing keys first
+                        privateKey = null;
+                        publicKey = null;
+                        localStorage.removeItem('privateKey');
+                        localStorage.removeItem('publicKey');
+
+                        // Import the new keys
+                        const result = await importKeys(privateKeyStr, publicKeyStr);
+                        setKeys(result);
+                        setPublicKeyStr(JSON.stringify(result.publicJwk));
+
+                        alert('Key pair imported successfully from file!');
+                    } catch (error) {
+                        alert('Error importing key pair: ' + error.message);
+                    }
+                };
+
+                // Trigger file selection
+                document.body.appendChild(fileInput);
+                fileInput.click();
+                document.body.removeChild(fileInput);
+            };
+
+            const importPrivateKey = () => {
+                // Create file input
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.accept = '.json';
+                fileInput.style.display = 'none';
+
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+
+                    try {
+                        const text = await file.text();
+                        const keyData = JSON.parse(text);
+
+                        // Check if it's a valid key file
+                        if (!keyData.n || !keyData.e || !keyData.d) {
+                            throw new Error('Invalid key file format');
+                        }
+
+                        // For private key import, we need both private and public parts
+                        // The exported file should contain the full private key
+                        const privateKeyStr = JSON.stringify(keyData);
+
+                        // Generate public key from private key data
+                        const publicKeyData = {
+                            kty: keyData.kty,
+                            n: keyData.n,
+                            e: keyData.e
+                        };
+                        const publicKeyStr = JSON.stringify(publicKeyData);
+
+                        // Clear existing keys first
+                        privateKey = null;
+                        publicKey = null;
+                        localStorage.removeItem('privateKey');
+                        localStorage.removeItem('publicKey');
+
+                        // Import the new keys
+                        const result = await importKeys(privateKeyStr, publicKeyStr);
+                        setKeys(result);
+                        setPublicKeyStr(JSON.stringify(result.publicJwk));
+
+                        alert('Private key imported successfully from file!');
+                    } catch (error) {
+                        alert('Error importing private key: ' + error.message);
+                    }
+                };
+
+                // Trigger file selection
+                document.body.appendChild(fileInput);
+                fileInput.click();
+                document.body.removeChild(fileInput);
+            };
+
+            const clearKeys = () => {
+                if (confirm('Are you sure you want to clear your stored keys? You will need to import or generate new keys to continue.')) {
+                    privateKey = null;
+                    publicKey = null;
+                    localStorage.removeItem('privateKey');
+                    localStorage.removeItem('publicKey');
+                    setKeys(null);
+                    setPublicKeyStr('');
+                    setSignature('');
+                    setEmbedHtml('');
+                    alert('Keys cleared successfully.');
+                }
+            };
+
+            const clearAll = () => {
+                if (confirm('Are you sure you want to clear all text and event logs? This cannot be undone.')) {
+                    setText('');
+                    setLog([]);
+                    setLastValue('');
+                    setSignature('');
+                    setEmbedHtml('');
+                }
+            };
+
+            return React.createElement('div', { className: 'container' },
+                React.createElement('h1', null, 'Human Authorship Verifier'),
+
+                // Key Management Section
+                React.createElement('div', { className: 'section' },
+                    React.createElement('h2', null, '1. Key Management'),
+                    React.createElement('div', { className: 'button-group' },
+                        React.createElement('button',
+                            {
+                                onClick: handleGenerateKeys,
+                                disabled: isGenerating
+                            },
+                            isGenerating ? 'Generating...' : 'Generate Key Pair'
+                        ),
+                        React.createElement('button', { className: 'secondary', onClick: exportKeyPair }, 'Export Key Pair'),
+                        React.createElement('button', { className: 'secondary', onClick: importKeyPair }, 'Import Key Pair'),
+                        React.createElement('button', { className: 'danger', onClick: clearKeys }, 'Clear Stored Keys')
+                    ),
+                    keys ? React.createElement('div', { className: 'status-message' },
+                        'Keys loaded successfully',
+                        React.createElement('br', null),
+                        React.createElement('small', { style: { color: '#666' } },
+                            '⚠️ Your private key is stored locally. Keep it secure and make backups.'
+                        )
+                    ) :
+                       React.createElement('div', { className: 'status-message' }, 'No keys found. Generate a key pair.'),
+                    publicKeyStr && React.createElement('div', { className: 'key-display' },
+                        React.createElement('strong', null, 'Public Key:'),
+                        React.createElement('pre', null, JSON.stringify(JSON.parse(publicKeyStr), null, 2))
+                    )
+                ),
+
+                // Text Input Section
+                React.createElement('div', { className: 'section' },
+                    React.createElement('h2', null, '2. Type Your Text'),
+                    React.createElement('textarea', {
+                        value: text,
+                        onChange: handleTextChange,
+                        onKeyDown: handleKeyDown,
+                        onKeyUp: handleKeyUp,
+                        placeholder: 'Type your text here to create a verifiable record of human authorship...',
+                        rows: 8
+                    })
+                ),
+
+                // Action Buttons
+                React.createElement('div', { className: 'button-group' },
+                    React.createElement('button', { className: 'secondary', onClick: copyToClipboard }, 'Copy HTML to Clipboard'),
+                    React.createElement('button', { className: 'secondary', onClick: downloadLog }, 'Download Event Log'),
+                    React.createElement('button', { className: 'secondary', onClick: () => setShowFingerprint(!showFingerprint) }, showFingerprint ? 'Hide Fingerprint' : 'Show Fingerprint'),
+                    React.createElement('button', { className: 'secondary', onClick: toggleLog }, showLog ? 'Hide Event Log' : 'Show Event Log'),
+                    React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All & Start Over')
+                ),
+
+                // Fingerprint Display Section
+                showFingerprint && React.createElement('div', { className: 'section output-section' },
+                    React.createElement('h3', null, 'User Fingerprint'),
+                    React.createElement('div', { className: 'stats' },
+                        React.createElement('span', null, 'Anonymous User Identifier'),
+                        React.createElement('span', null, `Length: ${fingerprint.length} chars`)
+                    ),
+                    React.createElement('p', null,
+                        'Enter a personal identifier (name, DOB, etc.) to create a consistent anonymous fingerprint. ',
+                        'This allows you to be recognized across different key pairs while remaining anonymous.'
+                    ),
+                    React.createElement('div', { style: { marginBottom: '15px' } },
+                        React.createElement('input', {
+                            type: 'text',
+                            value: userIdentifier,
+                            onChange: (e) => setUserIdentifier(e.target.value),
+                            placeholder: 'Enter your identifier (e.g., name, DOB, nickname)',
+                            style: {
+                                width: '100%',
+                                padding: '10px',
+                                border: '2px solid #ddd',
+                                borderRadius: '5px',
+                                fontSize: '14px',
+                                marginBottom: '10px'
+                            }
+                        }),
+                        React.createElement('button', {
+                            onClick: async () => {
+                                localStorage.setItem('userIdentifier', userIdentifier);
+                                const fp = await generateUserFingerprint(userIdentifier);
+                                setFingerprint(fp);
+                                alert('Fingerprint updated successfully!');
+                            },
+                            style: {
+                                backgroundColor: '#FF9800',
+                                marginLeft: '10px'
+                            }
+                        }, 'Update Fingerprint')
+                    ),
+                    React.createElement('div', { className: 'key-display' },
+                        React.createElement('strong', null, 'Your Fingerprint:'),
+                        React.createElement('pre', null, fingerprint || 'No fingerprint set')
+                    )
+                ),
+
+                // Event Log Display Section
+                showLog && React.createElement('div', { className: 'section output-section' },
+                    React.createElement('h3', null, 'Event Log Details'),
+                    React.createElement('div', { className: 'stats' },
+                        React.createElement('span', null, `Total Events: ${log.length}`),
+                        React.createElement('span', null, `Last Event: ${log.length > 0 ? new Date(log[log.length - 1].time).toLocaleTimeString() : 'None'}`)
+                    ),
+                    React.createElement('textarea', {
+                        value: JSON.stringify(log, null, 2),
+                        readOnly: true,
+                        rows: 12,
+                        placeholder: 'Event log will appear here...'
+                    })
+                ),
+
+                // Live Output Section
+                React.createElement('div', { className: 'section output-section' },
+                    React.createElement('h3', null, '3. Live Generated HTML Output'),
+                    React.createElement('div', { className: 'stats' },
+                        React.createElement('span', null, `Characters: ${text.length}`),
+                        React.createElement('span', null, `Events logged: ${log.length}`)
+                    ),
+                    React.createElement('p', null,
+                        'Copy this HTML and paste it into your webpage. Update the ',
+                        React.createElement('code', null, 'data-hav-log'),
+                        ' attribute to point to your hosted eventlog.txt file.'
+                    ),
+                    React.createElement('textarea', {
+                        value: embedHtml,
+                        readOnly: true,
+                        rows: 6,
+                        placeholder: 'Generated HTML will appear here as you type...'
+                    })
+                )
+            );
+        }
+
+        // Render the app
+        ReactDOM.render(React.createElement(App), document.getElementById('root'));
+    </script>
+</body>
+</html>
