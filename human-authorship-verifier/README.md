@@ -14,6 +14,7 @@ In an era of AI-generated content flooding the internet, **Human Authorship Veri
 ## Features
 
 - **Cryptographic Verification**: RSA-PSS signatures with SHA-256 hashing
+- **Two-Tier Verification System**: Fast content verification + optional behavioral verification
 - **Behavioral Logging**: Keystroke patterns and timing analysis
 - **Anonymous User Fingerprints**: User-defined identifiers hashed for privacy
 - **Key Pair Management**: Generate, export, and import cryptographic keys
@@ -148,10 +149,27 @@ The web application provides an intuitive interface with the following sections:
    - Others can verify your authorship using the embedded data
    - Fingerprint allows recognition across different key pairs
 
-## Verification Process
+## Two-Tier Verification System
 
-To verify a piece of text:
+The system now supports **two levels of verification** for different use cases:
 
+### Level 1: Content Integrity Check (Fast, No Network)
+- **Purpose**: Quickly verify that the displayed text hasn't been tampered with
+- **Requirements**: Only embedded data (public key, content signature, timestamp)
+- **Network**: None required
+- **Security**: Cryptographically proves text authenticity
+- **Use Case**: Social media posts, quick verification, resource-constrained environments
+
+### Level 2: Full Behavioral Verification (Complete, Requires Network)
+- **Purpose**: Verify human authorship with behavioral analysis
+- **Requirements**: Log file must be fetched from URL
+- **Network**: One HTTP request to fetch log
+- **Security**: Proves text was actually typed with human-like behavior
+- **Use Case**: High-trust scenarios, academic publishing, legal documents
+
+### Verification Process
+
+**Option A: Traditional Single-Tier (Legacy)**
 1. Extract the log URL from `data-hav-log`.
 2. Fetch the log file.
 3. Extract the public key from `data-hav-key`.
@@ -159,6 +177,35 @@ To verify a piece of text:
 5. Reconstruct the text from the log events.
 6. Compare reconstructed text with displayed text.
 7. (Optional) Extract fingerprint from `data-hav-fingerprint` for user identification.
+
+**Option B: Two-Tier Verification**
+1. **Level 1**: Verify content signature against displayed text (no network)
+2. **Level 2** (Optional): Fetch log and verify behavioral signature
+3. Combine results for comprehensive verification
+
+### Two-Tier API Usage
+
+```javascript
+const { verifyContent, verifyLogSignature, verifyTwoTier } = require('./hav-core');
+
+// Level 1: Fast content verification
+const level1Result = await verifyContent(text, contentSignature, timestamp, publicKey);
+if (level1Result.isValid) {
+    console.log('✅ Text integrity verified');
+}
+
+// Level 2: Full behavioral verification (requires log)
+const level2Result = await verifyLogSignature(log, text, logSignature, timestamp, publicKey);
+if (level2Result.isValid) {
+    console.log('✅ Human authorship verified with behavioral data');
+}
+
+// Combined verification
+const combinedResult = await verifyTwoTier(text, contentSignature, logSignature, timestamp, publicKey, log);
+if (combinedResult.isValid) {
+    console.log('✅ Complete verification passed');
+}
+```
 
 ### Fingerprint Verification
 

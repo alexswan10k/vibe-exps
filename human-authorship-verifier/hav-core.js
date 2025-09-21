@@ -3,6 +3,11 @@
  * Contains signing and verification functions for human-authored content
  */
 
+// Initialize global namespace immediately
+if (typeof window !== 'undefined') {
+    window.HAVCore = {};
+}
+
 // Detect environment
 const isBrowser = typeof window !== 'undefined' && typeof window.crypto !== 'undefined';
 const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
@@ -39,13 +44,8 @@ async function browserGenerateTextHash(text) {
 }
 
 async function browserSignLog(log, text, privateKeyJwk) {
-    // Create signed data structure
+    const timestamp = Date.now();
     const textHash = await browserGenerateTextHash(text);
-    const signedData = {
-        log: log,
-        textHash: textHash,
-        timestamp: Date.now()
-    };
 
     // Import private key
     const privateKey = await crypto.subtle.importKey(
@@ -59,20 +59,49 @@ async function browserSignLog(log, text, privateKeyJwk) {
         ['sign']
     );
 
-    // Sign the data
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(JSON.stringify(signedData));
-    const signature = await crypto.subtle.sign(
+    // Sign content (text + timestamp)
+    const contentSignedData = {
+        text: text,
+        timestamp: timestamp
+    };
+    const contentEncoder = new TextEncoder();
+    const contentDataBuffer = contentEncoder.encode(JSON.stringify(contentSignedData));
+    const contentSignature = await crypto.subtle.sign(
         {
             name: 'RSA-PSS',
             saltLength: 32, // 256 bits for SHA-256
         },
         privateKey,
-        dataBuffer
+        contentDataBuffer
     );
+    const contentSignatureBase64 = btoa(String.fromCharCode(...new Uint8Array(contentSignature)));
 
-    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)));
-    return { signature: signatureBase64, signedData };
+    // Sign log (log + textHash + timestamp)
+    const logSignedData = {
+        log: log,
+        textHash: textHash,
+        timestamp: timestamp
+    };
+    const logEncoder = new TextEncoder();
+    const logDataBuffer = logEncoder.encode(JSON.stringify(logSignedData));
+    const logSignature = await crypto.subtle.sign(
+        {
+            name: 'RSA-PSS',
+            saltLength: 32, // 256 bits for SHA-256
+        },
+        privateKey,
+        logDataBuffer
+    );
+    const logSignatureBase64 = btoa(String.fromCharCode(...new Uint8Array(logSignature)));
+
+    return {
+        contentSignature: contentSignatureBase64,
+        logSignature: logSignatureBase64,
+        timestamp: timestamp,
+        // Legacy support
+        signature: logSignatureBase64,
+        signedData: logSignedData
+    };
 }
 
 async function browserVerifyLog(log, text, signature, publicKeyJwk, signedData = null) {
@@ -235,13 +264,8 @@ function nodeGenerateTextHash(text) {
 
 function nodeSignLog(log, text, privateKeyJwk) {
     const crypto = require('crypto');
-
-    // Create signed data structure
-    const signedData = {
-        log: log,
-        textHash: nodeGenerateTextHash(text),
-        timestamp: Date.now()
-    };
+    const timestamp = Date.now();
+    const textHash = nodeGenerateTextHash(text);
 
     // Import private key
     const privateKeyObject = crypto.createPrivateKey({
@@ -249,12 +273,33 @@ function nodeSignLog(log, text, privateKeyJwk) {
         format: 'jwk'
     });
 
-    // Sign the data
-    const sign = crypto.createSign('RSA-SHA256');
-    sign.update(JSON.stringify(signedData));
-    const signature = sign.sign(privateKeyObject, 'base64');
+    // Sign content (text + timestamp)
+    const contentSignedData = {
+        text: text,
+        timestamp: timestamp
+    };
+    const contentSign = crypto.createSign('RSA-SHA256');
+    contentSign.update(JSON.stringify(contentSignedData));
+    const contentSignature = contentSign.sign(privateKeyObject, 'base64');
 
-    return { signature, signedData };
+    // Sign log (log + textHash + timestamp)
+    const logSignedData = {
+        log: log,
+        textHash: textHash,
+        timestamp: timestamp
+    };
+    const logSign = crypto.createSign('RSA-SHA256');
+    logSign.update(JSON.stringify(logSignedData));
+    const logSignature = logSign.sign(privateKeyObject, 'base64');
+
+    return {
+        contentSignature,
+        logSignature,
+        timestamp,
+        // Legacy support
+        signature: logSignature,
+        signedData: logSignedData
+    };
 }
 
 function nodeVerifyLog(log, text, signature, publicKeyJwk, signedData = null) {
@@ -422,15 +467,16 @@ function reconstructText(log) {
 
     for (const entry of log) {
         if (entry.type === 'diff' && entry.change) {
-            if (entry.change.added) {
-                // Insert text at position
-                const pos = entry.change.pos || text.length;
-                text = text.slice(0, pos) + entry.change.added + text.slice(pos);
-            } else if (entry.change.removed) {
-                // Remove text from position
-                const pos = entry.change.pos || 0;
+            const pos = entry.change.pos || 0;
+
+            // Handle removal first, then addition
+            if (entry.change.removed) {
                 const removeLength = entry.change.removed.length;
                 text = text.slice(0, pos) + text.slice(pos + removeLength);
+            }
+
+            if (entry.change.added) {
+                text = text.slice(0, pos) + entry.change.added + text.slice(pos);
             }
         }
     }
@@ -483,22 +529,243 @@ function calculateAverageInterval(events) {
     return intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
 }
 
-// Export functions
-module.exports = {
-    generateKeyPair,
-    generateTextHash,
-    signLog,
-    verifyLog,
-    reconstructText
-};
+/**
+ * Verify content signature (Level 1: Text integrity check)
+ * @param {string} text - The text content to verify
+ * @param {string} contentSignature - Base64 content signature
+ * @param {number} timestamp - Timestamp when signed
+ * @param {Object} publicKey - JWK public key
+ * @returns {Promise<Object>} Verification result
+ */
+async function verifyContent(text, contentSignature, timestamp, publicKey) {
+    const result = {
+        isValid: false,
+        details: {
+            contentSignatureValid: false,
+            textMatches: false,
+            errors: [],
+            warnings: []
+        }
+    };
 
-// For browser compatibility
-if (typeof window !== 'undefined') {
-    window.HAVCore = {
+    try {
+        // Check timestamp is reasonable
+        const now = Date.now();
+        if (Math.abs(now - timestamp) > 365 * 24 * 60 * 60 * 1000) { // 1 year
+            result.details.warnings.push('Content timestamp is unusually old or in the future');
+        }
+
+        // Verify content signature
+        const signedData = { text, timestamp };
+
+        if (isBrowser) {
+            const publicKeyObj = await crypto.subtle.importKey(
+                'jwk',
+                publicKey,
+                { name: 'RSA-PSS', hash: 'SHA-256' },
+                false,
+                ['verify']
+            );
+
+            const encoder = new TextEncoder();
+            const dataBuffer = encoder.encode(JSON.stringify(signedData));
+            const signatureBuffer = Uint8Array.from(atob(contentSignature), c => c.charCodeAt(0));
+
+            result.details.contentSignatureValid = await crypto.subtle.verify(
+                { name: 'RSA-PSS', saltLength: 32 },
+                publicKeyObj,
+                signatureBuffer,
+                dataBuffer
+            );
+        } else if (isNode) {
+            const crypto = require('crypto');
+            const publicKeyObj = crypto.createPublicKey({ key: publicKey, format: 'jwk' });
+            const verify = crypto.createVerify('RSA-SHA256');
+            verify.update(JSON.stringify(signedData));
+            result.details.contentSignatureValid = verify.verify(publicKeyObj, Buffer.from(contentSignature, 'base64'));
+        }
+
+        if (!result.details.contentSignatureValid) {
+            result.details.errors.push('Invalid content signature');
+            return result;
+        }
+
+        result.details.textMatches = true; // Content signature proves text integrity
+        result.isValid = true;
+
+    } catch (error) {
+        result.details.errors.push(`Content verification error: ${error.message}`);
+    }
+
+    return result;
+}
+
+/**
+ * Verify log signature (Level 2: Behavioral verification)
+ * @param {Array} log - Event log array
+ * @param {string} text - The text content
+ * @param {string} logSignature - Base64 log signature
+ * @param {number} timestamp - Timestamp when signed
+ * @param {Object} publicKey - JWK public key
+ * @returns {Promise<Object>} Verification result
+ */
+async function verifyLogSignature(log, text, logSignature, timestamp, publicKey) {
+    const result = {
+        isValid: false,
+        details: {
+            logSignatureValid: false,
+            textMatches: false,
+            textHashValid: false,
+            reconstructedText: '',
+            errors: [],
+            warnings: []
+        }
+    };
+
+    try {
+        // Reconstruct text from log
+        const reconstructedText = reconstructText(log);
+        result.details.reconstructedText = reconstructedText;
+
+        // Normalize texts for comparison
+        const normalizedDisplayed = text.trim().replace(/\s+/g, ' ').trim();
+        const normalizedReconstructed = reconstructedText.replace(/\s+/g, ' ').trim();
+        result.details.textMatches = normalizedDisplayed === normalizedReconstructed;
+
+        if (!result.details.textMatches) {
+            result.details.errors.push('Displayed text does not match log reconstruction');
+            return result;
+        }
+
+        // Generate expected text hash
+        const expectedHash = isBrowser ? await browserGenerateTextHash(text) : nodeGenerateTextHash(text);
+        const actualHash = isBrowser ? await browserGenerateTextHash(reconstructedText) : nodeGenerateTextHash(reconstructedText);
+        result.details.textHashValid = expectedHash === actualHash;
+
+        if (!result.details.textHashValid) {
+            result.details.errors.push('Text hash mismatch');
+            return result;
+        }
+
+        // Verify log signature
+        const signedData = { log, textHash: expectedHash, timestamp };
+
+        if (isBrowser) {
+            const publicKeyObj = await crypto.subtle.importKey(
+                'jwk',
+                publicKey,
+                { name: 'RSA-PSS', hash: 'SHA-256' },
+                false,
+                ['verify']
+            );
+
+            const encoder = new TextEncoder();
+            const dataBuffer = encoder.encode(JSON.stringify(signedData));
+            const signatureBuffer = Uint8Array.from(atob(logSignature), c => c.charCodeAt(0));
+
+            result.details.logSignatureValid = await crypto.subtle.verify(
+                { name: 'RSA-PSS', saltLength: 32 },
+                publicKeyObj,
+                signatureBuffer,
+                dataBuffer
+            );
+        } else if (isNode) {
+            const crypto = require('crypto');
+            const publicKeyObj = crypto.createPublicKey({ key: publicKey, format: 'jwk' });
+            const verify = crypto.createVerify('RSA-SHA256');
+            verify.update(JSON.stringify(signedData));
+            result.details.logSignatureValid = verify.verify(publicKeyObj, Buffer.from(logSignature, 'base64'));
+        }
+
+        if (!result.details.logSignatureValid) {
+            result.details.errors.push('Invalid log signature');
+            return result;
+        }
+
+        // Check security features
+        checkSecurityFeatures({ log, textHash: expectedHash, timestamp }, result.details);
+
+        result.isValid = result.details.logSignatureValid && result.details.textMatches && result.details.textHashValid;
+
+    } catch (error) {
+        result.details.errors.push(`Log verification error: ${error.message}`);
+    }
+
+    return result;
+}
+
+/**
+ * Two-tier verification: Content + Log
+ * @param {string} text - The text content
+ * @param {string} contentSignature - Base64 content signature
+ * @param {string} logSignature - Base64 log signature
+ * @param {number} timestamp - Timestamp when signed
+ * @param {Object} publicKey - JWK public key
+ * @param {Array} log - Event log array (fetched from URL)
+ * @returns {Promise<Object>} Combined verification result
+ */
+async function verifyTwoTier(text, contentSignature, logSignature, timestamp, publicKey, log) {
+    const result = {
+        level1Valid: false,
+        level2Valid: false,
+        isValid: false,
+        details: {
+            contentVerification: null,
+            logVerification: null,
+            errors: [],
+            warnings: []
+        }
+    };
+
+    // Level 1: Verify content signature
+    result.details.contentVerification = await verifyContent(text, contentSignature, timestamp, publicKey);
+    result.level1Valid = result.details.contentVerification.isValid;
+
+    if (!result.level1Valid) {
+        result.details.errors.push('Level 1 verification failed');
+        return result;
+    }
+
+    // Level 2: Verify log signature
+    result.details.logVerification = await verifyLogSignature(log, text, logSignature, timestamp, publicKey);
+    result.level2Valid = result.details.logVerification.isValid;
+
+    // Combine results
+    result.isValid = result.level1Valid && result.level2Valid;
+
+    // Merge warnings and errors
+    if (result.details.logVerification.details.warnings) {
+        result.details.warnings.push(...result.details.logVerification.details.warnings);
+    }
+    if (!result.level2Valid && result.details.logVerification.details.errors) {
+        result.details.errors.push(...result.details.logVerification.details.errors);
+    }
+
+    return result;
+}
+
+// Export functions for Node.js
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
         generateKeyPair,
         generateTextHash,
         signLog,
         verifyLog,
+        verifyContent,
+        verifyLogSignature,
+        verifyTwoTier,
         reconstructText
     };
+}
+
+// For browser compatibility - assign functions to global namespace
+if (typeof window !== 'undefined') {
+    window.HAVCore.generateKeyPair = generateKeyPair;
+    window.HAVCore.generateTextHash = generateTextHash;
+    window.HAVCore.signLog = signLog;
+    window.HAVCore.verifyLog = verifyLog;
+    window.HAVCore.verifyContent = verifyContent;
+    window.HAVCore.verifyLogSignature = verifyLogSignature;
+    window.HAVCore.verifyTwoTier = verifyTwoTier;
+    window.HAVCore.reconstructText = reconstructText;
 }

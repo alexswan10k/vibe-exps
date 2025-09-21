@@ -5,6 +5,78 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="hav-core.js"></script>
+    <script>
+        // Add missing verification functions to global scope
+        async function verifySignature(signedDataStr, signature, publicKey) {
+            try {
+                // Import public key for verification
+                const publicKeyObj = await crypto.subtle.importKey(
+                    'jwk',
+                    publicKey,
+                    {
+                        name: 'RSA-PSS',
+                        hash: 'SHA-256',
+                    },
+                    false,
+                    ['verify']
+                );
+
+                // Verify the signature
+                const encoder = new TextEncoder();
+                const dataBuffer = encoder.encode(signedDataStr);
+                const signatureBuffer = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
+
+                return await crypto.subtle.verify(
+                    {
+                        name: 'RSA-PSS',
+                        saltLength: 32, // 256 bits for SHA-256
+                    },
+                    publicKeyObj,
+                    signatureBuffer,
+                    dataBuffer
+                );
+            } catch (error) {
+                console.error('Signature verification error:', error);
+                return false;
+            }
+        }
+
+        // Add generateTextHash to global scope for legacy verification
+        async function generateTextHash(text) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(text.trim());
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // Add reconstructText to global scope for legacy verification
+        function reconstructText(log) {
+            let text = '';
+
+            for (const entry of log) {
+                if (entry.type === 'diff' && entry.change) {
+                    if (entry.change.added) {
+                        // Insert text at position
+                        const pos = entry.change.pos || text.length;
+                        text = text.slice(0, pos) + entry.change.added + text.slice(pos);
+                    } else if (entry.change.removed) {
+                        // Remove text from position
+                        const pos = entry.change.pos || 0;
+                        const removeLength = entry.change.removed.length;
+                        text = text.slice(0, pos) + text.slice(pos + removeLength);
+                    }
+                }
+            }
+
+            return text;
+        }
+
+        // Make functions available globally
+        window.verifySignature = verifySignature;
+        window.generateTextHash = generateTextHash;
+        window.reconstructText = reconstructText;
+    </script>
     <script src="hav-verify.js"></script>
     <style>
         body {
@@ -198,6 +270,57 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        .level-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .level-badge.level-1 {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .level-badge.level-2 {
+            background-color: #2196F3;
+            color: white;
+        }
+        .level-result {
+            margin-bottom: 20px;
+        }
+        .level-result h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+            font-size: 16px;
+        }
+        .verifying {
+            color: #ff9800;
+            font-style: italic;
+            font-size: 14px;
+        }
+        .two-tier-results {
+            margin: 20px 0;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+        }
+        .two-tier-results h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 8px;
+        }
+        .combined-status {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #dee2e6;
+        }
+        .combined-status h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
@@ -217,6 +340,12 @@
             const [result, setResult] = useState(null);
             const [batchResults, setBatchResults] = useState([]);
 
+            // Two-tier verification states
+            const [level1Result, setLevel1Result] = useState(null);
+            const [level2Result, setLevel2Result] = useState(null);
+            const [isVerifyingLevel1, setIsVerifyingLevel1] = useState(false);
+            const [isVerifyingLevel2, setIsVerifyingLevel2] = useState(false);
+
             // Check for pre-populated data from main page
             useEffect(() => {
                 const storedHtml = sessionStorage.getItem('hav-html-to-verify');
@@ -235,6 +364,156 @@
                     sessionStorage.removeItem('hav-log-to-verify');
                 }
             }, []);
+
+            // Reactive Level 1 verification
+            useEffect(() => {
+                const performLevel1Verification = async () => {
+                    if (!input.trim()) {
+                        setLevel1Result(null);
+                        return;
+                    }
+
+                    setIsVerifyingLevel1(true);
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(input, 'text/html');
+                        const element = doc.querySelector('[data-hav-key]');
+
+                        if (!element) {
+                            setLevel1Result({ isValid: false, details: { errors: ['No element with authorship data found'] } });
+                            return;
+                        }
+
+                        const publicKeyStr = element.getAttribute('data-hav-key');
+                        const contentSignature = element.getAttribute('data-hav-content-signature');
+                        const logSignature = element.getAttribute('data-hav-log-signature');
+                        const timestamp = parseInt(element.getAttribute('data-hav-timestamp'));
+
+                        if (!publicKeyStr || !contentSignature || !timestamp) {
+                            setLevel1Result({
+                                isValid: false,
+                                details: { errors: ['Missing Level 1 verification data (public key, content signature, or timestamp)'] }
+                            });
+                            return;
+                        }
+
+                        // Parse public key
+                        let decodedKeyStr = publicKeyStr;
+                        try {
+                            decodedKeyStr = atob(publicKeyStr);
+                        } catch (e) {
+                            // If base64 decode fails, assume it's already plain JSON
+                        }
+                        const publicKey = JSON.parse(decodedKeyStr);
+
+                        // Extract text content
+                        const text = element.textContent?.trim() || '';
+
+                        // Only support two-tier format now
+                        if (window.HAVCore && window.HAVCore.verifyContent) {
+                            try {
+                                const result = await window.HAVCore.verifyContent(text, contentSignature, timestamp, publicKey);
+                                setLevel1Result(result);
+                            } catch (error) {
+                                setLevel1Result({
+                                    isValid: false,
+                                    details: { errors: [`Level 1 verification error: ${error.message}`] }
+                                });
+                            }
+                        } else {
+                            setLevel1Result({
+                                isValid: false,
+                                details: { errors: ['HAVCore not available for Level 1 verification'] }
+                            });
+                        }
+                    } catch (error) {
+                        setLevel1Result({
+                            isValid: false,
+                            details: { errors: [`Level 1 verification error: ${error.message}`] }
+                        });
+                    }
+                    setIsVerifyingLevel1(false);
+                };
+
+                performLevel1Verification();
+            }, [input]);
+
+            // Reactive Level 2 verification
+            useEffect(() => {
+                const performLevel2Verification = async () => {
+                    if (!input.trim() || !useLocalLog || !logData.trim()) {
+                        setLevel2Result(null);
+                        return;
+                    }
+
+                    setIsVerifyingLevel2(true);
+                    try {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(input, 'text/html');
+                        const element = doc.querySelector('[data-hav-key]');
+
+                        if (!element) {
+                            setLevel2Result({ isValid: false, details: { errors: ['No element with authorship data found'] } });
+                            return;
+                        }
+
+                        const publicKeyStr = element.getAttribute('data-hav-key');
+                        const contentSignature = element.getAttribute('data-hav-content-signature');
+                        const logSignature = element.getAttribute('data-hav-log-signature');
+                        const timestamp = parseInt(element.getAttribute('data-hav-timestamp'));
+
+                        if (!publicKeyStr || !logSignature || !timestamp) {
+                            setLevel2Result({
+                                isValid: false,
+                                details: { errors: ['Missing Level 2 verification data (public key, log signature, or timestamp)'] }
+                            });
+                            return;
+                        }
+
+                        // Parse public key
+                        let decodedKeyStr = publicKeyStr;
+                        try {
+                            decodedKeyStr = atob(publicKeyStr);
+                        } catch (e) {
+                            // If base64 decode fails, assume it's already plain JSON
+                        }
+                        const publicKey = JSON.parse(decodedKeyStr);
+
+                        // Parse log data
+                        const logDataObj = JSON.parse(logData);
+
+                        // Extract text content
+                        const text = element.textContent?.trim() || '';
+
+                        // Only support two-tier format now
+                        if (window.HAVCore && window.HAVCore.verifyLogSignature) {
+                            console.log('Level 2 Verification Debug:');
+                            console.log('Text:', text);
+                            console.log('Log:', logDataObj.log);
+                            console.log('LogSignature:', logSignature);
+                            console.log('Timestamp:', timestamp);
+                            console.log('SignedData:', logDataObj);
+
+                            const result = await window.HAVCore.verifyLogSignature(logDataObj.log, text, logSignature, timestamp, publicKey);
+                            console.log('Verification result:', result);
+                            setLevel2Result(result);
+                        } else {
+                            setLevel2Result({
+                                isValid: false,
+                                details: { errors: ['HAVCore not available for Level 2 verification'] }
+                            });
+                        }
+                    } catch (error) {
+                        setLevel2Result({
+                            isValid: false,
+                            details: { errors: [`Level 2 verification error: ${error.message}`] }
+                        });
+                    }
+                    setIsVerifyingLevel2(false);
+                };
+
+                performLevel2Verification();
+            }, [input, useLocalLog, logData]);
             const verifySingle = async () => {
                 if (!input.trim()) {
                     alert('Please enter HTML to verify');
@@ -392,6 +671,123 @@
                 setUseLocalLog(false);
                 setResult(null);
                 setBatchResults([]);
+                setLevel1Result(null);
+                setLevel2Result(null);
+            };
+
+            const renderTwoTierResults = () => {
+                if (!level1Result && !level2Result) return null;
+
+                return React.createElement('div', { className: 'two-tier-results' },
+                    React.createElement('h3', null, 'Two-Tier Verification Results'),
+
+                    // Level 1 Result
+                    React.createElement('div', { className: 'level-result' },
+                        React.createElement('h4', null,
+                            React.createElement('span', { className: 'level-badge level-1' }, 'Level 1'),
+                            ' Content Integrity Check ',
+                            isVerifyingLevel1 && React.createElement('span', { className: 'verifying' }, '(verifying...)')
+                        ),
+                        level1Result && React.createElement('div', { className: `verification-result ${level1Result.isValid ? 'result-valid' : 'result-invalid'}` },
+                            React.createElement('p', null,
+                                React.createElement('strong', null, 'Status:'),
+                                React.createElement('span', { className: `badge ${level1Result.isValid ? 'badge-valid' : 'badge-invalid'}` },
+                                    level1Result.isValid ? '✓ TEXT INTEGRITY VERIFIED' : '✗ TEXT TAMPERED'
+                                )
+                            ),
+                            React.createElement('p', null,
+                                React.createElement('strong', null, 'Content Signature:'),
+                                React.createElement('span', { className: `badge ${level1Result.details.contentSignatureValid ? 'badge-valid' : 'badge-invalid'}` },
+                                    level1Result.details.contentSignatureValid ? 'VALID' : 'INVALID'
+                                )
+                            ),
+                            (level1Result.details.errors && level1Result.details.errors.length > 0) && React.createElement('div', { className: 'status-message status-error' },
+                                React.createElement('strong', null, 'Errors:'),
+                                React.createElement('ul', null,
+                                    level1Result.details.errors.map((error, index) =>
+                                        React.createElement('li', { key: index }, error)
+                                    )
+                                )
+                            ),
+                            (level1Result.details.warnings && level1Result.details.warnings.length > 0) && React.createElement('div', { className: 'status-message status-warning' },
+                                React.createElement('strong', null, 'Warnings:'),
+                                React.createElement('ul', null,
+                                    level1Result.details.warnings.map((warning, index) =>
+                                        React.createElement('li', { key: index }, warning)
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    // Level 2 Result
+                    useLocalLog && React.createElement('div', { className: 'level-result' },
+                        React.createElement('h4', null,
+                            React.createElement('span', { className: 'level-badge level-2' }, 'Level 2'),
+                            ' Behavioral Verification ',
+                            isVerifyingLevel2 && React.createElement('span', { className: 'verifying' }, '(verifying...)')
+                        ),
+                        level2Result && React.createElement('div', { className: `verification-result ${level2Result.isValid ? 'result-valid' : 'result-invalid'}` },
+                            React.createElement('p', null,
+                                React.createElement('strong', null, 'Status:'),
+                                React.createElement('span', { className: `badge ${level2Result.isValid ? 'badge-valid' : 'badge-invalid'}` },
+                                    level2Result.isValid ? '✓ HUMAN AUTHORSHIP VERIFIED' : '✗ VERIFICATION FAILED'
+                                )
+                            ),
+                            React.createElement('p', null,
+                                React.createElement('strong', null, 'Log Signature:'),
+                                React.createElement('span', { className: `badge ${level2Result.details.logSignatureValid ? 'badge-valid' : 'badge-invalid'}` },
+                                    level2Result.details.logSignatureValid ? 'VALID' : 'INVALID'
+                                )
+                            ),
+                            React.createElement('p', null,
+                                React.createElement('strong', null, 'Text Matches Log:'),
+                                React.createElement('span', { className: `badge ${level2Result.details.textMatches ? 'badge-valid' : 'badge-invalid'}` },
+                                    level2Result.details.textMatches ? 'YES' : 'NO'
+                                )
+                            ),
+                            level2Result.details.reconstructedText && React.createElement('p', null,
+                                React.createElement('strong', null, 'Reconstructed Text:'),
+                                React.createElement('br', null),
+                                React.createElement('em', null, `"${level2Result.details.reconstructedText}"`)
+                            ),
+                            (level2Result.details.errors && level2Result.details.errors.length > 0) && React.createElement('div', { className: 'status-message status-error' },
+                                React.createElement('strong', null, 'Errors:'),
+                                React.createElement('ul', null,
+                                    level2Result.details.errors.map((error, index) =>
+                                        React.createElement('li', { key: index }, error)
+                                    )
+                                )
+                            ),
+                            (level2Result.details.warnings && level2Result.details.warnings.length > 0) && React.createElement('div', { className: 'status-message status-warning' },
+                                React.createElement('strong', null, 'Warnings:'),
+                                React.createElement('ul', null,
+                                    level2Result.details.warnings.map((warning, index) =>
+                                        React.createElement('li', { key: index }, warning)
+                                    )
+                                )
+                            )
+                        ),
+                        !level2Result && !isVerifyingLevel2 && React.createElement('div', { className: 'verification-result' },
+                            React.createElement('p', { style: { color: '#666', fontStyle: 'italic' } }, 'Provide log data above to enable Level 2 verification')
+                        )
+                    ),
+
+                    // Combined Status
+                    level1Result && (!useLocalLog || level2Result) && React.createElement('div', { className: 'combined-status' },
+                        React.createElement('h4', null, 'Combined Verification Status'),
+                        React.createElement('div', { className: `verification-result ${(level1Result.isValid && (!useLocalLog || level2Result?.isValid)) ? 'result-valid' : 'result-invalid'}` },
+                            React.createElement('p', null,
+                                React.createElement('strong', null, 'Overall Status:'),
+                                React.createElement('span', { className: `badge ${(level1Result.isValid && (!useLocalLog || level2Result?.isValid)) ? 'badge-valid' : 'badge-invalid'}` },
+                                    (level1Result.isValid && (!useLocalLog || level2Result?.isValid)) ? '✓ VERIFICATION PASSED' : '✗ VERIFICATION FAILED'
+                                )
+                            ),
+                            React.createElement('p', null, 'Level 1 (Content): ', level1Result.isValid ? '✅ Passed' : '❌ Failed'),
+                            useLocalLog && React.createElement('p', null, 'Level 2 (Behavioral): ', level2Result?.isValid ? '✅ Passed' : '❌ Failed')
+                        )
+                    )
+                );
             };
 
             const renderResult = (result) => {
@@ -431,7 +827,7 @@
                             React.createElement('em', null, `"${result.details.reconstructedText}"`)
                         )
                     ),
-                    result.details.errors.length > 0 && React.createElement('div', { className: 'status-message status-error' },
+                    (result.details.errors && result.details.errors.length > 0) && React.createElement('div', { className: 'status-message status-error' },
                         React.createElement('strong', null, 'Errors:'),
                         React.createElement('ul', null,
                             result.details.errors.map((error, index) =>
@@ -439,7 +835,7 @@
                             )
                         )
                     ),
-                    result.details.warnings.length > 0 && React.createElement('div', { className: 'status-message status-warning' },
+                    (result.details.warnings && result.details.warnings.length > 0) && React.createElement('div', { className: 'status-message status-warning' },
                         React.createElement('strong', null, 'Warnings:'),
                         React.createElement('ul', null,
                             result.details.warnings.map((warning, index) =>
@@ -555,6 +951,7 @@
                         React.createElement('div', { className: 'spinner' }),
                         React.createElement('p', null, 'Verifying authorship...')
                     ),
+                    renderTwoTierResults(),
                     result && renderResult(result)
                 ),
 

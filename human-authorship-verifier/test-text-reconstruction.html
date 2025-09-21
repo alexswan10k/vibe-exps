@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Test Text Reconstruction</title>
+    <script src="hav-core.js"></script>
+</head>
+<body>
+    <h1>Text Reconstruction Test</h1>
+    <div id="output"></div>
+
+    <script>
+        // Test the text reconstruction
+        const testLog = [
+            {
+                type: 'diff',
+                change: { pos: 0, removed: '', added: 'h', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 1, removed: '', added: 'e', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 2, removed: '', added: 'l', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 3, removed: '', added: 'l', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 4, removed: '', added: 'o', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 5, removed: '', added: ' ', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 6, removed: '', added: 'w', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 7, removed: '', added: 'o', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 8, removed: '', added: 'r', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 9, removed: '', added: 'l', unchanged: false },
+                time: Date.now()
+            },
+            {
+                type: 'diff',
+                change: { pos: 10, removed: '', added: 'd', unchanged: false },
+                time: Date.now()
+            }
+        ];
+
+        // Wait for HAVCore to load
+        const initTest = async () => {
+            let attempts = 0;
+            while (!window.HAVCore && attempts < 100) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+                attempts++;
+            }
+
+            if (!window.HAVCore) {
+                document.getElementById('output').innerHTML = 'HAVCore failed to load';
+                return;
+            }
+
+            const reconstructed = window.HAVCore.reconstructText(testLog);
+            document.getElementById('output').innerHTML = `
+                <h2>Test Results</h2>
+                <p><strong>Expected:</strong> "hello world"</p>
+                <p><strong>Reconstructed:</strong> "${reconstructed}"</p>
+                <p><strong>Match:</strong> ${reconstructed === 'hello world' ? '✅ YES' : '❌ NO'}</p>
+                <h3>Log:</h3>
+                <pre>${JSON.stringify(testLog, null, 2)}</pre>
+            `;
+        };
+
+        initTest();
+    </script>
+</body>
+</html>

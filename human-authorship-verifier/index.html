@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <title>Human Authorship Verifier</title>
+    <script src="hav-core.js"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="hav-core.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -222,12 +222,28 @@
         }
 
         function getDiff(oldStr, newStr) {
-            if (oldStr.length < newStr.length) {
-                return {added: newStr.slice(oldStr.length), pos: oldStr.length};
-            } else if (oldStr.length > newStr.length) {
-                return {removed: oldStr.slice(newStr.length), pos: newStr.length};
+            // Find the common prefix
+            let i = 0;
+            while (i < oldStr.length && i < newStr.length && oldStr[i] === newStr[i]) {
+                i++;
             }
-            return {unchanged: true};
+
+            // Find the common suffix
+            let j = 0;
+            while (j < oldStr.length - i && j < newStr.length - i &&
+                   oldStr[oldStr.length - 1 - j] === newStr[newStr.length - 1 - j]) {
+                j++;
+            }
+
+            const removed = oldStr.slice(i, oldStr.length - j);
+            const added = newStr.slice(i, newStr.length - j);
+
+            return {
+                pos: i,
+                removed: removed,
+                added: added,
+                unchanged: removed === '' && added === ''
+            };
         }
 
         // Generate user-defined fingerprint from personal identifier
@@ -262,6 +278,7 @@
             const [fingerprint, setFingerprint] = useState('');
             const [showFingerprint, setShowFingerprint] = useState(false);
             const [signedData, setSignedData] = useState(null);
+            const [havCoreLoaded, setHavCoreLoaded] = useState(false);
 
             // Load keys on mount
             useEffect(() => {
@@ -308,28 +325,25 @@
                     }
 
                     try {
-                        // Generate hash of the final text for tamper-proof verification
-                        const textHash = await generateTextHash(text);
+                        // Use HAVCore directly - it should be loaded by now
+                        if (!window.HAVCore || !window.HAVCore.signLog) {
+                            throw new Error('HAVCore not available - two-tier signing system required');
+                        }
 
-                        // Create signed data structure that includes both log and text hash
-                        const signedDataObj = {
-                            log: log,
-                            textHash: textHash,
-                            timestamp: Date.now()
-                        };
+                        const privateKeyJwk = JSON.parse(localStorage.getItem('privateKey'));
+                        const signatures = await window.HAVCore.signLog(log, text, privateKeyJwk);
 
-                        const signedDataStr = JSON.stringify(signedDataObj);
-                        const sig = await signData(signedDataStr);
-                        setSignature(sig);
-                        setSignedData(signedDataObj);
+                        setSignature(signatures.logSignature); // Keep backward compatibility
+                        setSignedData(signatures.signedData);
 
                         // Base64 encode the public key JSON string to avoid HTML attribute escaping issues
                         const encodedPublicKey = btoa(publicKeyStr);
-                        const html = `<p data-hav-key="${encodedPublicKey}" data-hav-log="eventlog.json" data-hav-signature="${sig}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
+                        const html = `<p data-hav-key="${encodedPublicKey}" data-hav-log="eventlog.json" data-hav-content-signature="${signatures.contentSignature}" data-hav-log-signature="${signatures.logSignature}" data-hav-timestamp="${signatures.timestamp}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
                         setEmbedHtml(html);
                     } catch (error) {
                         console.error('Error generating output:', error);
                         setSignedData(null);
+                        setEmbedHtml(`Error: ${error.message}`);
                     }
                 };
 
@@ -895,8 +909,26 @@
             );
         }
 
-        // Render the app
-        ReactDOM.render(React.createElement(App), document.getElementById('root'));
+        // Wait for HAVCore to load before rendering the app
+        const initApp = async () => {
+            let attempts = 0;
+            const maxAttempts = 100; // 1 second max wait
+
+            while ((!window.HAVCore || !window.HAVCore.signLog) && attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+                attempts++;
+            }
+
+            if (!window.HAVCore || !window.HAVCore.signLog) {
+                // Render app with error message
+                document.getElementById('root').innerHTML = '<div style="color: red; padding: 20px; font-family: Arial;">Error: HAVCore failed to load. Please refresh the page.</div>';
+                return;
+            }
+
+            ReactDOM.render(React.createElement(App), document.getElementById('root'));
+        };
+
+        initApp();
     </script>
 </body>
 </html>

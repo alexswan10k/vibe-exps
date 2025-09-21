@@ -201,14 +201,22 @@ class HumanAuthorshipVerifier {
     _extractDataAttributes(element) {
         const keyAttr = element.getAttribute('data-hav-key');
         const logAttr = element.getAttribute('data-hav-log');
-        const sigAttr = element.getAttribute('data-hav-signature');
+        const sigAttr = element.getAttribute('data-hav-signature'); // Legacy
+        const logSigAttr = element.getAttribute('data-hav-log-signature'); // Two-tier
+        const contentSigAttr = element.getAttribute('data-hav-content-signature'); // Two-tier
+        const timestampAttr = element.getAttribute('data-hav-timestamp');
         const fpAttr = element.getAttribute('data-hav-fingerprint');
 
-        if (!keyAttr || !logAttr || !sigAttr) {
+        // Use log signature if available (two-tier), otherwise fall back to legacy signature
+        const signature = logSigAttr || sigAttr;
+
+        if (!keyAttr || !signature) {
             console.warn('Missing required authorship attributes:', {
                 hasKey: !!keyAttr,
-                hasLog: !!logAttr,
-                hasSignature: !!sigAttr
+                hasLogSignature: !!logSigAttr,
+                hasLegacySignature: !!sigAttr,
+                hasContentSignature: !!contentSigAttr,
+                hasTimestamp: !!timestampAttr
             });
             return null;
         }
@@ -230,7 +238,7 @@ class HumanAuthorshipVerifier {
             return {
                 publicKey,
                 logUrl: logAttr,
-                signature: sigAttr,
+                signature: signature,
                 fingerprint: fpAttr
             };
         } catch (error) {
