@@ -127,25 +127,34 @@
         let privateKey = null;
         let publicKey = null;
 
-        // Utility functions using core library
+        // Utility functions for key generation
         async function generateKeys() {
             try {
-                // Check if core library is loaded
-                if (!window.HAVCore || !window.HAVCore.generateKeyPair) {
-                    throw new Error('Core library not loaded. Please refresh the page.');
-                }
+                // Generate RSA-PSS key pair directly using Web Crypto API
+                const keyPair = await crypto.subtle.generateKey(
+                    {
+                        name: 'RSA-PSS',
+                        modulusLength: 2048,
+                        publicExponent: new Uint8Array([1, 0, 1]),
+                        hash: 'SHA-256',
+                    },
+                    true,
+                    ['sign', 'verify']
+                );
 
-                // Use core library to generate keys
-                const keyPair = await window.HAVCore.generateKeyPair();
-
+                // Keep CryptoKey objects for signing/verification
                 privateKey = keyPair.privateKey;
                 publicKey = keyPair.publicKey;
 
-                // Store in localStorage
-                localStorage.setItem('privateKey', JSON.stringify(keyPair.privateKey));
-                localStorage.setItem('publicKey', JSON.stringify(keyPair.publicKey));
+                // Export keys to JWK format for storage and display
+                const publicKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+                const privateKeyJwk = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
 
-                return { privateKey: keyPair.privateKey, publicKey: keyPair.publicKey, publicJwk: keyPair.publicKey };
+                // Store in localStorage
+                localStorage.setItem('privateKey', JSON.stringify(privateKeyJwk));
+                localStorage.setItem('publicKey', JSON.stringify(publicKeyJwk));
+
+                return { privateKey: keyPair.privateKey, publicKey: keyPair.publicKey, publicJwk: publicKeyJwk };
             } catch (error) {
                 console.error('Error generating keys:', error);
                 throw error;
