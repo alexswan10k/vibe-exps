@@ -93,8 +93,12 @@ async function browserVerifyLog(log, text, signature, publicKeyJwk, signedData =
         const reconstructedText = reconstructText(log);
         result.details.reconstructedText = reconstructedText;
 
+        // Normalize both texts for consistent comparison (handle HTML whitespace)
+        const normalizedDisplayed = text.trim().replace(/\s+/g, ' ').trim();
+        const normalizedReconstructed = reconstructedText.replace(/\s+/g, ' ').trim();
+
         // Compare texts
-        result.details.textMatches = reconstructedText === text.trim();
+        result.details.textMatches = normalizedReconstructed === normalizedDisplayed;
 
         if (!result.details.textMatches) {
             result.details.errors.push('Displayed text does not match log reconstruction');
@@ -273,8 +277,12 @@ function nodeVerifyLog(log, text, signature, publicKeyJwk, signedData = null) {
         const reconstructedText = reconstructText(log);
         result.details.reconstructedText = reconstructedText;
 
+        // Normalize both texts for consistent comparison (handle HTML whitespace)
+        const normalizedDisplayed = text.trim().replace(/\s+/g, ' ').trim();
+        const normalizedReconstructed = reconstructedText.replace(/\s+/g, ' ').trim();
+
         // Compare texts
-        result.details.textMatches = reconstructedText === text.trim();
+        result.details.textMatches = normalizedReconstructed === normalizedDisplayed;
 
         if (!result.details.textMatches) {
             result.details.errors.push('Displayed text does not match log reconstruction');

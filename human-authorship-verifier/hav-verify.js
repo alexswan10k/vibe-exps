@@ -335,17 +335,33 @@ class HumanAuthorshipVerifier {
      * @private
      */
     _getDisplayedText(element) {
+        let text = '';
+
         // For text elements, get text content
         if (element.textContent) {
-            return element.textContent.trim();
+            text = element.textContent;
         }
 
         // For input/textarea elements
         if (element.value) {
-            return element.value.trim();
+            text = element.value;
         }
 
-        return '';
+        // Normalize whitespace to handle line breaks and multiple spaces consistently
+        // This ensures HTML whitespace (including line breaks) matches textarea input
+        return this._normalizeWhitespace(text);
+    }
+
+    /**
+     * Normalize whitespace for consistent comparison
+     * @private
+     */
+    _normalizeWhitespace(text) {
+        return text
+            // Replace all whitespace (including newlines, tabs, multiple spaces) with single spaces
+            .replace(/\s+/g, ' ')
+            // Trim leading/trailing whitespace
+            .trim();
     }
 
     /**
