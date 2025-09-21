@@ -7,328 +7,16 @@
 const isBrowser = typeof window !== 'undefined' && typeof window.crypto !== 'undefined';
 const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
 
-// Unified verification functions (same as hav-core.js for consistency)
+// Import core functions to avoid duplication
+let verifyLogCore, reconstructTextCore;
 
-async function generateTextHash(text) {
-    if (isBrowser) {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(text.trim());
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    } else if (isNode) {
-        const crypto = require('crypto');
-        return crypto.createHash('sha256').update(text.trim(), 'utf8').digest('hex');
-    } else {
-        throw new Error('Unsupported environment');
-    }
+if (isNode) {
+    ({ verifyLog: verifyLogCore, reconstructText: reconstructTextCore } = require('./hav-core'));
+} else if (isBrowser && window.HAVCore) {
+    ({ verifyLog: verifyLogCore, reconstructText: reconstructTextCore } = window.HAVCore);
 }
 
-async function verifyLog(log, text, signature, publicKey, signedData = null) {
-    const result = {
-        isValid: false,
-        details: {
-            signatureValid: false,
-            textMatches: false,
-            textHashValid: false,
-            reconstructedText: '',
-            errors: [],
-            warnings: []
-        }
-    };
 
-    try {
-        // Reconstruct text from log
-        const reconstructedText = reconstructText(log);
-        result.details.reconstructedText = reconstructedText;
-
-        // Compare texts
-        result.details.textMatches = reconstructedText === text.trim();
-
-        if (!result.details.textMatches) {
-            result.details.errors.push('Displayed text does not match log reconstruction');
-            return result;
-        }
-
-        let signatureValid = false;
-        let verifiedTimestamp = null;
-
-        // If signedData is provided (for testing), use it directly
-        if (signedData) {
-            if (isBrowser) {
-                try {
-                    // Import public key
-                    const publicKeyObj = await crypto.subtle.importKey(
-                        'jwk',
-                        publicKey,
-                        {
-                            name: 'RSA-PSS',
-                            hash: 'SHA-256',
-                        },
-                        false,
-                        ['verify']
-                    );
-
-                    const encoder = new TextEncoder();
-                    const dataBuffer = encoder.encode(JSON.stringify(signedData));
-                    const signatureBuffer = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-
-                    signatureValid = await crypto.subtle.verify(
-                        {
-                            name: 'RSA-PSS',
-                            saltLength: 32, // 256 bits for SHA-256
-                        },
-                        publicKeyObj,
-                        signatureBuffer,
-                        dataBuffer
-                    );
-                    verifiedTimestamp = signedData.timestamp;
-                } catch (error) {
-                    console.error('Direct verification failed:', error);
-                }
-            } else if (isNode) {
-                try {
-                    const crypto = require('crypto');
-                    // Import public key
-                    const publicKeyObj = crypto.createPublicKey({
-                        key: publicKey,
-                        format: 'jwk'
-                    });
-
-                    const verify = crypto.createVerify('RSA-SHA256');
-                    verify.update(JSON.stringify(signedData));
-                    const signatureBuffer = Buffer.from(signature, 'base64');
-
-                    signatureValid = verify.verify(publicKeyObj, signatureBuffer);
-                    verifiedTimestamp = signedData.timestamp;
-                } catch (error) {
-                    console.error('Direct verification failed:', error);
-                }
-            }
-        } else {
-            // For production use, try to guess the timestamp
-            const now = Date.now();
-
-            // Check a few recent timestamps (within last minute)
-            for (let i = 0; i < 60 * 1000; i += 100) {
-                const testTimestamp = now - i;
-                const textHash = await generateTextHash(text);
-                const testSignedData = {
-                    log: log,
-                    textHash: textHash,
-                    timestamp: testTimestamp
-                };
-
-                if (isBrowser) {
-                    try {
-                        // Import public key
-                        const publicKeyObj = await crypto.subtle.importKey(
-                            'jwk',
-                            publicKey,
-                            {
-                                name: 'RSA-PSS',
-                                hash: 'SHA-256',
-                            },
-                            false,
-                            ['verify']
-                        );
-
-                        const encoder = new TextEncoder();
-                        const dataBuffer = encoder.encode(JSON.stringify(testSignedData));
-                        const signatureBuffer = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-
-                        if (await crypto.subtle.verify(
-                            {
-                                name: 'RSA-PSS',
-                                saltLength: 32, // 256 bits for SHA-256
-                            },
-                            publicKeyObj,
-                            signatureBuffer,
-                            dataBuffer
-                        )) {
-                            signatureValid = true;
-                            verifiedTimestamp = testTimestamp;
-                            break;
-                        }
-                    } catch (e) {
-                        // Continue trying different timestamps
-                    }
-                } else if (isNode) {
-                    try {
-                        const crypto = require('crypto');
-                        // Import public key
-                        const publicKeyObj = crypto.createPublicKey({
-                            key: publicKey,
-                            format: 'jwk'
-                        });
-
-                        const verify = crypto.createVerify('RSA-SHA256');
-                        verify.update(JSON.stringify(testSignedData));
-                        const signatureBuffer = Buffer.from(signature, 'base64');
-
-                        if (verify.verify(publicKeyObj, signatureBuffer)) {
-                            signatureValid = true;
-                            verifiedTimestamp = testTimestamp;
-                            break;
-                        }
-                    } catch (e) {
-                        // Continue trying different timestamps
-                    }
-                }
-            }
-
-            // If that didn't work, try the exact current time (for testing)
-            if (!signatureValid) {
-                const textHash = await generateTextHash(text);
-                const testSignedData = {
-                    log: log,
-                    textHash: textHash,
-                    timestamp: now
-                };
-
-                if (isBrowser) {
-                    try {
-                        // Import public key
-                        const publicKeyObj = await crypto.subtle.importKey(
-                            'jwk',
-                            publicKey,
-                            {
-                                name: 'RSA-PSS',
-                                hash: 'SHA-256',
-                            },
-                            false,
-                            ['verify']
-                        );
-
-                        const encoder = new TextEncoder();
-                        const dataBuffer = encoder.encode(JSON.stringify(testSignedData));
-                        const signatureBuffer = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-
-                        if (await crypto.subtle.verify(
-                            {
-                                name: 'RSA-PSS',
-                                saltLength: 32, // 256 bits for SHA-256
-                            },
-                            publicKeyObj,
-                            signatureBuffer,
-                            dataBuffer
-                        )) {
-                            signatureValid = true;
-                            verifiedTimestamp = now;
-                        }
-                    } catch (e) {
-                        // Continue
-                    }
-                } else if (isNode) {
-                    try {
-                        const crypto = require('crypto');
-                        // Import public key
-                        const publicKeyObj = crypto.createPublicKey({
-                            key: publicKey,
-                            format: 'jwk'
-                        });
-
-                        const verify = crypto.createVerify('RSA-SHA256');
-                        verify.update(JSON.stringify(testSignedData));
-                        const signatureBuffer = Buffer.from(signature, 'base64');
-
-                        if (verify.verify(publicKeyObj, signatureBuffer)) {
-                            signatureValid = true;
-                            verifiedTimestamp = now;
-                        }
-                    } catch (e) {
-                        // Continue
-                    }
-                }
-            }
-        }
-
-        result.details.signatureValid = signatureValid;
-
-        if (!signatureValid) {
-            result.details.errors.push('Invalid signature');
-            return result;
-        }
-
-        // Verify text hash matches
-        const expectedHash = await generateTextHash(text);
-        const actualHash = await generateTextHash(reconstructedText);
-        result.details.textHashValid = expectedHash === actualHash;
-
-        if (!result.details.textHashValid) {
-            result.details.errors.push('Text hash does not match');
-            return result;
-        }
-
-        // Check for additional security features
-        checkSecurityFeatures({ log, textHash: expectedHash, timestamp: verifiedTimestamp }, result.details);
-
-        // Final validation
-        result.isValid = result.details.signatureValid && result.details.textMatches && result.details.textHashValid;
-
-    } catch (error) {
-        result.details.errors.push(`Verification error: ${error.message}`);
-        console.error('HAV Verification error:', error);
-    }
-
-    return result;
-}
-
-function reconstructText(log) {
-    let text = '';
-
-    for (const entry of log) {
-        if (entry.type === 'diff' && entry.change) {
-            if (entry.change.added) {
-                // Insert text at position
-                const pos = entry.change.pos || text.length;
-                text = text.slice(0, pos) + entry.change.added + text.slice(pos);
-            } else if (entry.change.removed) {
-                // Remove text from position
-                const pos = entry.change.pos || 0;
-                const removeLength = entry.change.removed.length;
-                text = text.slice(0, pos) + text.slice(pos + removeLength);
-            }
-        }
-    }
-
-    return text;
-}
-
-function checkSecurityFeatures(logData, details) {
-    // Check for reasonable timestamp
-    const now = Date.now();
-    const logTime = logData.timestamp;
-
-    if (Math.abs(now - logTime) > 365 * 24 * 60 * 60 * 1000) { // 1 year
-        details.warnings.push('Log timestamp is unusually old or in the future');
-    }
-
-    // Check for minimum number of events (suggests human typing)
-    if (logData.log.length < 3) {
-        details.warnings.push('Very few events logged - may not indicate human authorship');
-    }
-
-    // Check for realistic typing patterns
-    const keyEvents = logData.log.filter(e => e.type === 'keydown' || e.type === 'keyup');
-    if (keyEvents.length > 0) {
-        const avgInterval = calculateAverageInterval(keyEvents);
-        if (avgInterval < 50) { // Less than 50ms between keystrokes
-            details.warnings.push('Unusually fast typing detected');
-        }
-    }
-}
-
-function calculateAverageInterval(events) {
-    if (events.length < 2) return 0;
-
-    const intervals = [];
-    for (let i = 1; i < events.length; i++) {
-        intervals.push(events[i].time - events[i-1].time);
-    }
-
-    return intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
-}
 
 class HumanAuthorshipVerifier {
     constructor(options = {}) {
@@ -386,24 +74,21 @@ class HumanAuthorshipVerifier {
             }
             result.details.logAccessible = true;
 
-            // Verify signature
-            const signatureValid = await this._verifySignature(logData, data.signature, data.publicKey);
-            result.details.signatureValid = signatureValid;
-
-            if (!signatureValid) {
-                result.details.errors.push('Invalid signature');
-                return result;
-            }
-
-            // Reconstruct text from log
-            const reconstructedText = this._reconstructText(logData.log);
-            result.details.reconstructedText = reconstructedText;
-
             // Get displayed text
             const displayedText = this._getDisplayedText(element);
 
-            // Compare texts
-            result.details.textMatches = reconstructedText === displayedText;
+            // Verify signature
+            const verificationResult = await this._verifySignature(logData, data.signature, data.publicKey, displayedText);
+            result.details.signatureValid = verificationResult.details.signatureValid;
+            result.details.textMatches = verificationResult.details.textMatches;
+            result.details.reconstructedText = verificationResult.details.reconstructedText;
+            result.details.errors.push(...verificationResult.details.errors);
+            result.details.warnings.push(...verificationResult.details.warnings);
+
+            if (!result.details.signatureValid) {
+                result.details.errors.push('Invalid signature');
+                return result;
+            }
 
             if (!result.details.textMatches) {
                 result.details.errors.push('Displayed text does not match log reconstruction');
@@ -420,6 +105,66 @@ class HumanAuthorshipVerifier {
 
             // Final validation
             result.isValid = result.details.signatureValid && result.details.textMatches && result.details.logAccessible;
+
+        } catch (error) {
+            result.details.errors.push(`Verification error: ${error.message}`);
+            console.error('HAV Verification error:', error);
+        }
+
+        return result;
+    }
+
+    /**
+     * Verify using primitive data (no HTML parsing or fetching)
+     * @param {Object} logData - Log data object with log array and timestamp
+     * @param {string} text - The text to verify
+     * @param {string} signature - Base64 signature
+     * @param {Object} publicKey - JWK public key
+     * @param {Object} options - Verification options
+     * @returns {Promise<Object>} Verification result
+     */
+    async verifyPrimitives(logData, text, signature, publicKey, options = {}) {
+        const opts = { ...this.options, ...options };
+        const result = {
+            isValid: false,
+            details: {
+                signatureValid: false,
+                textMatches: false,
+                logAccessible: true, // provided directly
+                fingerprint: null,
+                reconstructedText: '',
+                errors: [],
+                warnings: []
+            }
+        };
+
+        try {
+            // Verify signature
+            const signatureValid = await this._verifySignaturePrimitives(logData, signature, publicKey, text);
+            result.details.signatureValid = signatureValid;
+
+            if (!signatureValid) {
+                result.details.errors.push('Invalid signature');
+                return result;
+            }
+
+            // Reconstruct text from log
+            const reconstructedText = this._reconstructText(logData.log);
+            result.details.reconstructedText = reconstructedText;
+
+            // Compare texts
+            result.details.textMatches = reconstructedText === text.trim();
+
+            if (!result.details.textMatches) {
+                result.details.errors.push('Displayed text does not match log reconstruction');
+                return result;
+            }
+
+            // Check for additional security features
+            this._checkSecurityFeatures(logData, result.details);
+
+            // Final validation
+            result.isValid = result.details.signatureValid && result.details.textMatches;
 
         } catch (error) {
             result.details.errors.push(`Verification error: ${error.message}`);
@@ -536,10 +281,34 @@ class HumanAuthorshipVerifier {
      * Verify cryptographic signature using core library
      * @private
      */
-    async _verifySignature(logData, signature, publicKeyJwk) {
+    async _verifySignature(logData, signature, publicKeyJwk, text) {
         try {
-            // Use built-in verification function
-            const result = await verifyLog(logData.log, '', signature, publicKeyJwk, logData);
+            // Use core verification function
+            const result = await verifyLogCore(logData.log, text, signature, publicKeyJwk, logData);
+            return result;
+        } catch (error) {
+            console.error('Signature verification error:', error);
+            return {
+                isValid: false,
+                details: {
+                    signatureValid: false,
+                    textMatches: false,
+                    reconstructedText: '',
+                    errors: [`Verification error: ${error.message}`],
+                    warnings: []
+                }
+            };
+        }
+    }
+
+    /**
+     * Verify cryptographic signature using primitives
+     * @private
+     */
+    async _verifySignaturePrimitives(logData, signature, publicKeyJwk, text) {
+        try {
+            // Use core verification function
+            const result = await verifyLogCore(logData.log, text, signature, publicKeyJwk, logData);
             return result.details.signatureValid;
         } catch (error) {
             console.error('Signature verification error:', error);
@@ -553,8 +322,8 @@ class HumanAuthorshipVerifier {
      */
     _reconstructText(log) {
         try {
-            // Use built-in text reconstruction
-            return reconstructText(log);
+            // Use core text reconstruction
+            return reconstructTextCore(log);
         } catch (error) {
             console.error('Text reconstruction error:', error);
             return '';

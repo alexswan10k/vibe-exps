@@ -4,6 +4,7 @@
  */
 
 const { generateKeyPair, signLog, verifyLog, reconstructText } = require('./hav-core');
+const HumanAuthorshipVerifier = require('./hav-verify');
 
 // Test data and functions
 async function runTests() {
@@ -126,6 +127,39 @@ async function runTests() {
 
     } catch (error) {
         console.log('❌ Text reconstruction test failed:', error.message);
+    }
+
+    // Test 5: HumanAuthorshipVerifier class with primitives
+    console.log('\nTest 5: HumanAuthorshipVerifier.verifyPrimitives with valid content');
+    try {
+        const verifier = new HumanAuthorshipVerifier();
+
+        // Use the same key pair from test 1
+        const { publicKey, privateKey } = generateKeyPair();
+
+        const testText = "Hello World";
+        const testLog = [
+            { type: 'diff', change: { added: 'H', pos: 0 }, time: Date.now() },
+            { type: 'diff', change: { added: 'ello ', pos: 1 }, time: Date.now() + 100 },
+            { type: 'diff', change: { added: 'World', pos: 6 }, time: Date.now() + 200 }
+        ];
+
+        // Sign the log
+        const { signature, signedData } = signLog(testLog, testText, privateKey);
+
+        // Verify using the verifier class with primitives
+        const result = await verifier.verifyPrimitives(signedData, testText, signature, publicKey);
+
+        if (result.isValid) {
+            console.log('✅ HumanAuthorshipVerifier.verifyPrimitives test passed');
+            console.log('   Reconstructed text:', result.details.reconstructedText);
+        } else {
+            console.log('❌ HumanAuthorshipVerifier.verifyPrimitives test failed');
+            console.log('   Errors:', result.details.errors);
+        }
+
+    } catch (error) {
+        console.log('❌ HumanAuthorshipVerifier.verifyPrimitives test failed:', error.message);
     }
 
     console.log('\n🎉 Integration tests completed!');
