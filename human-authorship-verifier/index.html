@@ -306,9 +306,9 @@
                         const sig = await signData(signedDataStr);
                         setSignature(sig);
 
-                        // Properly escape the JSON string for HTML attributes
-                        const escapedPublicKey = publicKeyStr.replace(/"/g, '"');
-                        const html = `<p data-hav-key="${escapedPublicKey}" data-hav-log="eventlog.json" data-hav-signature="${sig}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
+                        // Base64 encode the public key JSON string to avoid HTML attribute escaping issues
+                        const encodedPublicKey = btoa(publicKeyStr);
+                        const html = `<p data-hav-key="${encodedPublicKey}" data-hav-log="eventlog.json" data-hav-signature="${sig}" data-hav-fingerprint="${fingerprint}">${text}</p>`;
                         setEmbedHtml(html);
                     } catch (error) {
                         console.error('Error generating output:', error);
@@ -752,6 +752,41 @@
                 React.createElement('div', { className: 'button-group' },
                     React.createElement('button', { className: 'secondary', onClick: copyToClipboard }, 'Copy HTML to Clipboard'),
                     React.createElement('button', { className: 'secondary', onClick: downloadLog }, 'Download Event Log'),
+                    React.createElement('button', {
+                        className: 'secondary',
+                        onClick: async () => {
+                            if (log.length === 0) {
+                                alert('No event log data to copy');
+                                return;
+                            }
+                            try {
+                                // Generate the same data structure used for signing
+                                const textHash = await generateTextHash(text);
+                                const logData = {
+                                    log: log,
+                                    textHash: textHash,
+                                    timestamp: Date.now()
+                                };
+                                const logStr = JSON.stringify(logData, null, 2);
+
+                                if (navigator.clipboard && window.isSecureContext) {
+                                    await navigator.clipboard.writeText(logStr);
+                                    alert('Event log copied to clipboard!');
+                                } else {
+                                    // Fallback
+                                    const tempTextArea = document.createElement('textarea');
+                                    tempTextArea.value = logStr;
+                                    document.body.appendChild(tempTextArea);
+                                    tempTextArea.select();
+                                    document.execCommand('copy');
+                                    document.body.removeChild(tempTextArea);
+                                    alert('Event log copied to clipboard!');
+                                }
+                            } catch (error) {
+                                alert('Failed to copy event log: ' + error.message);
+                            }
+                        }
+                    }, 'Copy Event Log to Clipboard'),
                     React.createElement('button', { className: 'secondary', onClick: () => setShowFingerprint(!showFingerprint) }, showFingerprint ? 'Hide Fingerprint' : 'Show Fingerprint'),
                     React.createElement('button', { className: 'secondary', onClick: toggleLog }, showLog ? 'Hide Event Log' : 'Show Event Log'),
                     React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All & Start Over')

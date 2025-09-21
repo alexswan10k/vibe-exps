@@ -4,7 +4,7 @@
     <title>Human Authorship Verifier - Verification Tool</title>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="hav-core.js"></script>
+    <script src="hav-verify.js"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -210,6 +210,8 @@
             const [activeTab, setActiveTab] = useState('single');
             const [input, setInput] = useState('');
             const [url, setUrl] = useState('');
+            const [logData, setLogData] = useState('');
+            const [useLocalLog, setUseLocalLog] = useState(false);
             const [isVerifying, setIsVerifying] = useState(false);
             const [result, setResult] = useState(null);
             const [batchResults, setBatchResults] = useState([]);
@@ -219,44 +221,68 @@
                     return;
                 }
 
+                if (useLocalLog && !logData.trim()) {
+                    alert('Please provide log data or uncheck "Use local log data"');
+                    return;
+                }
+
                 setIsVerifying(true);
                 setResult(null);
 
                 try {
-                    // Parse HTML to extract authorship data
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(input, 'text/html');
-                    const element = doc.querySelector('[data-hav-key]');
+                    if (useLocalLog) {
+                        // Manual verification with local log data
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(input, 'text/html');
+                        const element = doc.querySelector('[data-hav-key]');
 
-                    if (!element) {
-                        throw new Error('No element with authorship data found');
+                        if (!element) {
+                            throw new Error('No element with authorship data found');
+                        }
+
+                        // Extract data attributes
+                        const publicKeyStr = element.getAttribute('data-hav-key');
+                        const signature = element.getAttribute('data-hav-signature');
+
+                        if (!publicKeyStr || !signature) {
+                            throw new Error('Missing required authorship attributes');
+                        }
+
+                        // Parse public key (base64 decode first, then JSON parse)
+                        let decodedKeyStr = publicKeyStr;
+                        try {
+                            decodedKeyStr = atob(publicKeyStr);
+                        } catch (e) {
+                            // If base64 decode fails, assume it's already plain JSON
+                        }
+                        const publicKey = JSON.parse(decodedKeyStr);
+
+                        // Use provided log data
+                        const logDataObj = JSON.parse(logData);
+
+                        // Extract text content
+                        const text = element.textContent?.trim() || '';
+
+                        // Verify using built-in function
+                        const verificationResult = await verifyLog(logDataObj.log, text, signature, publicKey, logDataObj);
+                        setResult({
+                            isValid: verificationResult.isValid,
+                            details: {
+                                signatureValid: verificationResult.details.signatureValid,
+                                textMatches: verificationResult.details.textMatches,
+                                logAccessible: true, // Since we're using local data
+                                fingerprint: null,
+                                reconstructedText: verificationResult.details.reconstructedText,
+                                errors: verificationResult.details.errors,
+                                warnings: verificationResult.details.warnings
+                            }
+                        });
+                    } else {
+                        // Use HumanAuthorshipVerifier for verification
+                        const verifier = new HumanAuthorshipVerifier();
+                        const verificationResult = await verifier.verify(input);
+                        setResult(verificationResult);
                     }
-
-                    // Extract data attributes
-                    const publicKeyStr = element.getAttribute('data-hav-key');
-                    const signature = element.getAttribute('data-hav-signature');
-                    const logUrl = element.getAttribute('data-hav-log');
-
-                    if (!publicKeyStr || !signature || !logUrl) {
-                        throw new Error('Missing required authorship attributes');
-                    }
-
-                    // Parse public key
-                    const publicKey = JSON.parse(publicKeyStr);
-
-                    // Fetch log data
-                    const response = await fetch(logUrl);
-                    if (!response.ok) {
-                        throw new Error(`Failed to fetch log: ${response.status}`);
-                    }
-                    const logData = await response.json();
-
-                    // Extract text content
-                    const text = element.textContent?.trim() || '';
-
-                    // Verify using core library
-                    const verificationResult = await window.HAVCore.verifyLog(logData.log, text, signature, publicKey);
-                    setResult(verificationResult);
                 } catch (error) {
                     setResult({
                         isValid: false,
@@ -286,39 +312,9 @@
                     }
                     const html = await response.text();
 
-                    // Parse HTML to extract authorship data
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    const element = doc.querySelector('[data-hav-key]');
-
-                    if (!element) {
-                        throw new Error('No element with authorship data found');
-                    }
-
-                    // Extract data attributes
-                    const publicKeyStr = element.getAttribute('data-hav-key');
-                    const signature = element.getAttribute('data-hav-signature');
-                    const logUrl = element.getAttribute('data-hav-log');
-
-                    if (!publicKeyStr || !signature || !logUrl) {
-                        throw new Error('Missing required authorship attributes');
-                    }
-
-                    // Parse public key
-                    const publicKey = JSON.parse(publicKeyStr);
-
-                    // Fetch log data
-                    const logResponse = await fetch(logUrl);
-                    if (!logResponse.ok) {
-                        throw new Error(`Failed to fetch log: ${logResponse.status}`);
-                    }
-                    const logData = await logResponse.json();
-
-                    // Extract text content
-                    const text = element.textContent?.trim() || '';
-
-                    // Verify using core library
-                    const verificationResult = await window.HAVCore.verifyLog(logData.log, text, signature, publicKey);
+                    // Use HumanAuthorshipVerifier for verification
+                    const verifier = new HumanAuthorshipVerifier();
+                    const verificationResult = await verifier.verify(html);
                     setResult(verificationResult);
                 } catch (error) {
                     setResult({
@@ -353,63 +349,9 @@
                         return;
                     }
 
-                    const results = [];
-
-                    for (let i = 0; i < elements.length; i++) {
-                        const element = elements[i];
-                        try {
-                            // Extract data attributes
-                            const publicKeyStr = element.getAttribute('data-hav-key');
-                            const signature = element.getAttribute('data-hav-signature');
-                            const logUrl = element.getAttribute('data-hav-log');
-
-                            if (!publicKeyStr || !signature || !logUrl) {
-                                results.push({
-                                    element,
-                                    success: false,
-                                    result: null,
-                                    error: 'Missing required authorship attributes'
-                                });
-                                continue;
-                            }
-
-                            // Parse public key
-                            const publicKey = JSON.parse(publicKeyStr);
-
-                            // Fetch log data
-                            const logResponse = await fetch(logUrl);
-                            if (!logResponse.ok) {
-                                results.push({
-                                    element,
-                                    success: false,
-                                    result: null,
-                                    error: `Failed to fetch log: ${logResponse.status}`
-                                });
-                                continue;
-                            }
-                            const logData = await logResponse.json();
-
-                            // Extract text content
-                            const text = element.textContent?.trim() || '';
-
-                            // Verify using core library
-                            const verificationResult = await window.HAVCore.verifyLog(logData.log, text, signature, publicKey);
-                            results.push({
-                                element,
-                                success: true,
-                                result: verificationResult,
-                                error: null
-                            });
-                        } catch (error) {
-                            results.push({
-                                element,
-                                success: false,
-                                result: null,
-                                error: error.message
-                            });
-                        }
-                    }
-
+                    // Use HumanAuthorshipVerifier for batch verification
+                    const verifier = new HumanAuthorshipVerifier();
+                    const results = await verifier.verifyBatch(elements);
                     setBatchResults(results);
                 } catch (error) {
                     setBatchResults([{
@@ -426,6 +368,8 @@
             const clearAll = () => {
                 setInput('');
                 setUrl('');
+                setLogData('');
+                setUseLocalLog(false);
                 setResult(null);
                 setBatchResults([]);
             };
@@ -532,6 +476,53 @@
                             placeholder: 'Paste HTML containing data-hav-* attributes here...',
                             rows: 8
                         })
+                    ),
+                    React.createElement('div', { className: 'section' },
+                        React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+                            React.createElement('input', {
+                                type: 'checkbox',
+                                checked: useLocalLog,
+                                onChange: (e) => setUseLocalLog(e.target.checked)
+                            }),
+                            React.createElement('span', null, 'Use local log data instead of fetching from URL')
+                        ),
+                        useLocalLog && React.createElement('div', { style: { marginTop: '10px' } },
+                            React.createElement('h3', null, 'Event Log JSON'),
+                            React.createElement('textarea', {
+                                value: logData,
+                                onChange: (e) => setLogData(e.target.value),
+                                placeholder: 'Paste the eventlog.json content here...',
+                                rows: 6
+                            }),
+                            React.createElement('div', { style: { marginTop: '10px' } },
+                                React.createElement('button', {
+                                    className: 'secondary',
+                                    onClick: async () => {
+                                        if (!logData.trim()) {
+                                            alert('No log data to copy');
+                                            return;
+                                        }
+                                        try {
+                                            if (navigator.clipboard && window.isSecureContext) {
+                                                await navigator.clipboard.writeText(logData);
+                                                alert('Event log copied to clipboard!');
+                                            } else {
+                                                // Fallback
+                                                const tempTextArea = document.createElement('textarea');
+                                                tempTextArea.value = logData;
+                                                document.body.appendChild(tempTextArea);
+                                                tempTextArea.select();
+                                                document.execCommand('copy');
+                                                document.body.removeChild(tempTextArea);
+                                                alert('Event log copied to clipboard!');
+                                            }
+                                        } catch (error) {
+                                            alert('Failed to copy: ' + error.message);
+                                        }
+                                    }
+                                }, 'Copy Event Log to Clipboard')
+                            )
+                        )
                     ),
                     React.createElement('div', { className: 'button-group' },
                         React.createElement('button', {
