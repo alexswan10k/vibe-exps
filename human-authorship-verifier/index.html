@@ -792,6 +792,22 @@
                             }
                         }
                     }, 'Copy Event Log to Clipboard'),
+                    React.createElement('button', {
+                        style: { backgroundColor: '#4CAF50', color: 'white' },
+                        onClick: () => {
+                            if (!embedHtml || !signedData) {
+                                alert('No content available to verify. Please type some text first.');
+                                return;
+                            }
+
+                            // Store data for the verification page
+                            sessionStorage.setItem('hav-html-to-verify', embedHtml);
+                            sessionStorage.setItem('hav-log-to-verify', JSON.stringify(signedData));
+
+                            // Open verification page
+                            window.open('verify.html', '_blank');
+                        }
+                    }, '🔍 Verify This Content'),
                     React.createElement('button', { className: 'secondary', onClick: () => setShowFingerprint(!showFingerprint) }, showFingerprint ? 'Hide Fingerprint' : 'Show Fingerprint'),
                     React.createElement('button', { className: 'secondary', onClick: toggleLog }, showLog ? 'Hide Event Log' : 'Show Event Log'),
                     React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All & Start Over')

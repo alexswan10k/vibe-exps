@@ -216,6 +216,25 @@
             const [isVerifying, setIsVerifying] = useState(false);
             const [result, setResult] = useState(null);
             const [batchResults, setBatchResults] = useState([]);
+
+            // Check for pre-populated data from main page
+            useEffect(() => {
+                const storedHtml = sessionStorage.getItem('hav-html-to-verify');
+                const storedLog = sessionStorage.getItem('hav-log-to-verify');
+
+                if (storedHtml) {
+                    setInput(storedHtml);
+                    setUseLocalLog(true);
+                    // Clear the stored data after using it
+                    sessionStorage.removeItem('hav-html-to-verify');
+                }
+
+                if (storedLog) {
+                    setLogData(storedLog);
+                    // Clear the stored data after using it
+                    sessionStorage.removeItem('hav-log-to-verify');
+                }
+            }, []);
             const verifySingle = async () => {
                 if (!input.trim()) {
                     alert('Please enter HTML to verify');
