@@ -130,6 +130,11 @@
         // Utility functions using core library
         async function generateKeys() {
             try {
+                // Check if core library is loaded
+                if (!window.HAVCore || !window.HAVCore.generateKeyPair) {
+                    throw new Error('Core library not loaded. Please refresh the page.');
+                }
+
                 // Use core library to generate keys
                 const keyPair = await window.HAVCore.generateKeyPair();
 
@@ -247,6 +252,7 @@
             const [userIdentifier, setUserIdentifier] = useState('');
             const [fingerprint, setFingerprint] = useState('');
             const [showFingerprint, setShowFingerprint] = useState(false);
+            const [signedData, setSignedData] = useState(null);
 
             // Load keys on mount
             useEffect(() => {
@@ -288,6 +294,7 @@
                     if (!text.trim() || !keys || log.length === 0) {
                         setSignature('');
                         setEmbedHtml('');
+                        setSignedData(null);
                         return;
                     }
 
@@ -296,15 +303,16 @@
                         const textHash = await generateTextHash(text);
 
                         // Create signed data structure that includes both log and text hash
-                        const signedData = {
+                        const signedDataObj = {
                             log: log,
                             textHash: textHash,
                             timestamp: Date.now()
                         };
 
-                        const signedDataStr = JSON.stringify(signedData, null, 2);
+                        const signedDataStr = JSON.stringify(signedDataObj);
                         const sig = await signData(signedDataStr);
                         setSignature(sig);
+                        setSignedData(signedDataObj);
 
                         // Base64 encode the public key JSON string to avoid HTML attribute escaping issues
                         const encodedPublicKey = btoa(publicKeyStr);
@@ -312,6 +320,7 @@
                         setEmbedHtml(html);
                     } catch (error) {
                         console.error('Error generating output:', error);
+                        setSignedData(null);
                     }
                 };
 
@@ -363,21 +372,14 @@
             };
 
             const downloadLog = async () => {
-                if (!text.trim()) {
-                    alert('No text to create log for');
+                if (!signedData) {
+                    alert('No signed data available. Please type some text first.');
                     return;
                 }
 
                 try {
-                    // Generate the same data structure used for signing
-                    const textHash = await generateTextHash(text);
-                    const logData = {
-                        log: log,
-                        textHash: textHash,
-                        timestamp: Date.now()
-                    };
-
-                    const logStr = JSON.stringify(logData, null, 2);
+                    // Use the exact signed data that was used for signing
+                    const logStr = JSON.stringify(signedData, null, 2);
                     const blob = new Blob([logStr], {type: 'application/json'});
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -755,19 +757,13 @@
                     React.createElement('button', {
                         className: 'secondary',
                         onClick: async () => {
-                            if (log.length === 0) {
-                                alert('No event log data to copy');
+                            if (!signedData) {
+                                alert('No signed data available. Please type some text first.');
                                 return;
                             }
                             try {
-                                // Generate the same data structure used for signing
-                                const textHash = await generateTextHash(text);
-                                const logData = {
-                                    log: log,
-                                    textHash: textHash,
-                                    timestamp: Date.now()
-                                };
-                                const logStr = JSON.stringify(logData, null, 2);
+                                // Use the exact signed data that was used for signing
+                                const logStr = JSON.stringify(signedData, null, 2);
 
                                 if (navigator.clipboard && window.isSecureContext) {
                                     await navigator.clipboard.writeText(logStr);

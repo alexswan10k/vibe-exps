@@ -137,13 +137,13 @@ async function browserVerifyLog(log, text, signature, publicKeyJwk, signedData =
                 console.error('Direct verification failed:', error);
             }
         } else {
-            // For production use, try to guess the timestamp
+            // For cases where signedData is not provided (testing), use timestamp guessing
             const now = Date.now();
+            const textHash = await browserGenerateTextHash(text);
 
-            // Check a few recent timestamps (within last minute)
-            for (let i = 0; i < 60 * 1000; i += 100) {
+            // Check a wider range of timestamps (within last 24 hours)
+            for (let i = 0; i < 24 * 60 * 60 * 1000; i += 1000) { // Check every second for 24 hours
                 const testTimestamp = now - i;
-                const textHash = await browserGenerateTextHash(text);
                 const testSignedData = {
                     log: log,
                     textHash: textHash,
@@ -170,37 +170,6 @@ async function browserVerifyLog(log, text, signature, publicKeyJwk, signedData =
                     }
                 } catch (e) {
                     // Continue trying different timestamps
-                }
-            }
-
-            // If that didn't work, try the exact current time (for testing)
-            if (!signatureValid) {
-                const textHash = await browserGenerateTextHash(text);
-                const testSignedData = {
-                    log: log,
-                    textHash: textHash,
-                    timestamp: now
-                };
-
-                try {
-                    const encoder = new TextEncoder();
-                    const dataBuffer = encoder.encode(JSON.stringify(testSignedData));
-                    const signatureBuffer = Uint8Array.from(atob(signature), c => c.charCodeAt(0));
-
-                    if (await crypto.subtle.verify(
-                        {
-                            name: 'RSA-PSS',
-                            saltLength: 32, // 256 bits for SHA-256
-                        },
-                        publicKey,
-                        signatureBuffer,
-                        dataBuffer
-                    )) {
-                        signatureValid = true;
-                        verifiedTimestamp = now;
-                    }
-                } catch (e) {
-                    // Continue
                 }
             }
         }
@@ -334,15 +303,16 @@ function nodeVerifyLog(log, text, signature, publicKeyJwk, signedData = null) {
                 console.error('Direct verification failed:', error);
             }
         } else {
-            // For production use, try to guess the timestamp
+            // For cases where signedData is not provided (testing), use timestamp guessing
             const now = Date.now();
+            const textHash = nodeGenerateTextHash(text);
 
-            // Check a few recent timestamps (within last minute)
-            for (let i = 0; i < 60 * 1000; i += 100) {
+            // Check a wider range of timestamps (within last 24 hours)
+            for (let i = 0; i < 24 * 60 * 60 * 1000; i += 1000) { // Check every second for 24 hours
                 const testTimestamp = now - i;
                 const testSignedData = {
                     log: log,
-                    textHash: nodeGenerateTextHash(text),
+                    textHash: textHash,
                     timestamp: testTimestamp
                 };
 
@@ -358,28 +328,6 @@ function nodeVerifyLog(log, text, signature, publicKeyJwk, signedData = null) {
                     }
                 } catch (e) {
                     // Continue trying different timestamps
-                }
-            }
-
-            // If that didn't work, try the exact current time (for testing)
-            if (!signatureValid) {
-                const testSignedData = {
-                    log: log,
-                    textHash: nodeGenerateTextHash(text),
-                    timestamp: now
-                };
-
-                try {
-                    const verify = crypto.createVerify('RSA-SHA256');
-                    verify.update(JSON.stringify(testSignedData));
-                    const signatureBuffer = Buffer.from(signature, 'base64');
-
-                    if (verify.verify(publicKeyObject, signatureBuffer)) {
-                        signatureValid = true;
-                        verifiedTimestamp = now;
-                    }
-                } catch (e) {
-                    // Continue
                 }
             }
         }
