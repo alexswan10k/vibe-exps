@@ -50,32 +50,10 @@
             return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
 
-        // Add reconstructText to global scope for legacy verification
-        function reconstructText(log) {
-            let text = '';
-
-            for (const entry of log) {
-                if (entry.type === 'diff' && entry.change) {
-                    if (entry.change.added) {
-                        // Insert text at position
-                        const pos = entry.change.pos || text.length;
-                        text = text.slice(0, pos) + entry.change.added + text.slice(pos);
-                    } else if (entry.change.removed) {
-                        // Remove text from position
-                        const pos = entry.change.pos || 0;
-                        const removeLength = entry.change.removed.length;
-                        text = text.slice(0, pos) + text.slice(pos + removeLength);
-                    }
-                }
-            }
-
-            return text;
-        }
-
-        // Make functions available globally
+        // Make functions available globally - use HAVCore functions when available
         window.verifySignature = verifySignature;
         window.generateTextHash = generateTextHash;
-        window.reconstructText = reconstructText;
+        // reconstructText will be available from HAVCore when loaded
     </script>
     <script src="hav-verify.js"></script>
     <style>

@@ -276,7 +276,6 @@
         function App() {
             const [text, setText] = useState('');
             const [log, setLog] = useState([]);
-            const [lastValue, setLastValue] = useState('');
             const [keys, setKeys] = useState(null);
             const [publicKeyStr, setPublicKeyStr] = useState('');
             const [isGenerating, setIsGenerating] = useState(false);
@@ -372,18 +371,59 @@
 
             const handleTextChange = (e) => {
                 const newValue = e.target.value;
-                const diff = getDiff(lastValue, newValue);
+                const oldValue = text;
 
-                if (diff.added || diff.removed) {
-                    setLog(prevLog => [...prevLog, {
-                        type: 'diff',
-                        change: diff,
-                        time: Date.now()
-                    }]);
+                // Calculate cursor position (approximate)
+                const cursorPos = e.target.selectionStart || newValue.length;
+
+                // Generate simplified keyboard events
+                const events = [];
+
+                if (newValue.length > oldValue.length) {
+                    // Characters were added - generate insert events
+                    const addedChars = newValue.slice(oldValue.length);
+                    for (let i = 0; i < addedChars.length; i++) {
+                        events.push({
+                            type: 'insert',
+                            char: addedChars[i],
+                            cursor: oldValue.length + i,
+                            time: Date.now() + i
+                        });
+                    }
+                } else if (newValue.length < oldValue.length) {
+                    // Characters were removed - generate backspace events
+                    const removedCount = oldValue.length - newValue.length;
+                    for (let i = 0; i < removedCount; i++) {
+                        events.push({
+                            type: 'backspace',
+                            cursor: oldValue.length - i,
+                            time: Date.now() + i
+                        });
+                    }
+                } else {
+                    // Length unchanged but content might be different (replacement)
+                    // This is a simplified case - in practice this would be more complex
+                    // For now, we'll treat this as a backspace followed by insert
+                    if (newValue !== oldValue) {
+                        events.push({
+                            type: 'backspace',
+                            cursor: cursorPos + 1,
+                            time: Date.now()
+                        });
+                        events.push({
+                            type: 'insert',
+                            char: newValue[cursorPos],
+                            cursor: cursorPos,
+                            time: Date.now() + 1
+                        });
+                    }
+                }
+
+                if (events.length > 0) {
+                    setLog(prevLog => [...prevLog, ...events]);
                 }
 
                 setText(newValue);
-                setLastValue(newValue);
             };
 
             const handleKeyDown = (e) => {
@@ -716,7 +756,6 @@
                 if (confirm('Are you sure you want to clear all text and event logs? This cannot be undone.')) {
                     setText('');
                     setLog([]);
-                    setLastValue('');
                     setSignature('');
                     setEmbedHtml('');
                 }

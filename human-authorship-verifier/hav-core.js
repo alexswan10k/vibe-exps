@@ -459,29 +459,36 @@ function verifyLog(log, text, signature, publicKey, signedData = null) {
 
 /**
  * Reconstruct text from event log
- * @param {Array} log - Array of log events
+ * @param {Array} log - Array of log events with simplified keyboard format
  * @returns {string} Reconstructed text
  */
 function reconstructText(log) {
     let text = '';
 
     for (const entry of log) {
-        if (entry.type === 'diff' && entry.change) {
-            const pos = entry.change.pos || 0;
+        const cursor = entry.cursor || 0;
 
-            // Handle removal and addition at the same position (for replacements)
-            if (entry.change.removed && entry.change.added) {
-                // Replacement: remove old text and add new text at same position
-                const removeLength = entry.change.removed.length;
-                text = text.slice(0, pos) + entry.change.added + text.slice(pos + removeLength);
-            } else if (entry.change.removed) {
-                // Pure removal
-                const removeLength = entry.change.removed.length;
-                text = text.slice(0, pos) + text.slice(pos + removeLength);
-            } else if (entry.change.added) {
-                // Pure addition
-                text = text.slice(0, pos) + entry.change.added + text.slice(pos);
-            }
+        switch (entry.type) {
+            case 'insert':
+                // Insert character at cursor position
+                if (entry.char && entry.char.length === 1) {
+                    text = text.slice(0, cursor) + entry.char + text.slice(cursor);
+                }
+                break;
+
+            case 'backspace':
+                // Remove character before cursor (if cursor > 0)
+                if (cursor > 0) {
+                    text = text.slice(0, cursor - 1) + text.slice(cursor);
+                }
+                break;
+
+            case 'delete':
+                // Remove character at cursor (if cursor < text.length)
+                if (cursor < text.length) {
+                    text = text.slice(0, cursor) + text.slice(cursor + 1);
+                }
+                break;
         }
     }
 

@@ -21,9 +21,17 @@ async function runTests() {
         // Step 2: Create test log data (simulating user typing)
         const testText = "Hello World";
         const testLog = [
-            { type: 'diff', change: { added: 'H', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: 'ello ', pos: 1 }, time: Date.now() + 100 },
-            { type: 'diff', change: { added: 'World', pos: 6 }, time: Date.now() + 200 }
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: ' ', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: 'W', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 'o', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 'r', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'l', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 'd', cursor: 10, time: Date.now() + 1000 }
         ];
         console.log('   ✅ Created test log data');
 
@@ -58,7 +66,22 @@ async function runTests() {
 
         // Create log that matches original text
         const testLog = [
-            { type: 'diff', change: { added: originalText, pos: 0 }, time: Date.now() }
+            { type: 'insert', char: 'O', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'r', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'i', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'g', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'i', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: 'n', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: 'a', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 'l', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: ' ', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'c', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 'o', cursor: 10, time: Date.now() + 1000 },
+            { type: 'insert', char: 'n', cursor: 11, time: Date.now() + 1100 },
+            { type: 'insert', char: 't', cursor: 12, time: Date.now() + 1200 },
+            { type: 'insert', char: 'e', cursor: 13, time: Date.now() + 1300 },
+            { type: 'insert', char: 'n', cursor: 14, time: Date.now() + 1400 },
+            { type: 'insert', char: 't', cursor: 15, time: Date.now() + 1500 }
         ];
 
         // Sign with original text
@@ -85,7 +108,18 @@ async function runTests() {
 
         const testText = "Test content";
         const testLog = [
-            { type: 'diff', change: { added: testText, pos: 0 }, time: Date.now() }
+            { type: 'insert', char: 'T', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 's', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 't', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: ' ', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: 'c', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: 'o', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 'n', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 't', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'e', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 'n', cursor: 10, time: Date.now() + 1000 },
+            { type: 'insert', char: 't', cursor: 11, time: Date.now() + 1100 }
         ];
 
         // Try to verify with invalid signature
@@ -107,11 +141,18 @@ async function runTests() {
     try {
         const testText = "Hello World!";
         const testLog = [
-            { type: 'diff', change: { added: 'H', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: 'ello', pos: 1 }, time: Date.now() + 100 },
-            { type: 'diff', change: { added: ' ', pos: 5 }, time: Date.now() + 200 },
-            { type: 'diff', change: { added: 'World', pos: 6 }, time: Date.now() + 300 },
-            { type: 'diff', change: { added: '!', pos: 11 }, time: Date.now() + 400 }
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: ' ', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: 'W', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 'o', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 'r', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'l', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 'd', cursor: 10, time: Date.now() + 1000 },
+            { type: 'insert', char: '!', cursor: 11, time: Date.now() + 1100 }
         ];
 
         const reconstructed = reconstructText(testLog);
@@ -135,10 +176,13 @@ async function runTests() {
     try {
         const testText = "Hello";
         const testLog = [
-            { type: 'diff', change: { added: 'H', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: 'i', pos: 1 }, time: Date.now() + 100 },
-            { type: 'diff', change: { removed: 'i', pos: 1 }, time: Date.now() + 200 }, // Backspace
-            { type: 'diff', change: { added: 'ello', pos: 1 }, time: Date.now() + 300 }
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'i', cursor: 1, time: Date.now() + 100 },
+            { type: 'backspace', cursor: 2, time: Date.now() + 200 }, // Backspace removes 'i'
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 300 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 400 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 500 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 600 }
         ];
 
         const reconstructed = reconstructText(testLog);
@@ -162,9 +206,21 @@ async function runTests() {
     try {
         const testText = "Hello";
         const testLog = [
-            { type: 'diff', change: { added: 'h', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: 'ello', pos: 1 }, time: Date.now() + 100 },
-            { type: 'diff', change: { removed: 'h', added: 'H', pos: 0 }, time: Date.now() + 200 } // Replace h with H
+            { type: 'insert', char: 'h', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'backspace', cursor: 5, time: Date.now() + 500 }, // Remove 'o'
+            { type: 'backspace', cursor: 4, time: Date.now() + 600 }, // Remove 'l'
+            { type: 'backspace', cursor: 3, time: Date.now() + 700 }, // Remove 'l'
+            { type: 'backspace', cursor: 2, time: Date.now() + 800 }, // Remove 'e'
+            { type: 'backspace', cursor: 1, time: Date.now() + 900 }, // Remove 'h'
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() + 1000 }, // Insert 'H'
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 1100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 1200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 1300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 1400 }
         ];
 
         const reconstructed = reconstructText(testLog);
@@ -186,13 +242,16 @@ async function runTests() {
     // Test 4c: Complex editing scenario
     console.log('\nTest 4c: Complex editing scenario (insert, delete, replace)');
     try {
-        const testText = "Hello, world!";
+        const testText = "Hello!";
         const testLog = [
-            { type: 'diff', change: { added: 'Hello world', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: ',', pos: 5 }, time: Date.now() + 100 },
-            { type: 'diff', change: { added: '!', pos: 12 }, time: Date.now() + 200 },
-            { type: 'diff', change: { removed: 'd', pos: 11 }, time: Date.now() + 300 }, // Remove 'd'
-            { type: 'diff', change: { added: 'd', pos: 11 }, time: Date.now() + 400 }  // Add 'd' back
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: 'x', cursor: 5, time: Date.now() + 500 }, // Type 'x' by mistake
+            { type: 'backspace', cursor: 6, time: Date.now() + 600 }, // Backspace removes 'x'
+            { type: 'insert', char: '!', cursor: 5, time: Date.now() + 700 }  // Add exclamation
         ];
 
         const reconstructed = reconstructText(testLog);
@@ -214,10 +273,20 @@ async function runTests() {
     // Test 4d: Middle-of-text editing
     console.log('\nTest 4d: Editing in the middle of text');
     try {
-        const testText = "Hello,  beautiful world!";
+        const testText = "Hello world!";
         const testLog = [
-            { type: 'diff', change: { added: 'Hello, world!', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: ' beautiful ', pos: 7 }, time: Date.now() + 100 }
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: ' ', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: 'w', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 'o', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 'r', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'l', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 'd', cursor: 10, time: Date.now() + 1000 },
+            { type: 'insert', char: '!', cursor: 11, time: Date.now() + 1100 } // Add exclamation at end
         ];
 
         const reconstructed = reconstructText(testLog);
@@ -241,13 +310,16 @@ async function runTests() {
     try {
         const testText = "Hi";
         const testLog = [
-            { type: 'diff', change: { added: 'H', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: 'ello', pos: 1 }, time: Date.now() + 100 },
-            { type: 'diff', change: { removed: 'o', pos: 4 }, time: Date.now() + 200 }, // Backspace 'o'
-            { type: 'diff', change: { removed: 'l', pos: 3 }, time: Date.now() + 300 }, // Backspace 'l'
-            { type: 'diff', change: { removed: 'l', pos: 2 }, time: Date.now() + 400 }, // Backspace 'l'
-            { type: 'diff', change: { removed: 'e', pos: 1 }, time: Date.now() + 500 }, // Backspace 'e'
-            { type: 'diff', change: { added: 'i', pos: 1 }, time: Date.now() + 600 }    // Type 'i'
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'backspace', cursor: 5, time: Date.now() + 500 }, // Backspace 'o'
+            { type: 'backspace', cursor: 4, time: Date.now() + 600 }, // Backspace 'l'
+            { type: 'backspace', cursor: 3, time: Date.now() + 700 }, // Backspace 'l'
+            { type: 'backspace', cursor: 2, time: Date.now() + 800 }, // Backspace 'e'
+            { type: 'insert', char: 'i', cursor: 1, time: Date.now() + 900 }    // Type 'i'
         ];
 
         const reconstructed = reconstructText(testLog);
@@ -266,6 +338,67 @@ async function runTests() {
         console.log('❌ Multiple backspaces test failed:', error.message);
     }
 
+    // Test 4f: Delete first character
+    console.log('\nTest 4f: Delete first character');
+    try {
+        const testText = "ello";
+        const testLog = [
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'backspace', cursor: 1, time: Date.now() + 500 } // Backspace first 'H' when cursor is at position 1
+        ];
+
+        const reconstructed = reconstructText(testLog);
+
+        if (reconstructed === testText) {
+            console.log('✅ Delete first character test passed');
+            console.log('   Expected:', testText);
+            console.log('   Reconstructed:', reconstructed);
+        } else {
+            console.log('❌ Delete first character test failed');
+            console.log('   Expected:', testText);
+            console.log('   Got:', reconstructed);
+        }
+
+    } catch (error) {
+        console.log('❌ Delete first character test failed:', error.message);
+    }
+
+    // Test 4g: Delete at cursor position 1 then insert
+    console.log('\nTest 4g: Delete at cursor position 1 then insert');
+    try {
+        const testText = "hHllo";
+        const testLog = [
+            { type: 'insert', char: 'h', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'delete', cursor: 1, time: Date.now() + 500 }, // Delete 'e' at cursor position 1 -> "hllo"
+            { type: 'insert', char: 'H', cursor: 1, time: Date.now() + 600 } // Insert 'H' at cursor position 1 -> "hHllo"
+        ];
+
+        const reconstructed = reconstructText(testLog);
+
+        if (reconstructed === testText) {
+            console.log('✅ Delete at cursor position 1 then insert test passed');
+            console.log('   Expected:', testText);
+            console.log('   Reconstructed:', reconstructed);
+        } else {
+            console.log('❌ Delete at cursor position 1 then insert test failed');
+            console.log('   Expected:', testText);
+            console.log('   Got:', reconstructed);
+        }
+
+    } catch (error) {
+        console.log('❌ Delete at cursor position 1 then insert test failed:', error.message);
+    }
+
+
+
     // Test 5: HumanAuthorshipVerifier class with primitives
     console.log('\nTest 5: HumanAuthorshipVerifier.verifyPrimitives with valid content');
     try {
@@ -276,9 +409,17 @@ async function runTests() {
 
         const testText = "Hello World";
         const testLog = [
-            { type: 'diff', change: { added: 'H', pos: 0 }, time: Date.now() },
-            { type: 'diff', change: { added: 'ello ', pos: 1 }, time: Date.now() + 100 },
-            { type: 'diff', change: { added: 'World', pos: 6 }, time: Date.now() + 200 }
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: ' ', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: 'W', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 'o', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 'r', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'l', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 'd', cursor: 10, time: Date.now() + 1000 }
         ];
 
         // Sign the log
@@ -310,7 +451,64 @@ async function runTests() {
         // Create test data
         const testText = 'Hello, this is a test of the two-tier verification system!';
         const testLog = [
-            { type: 'diff', change: { added: 'Hello, this is a test of the two-tier verification system!', pos: 0 }, time: Date.now() }
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: ',', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: ' ', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 't', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 'h', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'i', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 's', cursor: 10, time: Date.now() + 1000 },
+            { type: 'insert', char: ' ', cursor: 11, time: Date.now() + 1100 },
+            { type: 'insert', char: 'i', cursor: 12, time: Date.now() + 1200 },
+            { type: 'insert', char: 's', cursor: 13, time: Date.now() + 1300 },
+            { type: 'insert', char: ' ', cursor: 14, time: Date.now() + 1400 },
+            { type: 'insert', char: 'a', cursor: 15, time: Date.now() + 1500 },
+            { type: 'insert', char: ' ', cursor: 16, time: Date.now() + 1600 },
+            { type: 'insert', char: 't', cursor: 17, time: Date.now() + 1700 },
+            { type: 'insert', char: 'e', cursor: 18, time: Date.now() + 1800 },
+            { type: 'insert', char: 's', cursor: 19, time: Date.now() + 1900 },
+            { type: 'insert', char: 't', cursor: 20, time: Date.now() + 2000 },
+            { type: 'insert', char: ' ', cursor: 21, time: Date.now() + 2100 },
+            { type: 'insert', char: 'o', cursor: 22, time: Date.now() + 2200 },
+            { type: 'insert', char: 'f', cursor: 23, time: Date.now() + 2300 },
+            { type: 'insert', char: ' ', cursor: 24, time: Date.now() + 2400 },
+            { type: 'insert', char: 't', cursor: 25, time: Date.now() + 2500 },
+            { type: 'insert', char: 'h', cursor: 26, time: Date.now() + 2600 },
+            { type: 'insert', char: 'e', cursor: 27, time: Date.now() + 2700 },
+            { type: 'insert', char: ' ', cursor: 28, time: Date.now() + 2800 },
+            { type: 'insert', char: 't', cursor: 29, time: Date.now() + 2900 },
+            { type: 'insert', char: 'w', cursor: 30, time: Date.now() + 3000 },
+            { type: 'insert', char: 'o', cursor: 31, time: Date.now() + 3100 },
+            { type: 'insert', char: '-', cursor: 32, time: Date.now() + 3200 },
+            { type: 'insert', char: 't', cursor: 33, time: Date.now() + 3300 },
+            { type: 'insert', char: 'i', cursor: 34, time: Date.now() + 3400 },
+            { type: 'insert', char: 'e', cursor: 35, time: Date.now() + 3500 },
+            { type: 'insert', char: 'r', cursor: 36, time: Date.now() + 3600 },
+            { type: 'insert', char: ' ', cursor: 37, time: Date.now() + 3700 },
+            { type: 'insert', char: 'v', cursor: 38, time: Date.now() + 3800 },
+            { type: 'insert', char: 'e', cursor: 39, time: Date.now() + 3900 },
+            { type: 'insert', char: 'r', cursor: 40, time: Date.now() + 4000 },
+            { type: 'insert', char: 'i', cursor: 41, time: Date.now() + 4100 },
+            { type: 'insert', char: 'f', cursor: 42, time: Date.now() + 4200 },
+            { type: 'insert', char: 'i', cursor: 43, time: Date.now() + 4300 },
+            { type: 'insert', char: 'c', cursor: 44, time: Date.now() + 4400 },
+            { type: 'insert', char: 'a', cursor: 45, time: Date.now() + 4500 },
+            { type: 'insert', char: 't', cursor: 46, time: Date.now() + 4600 },
+            { type: 'insert', char: 'i', cursor: 47, time: Date.now() + 4700 },
+            { type: 'insert', char: 'o', cursor: 48, time: Date.now() + 4800 },
+            { type: 'insert', char: 'n', cursor: 49, time: Date.now() + 4900 },
+            { type: 'insert', char: ' ', cursor: 50, time: Date.now() + 5000 },
+            { type: 'insert', char: 's', cursor: 51, time: Date.now() + 5100 },
+            { type: 'insert', char: 'y', cursor: 52, time: Date.now() + 5200 },
+            { type: 'insert', char: 's', cursor: 53, time: Date.now() + 5300 },
+            { type: 'insert', char: 't', cursor: 54, time: Date.now() + 5400 },
+            { type: 'insert', char: 'e', cursor: 55, time: Date.now() + 5500 },
+            { type: 'insert', char: 'm', cursor: 56, time: Date.now() + 5600 },
+            { type: 'insert', char: '!', cursor: 57, time: Date.now() + 5700 }
         ];
 
         console.log('   6.2 Test data created');
