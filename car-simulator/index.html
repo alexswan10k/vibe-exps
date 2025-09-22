@@ -29,6 +29,7 @@
         font-family: 'Courier New', monospace;
         border: 2px solid #333;
         box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        min-width: 200px;
     }
     #controls {
         margin-bottom: 15px;
@@ -41,9 +42,29 @@
         font-size: 16px;
         text-shadow: 0 0 5px #00ff00;
     }
+    #rpm {
+        margin-top: 5px;
+        color: #ff6600;
+        font-size: 14px;
+    }
     #gear {
-        margin-top: 10px;
+        margin-top: 5px;
         color: #ffff00;
+    }
+    #fuel {
+        margin-top: 5px;
+        color: #00ccff;
+    }
+    #health {
+        margin-top: 5px;
+        color: #ff3333;
+    }
+    #score {
+        margin-top: 10px;
+        color: #ffffff;
+        font-weight: bold;
+        border-top: 1px solid #555;
+        padding-top: 10px;
     }
     #minimap {
         position: absolute;
@@ -72,10 +93,16 @@
             S - Brake<br>
             A/D - Steer Left/Right<br>
             Space - Handbrake<br>
-            R - Reset Car
+            R - Reset Car<br>
+            P - Pause<br>
+            F - Debug Info
         </div>
         <div id="speed">Speed: 0 km/h</div>
-        <div id="gear">Gear: D</div>
+        <div id="rpm">RPM: 800</div>
+        <div id="gear">Gear: N</div>
+        <div id="fuel">Fuel: 100%</div>
+        <div id="health">Health: 100%</div>
+        <div id="score">Score: 0</div>
     </div>
     <div id="minimap">
         <canvas id="minimap-canvas"></canvas>

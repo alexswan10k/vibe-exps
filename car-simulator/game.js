@@ -10,14 +10,33 @@ class CarSimulator {
         this.keys = {};
         this.speedDisplay = document.getElementById('speed');
         this.gearDisplay = document.getElementById('gear');
+        this.rpmDisplay = document.getElementById('rpm');
+        this.fuelDisplay = document.getElementById('fuel');
+        this.healthDisplay = document.getElementById('health');
+        this.scoreDisplay = document.getElementById('score');
         this.minimapCanvas = document.getElementById('minimap-canvas');
         this.minimapCtx = this.minimapCanvas.getContext('2d');
+
+        // New properties for improvements
+        this.trafficVehicles = [];
+        this.pedestrians = [];
+        this.particles = [];
+        this.audioContext = null;
+        this.engineSound = null;
+        this.carHealth = 100;
+        this.fuel = 100;
+        this.score = 0;
+        this.gameTime = 0;
+        this.isPaused = false;
+        this.showDebug = false;
 
         this.init();
         this.createGround();
         this.createCar();
         this.createProceduralTown();
+        this.createTraffic();
         this.setupControls();
+        this.setupAudio();
         this.animate();
     }
 
@@ -361,13 +380,125 @@ class CarSimulator {
     }
 
     setupControls() {
-        document.addEventListener('keydown', (event) => this.keys[event.code] = true);
+        document.addEventListener('keydown', (event) => {
+            this.keys[event.code] = true;
+            if (event.code === 'KeyP') this.togglePause();
+            if (event.code === 'KeyF') this.toggleDebug();
+        });
         document.addEventListener('keyup', (event) => this.keys[event.code] = false);
     }
 
+    togglePause() {
+        this.isPaused = !this.isPaused;
+        const pauseOverlay = document.getElementById('pause-overlay') || this.createPauseOverlay();
+        pauseOverlay.style.display = this.isPaused ? 'flex' : 'none';
+    }
+
+    toggleDebug() {
+        this.showDebug = !this.showDebug;
+        const debugInfo = document.getElementById('debug-info') || this.createDebugInfo();
+        debugInfo.style.display = this.showDebug ? 'block' : 'none';
+    }
+
+    createPauseOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'pause-overlay';
+        overlay.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; align-items: center;
+            justify-content: center; z-index: 1000; color: white; font-size: 24px;
+        `;
+        overlay.innerHTML = '<div>PAUSED<br>Press P to resume</div>';
+        document.body.appendChild(overlay);
+        return overlay;
+    }
+
+    createDebugInfo() {
+        const debug = document.createElement('div');
+        debug.id = 'debug-info';
+        debug.style.cssText = `
+            position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.9); color: #00ff00; padding: 10px;
+            font-family: monospace; font-size: 12px; border-radius: 5px;
+            display: none; z-index: 100;
+        `;
+        document.getElementById('container').appendChild(debug);
+        return debug;
+    }
+
+    setupAudio() {
+        try {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.createEngineSound();
+        } catch (e) {
+            console.log('Audio not supported');
+        }
+    }
+
+    createEngineSound() {
+        const oscillator = this.audioContext.createOscillator();
+        const gainNode = this.audioContext.createGain();
+
+        oscillator.type = 'sawtooth';
+        oscillator.frequency.setValueAtTime(80, this.audioContext.currentTime);
+
+        gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+
+        oscillator.start();
+        this.engineSound = { oscillator, gainNode };
+    }
+
+    createTraffic() {
+        const trafficColors = [0xff0000, 0x0000ff, 0x00ff00, 0xffff00, 0xff00ff, 0x00ffff];
+
+        for (let i = 0; i < 15; i++) {
+            const x = (Math.random() - 0.5) * 600;
+            const z = (Math.random() - 0.5) * 600;
+            const color = trafficColors[Math.floor(Math.random() * trafficColors.length)];
+
+            // Traffic car body
+            const trafficCar = new THREE.Group();
+            trafficCar.position.set(x, 1, z);
+
+            const bodyGeom = new THREE.BoxGeometry(3.5, 1, 1.5);
+            const bodyMat = new THREE.MeshLambertMaterial({ color });
+            const body = new THREE.Mesh(bodyGeom, bodyMat);
+            body.castShadow = true;
+            trafficCar.add(body);
+
+            // Simple wheels
+            const wheelGeom = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 8);
+            wheelGeom.rotateZ(Math.PI / 2);
+            const wheelMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
+
+            for (let j = 0; j < 4; j++) {
+                const wheel = new THREE.Mesh(wheelGeom, wheelMat);
+                wheel.position.set(
+                    j % 2 === 0 ? -1.2 : 1.2,
+                    -0.5,
+                    j < 2 ? -0.6 : 0.6
+                );
+                trafficCar.add(wheel);
+            }
+
+            this.scene.add(trafficCar);
+            this.trafficVehicles.push({
+                mesh: trafficCar,
+                speed: 10 + Math.random() * 20,
+                direction: Math.random() * Math.PI * 2,
+                lastPosition: new THREE.Vector3(x, 1, z)
+            });
+        }
+    }
+
     updateCar() {
+        if (this.isPaused) return;
+
         const maxSteerVal = Math.PI / 8;
-        const maxForce = 1000;
+        const maxForce = 3000; // Increased power for better acceleration
         const brakeForce = 20;
 
         let steer = 0;
@@ -400,6 +531,8 @@ class CarSimulator {
             this.carChassis.velocity.set(0, 0, 0);
             this.carChassis.angularVelocity.set(0, 0, 0);
             this.carChassis.quaternion.set(0, 0, 0, 1);
+            this.carHealth = 100;
+            this.fuel = 100;
         }
 
         // Update meshes
@@ -413,15 +546,45 @@ class CarSimulator {
             this.wheelMeshes[i].quaternion.copy(t.quaternion);
         }
 
-        // Speed
+        // Speed and RPM
         const speed = this.carChassis.velocity.length() * 3.6;
+        const rpm = Math.max(800, speed * 60); // Simulate RPM based on speed (increased multiplier)
         this.speedDisplay.textContent = `Speed: ${speed.toFixed(1)} km/h`;
+        this.rpmDisplay.textContent = `RPM: ${rpm.toFixed(0)}`;
 
         // Gear
         let gear = 'N';
         if (this.keys.KeyW) gear = 'D';
         else if (this.keys.KeyS) gear = 'R';
         this.gearDisplay.textContent = `Gear: ${gear}`;
+
+        // Fuel consumption
+        if (this.keys.KeyW || this.keys.KeyS) {
+            this.fuel = Math.max(0, this.fuel - 0.02);
+            this.fuelDisplay.textContent = `Fuel: ${this.fuel.toFixed(1)}%`;
+        }
+
+        // Health system - damage from collisions
+        const velocity = this.carChassis.velocity.length();
+        if (velocity > 50) { // High speed damage
+            this.carHealth = Math.max(0, this.carHealth - 0.01);
+        }
+
+        // Update audio
+        this.updateEngineSound(speed);
+
+        // Update traffic
+        this.updateTraffic();
+
+        // Update game time and score
+        this.gameTime += 1/60;
+        if (this.gameTime % 5 < 1/60) { // Every 5 seconds
+            this.score += Math.floor(speed);
+            this.scoreDisplay.textContent = `Score: ${this.score}`;
+        }
+
+        // Update health display
+        this.healthDisplay.textContent = `Health: ${this.carHealth.toFixed(1)}%`;
     }
 
     updateCamera() {
@@ -436,6 +599,76 @@ class CarSimulator {
 
         this.cameraRig.position.lerp(idealOffset, 0.1);
         this.camera.lookAt(idealLookAt);
+    }
+
+    updateEngineSound(speed) {
+        if (!this.engineSound || !this.audioContext) return;
+
+        const { oscillator, gainNode } = this.engineSound;
+        const normalizedSpeed = Math.min(speed / 100, 1); // Normalize speed
+        const frequency = 80 + normalizedSpeed * 200; // 80-280 Hz range
+        const volume = normalizedSpeed * 0.1; // Volume based on speed
+
+        oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+        gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+    }
+
+    updateTraffic() {
+        this.trafficVehicles.forEach(vehicle => {
+            // Move traffic vehicles in their direction
+            const moveX = Math.cos(vehicle.direction) * vehicle.speed * 0.016; // 60fps
+            const moveZ = Math.sin(vehicle.direction) * vehicle.speed * 0.016;
+
+            vehicle.mesh.position.x += moveX;
+            vehicle.mesh.position.z += moveZ;
+
+            // Rotate wheels slightly for effect
+            vehicle.mesh.children.forEach((child, index) => {
+                if (index >= 1 && index <= 4) { // Wheels
+                    child.rotation.x += vehicle.speed * 0.1;
+                }
+            });
+
+            // Wrap around world boundaries
+            if (Math.abs(vehicle.mesh.position.x) > 500) {
+                vehicle.mesh.position.x = -Math.sign(vehicle.mesh.position.x) * 500;
+            }
+            if (Math.abs(vehicle.mesh.position.z) > 500) {
+                vehicle.mesh.position.z = -Math.sign(vehicle.mesh.position.z) * 500;
+            }
+
+            // Simple collision detection with player car
+            const distance = this.carChassis.position.distanceTo(vehicle.mesh.position);
+            if (distance < 5) {
+                this.carHealth = Math.max(0, this.carHealth - 0.5);
+                // Push cars apart
+                const pushDirection = new THREE.Vector3()
+                    .subVectors(vehicle.mesh.position, this.carChassis.position)
+                    .normalize();
+                vehicle.mesh.position.add(pushDirection.multiplyScalar(2));
+            }
+        });
+    }
+
+    updateDebugInfo() {
+        if (!this.showDebug) return;
+
+        const debugInfo = document.getElementById('debug-info');
+        if (!debugInfo) return;
+
+        const speed = this.carChassis.velocity.length() * 3.6;
+        const pos = this.carChassis.position;
+
+        debugInfo.innerHTML = `
+            Position: (${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)})<br>
+            Speed: ${speed.toFixed(1)} km/h<br>
+            Health: ${this.carHealth.toFixed(1)}%<br>
+            Fuel: ${this.fuel.toFixed(1)}%<br>
+            Score: ${this.score}<br>
+            Time: ${this.gameTime.toFixed(1)}s<br>
+            Traffic: ${this.trafficVehicles.length}<br>
+            FPS: ${Math.round(1 / (1/60))}
+        `;
     }
 
     updateMinimap() {
@@ -465,6 +698,16 @@ class CarSimulator {
             ctx.stroke();
         }
 
+        // Draw traffic vehicles
+        ctx.fillStyle = '#ffff00';
+        this.trafficVehicles.forEach(vehicle => {
+            const trafficX = centerX + vehicle.mesh.position.x * scale;
+            const trafficZ = centerY + vehicle.mesh.position.z * scale;
+            ctx.beginPath();
+            ctx.arc(trafficX, trafficZ, 2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
         // Draw car
         const carX = centerX + this.carChassis.position.x * scale;
         const carZ = centerY + this.carChassis.position.z * scale;
@@ -486,13 +729,14 @@ class CarSimulator {
     animate() {
         requestAnimationFrame(() => this.animate());
 
-        this.world.step(1 / 60);
-
-        this.updateCar();
+        if (!this.isPaused) {
+            this.world.step(1 / 60);
+            this.updateCar();
+        }
 
         this.updateCamera();
-
         this.updateMinimap();
+        this.updateDebugInfo();
 
         this.renderer.render(this.scene, this.camera);
     }
