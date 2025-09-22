@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid Diagram Refiner</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+</head>
+<body>
+    <div class="requirements-note">
+        Requires LMStudio running on localhost:1234 with qwen/qwen3-4b-thinking-2507 model loaded.
+    </div>
+    <div class="context-status">
+        Context: <span id="token-count">0</span> tokens (<span id="context-percent">0%</span>)
+        <button id="summarize-btn" title="Summarize old thinking blocks">📝</button>
+    </div>
+    <div class="container">
+        <div class="left-panel">
+            <h2>Chat & Input <button id="reset-btn" title="Reset conversation and diagram">🔄</button></h2>
+            <div id="chat-history" class="chat-history"></div>
+            <div class="input-section">
+                <textarea id="user-input" placeholder="Enter your message or Mermaid code..."></textarea>
+                <div class="button-row">
+                    <button id="send-btn">Send</button>
+                    <button id="stop-btn" style="display: none;">⏹️ Stop</button>
+                    <button id="skip-thinking-btn" style="display: none;">⏭️ Skip Thinking</button>
+                </div>
+            </div>
+        </div>
+        <div class="right-panel">
+            <h2>Diagram</h2>
+            <div id="diagram-container" class="diagram-container"></div>
+            <h3>Mermaid Code</h3>
+            <textarea id="code-textarea" class="code-textarea" readonly></textarea>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
