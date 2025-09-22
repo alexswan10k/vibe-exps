@@ -4,7 +4,7 @@
  * Includes all tests: basic integration, two-tier verification, and tamper detection
  */
 
-const { generateKeyPair, signLog, verifyLog, reconstructText, verifyContent, verifyLogSignature, verifyTwoTier } = require('./hav-core');
+const { generateKeyPair, signLog, verifyLog, reconstructText, verifyContent, verifyLogSignature, verifyTwoTier, serializeLog, deserializeLog } = require('./hav-core');
 const HumanAuthorshipVerifier = require('./hav-verify');
 
 // Test data and functions
@@ -604,6 +604,192 @@ async function runTests() {
 
     } catch (error) {
         console.log('❌ Two-tier verification tests failed:', error.message);
+    }
+
+    // Test 7: TLV Serialization Roundtrip
+    console.log('\nTest 7: TLV Serialization Roundtrip');
+    try {
+        // Test with various event types
+        const testLog = [
+            { type: 'input', oldValue: '', newValue: 'H', selectionStart: 1, selectionEnd: 1, cursor: 1, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'backspace', cursor: 2, time: Date.now() + 200 },
+            { type: 'delete', cursor: 1, time: Date.now() + 300 },
+            { type: 'selection', cursor: 0, selectionStart: 0, selectionEnd: 5, time: Date.now() + 400 },
+            { type: 'keydown', key: 'a', time: Date.now() + 500 },
+            { type: 'keyup', key: 'a', time: Date.now() + 600 }
+        ];
+
+        console.log('   7.1 Serializing log to TLV...');
+        const serialized = serializeLog(testLog);
+        console.log('       ✅ Serialized to', serialized.length, 'bytes');
+
+        console.log('   7.2 Deserializing TLV back to log...');
+        const deserialized = deserializeLog(serialized);
+        console.log('       ✅ Deserialized to', deserialized.length, 'events');
+
+        console.log('   7.3 Verifying roundtrip integrity...');
+        let roundtripValid = true;
+        if (testLog.length !== deserialized.length) {
+            roundtripValid = false;
+            console.log('       ❌ Length mismatch:', testLog.length, 'vs', deserialized.length);
+        } else {
+            for (let i = 0; i < testLog.length; i++) {
+                const original = testLog[i];
+                const restored = deserialized[i];
+
+                // Check type
+                if (original.type !== restored.type) {
+                    roundtripValid = false;
+                    console.log(`       ❌ Type mismatch at index ${i}:`, original.type, 'vs', restored.type);
+                    break;
+                }
+
+                // Check all properties
+                for (const key in original) {
+                    if (original[key] !== restored[key]) {
+                        roundtripValid = false;
+                        console.log(`       ❌ Property mismatch at index ${i}, key ${key}:`, original[key], 'vs', restored[key]);
+                        break;
+                    }
+                }
+                if (!roundtripValid) break;
+            }
+        }
+
+        if (roundtripValid) {
+            console.log('✅ TLV roundtrip test passed - perfect serialization/deserialization');
+            console.log('   Original log events:', testLog.length);
+            console.log('   Serialized size:', serialized.length, 'bytes');
+        } else {
+            console.log('❌ TLV roundtrip test failed - data corruption detected');
+        }
+
+        // Test with empty log
+        console.log('   7.4 Testing empty log...');
+        const emptyLog = [];
+        const emptySerialized = serializeLog(emptyLog);
+        const emptyDeserialized = deserializeLog(emptySerialized);
+        if (emptyDeserialized.length === 0) {
+            console.log('       ✅ Empty log roundtrip passed');
+        } else {
+            console.log('       ❌ Empty log roundtrip failed');
+            roundtripValid = false;
+        }
+
+        // Test with complex log
+        console.log('   7.5 Testing complex log with special characters...');
+        const complexLog = [
+            { type: 'insert', char: '🚀', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'Hello 世界 🌍', cursor: 1, time: Date.now() + 100 },
+            { type: 'input', oldValue: '🚀', newValue: '🚀Hello 世界 🌍', selectionStart: 15, selectionEnd: 15, cursor: 15, time: Date.now() + 200 }
+        ];
+        const complexSerialized = serializeLog(complexLog);
+        const complexDeserialized = deserializeLog(complexSerialized);
+
+        let complexValid = true;
+        if (complexLog.length !== complexDeserialized.length) {
+            complexValid = false;
+        } else {
+            for (let i = 0; i < complexLog.length; i++) {
+                const orig = complexLog[i];
+                const rest = complexDeserialized[i];
+                if (JSON.stringify(orig) !== JSON.stringify(rest)) {
+                    complexValid = false;
+                    break;
+                }
+            }
+        }
+
+        if (complexValid) {
+            console.log('       ✅ Complex log with Unicode roundtrip passed');
+        } else {
+            console.log('       ❌ Complex log roundtrip failed');
+            roundtripValid = false;
+        }
+
+        // Test 7.6: Space savings comparison
+        console.log('   7.6 Space savings comparison...');
+
+        // Use the large test log from Test 6
+        const largeTestLog = [
+            { type: 'insert', char: 'H', cursor: 0, time: Date.now() },
+            { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+            { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+            { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+            { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 },
+            { type: 'insert', char: ',', cursor: 5, time: Date.now() + 500 },
+            { type: 'insert', char: ' ', cursor: 6, time: Date.now() + 600 },
+            { type: 'insert', char: 't', cursor: 7, time: Date.now() + 700 },
+            { type: 'insert', char: 'h', cursor: 8, time: Date.now() + 800 },
+            { type: 'insert', char: 'i', cursor: 9, time: Date.now() + 900 },
+            { type: 'insert', char: 's', cursor: 10, time: Date.now() + 1000 },
+            { type: 'insert', char: ' ', cursor: 11, time: Date.now() + 1100 },
+            { type: 'insert', char: 'i', cursor: 12, time: Date.now() + 1200 },
+            { type: 'insert', char: 's', cursor: 13, time: Date.now() + 1300 },
+            { type: 'insert', char: ' ', cursor: 14, time: Date.now() + 1400 },
+            { type: 'insert', char: 'a', cursor: 15, time: Date.now() + 1500 },
+            { type: 'insert', char: ' ', cursor: 16, time: Date.now() + 1600 },
+            { type: 'insert', char: 't', cursor: 17, time: Date.now() + 1700 },
+            { type: 'insert', char: 'e', cursor: 18, time: Date.now() + 1800 },
+            { type: 'insert', char: 's', cursor: 19, time: Date.now() + 1900 },
+            { type: 'insert', char: 't', cursor: 20, time: Date.now() + 2000 },
+            { type: 'insert', char: ' ', cursor: 21, time: Date.now() + 2100 },
+            { type: 'insert', char: 'o', cursor: 22, time: Date.now() + 2200 },
+            { type: 'insert', char: 'f', cursor: 23, time: Date.now() + 2300 },
+            { type: 'insert', char: ' ', cursor: 24, time: Date.now() + 2400 },
+            { type: 'insert', char: 't', cursor: 25, time: Date.now() + 2500 },
+            { type: 'insert', char: 'h', cursor: 26, time: Date.now() + 2600 },
+            { type: 'insert', char: 'e', cursor: 27, time: Date.now() + 2700 },
+            { type: 'insert', char: ' ', cursor: 28, time: Date.now() + 2800 },
+            { type: 'insert', char: 't', cursor: 29, time: Date.now() + 2900 },
+            { type: 'insert', char: 'w', cursor: 30, time: Date.now() + 3000 },
+            { type: 'insert', char: 'o', cursor: 31, time: Date.now() + 3100 },
+            { type: 'insert', char: '-', cursor: 32, time: Date.now() + 3200 },
+            { type: 'insert', char: 't', cursor: 33, time: Date.now() + 3300 },
+            { type: 'insert', char: 'i', cursor: 34, time: Date.now() + 3400 },
+            { type: 'insert', char: 'e', cursor: 35, time: Date.now() + 3500 },
+            { type: 'insert', char: 'r', cursor: 36, time: Date.now() + 3600 },
+            { type: 'insert', char: ' ', cursor: 37, time: Date.now() + 3700 },
+            { type: 'insert', char: 'v', cursor: 38, time: Date.now() + 3800 },
+            { type: 'insert', char: 'e', cursor: 39, time: Date.now() + 3900 },
+            { type: 'insert', char: 'r', cursor: 40, time: Date.now() + 4000 },
+            { type: 'insert', char: 'i', cursor: 41, time: Date.now() + 4100 },
+            { type: 'insert', char: 'f', cursor: 42, time: Date.now() + 4200 },
+            { type: 'insert', char: 'i', cursor: 43, time: Date.now() + 4300 },
+            { type: 'insert', char: 'c', cursor: 44, time: Date.now() + 4400 },
+            { type: 'insert', char: 'a', cursor: 45, time: Date.now() + 4500 },
+            { type: 'insert', char: 't', cursor: 46, time: Date.now() + 4600 },
+            { type: 'insert', char: 'i', cursor: 47, time: Date.now() + 4700 },
+            { type: 'insert', char: 'o', cursor: 48, time: Date.now() + 4800 },
+            { type: 'insert', char: 'n', cursor: 49, time: Date.now() + 4900 },
+            { type: 'insert', char: ' ', cursor: 50, time: Date.now() + 5000 },
+            { type: 'insert', char: 's', cursor: 51, time: Date.now() + 5100 },
+            { type: 'insert', char: 'y', cursor: 52, time: Date.now() + 5200 },
+            { type: 'insert', char: 's', cursor: 53, time: Date.now() + 5300 },
+            { type: 'insert', char: 't', cursor: 54, time: Date.now() + 5400 },
+            { type: 'insert', char: 'e', cursor: 55, time: Date.now() + 5500 },
+            { type: 'insert', char: 'm', cursor: 56, time: Date.now() + 5600 },
+            { type: 'insert', char: '!', cursor: 57, time: Date.now() + 5700 }
+        ];
+
+        const jsonSize = Buffer.byteLength(JSON.stringify(largeTestLog), 'utf8');
+        const tlvSize = serializeLog(largeTestLog).length;
+        const savingsPercent = ((jsonSize - tlvSize) / jsonSize * 100).toFixed(1);
+
+        console.log('       Large log (58 events):');
+        console.log('       JSON size:', jsonSize, 'bytes');
+        console.log('       TLV size:', tlvSize, 'bytes');
+        console.log('       Space saved:', jsonSize - tlvSize, 'bytes (' + savingsPercent + '%)');
+
+        if (roundtripValid) {
+            console.log('✅ All TLV serialization tests passed');
+        } else {
+            console.log('❌ Some TLV serialization tests failed');
+        }
+
+    } catch (error) {
+        console.log('❌ TLV serialization test failed:', error.message);
     }
 
     console.log('\n🎉 Integration tests completed!');

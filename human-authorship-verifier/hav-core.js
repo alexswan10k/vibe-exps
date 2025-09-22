@@ -766,6 +766,555 @@ async function verifyTwoTier(text, contentSignature, logSignature, timestamp, pu
     return result;
 }
 
+/**
+ * TLV Type codes for log events
+ */
+const TLV_TYPES = {
+    INPUT: 1,
+    INSERT: 2,
+    BACKSPACE: 3,
+    DELETE: 4,
+    SELECTION: 5,
+    KEYDOWN: 6,
+    KEYUP: 7
+};
+
+/**
+ * Serialize a log array to TLV binary format
+ * @param {Array} log - Array of log events
+ * @returns {Uint8Array} Binary TLV data
+ */
+function serializeLog(log) {
+    const buffers = [];
+
+    for (const event of log) {
+        const eventBuffer = serializeEvent(event);
+        buffers.push(eventBuffer);
+    }
+
+    // Concatenate all event buffers
+    const totalLength = buffers.reduce((sum, buf) => sum + buf.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const buf of buffers) {
+        result.set(buf, offset);
+        offset += buf.length;
+    }
+
+    return result;
+}
+
+/**
+ * Serialize a single event to TLV format
+ * @param {Object} event - Log event object
+ * @returns {Uint8Array} TLV binary data for the event
+ */
+function serializeEvent(event) {
+    const type = TLV_TYPES[event.type.toUpperCase()];
+    if (type === undefined) {
+        throw new Error(`Unknown event type: ${event.type}`);
+    }
+
+    let valueBuffer;
+    switch (event.type) {
+        case 'input':
+            valueBuffer = serializeInputEvent(event);
+            break;
+        case 'insert':
+            valueBuffer = serializeInsertEvent(event);
+            break;
+        case 'backspace':
+            valueBuffer = serializeBackspaceEvent(event);
+            break;
+        case 'delete':
+            valueBuffer = serializeDeleteEvent(event);
+            break;
+        case 'selection':
+            valueBuffer = serializeSelectionEvent(event);
+            break;
+        case 'keydown':
+            valueBuffer = serializeKeyEvent(event);
+            break;
+        case 'keyup':
+            valueBuffer = serializeKeyEvent(event);
+            break;
+        default:
+            throw new Error(`Unsupported event type: ${event.type}`);
+    }
+
+    // Create TLV: Type (1 byte) + Length (2 bytes) + Value
+    const length = valueBuffer.length;
+    const tlvBuffer = new Uint8Array(3 + length);
+    tlvBuffer[0] = type;
+    // Big-endian length
+    tlvBuffer[1] = (length >> 8) & 0xFF;
+    tlvBuffer[2] = length & 0xFF;
+    tlvBuffer.set(valueBuffer, 3);
+
+    return tlvBuffer;
+}
+
+/**
+ * Serialize input event fields
+ * @param {Object} event
+ * @returns {Uint8Array}
+ */
+function serializeInputEvent(event) {
+    const buffers = [];
+
+    // oldValue: string
+    buffers.push(serializeString(event.oldValue || ''));
+
+    // newValue: string
+    buffers.push(serializeString(event.newValue || ''));
+
+    // selectionStart: uint32
+    buffers.push(serializeUint32(event.selectionStart || 0));
+
+    // selectionEnd: uint32
+    buffers.push(serializeUint32(event.selectionEnd || 0));
+
+    // cursor: uint32
+    buffers.push(serializeUint32(event.cursor || 0));
+
+    // time: uint64
+    buffers.push(serializeUint64(event.time || 0));
+
+    return concatenateBuffers(buffers);
+}
+
+/**
+ * Serialize insert event fields
+ * @param {Object} event
+ * @returns {Uint8Array}
+ */
+function serializeInsertEvent(event) {
+    const buffers = [];
+
+    // char: string (1 char)
+    buffers.push(serializeString(event.char || ''));
+
+    // cursor: uint32
+    buffers.push(serializeUint32(event.cursor || 0));
+
+    // time: uint64
+    buffers.push(serializeUint64(event.time || 0));
+
+    return concatenateBuffers(buffers);
+}
+
+/**
+ * Serialize backspace event fields
+ * @param {Object} event
+ * @returns {Uint8Array}
+ */
+function serializeBackspaceEvent(event) {
+    const buffers = [];
+
+    // cursor: uint32
+    buffers.push(serializeUint32(event.cursor || 0));
+
+    // time: uint64
+    buffers.push(serializeUint64(event.time || 0));
+
+    return concatenateBuffers(buffers);
+}
+
+/**
+ * Serialize delete event fields
+ * @param {Object} event
+ * @returns {Uint8Array}
+ */
+function serializeDeleteEvent(event) {
+    const buffers = [];
+
+    // cursor: uint32
+    buffers.push(serializeUint32(event.cursor || 0));
+
+    // time: uint64
+    buffers.push(serializeUint64(event.time || 0));
+
+    return concatenateBuffers(buffers);
+}
+
+/**
+ * Serialize selection event fields
+ * @param {Object} event
+ * @returns {Uint8Array}
+ */
+function serializeSelectionEvent(event) {
+    const buffers = [];
+
+    // cursor: uint32
+    buffers.push(serializeUint32(event.cursor || 0));
+
+    // selectionStart: uint32
+    buffers.push(serializeUint32(event.selectionStart || 0));
+
+    // selectionEnd: uint32
+    buffers.push(serializeUint32(event.selectionEnd || 0));
+
+    // time: uint64
+    buffers.push(serializeUint64(event.time || 0));
+
+    return concatenateBuffers(buffers);
+}
+
+/**
+ * Serialize keydown/keyup event fields
+ * @param {Object} event
+ * @returns {Uint8Array}
+ */
+function serializeKeyEvent(event) {
+    const buffers = [];
+
+    // key: string
+    buffers.push(serializeString(event.key || ''));
+
+    // time: uint64
+    buffers.push(serializeUint64(event.time || 0));
+
+    return concatenateBuffers(buffers);
+}
+
+/**
+ * Serialize a string as length-prefixed UTF-8
+ * @param {string} str
+ * @returns {Uint8Array}
+ */
+function serializeString(str) {
+    const encoder = new TextEncoder();
+    const strBuffer = encoder.encode(str);
+    const length = strBuffer.length;
+    const buffer = new Uint8Array(2 + length);
+    // Big-endian length
+    buffer[0] = (length >> 8) & 0xFF;
+    buffer[1] = length & 0xFF;
+    buffer.set(strBuffer, 2);
+    return buffer;
+}
+
+/**
+ * Serialize a 32-bit unsigned integer (big-endian)
+ * @param {number} value
+ * @returns {Uint8Array}
+ */
+function serializeUint32(value) {
+    const buffer = new Uint8Array(4);
+    buffer[0] = (value >>> 24) & 0xFF;
+    buffer[1] = (value >>> 16) & 0xFF;
+    buffer[2] = (value >>> 8) & 0xFF;
+    buffer[3] = value & 0xFF;
+    return buffer;
+}
+
+/**
+ * Serialize a 64-bit unsigned integer (big-endian)
+ * @param {number} value
+ * @returns {Uint8Array}
+ */
+function serializeUint64(value) {
+    const buffer = new Uint8Array(8);
+    const high = Math.floor(value / 0x100000000);
+    const low = value % 0x100000000;
+    buffer[0] = (high >>> 24) & 0xFF;
+    buffer[1] = (high >>> 16) & 0xFF;
+    buffer[2] = (high >>> 8) & 0xFF;
+    buffer[3] = high & 0xFF;
+    buffer[4] = (low >>> 24) & 0xFF;
+    buffer[5] = (low >>> 16) & 0xFF;
+    buffer[6] = (low >>> 8) & 0xFF;
+    buffer[7] = low & 0xFF;
+    return buffer;
+}
+
+/**
+ * Concatenate multiple Uint8Arrays
+ * @param {Array<Uint8Array>} buffers
+ * @returns {Uint8Array}
+ */
+function concatenateBuffers(buffers) {
+    const totalLength = buffers.reduce((sum, buf) => sum + buf.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const buf of buffers) {
+        result.set(buf, offset);
+        offset += buf.length;
+    }
+    return result;
+}
+
+/**
+ * Deserialize TLV binary data back to log array
+ * @param {Uint8Array} data - Binary TLV data
+ * @returns {Array} Array of log events
+ */
+function deserializeLog(data) {
+    const log = [];
+    let offset = 0;
+
+    while (offset < data.length) {
+        const event = deserializeEvent(data, offset);
+        log.push(event.event);
+        offset = event.newOffset;
+    }
+
+    return log;
+}
+
+/**
+ * Deserialize a single TLV event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object} { event, newOffset }
+ */
+function deserializeEvent(data, offset) {
+    const type = data[offset];
+    const length = (data[offset + 1] << 8) | data[offset + 2];
+    const valueStart = offset + 3;
+    const valueEnd = valueStart + length;
+
+    let event;
+    let valueOffset = valueStart;
+
+    switch (type) {
+        case TLV_TYPES.INPUT:
+            event = deserializeInputEvent(data, valueOffset);
+            break;
+        case TLV_TYPES.INSERT:
+            event = deserializeInsertEvent(data, valueOffset);
+            break;
+        case TLV_TYPES.BACKSPACE:
+            event = deserializeBackspaceEvent(data, valueOffset);
+            break;
+        case TLV_TYPES.DELETE:
+            event = deserializeDeleteEvent(data, valueOffset);
+            break;
+        case TLV_TYPES.SELECTION:
+            event = deserializeSelectionEvent(data, valueOffset);
+            break;
+        case TLV_TYPES.KEYDOWN:
+            event = Object.assign(deserializeKeyEvent(data, valueOffset), { type: 'keydown' });
+            break;
+        case TLV_TYPES.KEYUP:
+            event = Object.assign(deserializeKeyEvent(data, valueOffset), { type: 'keyup' });
+            break;
+        default:
+            throw new Error(`Unknown TLV type: ${type}`);
+    }
+
+    return { event, newOffset: valueEnd };
+}
+
+/**
+ * Deserialize input event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object}
+ */
+function deserializeInputEvent(data, offset) {
+    let currentOffset = offset;
+
+    // oldValue
+    const oldValueResult = deserializeString(data, currentOffset);
+    currentOffset = oldValueResult.newOffset;
+
+    // newValue
+    const newValueResult = deserializeString(data, currentOffset);
+    currentOffset = newValueResult.newOffset;
+
+    // selectionStart
+    const selectionStart = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // selectionEnd
+    const selectionEnd = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // cursor
+    const cursor = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // time
+    const time = deserializeUint64(data, currentOffset);
+
+    return {
+        type: 'input',
+        oldValue: oldValueResult.value,
+        newValue: newValueResult.value,
+        selectionStart,
+        selectionEnd,
+        cursor,
+        time
+    };
+}
+
+/**
+ * Deserialize insert event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object}
+ */
+function deserializeInsertEvent(data, offset) {
+    let currentOffset = offset;
+
+    // char
+    const charResult = deserializeString(data, currentOffset);
+    currentOffset = charResult.newOffset;
+
+    // cursor
+    const cursor = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // time
+    const time = deserializeUint64(data, currentOffset);
+
+    return {
+        type: 'insert',
+        char: charResult.value,
+        cursor,
+        time
+    };
+}
+
+/**
+ * Deserialize backspace event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object}
+ */
+function deserializeBackspaceEvent(data, offset) {
+    let currentOffset = offset;
+
+    // cursor
+    const cursor = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // time
+    const time = deserializeUint64(data, currentOffset);
+
+    return {
+        type: 'backspace',
+        cursor,
+        time
+    };
+}
+
+/**
+ * Deserialize delete event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object}
+ */
+function deserializeDeleteEvent(data, offset) {
+    let currentOffset = offset;
+
+    // cursor
+    const cursor = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // time
+    const time = deserializeUint64(data, currentOffset);
+
+    return {
+        type: 'delete',
+        cursor,
+        time
+    };
+}
+
+/**
+ * Deserialize selection event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object}
+ */
+function deserializeSelectionEvent(data, offset) {
+    let currentOffset = offset;
+
+    // cursor
+    const cursor = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // selectionStart
+    const selectionStart = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // selectionEnd
+    const selectionEnd = deserializeUint32(data, currentOffset);
+    currentOffset += 4;
+
+    // time
+    const time = deserializeUint64(data, currentOffset);
+
+    return {
+        type: 'selection',
+        cursor,
+        selectionStart,
+        selectionEnd,
+        time
+    };
+}
+
+/**
+ * Deserialize key event
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object}
+ */
+function deserializeKeyEvent(data, offset) {
+    let currentOffset = offset;
+
+    // key
+    const keyResult = deserializeString(data, currentOffset);
+    currentOffset = keyResult.newOffset;
+
+    // time
+    const time = deserializeUint64(data, currentOffset);
+
+    return {
+        key: keyResult.value,
+        time
+    };
+}
+
+/**
+ * Deserialize a length-prefixed string
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {Object} { value, newOffset }
+ */
+function deserializeString(data, offset) {
+    const length = (data[offset] << 8) | data[offset + 1];
+    const strStart = offset + 2;
+    const strEnd = strStart + length;
+    const decoder = new TextDecoder();
+    const value = decoder.decode(data.slice(strStart, strEnd));
+    return { value, newOffset: strEnd };
+}
+
+/**
+ * Deserialize a 32-bit unsigned integer (big-endian)
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {number}
+ */
+function deserializeUint32(data, offset) {
+    return (data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3];
+}
+
+/**
+ * Deserialize a 64-bit unsigned integer (big-endian)
+ * @param {Uint8Array} data
+ * @param {number} offset
+ * @returns {number}
+ */
+function deserializeUint64(data, offset) {
+    const high = deserializeUint32(data, offset);
+    const low = deserializeUint32(data, offset + 4);
+    return high * 0x100000000 + low;
+}
+
 // Export functions for Node.js
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -776,7 +1325,9 @@ if (typeof module !== 'undefined' && module.exports) {
         verifyContent,
         verifyLogSignature,
         verifyTwoTier,
-        reconstructText
+        reconstructText,
+        serializeLog,
+        deserializeLog
     };
 }
 
@@ -790,4 +1341,6 @@ if (typeof window !== 'undefined') {
     window.HAVCore.verifyLogSignature = verifyLogSignature;
     window.HAVCore.verifyTwoTier = verifyTwoTier;
     window.HAVCore.reconstructText = reconstructText;
+    window.HAVCore.serializeLog = serializeLog;
+    window.HAVCore.deserializeLog = deserializeLog;
 }
