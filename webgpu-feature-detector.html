@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU Feature Detector</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .supported {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .unsupported {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .partial {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .feature-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+        }
+        .feature-card h3 {
+            margin-top: 0;
+            color: #495057;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 8px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 4px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        .copy-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .copy-btn:hover {
+            background: #0056b3;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            overflow-x: auto;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebGPU Feature Detector</h1>
+    <div id="loading" class="loading">Checking WebGPU support...</div>
+
+    <div id="content" style="display: none;">
+        <div id="status" class="status"></div>
+
+        <div class="container">
+            <h2>Adapter Information</h2>
+            <div id="adapter-info"></div>
+        </div>
+
+        <div class="container">
+            <h2>Supported Features</h2>
+            <div id="features"></div>
+        </div>
+
+        <div class="container">
+            <h2>Device Limits</h2>
+            <div id="limits"></div>
+        </div>
+
+        <div class="container">
+            <h2>Technical Details</h2>
+            <button id="copy-btn" class="copy-btn">Copy Technical Info</button>
+            <pre id="technical-info"></pre>
+        </div>
+    </div>
+
+    <script>
+        class WebGPUDetector {
+            constructor() {
+                this.adapter = null;
+                this.device = null;
+                this.features = new Set();
+                this.limits = {};
+                this.adapterInfo = {};
+            }
+
+            async detect() {
+                try {
+                    // Check basic WebGPU support
+                    if (!navigator.gpu) {
+                        await this.showUnsupportedBrowser();
+                        return;
+                    }
+
+                    // Request adapter
+                    this.adapter = await navigator.gpu.requestAdapter();
+                    if (!this.adapter) {
+                        this.showResult('unsupported', 'No WebGPU adapter found');
+                        return;
+                    }
+
+                    // Get comprehensive adapter info
+                    this.adapterInfo = await this.getAdapterInfo();
+
+                    // Request device with comprehensive features
+                    try {
+                        this.device = await this.adapter.requestDevice({
+                            requiredFeatures: [],
+                            requiredLimits: {}
+                        });
+                    } catch (deviceError) {
+                        console.warn('Failed to create device with default options:', deviceError);
+                        // Try with minimal requirements
+                        try {
+                            this.device = await this.adapter.requestDevice();
+                        } catch (fallbackError) {
+                            console.error('Device creation failed:', fallbackError);
+                            this.showResult('partial', 'WebGPU adapter found but device creation failed');
+                            return;
+                        }
+                    }
+
+                    if (!this.device) {
+                        this.showResult('partial', 'WebGPU adapter found but device creation failed');
+                        return;
+                    }
+
+                    // Get features and limits
+                    this.features = this.device.features || new Set();
+                    this.limits = this.device.limits || {};
+
+                    // If features/limits are empty, try alternative detection
+                    if (this.features.size === 0 || Object.keys(this.limits).length === 0) {
+                        console.warn('Device features/limits not populated, attempting alternative detection');
+                        await this.detectCapabilitiesManually();
+                    }
+
+                    this.showResult('supported', 'WebGPU is fully supported!');
+                    this.displayResults();
+
+                } catch (error) {
+                    console.error('WebGPU detection error:', error);
+                    this.showResult('unsupported', `WebGPU error: ${error.message}`);
+                }
+            }
+
+            async showUnsupportedBrowser() {
+                const browser = this.getBrowserName(navigator.userAgent);
+                const browserInfo = this.getBrowserInfo();
+                const systemInfo = this.getSystemInfo();
+
+                // Get WebGL information
+                let webglInfo = {};
+                try {
+                    webglInfo = await this.getWebGLHints();
+                } catch (e) {
+                    console.warn('WebGL detection failed:', e);
+                }
+
+                // Determine status and recommendation
+                const { statusMessage, additionalInfo } = this.getBrowserStatus(browser);
+
+                // Build all HTML content
+                const html = this.buildUnsupportedBrowserHTML(browser, browserInfo, systemInfo, webglInfo, statusMessage, additionalInfo);
+
+                // Update DOM in single batch
+                this.updateUnsupportedBrowserDOM(statusMessage, html, browserInfo, systemInfo, webglInfo, statusMessage, additionalInfo);
+            }
+
+            getBrowserStatus(browser) {
+                const statusMap = {
+                    'Safari': {
+                        statusMessage: 'Safari does not yet support WebGPU',
+                        additionalInfo: 'WebGPU support is expected in future Safari versions. Currently, you can use WebGL for GPU-accelerated graphics.'
+                    },
+                    'Edge': {
+                        statusMessage: 'Microsoft Edge has limited WebGPU support',
+                        additionalInfo: 'Try updating to the latest version or use Chrome for full WebGPU support.'
+                    },
+                    'Unknown': {
+                        statusMessage: 'WebGPU is not supported in this browser',
+                        additionalInfo: 'Consider using Chrome, Firefox, or Edge for WebGPU support.'
+                    }
+                };
+
+                return statusMap[browser] || {
+                    statusMessage: 'WebGPU is not supported in this browser',
+                    additionalInfo: 'Try updating to the latest version or switch to a supported browser like Chrome or Firefox.'
+                };
+            }
+
+            buildUnsupportedBrowserHTML(browser, browserInfo, systemInfo, webglInfo, statusMessage, additionalInfo) {
+                const cards = [
+                    this.buildCompatibilityCard(browser, additionalInfo),
+                    this.buildBrowserInfoCard(browserInfo),
+                    this.buildSystemInfoCard(systemInfo),
+                    ...(webglInfo.webglVersion || webglInfo.renderer ? [this.buildWebGLCard(webglInfo)] : []),
+                    this.buildCaniuseIframeCard()
+                ];
+
+                return `<div class="feature-grid">${cards.join('')}</div>`;
+            }
+
+            buildCompatibilityCard(browser, additionalInfo) {
+                return `
+                    <div class="feature-card">
+                        <h3>WebGPU Compatibility</h3>
+                        <ul class="feature-list">
+                            <li><strong>Current Browser:</strong> ${browser}</li>
+                            <li><strong>WebGPU Support:</strong> Not Available</li>
+                            <li><strong>Recommendation:</strong> ${additionalInfo}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+            buildBrowserInfoCard(browserInfo) {
+                return `
+                    <div class="feature-card">
+                        <h3>Browser Environment</h3>
+                        <ul class="feature-list">
+                            <li><strong>Browser:</strong> ${browserInfo.browser} ${browserInfo.version}</li>
+                            <li><strong>Platform:</strong> ${browserInfo.platform}</li>
+                            <li><strong>CPU Cores:</strong> ${browserInfo.hardwareConcurrency}</li>
+                            <li><strong>Language:</strong> ${browserInfo.language}</li>
+                            <li><strong>Online Status:</strong> ${browserInfo.onLine ? 'Online' : 'Offline'}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+            buildSystemInfoCard(systemInfo) {
+                return `
+                    <div class="feature-card">
+                        <h3>System Information</h3>
+                        <ul class="feature-list">
+                            <li><strong>Screen Resolution:</strong> ${systemInfo.screenWidth}×${systemInfo.screenHeight}</li>
+                            <li><strong>Device Pixel Ratio:</strong> ${systemInfo.devicePixelRatio}</li>
+                            <li><strong>Color Depth:</strong> ${systemInfo.colorDepth}-bit</li>
+                            <li><strong>Touch Points:</strong> ${systemInfo.maxTouchPoints}</li>
+                            <li><strong>WebGL Support:</strong> ${systemInfo.webglSupported ? 'Yes' : 'No'}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+            buildWebGLCard(webglInfo) {
+                const webglItems = [
+                    webglInfo.webglVersion && `<li><strong>WebGL Version:</strong> ${webglInfo.webglVersion}</li>`,
+                    webglInfo.renderer && `<li><strong>Renderer:</strong> ${webglInfo.renderer}</li>`,
+                    webglInfo.vendor && `<li><strong>Vendor:</strong> ${webglInfo.vendor}</li>`,
+                    webglInfo.webglExtensions && `<li><strong>Extensions:</strong> ${webglInfo.webglExtensions}</li>`,
+                    webglInfo.maxTextureSize && `<li><strong>Max Texture Size:</strong> ${webglInfo.maxTextureSize}px</li>`
+                ].filter(Boolean);
+
+                return `
+                    <div class="feature-card">
+                        <h3>WebGL Context (Alternative)</h3>
+                        <ul class="feature-list">${webglItems.join('')}</ul>
+                    </div>
+                `;
+            }
+
+            buildCaniuseIframeCard() {
+                return `
+                    <div class="feature-card">
+                        <h3>WebGPU Browser Support</h3>
+                        <iframe
+                            src="https://caniuse.com/webgpu/embed/simple"
+                            width="100%"
+                            height="400"
+                            style="border: 1px solid #dee2e6; border-radius: 4px; margin-top: 10px;"
+                            title="WebGPU Browser Support"
+                            sandbox="allow-scripts allow-same-origin">
+                        </iframe>
+                        <p style="font-size: 12px; color: #6c757d; margin-top: 10px;">
+                            <em>Live browser compatibility data from caniuse.com</em>
+                        </p>
+                    </div>
+                `;
+            }
+
+            updateUnsupportedBrowserDOM(statusMessage, html, browserInfo, systemInfo, webglInfo, statusMessageArg, additionalInfo) {
+                // Update status
+                const statusEl = document.getElementById('status');
+                statusEl.className = 'status unsupported';
+                statusEl.textContent = statusMessage;
+
+                // Update adapter info
+                document.getElementById('adapter-info').innerHTML = html;
+
+                // Update features and limits
+                document.getElementById('features').innerHTML = '<p>WebGPU features not available in this browser.</p>';
+                document.getElementById('limits').innerHTML = '<p>WebGPU limits not available in this browser.</p>';
+
+                // Update technical info
+                const info = {
+                    browser: browserInfo,
+                    system: systemInfo,
+                    webgl: webglInfo,
+                    webgpu: {
+                        supported: false,
+                        reason: statusMessageArg,
+                        recommendation: additionalInfo
+                    },
+                    timestamp: new Date().toISOString()
+                };
+                document.getElementById('technical-info').textContent = JSON.stringify(info, null, 2);
+
+                // Show content
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            }
+
+            showResult(status, message) {
+                const statusEl = document.getElementById('status');
+                statusEl.className = `status ${status}`;
+                statusEl.textContent = message;
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            }
+
+            displayResults() {
+                this.displayAdapterInfo();
+                this.displayFeatures();
+                this.displayLimits();
+                this.displayTechnicalInfo();
+            }
+
+            displayAdapterInfo() {
+                const info = this.adapterInfo;
+                const cards = [
+                    this.buildGPUInfoCard(info),
+                    ...(info.browserInfo ? [this.buildBrowserInfoCard(info.browserInfo)] : []),
+                    ...(info.systemInfo ? [this.buildSystemInfoCard(info.systemInfo)] : []),
+                    ...(this.hasWebGLInfo(info) ? [this.buildWebGLInfoCard(info)] : []),
+                    this.buildCaniuseIframeCard(),
+                    ...(info.note ? [this.buildNotesCard(info.note)] : [])
+                ];
+
+                document.getElementById('adapter-info').innerHTML = `<div class="feature-grid">${cards.join('')}</div>`;
+            }
+
+            buildGPUInfoCard(info) {
+                const gpuItems = [
+                    `<li><strong>Vendor:</strong> ${info.vendor || 'Unknown'}</li>`,
+                    `<li><strong>Architecture:</strong> ${info.architecture || 'Unknown'}</li>`,
+                    `<li><strong>Device:</strong> ${info.device || 'Unknown'}</li>`,
+                    `<li><strong>Description:</strong> ${info.description || 'Unknown'}</li>`,
+                    `<li><strong>Detection Method:</strong> ${info.detectionMethod || 'Unknown'}</li>`,
+                    ...(info.estimatedGPUType ? [`<li><strong>Estimated GPU Type:</strong> ${info.estimatedGPUType}</li>`] : [])
+                ];
+
+                return `
+                    <div class="feature-card">
+                        <h3>GPU Information</h3>
+                        <ul class="feature-list">${gpuItems.join('')}</ul>
+                    </div>
+                `;
+            }
+
+            hasWebGLInfo(info) {
+                return info.webglVersion || info.renderer || info.webglExtensions;
+            }
+
+            buildWebGLInfoCard(info) {
+                const webglItems = [
+                    ...(info.webglVersion ? [`<li><strong>WebGL Version:</strong> ${info.webglVersion}</li>`] : []),
+                    ...(info.renderer ? [`<li><strong>Renderer:</strong> ${info.renderer}</li>`] : []),
+                    ...(info.webglExtensions ? [`<li><strong>Extensions:</strong> ${info.webglExtensions}</li>`] : []),
+                    ...(info.maxTextureSize ? [`<li><strong>Max Texture Size:</strong> ${info.maxTextureSize}px</li>`] : []),
+                    ...(info.maxViewportDims ? [`<li><strong>Max Viewport:</strong> ${info.maxViewportDims[0]}×${info.maxViewportDims[1]}</li>`] : [])
+                ];
+
+                return `
+                    <div class="feature-card">
+                        <h3>WebGL Context</h3>
+                        <ul class="feature-list">${webglItems.join('')}</ul>
+                    </div>
+                `;
+            }
+
+            buildNotesCard(note) {
+                return `
+                    <div class="feature-card">
+                        <h3>Notes</h3>
+                        <ul class="feature-list">
+                            <li>${note}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+
+            displayFeatures() {
+                const features = Array.from(this.features);
+                const categorizedFeatures = this.categorizeFeatures(features);
+
+                const cards = Object.entries(categorizedFeatures).map(([category, featureList]) =>
+                    this.buildFeatureCategoryCard(category, featureList)
+                );
+
+                document.getElementById('features').innerHTML = `<div class="feature-grid">${cards.join('')}</div>`;
+            }
+
+            buildFeatureCategoryCard(category, featureList) {
+                const featureItems = featureList.map(feature => `<li>${this.formatFeatureName(feature)}</li>`).join('');
+
+                return `
+                    <div class="feature-card">
+                        <h3>${category}</h3>
+                        <ul class="feature-list">${featureItems}</ul>
+                    </div>
+                `;
+            }
+
+            categorizeFeatures(features) {
+                const categories = {
+                    'Texture & Storage': [],
+                    'Compute': [],
+                    'Rendering': [],
+                    'Other': []
+                };
+
+                features.forEach(feature => {
+                    if (feature.includes('texture') || feature.includes('storage')) {
+                        categories['Texture & Storage'].push(feature);
+                    } else if (feature.includes('compute') || feature.includes('shader')) {
+                        categories['Compute'].push(feature);
+                    } else if (feature.includes('render') || feature.includes('depth') || feature.includes('stencil')) {
+                        categories['Rendering'].push(feature);
+                    } else {
+                        categories['Other'].push(feature);
+                    }
+                });
+
+                // Remove empty categories
+                Object.keys(categories).forEach(key => {
+                    if (categories[key].length === 0) {
+                        delete categories[key];
+                    }
+                });
+
+                return categories;
+            }
+
+            formatFeatureName(feature) {
+                return feature.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+            }
+
+            displayLimits() {
+                const limits = this.limits;
+                const importantLimits = this.getImportantLimits(limits);
+
+                // Split into chunks for better display
+                const chunks = this.chunkObject(importantLimits, 10);
+                const cards = chunks.map(chunk => this.buildLimitsCard(chunk));
+
+                document.getElementById('limits').innerHTML = `<div class="feature-grid">${cards.join('')}</div>`;
+            }
+
+            getImportantLimits(limits) {
+                return {
+                    'Max Texture Dimension 2D': limits.maxTextureDimension2D,
+                    'Max Texture Dimension 3D': limits.maxTextureDimension3D,
+                    'Max Texture Array Layers': limits.maxTextureArrayLayers,
+                    'Max Bind Groups': limits.maxBindGroups,
+                    'Max Bindings Per Bind Group': limits.maxBindingsPerBindGroup,
+                    'Max Dynamic Uniform Buffers Per Pipeline Layout': limits.maxDynamicUniformBuffersPerPipelineLayout,
+                    'Max Dynamic Storage Buffers Per Pipeline Layout': limits.maxDynamicStorageBuffersPerPipelineLayout,
+                    'Max Sampled Textures Per Shader Stage': limits.maxSampledTexturesPerShaderStage,
+                    'Max Samplers Per Shader Stage': limits.maxSamplersPerShaderStage,
+                    'Max Storage Buffers Per Shader Stage': limits.maxStorageBuffersPerShaderStage,
+                    'Max Storage Textures Per Shader Stage': limits.maxStorageTexturesPerShaderStage,
+                    'Max Uniform Buffers Per Shader Stage': limits.maxUniformBuffersPerShaderStage,
+                    'Max Uniform Buffer Binding Size': this.formatBytes(limits.maxUniformBufferBindingSize),
+                    'Max Storage Buffer Binding Size': this.formatBytes(limits.maxStorageBufferBindingSize),
+                    'Max Vertex Buffers': limits.maxVertexBuffers,
+                    'Max Buffer Size': this.formatBytes(limits.maxBufferSize),
+                    'Max Vertex Attributes': limits.maxVertexAttributes,
+                    'Max Vertex Buffer Array Stride': limits.maxVertexBufferArrayStride,
+                    'Max Inter Stage Shader Components': limits.maxInterStageShaderComponents,
+                    'Max Compute Workgroup Storage Size': limits.maxComputeWorkgroupStorageSize,
+                    'Max Compute Invocations Per Workgroup': limits.maxComputeInvocationsPerWorkgroup,
+                    'Max Compute Workgroup Size X': limits.maxComputeWorkgroupSizeX,
+                    'Max Compute Workgroup Size Y': limits.maxComputeWorkgroupSizeY,
+                    'Max Compute Workgroup Size Z': limits.maxComputeWorkgroupSizeZ,
+                    'Max Compute Workgroups Per Dimension': limits.maxComputeWorkgroupsPerDimension
+                };
+            }
+
+            buildLimitsCard(chunk) {
+                const limitItems = Object.entries(chunk).map(([key, value]) =>
+                    `<li><strong>${key}:</strong> ${value}</li>`
+                ).join('');
+
+                return `<div class="feature-card"><ul class="feature-list">${limitItems}</ul></div>`;
+            }
+
+            chunkObject(obj, size) {
+                const entries = Object.entries(obj);
+                const chunks = [];
+                for (let i = 0; i < entries.length; i += size) {
+                    chunks.push(Object.fromEntries(entries.slice(i, i + size)));
+                }
+                return chunks;
+            }
+
+            formatBytes(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            async getAdapterInfo() {
+                const info = {
+                    detectionMethod: 'unknown',
+                    browserInfo: this.getBrowserInfo(),
+                    systemInfo: this.getSystemInfo()
+                };
+
+                // Method 1: Try standard requestAdapterInfo
+                try {
+                    if (this.adapter.requestAdapterInfo) {
+                        const adapterInfo = await this.adapter.requestAdapterInfo();
+                        if (adapterInfo && (adapterInfo.vendor || adapterInfo.architecture || adapterInfo.device)) {
+                            Object.assign(info, adapterInfo);
+                            info.detectionMethod = 'requestAdapterInfo';
+                            return info;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('requestAdapterInfo failed:', error);
+                }
+
+                // Method 2: Try alternative adapter properties
+                try {
+                    const alternativeInfo = await this.getAlternativeAdapterInfo();
+                    if (alternativeInfo) {
+                        Object.assign(info, alternativeInfo);
+                        info.detectionMethod = 'alternative-properties';
+                        return info;
+                    }
+                } catch (error) {
+                    console.warn('Alternative adapter info failed:', error);
+                }
+
+                // Method 3: Browser-specific detection
+                try {
+                    const browserInfo = await this.getBrowserSpecificInfo();
+                    if (browserInfo) {
+                        Object.assign(info, browserInfo);
+                        info.detectionMethod = 'browser-specific';
+                        return info;
+                    }
+                } catch (error) {
+                    console.warn('Browser-specific detection failed:', error);
+                }
+
+                // Method 4: WebGL hints and fallback detection
+                try {
+                    const webglInfo = await this.getWebGLHints();
+                    Object.assign(info, webglInfo);
+                    info.detectionMethod = 'webgl-hints';
+                    return info;
+                } catch (error) {
+                    console.warn('WebGL hints failed:', error);
+                }
+
+                // Final fallback
+                info.detectionMethod = 'fallback';
+                info.note = 'Limited adapter information available';
+                info.estimatedType = this.estimateGPUType();
+                return info;
+            }
+
+            getBrowserInfo() {
+                const ua = navigator.userAgent;
+                const browserName = this.getBrowserName(ua);
+                const browserVersion = this.getBrowserVersion(ua, browserName);
+
+                return {
+                    userAgent: ua,
+                    browser: browserName,
+                    version: browserVersion,
+                    platform: navigator.platform,
+                    language: navigator.language,
+                    cookieEnabled: navigator.cookieEnabled,
+                    onLine: navigator.onLine,
+                    hardwareConcurrency: navigator.hardwareConcurrency || 'Unknown'
+                };
+            }
+
+            getSystemInfo() {
+                return {
+                    screenWidth: screen.width,
+                    screenHeight: screen.height,
+                    colorDepth: screen.colorDepth,
+                    pixelDepth: screen.pixelDepth,
+                    devicePixelRatio: window.devicePixelRatio || 1,
+                    maxTouchPoints: navigator.maxTouchPoints || 0,
+                    webglSupported: this.isWebGLSupported()
+                };
+            }
+
+            getBrowserName(userAgent) {
+                if (userAgent.includes('Chrome')) return 'Chrome';
+                if (userAgent.includes('Firefox')) return 'Firefox';
+                if (userAgent.includes('Safari')) return 'Safari';
+                if (userAgent.includes('Edge')) return 'Edge';
+                return 'Unknown';
+            }
+
+            getBrowserVersion(userAgent, browserName) {
+                try {
+                    switch (browserName) {
+                        case 'Chrome':
+                            // Chrome: "Chrome/94.0.4606.71" or "Chrome/94.0.0.0"
+                            const chromeMatch = userAgent.match(/Chrome\/(\d+(\.\d+)*)/);
+                            return chromeMatch ? chromeMatch[1] : 'Unknown';
+
+                        case 'Firefox':
+                            // Firefox: "Firefox/92.0" or "Firefox/92.0.1"
+                            const firefoxMatch = userAgent.match(/Firefox\/(\d+(\.\d+)*)/);
+                            return firefoxMatch ? firefoxMatch[1] : 'Unknown';
+
+                        case 'Safari':
+                            // Safari: "Version/15.0" (note: Safari uses "Version" not "Safari/version")
+                            const safariMatch = userAgent.match(/Version\/(\d+(\.\d+)*)/);
+                            return safariMatch ? safariMatch[1] : 'Unknown';
+
+                        case 'Edge':
+                            // Edge: "Edg/94.0.992.38" or "Edge/94.0.992.38"
+                            const edgeMatch = userAgent.match(/(?:Edg|Edge)\/(\d+(\.\d+)*)/);
+                            return edgeMatch ? edgeMatch[1] : 'Unknown';
+
+                        default:
+                            // Try to find any version pattern
+                            const genericMatch = userAgent.match(/\/(\d+(\.\d+)*)/);
+                            return genericMatch ? genericMatch[1] : 'Unknown';
+                    }
+                } catch (e) {
+                    console.warn('Browser version detection failed:', e);
+                    return 'Unknown';
+                }
+            }
+
+            async getAlternativeAdapterInfo() {
+                const info = {};
+
+                // Try to get info from adapter properties
+                if (this.adapter.info) {
+                    Object.assign(info, this.adapter.info);
+                }
+
+                // Try to get info from adapter methods
+                const methods = ['getInfo', 'getAdapterInfo', 'info'];
+                for (const method of methods) {
+                    if (typeof this.adapter[method] === 'function') {
+                        try {
+                            const result = await this.adapter[method]();
+                            if (result && typeof result === 'object') {
+                                Object.assign(info, result);
+                            }
+                        } catch (e) {
+                            // Method exists but failed, continue
+                        }
+                    }
+                }
+
+                return Object.keys(info).length > 0 ? info : null;
+            }
+
+            async getBrowserSpecificInfo() {
+                const info = {};
+                const browser = this.getBrowserName(navigator.userAgent);
+
+                switch (browser) {
+                    case 'Chrome':
+                        const chromeInfo = await this.getChromeGPUInfo();
+                        if (typeof chromeInfo === 'object') {
+                            info.vendor = chromeInfo.vendor || 'Chrome GPU (WebGPU)';
+                            info.renderer = chromeInfo.renderer;
+                            info.webglVersion = chromeInfo.webglVersion;
+                        } else {
+                            info.vendor = chromeInfo;
+                        }
+                        break;
+                    case 'Firefox':
+                        const firefoxInfo = await this.getFirefoxGPUInfo();
+                        if (typeof firefoxInfo === 'object') {
+                            info.vendor = firefoxInfo.vendor || 'Firefox GPU (WebGPU)';
+                            info.renderer = firefoxInfo.renderer;
+                            info.webglVersion = firefoxInfo.webglVersion;
+                        } else {
+                            info.vendor = firefoxInfo;
+                        }
+                        break;
+                    case 'Safari':
+                        const safariInfo = await this.getSafariGPUInfo();
+                        if (typeof safariInfo === 'object') {
+                            info.vendor = safariInfo.vendor || 'Apple GPU (WebGPU)';
+                            info.renderer = safariInfo.renderer;
+                            info.webglVersion = safariInfo.webglVersion;
+                        } else {
+                            info.vendor = safariInfo;
+                        }
+                        break;
+                }
+
+                return Object.keys(info).length > 0 ? info : null;
+            }
+
+            async getChromeGPUInfo() {
+                try {
+                    // Try to get GPU info from chrome://gpu
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                        if (debugInfo) {
+                            const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                            const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                            return {
+                                vendor: vendor || 'Unknown',
+                                renderer: renderer || 'Unknown',
+                                webglVersion: gl.getParameter(gl.VERSION)
+                            };
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Chrome GPU info detection failed:', e);
+                }
+                return 'Chrome GPU (WebGPU)';
+            }
+
+            async getFirefoxGPUInfo() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        const renderer = gl.getParameter(gl.RENDERER);
+                        const vendor = gl.getParameter(gl.VENDOR);
+                        return {
+                            vendor: vendor || 'Unknown',
+                            renderer: renderer || 'Unknown',
+                            webglVersion: gl.getParameter(gl.VERSION)
+                        };
+                    }
+                } catch (e) {
+                    console.warn('Firefox GPU info detection failed:', e);
+                }
+                return 'Firefox GPU (WebGPU)';
+            }
+
+            async getSafariGPUInfo() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                    if (gl) {
+                        const renderer = gl.getParameter(gl.RENDERER);
+                        const vendor = gl.getParameter(gl.VENDOR);
+                        return {
+                            vendor: vendor || 'Apple',
+                            renderer: renderer || 'Apple GPU',
+                            webglVersion: gl.getParameter(gl.VERSION)
+                        };
+                    }
+                } catch (e) {
+                    console.warn('Safari GPU info detection failed:', e);
+                }
+                return 'Apple GPU (WebGPU)';
+            }
+
+            async getWebGLHints() {
+                const info = {};
+
+                try {
+                    const canvas = document.createElement('canvas');
+                    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+                    if (gl) {
+                        info.webglVersion = gl.getParameter(gl.VERSION);
+                        info.vendor = gl.getParameter(gl.VENDOR);
+                        info.renderer = gl.getParameter(gl.RENDERER);
+
+                        // Get extensions
+                        const extensions = gl.getSupportedExtensions();
+                        info.webglExtensions = extensions ? extensions.length : 0;
+
+                        // Get some capabilities
+                        info.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+                        info.maxViewportDims = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+                        info.maxRenderbufferSize = gl.getParameter(gl.MAX_RENDERBUFFER_SIZE);
+
+                        // Try to identify GPU type from renderer string
+                        const renderer = info.renderer.toLowerCase();
+                        if (renderer.includes('intel')) {
+                            info.estimatedGPUType = 'Intel GPU';
+                        } else if (renderer.includes('nvidia')) {
+                            info.estimatedGPUType = 'NVIDIA GPU';
+                        } else if (renderer.includes('amd') || renderer.includes('ati')) {
+                            info.estimatedGPUType = 'AMD GPU';
+                        } else if (renderer.includes('apple')) {
+                            info.estimatedGPUType = 'Apple GPU';
+                        } else if (renderer.includes('mali')) {
+                            info.estimatedGPUType = 'ARM Mali GPU';
+                        } else if (renderer.includes('adreno')) {
+                            info.estimatedGPUType = 'Qualcomm Adreno GPU';
+                        }
+                    }
+                } catch (e) {
+                    console.warn('WebGL hints failed:', e);
+                }
+
+                return info;
+            }
+
+            estimateGPUType() {
+                const ua = navigator.userAgent.toLowerCase();
+                const platform = navigator.platform.toLowerCase();
+
+                if (ua.includes('chrome') && ua.includes('android')) {
+                    return 'Mobile GPU (Android)';
+                } else if (ua.includes('safari') && (platform.includes('mac') || platform.includes('iphone') || platform.includes('ipad'))) {
+                    return 'Apple GPU (macOS/iOS)';
+                } else if (ua.includes('firefox') && platform.includes('linux')) {
+                    return 'Linux GPU';
+                } else if (platform.includes('win')) {
+                    return 'Windows GPU';
+                } else if (platform.includes('linux')) {
+                    return 'Linux GPU';
+                } else {
+                    return 'Unknown GPU Type';
+                }
+            }
+
+            isWebGLSupported() {
+                try {
+                    const canvas = document.createElement('canvas');
+                    return !!(canvas.getContext('webgl') || canvas.getContext('experimental-webgl'));
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            async detectCapabilitiesManually() {
+                console.log('Starting manual capability detection...');
+
+                // Add basic features that are likely supported
+                const basicFeatures = [
+                    'texture-compression-bc',
+                    'texture-compression-etc2',
+                    'texture-compression-astc',
+                    'timestamp-query',
+                    'indirect-first-instance',
+                    'shader-f16',
+                    'depth-clip-control',
+                    'depth32float-stencil8',
+                    'render-to-texture-format'
+                ];
+
+                // Test which features we can actually request
+                for (const feature of basicFeatures) {
+                    try {
+                        const testDevice = await this.adapter.requestDevice({
+                            requiredFeatures: [feature]
+                        });
+                        if (testDevice) {
+                            this.features.add(feature);
+                            testDevice.destroy();
+                        }
+                    } catch (e) {
+                        // Feature not supported, skip
+                    }
+                }
+
+                // Try to get some basic limits by testing different configurations
+                this.limits = await this.detectLimitsManually();
+
+                console.log('Manual detection complete. Features:', Array.from(this.features), 'Limits:', this.limits);
+            }
+
+            async detectLimitsManually() {
+                const limits = {};
+
+                // Test texture dimension limits
+                try {
+                    const maxTextureSize = await this.findMaxTextureSize();
+                    limits.maxTextureDimension2D = maxTextureSize;
+                    limits.maxTextureDimension3D = maxTextureSize;
+                } catch (e) {
+                    limits.maxTextureDimension2D = 8192; // fallback
+                    limits.maxTextureDimension3D = 2048; // fallback
+                }
+
+                // Test buffer size limits
+                try {
+                    const maxBufferSize = await this.findMaxBufferSize();
+                    limits.maxBufferSize = maxBufferSize;
+                    limits.maxUniformBufferBindingSize = Math.min(maxBufferSize, 65536);
+                    limits.maxStorageBufferBindingSize = maxBufferSize;
+                } catch (e) {
+                    limits.maxBufferSize = 268435456; // 256MB fallback
+                    limits.maxUniformBufferBindingSize = 65536;
+                    limits.maxStorageBufferBindingSize = 134217728; // 128MB fallback
+                }
+
+                // Set some reasonable defaults for other limits
+                limits.maxTextureArrayLayers = 256;
+                limits.maxBindGroups = 4;
+                limits.maxBindingsPerBindGroup = 16;
+                limits.maxDynamicUniformBuffersPerPipelineLayout = 8;
+                limits.maxDynamicStorageBuffersPerPipelineLayout = 4;
+                limits.maxSampledTexturesPerShaderStage = 16;
+                limits.maxSamplersPerShaderStage = 16;
+                limits.maxStorageBuffersPerShaderStage = 8;
+                limits.maxStorageTexturesPerShaderStage = 4;
+                limits.maxUniformBuffersPerShaderStage = 12;
+                limits.maxVertexBuffers = 8;
+                limits.maxVertexAttributes = 16;
+                limits.maxVertexBufferArrayStride = 2048;
+                limits.maxInterStageShaderComponents = 60;
+                limits.maxComputeWorkgroupStorageSize = 16384;
+                limits.maxComputeInvocationsPerWorkgroup = 256;
+                limits.maxComputeWorkgroupSizeX = 256;
+                limits.maxComputeWorkgroupSizeY = 256;
+                limits.maxComputeWorkgroupSizeZ = 64;
+                limits.maxComputeWorkgroupsPerDimension = 65535;
+
+                return limits;
+            }
+
+            async findMaxTextureSize() {
+                const sizes = [4096, 8192, 16384, 32768];
+                for (const size of sizes.reverse()) {
+                    try {
+                        const texture = this.device.createTexture({
+                            size: [size, size],
+                            format: 'rgba8unorm',
+                            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+                        });
+                        texture.destroy();
+                        return size;
+                    } catch (e) {
+                        continue;
+                    }
+                }
+                return 4096; // minimum fallback
+            }
+
+            async findMaxBufferSize() {
+                const sizes = [67108864, 134217728, 268435456, 536870912]; // 64MB, 128MB, 256MB, 512MB
+                for (const size of sizes.reverse()) {
+                    try {
+                        const buffer = this.device.createBuffer({
+                            size: size,
+                            usage: GPUBufferUsage.UNIFORM
+                        });
+                        buffer.destroy();
+                        return size;
+                    } catch (e) {
+                        continue;
+                    }
+                }
+                return 67108864; // 64MB fallback
+            }
+
+            displayTechnicalInfo() {
+                const info = {
+                    adapter: this.adapterInfo,
+                    features: Array.from(this.features),
+                    limits: this.limits,
+                    timestamp: new Date().toISOString()
+                };
+
+                document.getElementById('technical-info').textContent = JSON.stringify(info, null, 2);
+
+                // Add copy functionality
+                document.getElementById('copy-btn').addEventListener('click', () => {
+                    navigator.clipboard.writeText(JSON.stringify(info, null, 2)).then(() => {
+                        const btn = document.getElementById('copy-btn');
+                        const originalText = btn.textContent;
+                        btn.textContent = 'Copied!';
+                        setTimeout(() => btn.textContent = originalText, 2000);
+                    });
+                });
+            }
+        }
+
+        // Initialize detector when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            const detector = new WebGPUDetector();
+            detector.detect();
+        });
+    </script>
+</body>
+</html>
