@@ -203,56 +203,7 @@
             background-color: #ffc107;
             color: #212529;
         }
-        .tabs {
-            display: flex;
-            margin-bottom: 20px;
-        }
-        .tab {
-            padding: 10px 20px;
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            cursor: pointer;
-            border-bottom: none;
-        }
-        .tab.active {
-            background-color: white;
-            border-bottom: 2px solid #4CAF50;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .url-input {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        .url-input input {
-            flex: 1;
-            padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 5px;
-        }
-        .batch-results {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-        .batch-item {
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-        }
-        .batch-item.valid {
-            background-color: #d4edda;
-            border-color: #28a745;
-        }
-        .batch-item.invalid {
-            background-color: #f8d7da;
-            border-color: #dc3545;
-        }
+
         .loading {
             text-align: center;
             padding: 20px;
@@ -331,14 +282,9 @@
         const { useState, useEffect } = React;
 
         function App() {
-            const [activeTab, setActiveTab] = useState('single');
             const [input, setInput] = useState('');
-            const [url, setUrl] = useState('');
             const [logData, setLogData] = useState('');
             const [useLocalLog, setUseLocalLog] = useState(false);
-            const [isVerifying, setIsVerifying] = useState(false);
-            const [result, setResult] = useState(null);
-            const [batchResults, setBatchResults] = useState([]);
 
             // Two-tier verification states
             const [level1Result, setLevel1Result] = useState(null);
@@ -406,8 +352,15 @@
                         }
                         const publicKey = JSON.parse(decodedKeyStr);
 
-                        // Extract text content
-                        const text = element.textContent?.trim() || '';
+                        // Extract text content - handle different element types
+                        let text = '';
+                        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+                            text = element.value || '';
+                        } else {
+                            // For other elements, get textContent but preserve newlines
+                            text = element.textContent || '';
+                        }
+                        text = text.trim();
 
                         // Only support two-tier format now
                         if (window.HAVCore && window.HAVCore.verifyContent) {
@@ -482,8 +435,15 @@
                         // Parse log data
                         const logDataObj = JSON.parse(logData);
 
-                        // Extract text content
-                        const text = element.textContent?.trim() || '';
+                        // Extract text content - handle different element types
+                        let text = '';
+                        if (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') {
+                            text = element.value || '';
+                        } else {
+                            // For other elements, get textContent but preserve newlines
+                            text = element.textContent || '';
+                        }
+                        text = text.trim();
 
                         // Only support two-tier format now
                         if (window.HAVCore && window.HAVCore.verifyLogSignature) {
@@ -514,163 +474,11 @@
 
                 performLevel2Verification();
             }, [input, useLocalLog, logData]);
-            const verifySingle = async () => {
-                if (!input.trim()) {
-                    alert('Please enter HTML to verify');
-                    return;
-                }
-
-                if (useLocalLog && !logData.trim()) {
-                    alert('Please provide log data or uncheck "Use local log data"');
-                    return;
-                }
-
-                setIsVerifying(true);
-                setResult(null);
-
-                try {
-                    if (useLocalLog) {
-                        // Manual verification with local log data
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(input, 'text/html');
-                        const element = doc.querySelector('[data-hav-key]');
-
-                        if (!element) {
-                            throw new Error('No element with authorship data found');
-                        }
-
-                        // Extract data attributes
-                        const publicKeyStr = element.getAttribute('data-hav-key');
-                        const signature = element.getAttribute('data-hav-signature');
-
-                        if (!publicKeyStr || !signature) {
-                            throw new Error('Missing required authorship attributes');
-                        }
-
-                        // Parse public key (base64 decode first, then JSON parse)
-                        let decodedKeyStr = publicKeyStr;
-                        try {
-                            decodedKeyStr = atob(publicKeyStr);
-                        } catch (e) {
-                            // If base64 decode fails, assume it's already plain JSON
-                        }
-                        const publicKey = JSON.parse(decodedKeyStr);
-
-                        // Use provided log data
-                        const logDataObj = JSON.parse(logData);
-
-                        // Extract text content
-                        const text = element.textContent?.trim() || '';
-
-                        // Verify using built-in function
-                        const verificationResult = await verifyLog(logDataObj.log, text, signature, publicKey, logDataObj);
-                        setResult({
-                            isValid: verificationResult.isValid,
-                            details: {
-                                signatureValid: verificationResult.details.signatureValid,
-                                textMatches: verificationResult.details.textMatches,
-                                logAccessible: true, // Since we're using local data
-                                fingerprint: null,
-                                reconstructedText: verificationResult.details.reconstructedText,
-                                errors: verificationResult.details.errors,
-                                warnings: verificationResult.details.warnings
-                            }
-                        });
-                    } else {
-                        // Use HumanAuthorshipVerifier for verification
-                        const verifier = new HumanAuthorshipVerifier();
-                        const verificationResult = await verifier.verify(input);
-                        setResult(verificationResult);
-                    }
-                } catch (error) {
-                    setResult({
-                        isValid: false,
-                        details: {
-                            errors: [`Verification failed: ${error.message}`],
-                            warnings: []
-                        }
-                    });
-                }
-
-                setIsVerifying(false);
-            };
-
-            const verifyFromUrl = async () => {
-                if (!url.trim()) {
-                    alert('Please enter a URL');
-                    return;
-                }
-
-                setIsVerifying(true);
-                setResult(null);
-
-                try {
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        throw new Error(`Failed to fetch URL: ${response.status}`);
-                    }
-                    const html = await response.text();
-
-                    // Use HumanAuthorshipVerifier for verification
-                    const verifier = new HumanAuthorshipVerifier();
-                    const verificationResult = await verifier.verify(html);
-                    setResult(verificationResult);
-                } catch (error) {
-                    setResult({
-                        isValid: false,
-                        details: {
-                            errors: [`Verification failed: ${error.message}`],
-                            warnings: []
-                        }
-                    });
-                }
-
-                setIsVerifying(false);
-            };
-
-            const verifyBatch = async () => {
-                if (!input.trim()) {
-                    alert('Please enter HTML containing multiple elements to verify');
-                    return;
-                }
-
-                setIsVerifying(true);
-                setBatchResults([]);
-
-                try {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(input, 'text/html');
-                    const elements = Array.from(doc.querySelectorAll('[data-hav-key]'));
-
-                    if (elements.length === 0) {
-                        alert('No elements with authorship data found');
-                        setIsVerifying(false);
-                        return;
-                    }
-
-                    // Use HumanAuthorshipVerifier for batch verification
-                    const verifier = new HumanAuthorshipVerifier();
-                    const results = await verifier.verifyBatch(elements);
-                    setBatchResults(results);
-                } catch (error) {
-                    setBatchResults([{
-                        element: null,
-                        success: false,
-                        result: null,
-                        error: error.message
-                    }]);
-                }
-
-                setIsVerifying(false);
-            };
 
             const clearAll = () => {
                 setInput('');
-                setUrl('');
                 setLogData('');
                 setUseLocalLog(false);
-                setResult(null);
-                setBatchResults([]);
                 setLevel1Result(null);
                 setLevel2Result(null);
             };
@@ -790,220 +598,71 @@
                 );
             };
 
-            const renderResult = (result) => {
-                if (!result) return null;
 
-                const statusClass = result.isValid ? 'result-valid' : 'result-invalid';
-                const statusText = result.isValid ? '✓ VERIFIED' : '✗ NOT VERIFIED';
-
-                return React.createElement('div', { className: `verification-result ${statusClass}` },
-                    React.createElement('h3', null, statusText),
-                    React.createElement('div', { className: 'result-details' },
-                        React.createElement('p', null,
-                            React.createElement('strong', null, 'Signature Valid:'),
-                            React.createElement('span', { className: `badge ${result.details.signatureValid ? 'badge-valid' : 'badge-invalid'}` },
-                                result.details.signatureValid ? 'YES' : 'NO'
-                            )
-                        ),
-                        React.createElement('p', null,
-                            React.createElement('strong', null, 'Text Matches:'),
-                            React.createElement('span', { className: `badge ${result.details.textMatches ? 'badge-valid' : 'badge-invalid'}` },
-                                result.details.textMatches ? 'YES' : 'NO'
-                            )
-                        ),
-                        React.createElement('p', null,
-                            React.createElement('strong', null, 'Log Accessible:'),
-                            React.createElement('span', { className: `badge ${result.details.logAccessible ? 'badge-valid' : 'badge-invalid'}` },
-                                result.details.logAccessible ? 'YES' : 'NO'
-                            )
-                        ),
-                        result.details.fingerprint && React.createElement('p', null,
-                            React.createElement('strong', null, 'Fingerprint:'),
-                            React.createElement('code', null, result.details.fingerprint.substring(0, 16) + '...')
-                        ),
-                        result.details.reconstructedText && React.createElement('p', null,
-                            React.createElement('strong', null, 'Reconstructed Text:'),
-                            React.createElement('br', null),
-                            React.createElement('em', null, `"${result.details.reconstructedText}"`)
-                        )
-                    ),
-                    (result.details.errors && result.details.errors.length > 0) && React.createElement('div', { className: 'status-message status-error' },
-                        React.createElement('strong', null, 'Errors:'),
-                        React.createElement('ul', null,
-                            result.details.errors.map((error, index) =>
-                                React.createElement('li', { key: index }, error)
-                            )
-                        )
-                    ),
-                    (result.details.warnings && result.details.warnings.length > 0) && React.createElement('div', { className: 'status-message status-warning' },
-                        React.createElement('strong', null, 'Warnings:'),
-                        React.createElement('ul', null,
-                            result.details.warnings.map((warning, index) =>
-                                React.createElement('li', { key: index }, warning)
-                            )
-                        )
-                    )
-                );
-            };
-
-            const renderBatchResults = () => {
-                if (batchResults.length === 0) return null;
-
-                return React.createElement('div', { className: 'batch-results' },
-                    React.createElement('h3', null, `Batch Results (${batchResults.length} items)`),
-                    batchResults.map((item, index) => {
-                        const statusClass = item.success && item.result?.isValid ? 'valid' : 'invalid';
-                        const statusText = item.success && item.result?.isValid ? '✓ Verified' : '✗ Failed';
-
-                        return React.createElement('div', { key: index, className: `batch-item ${statusClass}` },
-                            React.createElement('strong', null, `Item ${index + 1}: ${statusText}`),
-                            item.success ? renderResult(item.result) : React.createElement('p', null, `Error: ${item.error}`)
-                        );
-                    })
-                );
-            };
 
             return React.createElement('div', { className: 'container' },
                 React.createElement('h1', null, 'Human Authorship Verifier'),
 
-                // Tabs
-                React.createElement('div', { className: 'tabs' },
-                    React.createElement('div', {
-                        className: `tab ${activeTab === 'single' ? 'active' : ''}`,
-                        onClick: () => setActiveTab('single')
-                    }, 'Single Verification'),
-                    React.createElement('div', {
-                        className: `tab ${activeTab === 'url' ? 'active' : ''}`,
-                        onClick: () => setActiveTab('url')
-                    }, 'Verify from URL'),
-                    React.createElement('div', {
-                        className: `tab ${activeTab === 'batch' ? 'active' : ''}`,
-                        onClick: () => setActiveTab('batch')
-                    }, 'Batch Verification')
+                React.createElement('div', { className: 'section' },
+                    React.createElement('h2', null, 'Paste HTML to Verify'),
+                    React.createElement('textarea', {
+                        value: input,
+                        onChange: (e) => setInput(e.target.value),
+                        placeholder: 'Paste HTML containing data-hav-* attributes here...',
+                        rows: 8
+                    })
                 ),
-
-                // Single Verification Tab
-                React.createElement('div', { className: `tab-content ${activeTab === 'single' ? 'active' : ''}` },
-                    React.createElement('div', { className: 'section' },
-                        React.createElement('h2', null, 'Paste HTML to Verify'),
+                React.createElement('div', { className: 'section' },
+                    React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
+                        React.createElement('input', {
+                            type: 'checkbox',
+                            checked: useLocalLog,
+                            onChange: (e) => setUseLocalLog(e.target.checked)
+                        }),
+                        React.createElement('span', null, 'Use local log data instead of fetching from URL')
+                    ),
+                    useLocalLog && React.createElement('div', { style: { marginTop: '10px' } },
+                        React.createElement('h3', null, 'Event Log JSON'),
                         React.createElement('textarea', {
-                            value: input,
-                            onChange: (e) => setInput(e.target.value),
-                            placeholder: 'Paste HTML containing data-hav-* attributes here...',
-                            rows: 8
-                        })
-                    ),
-                    React.createElement('div', { className: 'section' },
-                        React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '10px' } },
-                            React.createElement('input', {
-                                type: 'checkbox',
-                                checked: useLocalLog,
-                                onChange: (e) => setUseLocalLog(e.target.checked)
-                            }),
-                            React.createElement('span', null, 'Use local log data instead of fetching from URL')
-                        ),
-                        useLocalLog && React.createElement('div', { style: { marginTop: '10px' } },
-                            React.createElement('h3', null, 'Event Log JSON'),
-                            React.createElement('textarea', {
-                                value: logData,
-                                onChange: (e) => setLogData(e.target.value),
-                                placeholder: 'Paste the eventlog.json content here...',
-                                rows: 6
-                            }),
-                            React.createElement('div', { style: { marginTop: '10px' } },
-                                React.createElement('button', {
-                                    className: 'secondary',
-                                    onClick: async () => {
-                                        if (!logData.trim()) {
-                                            alert('No log data to copy');
-                                            return;
-                                        }
-                                        try {
-                                            if (navigator.clipboard && window.isSecureContext) {
-                                                await navigator.clipboard.writeText(logData);
-                                                alert('Event log copied to clipboard!');
-                                            } else {
-                                                // Fallback
-                                                const tempTextArea = document.createElement('textarea');
-                                                tempTextArea.value = logData;
-                                                document.body.appendChild(tempTextArea);
-                                                tempTextArea.select();
-                                                document.execCommand('copy');
-                                                document.body.removeChild(tempTextArea);
-                                                alert('Event log copied to clipboard!');
-                                            }
-                                        } catch (error) {
-                                            alert('Failed to copy: ' + error.message);
-                                        }
-                                    }
-                                }, 'Copy Event Log to Clipboard')
-                            )
-                        )
-                    ),
-                    React.createElement('div', { className: 'button-group' },
-                        React.createElement('button', {
-                            onClick: verifySingle,
-                            disabled: isVerifying
-                        }, isVerifying ? 'Verifying...' : 'Verify Authorship'),
-                        React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All')
-                    ),
-                    isVerifying && React.createElement('div', { className: 'loading' },
-                        React.createElement('div', { className: 'spinner' }),
-                        React.createElement('p', null, 'Verifying authorship...')
-                    ),
-                    renderTwoTierResults(),
-                    result && renderResult(result)
-                ),
-
-                // URL Verification Tab
-                React.createElement('div', { className: `tab-content ${activeTab === 'url' ? 'active' : ''}` },
-                    React.createElement('div', { className: 'section' },
-                        React.createElement('h2', null, 'Verify from URL'),
-                        React.createElement('div', { className: 'url-input' },
-                            React.createElement('input', {
-                                type: 'url',
-                                value: url,
-                                onChange: (e) => setUrl(e.target.value),
-                                placeholder: 'https://example.com/page.html'
-                            }),
+                            value: logData,
+                            onChange: (e) => setLogData(e.target.value),
+                            placeholder: 'Paste the eventlog.json content here...',
+                            rows: 6
+                        }),
+                        React.createElement('div', { style: { marginTop: '10px' } },
                             React.createElement('button', {
-                                onClick: verifyFromUrl,
-                                disabled: isVerifying
-                            }, isVerifying ? 'Loading...' : 'Verify')
+                                className: 'secondary',
+                                onClick: async () => {
+                                    if (!logData.trim()) {
+                                        alert('No log data to copy');
+                                        return;
+                                    }
+                                    try {
+                                        if (navigator.clipboard && window.isSecureContext) {
+                                            await navigator.clipboard.writeText(logData);
+                                            alert('Event log copied to clipboard!');
+                                        } else {
+                                            // Fallback
+                                            const tempTextArea = document.createElement('textarea');
+                                            tempTextArea.value = logData;
+                                            document.body.appendChild(tempTextArea);
+                                            tempTextArea.select();
+                                            document.execCommand('copy');
+                                            document.body.removeChild(tempTextArea);
+                                            alert('Event log copied to clipboard!');
+                                        }
+                                    } catch (error) {
+                                        alert('Failed to copy: ' + error.message);
+                                    }
+                                }
+                            }, 'Copy Event Log to Clipboard')
                         )
-                    ),
-                    isVerifying && React.createElement('div', { className: 'loading' },
-                        React.createElement('div', { className: 'spinner' }),
-                        React.createElement('p', null, 'Fetching and verifying...')
-                    ),
-                    result && renderResult(result)
+                    )
                 ),
-
-                // Batch Verification Tab
-                React.createElement('div', { className: `tab-content ${activeTab === 'batch' ? 'active' : ''}` },
-                    React.createElement('div', { className: 'section' },
-                        React.createElement('h2', null, 'Batch Verification'),
-                        React.createElement('p', null, 'Paste HTML containing multiple elements with authorship data to verify them all at once.'),
-                        React.createElement('textarea', {
-                            value: input,
-                            onChange: (e) => setInput(e.target.value),
-                            placeholder: 'Paste HTML with multiple data-hav-* elements...',
-                            rows: 8
-                        })
-                    ),
-                    React.createElement('div', { className: 'button-group' },
-                        React.createElement('button', {
-                            onClick: verifyBatch,
-                            disabled: isVerifying
-                        }, isVerifying ? 'Verifying...' : 'Verify Batch'),
-                        React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All')
-                    ),
-                    isVerifying && React.createElement('div', { className: 'loading' },
-                        React.createElement('div', { className: 'spinner' }),
-                        React.createElement('p', null, 'Verifying batch...')
-                    ),
-                    renderBatchResults()
-                )
+                React.createElement('div', { className: 'button-group' },
+                    React.createElement('button', { className: 'danger', onClick: clearAll }, 'Clear All')
+                ),
+                renderTwoTierResults()
             );
         }
 

@@ -469,13 +469,17 @@ function reconstructText(log) {
         if (entry.type === 'diff' && entry.change) {
             const pos = entry.change.pos || 0;
 
-            // Handle removal first, then addition
-            if (entry.change.removed) {
+            // Handle removal and addition at the same position (for replacements)
+            if (entry.change.removed && entry.change.added) {
+                // Replacement: remove old text and add new text at same position
+                const removeLength = entry.change.removed.length;
+                text = text.slice(0, pos) + entry.change.added + text.slice(pos + removeLength);
+            } else if (entry.change.removed) {
+                // Pure removal
                 const removeLength = entry.change.removed.length;
                 text = text.slice(0, pos) + text.slice(pos + removeLength);
-            }
-
-            if (entry.change.added) {
+            } else if (entry.change.added) {
+                // Pure addition
                 text = text.slice(0, pos) + entry.change.added + text.slice(pos);
             }
         }

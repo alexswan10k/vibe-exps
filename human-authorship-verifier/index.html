@@ -222,27 +222,35 @@
         }
 
         function getDiff(oldStr, newStr) {
-            // Find the common prefix
-            let i = 0;
-            while (i < oldStr.length && i < newStr.length && oldStr[i] === newStr[i]) {
-                i++;
+            // Simple diff: find what changed between old and new strings
+            // This is a simplified approach - in a real implementation you'd want a more sophisticated diff
+
+            if (oldStr === newStr) {
+                return { pos: 0, removed: '', added: '', unchanged: true };
             }
 
-            // Find the common suffix
-            let j = 0;
-            while (j < oldStr.length - i && j < newStr.length - i &&
-                   oldStr[oldStr.length - 1 - j] === newStr[newStr.length - 1 - j]) {
-                j++;
+            // Find the first difference
+            let start = 0;
+            while (start < oldStr.length && start < newStr.length && oldStr[start] === newStr[start]) {
+                start++;
             }
 
-            const removed = oldStr.slice(i, oldStr.length - j);
-            const added = newStr.slice(i, newStr.length - j);
+            // Find the last difference
+            let endOld = oldStr.length;
+            let endNew = newStr.length;
+            while (endOld > start && endNew > start && oldStr[endOld - 1] === newStr[endNew - 1]) {
+                endOld--;
+                endNew--;
+            }
+
+            const removed = oldStr.slice(start, endOld);
+            const added = newStr.slice(start, endNew);
 
             return {
-                pos: i,
+                pos: start,
                 removed: removed,
                 added: added,
-                unchanged: removed === '' && added === ''
+                unchanged: false
             };
         }
 
@@ -765,7 +773,7 @@
                     React.createElement('h2', null, '2. Type Your Text'),
                     React.createElement('textarea', {
                         value: text,
-                        onChange: handleTextChange,
+                        onInput: handleTextChange,
                         onKeyDown: handleKeyDown,
                         onKeyUp: handleKeyUp,
                         placeholder: 'Type your text here to create a verifiable record of human authorship...',
