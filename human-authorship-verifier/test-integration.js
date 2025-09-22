@@ -397,6 +397,35 @@ async function runTests() {
         console.log('❌ Delete at cursor position 1 then insert test failed:', error.message);
     }
 
+    // Test 4h: New input event format (most reliable)
+    console.log('\nTest 4h: New input event format reconstruction');
+    try {
+        const testText = "Hello!";
+        const testLog = [
+            { type: 'input', oldValue: '', newValue: 'H', selectionStart: 1, selectionEnd: 1, cursor: 1, time: Date.now() },
+            { type: 'input', oldValue: 'H', newValue: 'He', selectionStart: 2, selectionEnd: 2, cursor: 2, time: Date.now() + 100 },
+            { type: 'input', oldValue: 'He', newValue: 'Hel', selectionStart: 3, selectionEnd: 3, cursor: 3, time: Date.now() + 200 },
+            { type: 'input', oldValue: 'Hel', newValue: 'Hell', selectionStart: 4, selectionEnd: 4, cursor: 4, time: Date.now() + 300 },
+            { type: 'input', oldValue: 'Hell', newValue: 'Hello', selectionStart: 5, selectionEnd: 5, cursor: 5, time: Date.now() + 400 },
+            { type: 'input', oldValue: 'Hello', newValue: 'Hello!', selectionStart: 6, selectionEnd: 6, cursor: 6, time: Date.now() + 500 }
+        ];
+
+        const reconstructed = reconstructText(testLog);
+
+        if (reconstructed === testText) {
+            console.log('✅ New input event format test passed');
+            console.log('   Expected:', testText);
+            console.log('   Reconstructed:', reconstructed);
+        } else {
+            console.log('❌ New input event format test failed');
+            console.log('   Expected:', testText);
+            console.log('   Got:', reconstructed);
+        }
+
+    } catch (error) {
+        console.log('❌ New input event format test failed:', error.message);
+    }
+
 
 
     // Test 5: HumanAuthorshipVerifier class with primitives

@@ -459,35 +459,46 @@ function verifyLog(log, text, signature, publicKey, signedData = null) {
 
 /**
  * Reconstruct text from event log
- * @param {Array} log - Array of log events with simplified keyboard format
+ * @param {Array} log - Array of log events (input, selection, or simplified keyboard format)
  * @returns {string} Reconstructed text
  */
 function reconstructText(log) {
     let text = '';
 
     for (const entry of log) {
-        const cursor = entry.cursor || 0;
-
         switch (entry.type) {
+            case 'input':
+                // Use the newValue directly from input events - this is the most reliable
+                text = entry.newValue;
+                break;
+
             case 'insert':
-                // Insert character at cursor position
+                // Legacy support: Insert character at cursor position
+                const cursor = entry.cursor || 0;
                 if (entry.char && entry.char.length === 1) {
                     text = text.slice(0, cursor) + entry.char + text.slice(cursor);
                 }
                 break;
 
             case 'backspace':
-                // Remove character before cursor (if cursor > 0)
-                if (cursor > 0) {
-                    text = text.slice(0, cursor - 1) + text.slice(cursor);
+                // Legacy support: Remove character before cursor (if cursor > 0)
+                if (entry.cursor > 0) {
+                    text = text.slice(0, entry.cursor - 1) + text.slice(entry.cursor);
                 }
                 break;
 
             case 'delete':
-                // Remove character at cursor (if cursor < text.length)
-                if (cursor < text.length) {
-                    text = text.slice(0, cursor) + text.slice(cursor + 1);
+                // Legacy support: Remove character at cursor (if cursor < text.length)
+                if (entry.cursor < text.length) {
+                    text = text.slice(0, entry.cursor) + text.slice(entry.cursor + 1);
                 }
+                break;
+
+            // Selection events don't change text, just cursor/selection state
+            case 'selection':
+            case 'keydown':
+            case 'keyup':
+                // These events don't change the text content
                 break;
         }
     }

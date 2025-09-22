@@ -287,6 +287,11 @@
             const [signedData, setSignedData] = useState(null);
             const [havCoreLoaded, setHavCoreLoaded] = useState(false);
 
+            // Track cursor and selection state
+            const [lastCursorPos, setLastCursorPos] = useState(0);
+            const [lastSelectionStart, setLastSelectionStart] = useState(0);
+            const [lastSelectionEnd, setLastSelectionEnd] = useState(0);
+
             // Load keys on mount
             useEffect(() => {
                 const loadKeys = async () => {
@@ -372,58 +377,47 @@
             const handleTextChange = (e) => {
                 const newValue = e.target.value;
                 const oldValue = text;
+                const selectionStart = e.target.selectionStart;
+                const selectionEnd = e.target.selectionEnd;
 
-                // Calculate cursor position (approximate)
-                const cursorPos = e.target.selectionStart || newValue.length;
+                // Record the actual input event with full context
+                const inputEvent = {
+                    type: 'input',
+                    oldValue: oldValue,
+                    newValue: newValue,
+                    selectionStart: selectionStart,
+                    selectionEnd: selectionEnd,
+                    cursor: selectionStart, // cursor is at selection start for input
+                    time: Date.now()
+                };
 
-                // Generate simplified keyboard events
-                const events = [];
-
-                if (newValue.length > oldValue.length) {
-                    // Characters were added - generate insert events
-                    const addedChars = newValue.slice(oldValue.length);
-                    for (let i = 0; i < addedChars.length; i++) {
-                        events.push({
-                            type: 'insert',
-                            char: addedChars[i],
-                            cursor: oldValue.length + i,
-                            time: Date.now() + i
-                        });
-                    }
-                } else if (newValue.length < oldValue.length) {
-                    // Characters were removed - generate backspace events
-                    const removedCount = oldValue.length - newValue.length;
-                    for (let i = 0; i < removedCount; i++) {
-                        events.push({
-                            type: 'backspace',
-                            cursor: oldValue.length - i,
-                            time: Date.now() + i
-                        });
-                    }
-                } else {
-                    // Length unchanged but content might be different (replacement)
-                    // This is a simplified case - in practice this would be more complex
-                    // For now, we'll treat this as a backspace followed by insert
-                    if (newValue !== oldValue) {
-                        events.push({
-                            type: 'backspace',
-                            cursor: cursorPos + 1,
-                            time: Date.now()
-                        });
-                        events.push({
-                            type: 'insert',
-                            char: newValue[cursorPos],
-                            cursor: cursorPos,
-                            time: Date.now() + 1
-                        });
-                    }
-                }
-
-                if (events.length > 0) {
-                    setLog(prevLog => [...prevLog, ...events]);
-                }
-
+                setLog(prevLog => [...prevLog, inputEvent]);
                 setText(newValue);
+
+                // Update cursor/selection tracking
+                setLastCursorPos(selectionStart);
+                setLastSelectionStart(selectionStart);
+                setLastSelectionEnd(selectionEnd);
+            };
+
+            const handleSelectionChange = (e) => {
+                const selectionStart = e.target.selectionStart;
+                const selectionEnd = e.target.selectionEnd;
+
+                // Only log selection changes if they actually changed
+                if (selectionStart !== lastSelectionStart || selectionEnd !== lastSelectionEnd) {
+                    setLog(prevLog => [...prevLog, {
+                        type: 'selection',
+                        selectionStart: selectionStart,
+                        selectionEnd: selectionEnd,
+                        cursor: selectionStart,
+                        time: Date.now()
+                    }]);
+
+                    setLastSelectionStart(selectionStart);
+                    setLastSelectionEnd(selectionEnd);
+                    setLastCursorPos(selectionStart);
+                }
             };
 
             const handleKeyDown = (e) => {
@@ -813,6 +807,7 @@
                     React.createElement('textarea', {
                         value: text,
                         onInput: handleTextChange,
+                        onSelect: handleSelectionChange,
                         onKeyDown: handleKeyDown,
                         onKeyUp: handleKeyUp,
                         placeholder: 'Type your text here to create a verifiable record of human authorship...',
