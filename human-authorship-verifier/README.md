@@ -15,13 +15,14 @@ In an era of AI-generated content flooding the internet, **Human Authorship Veri
 
 - **Cryptographic Verification**: RSA-PSS signatures with SHA-256 hashing
 - **Two-Tier Verification System**: Fast content verification + optional behavioral verification
-- **Behavioral Logging**: Keystroke patterns and timing analysis
+- **Behavioral Logging**: Keystroke patterns and timing analysis with multiple event types
+- **TLV Binary Serialization**: 70%+ space savings for efficient log storage and transmission
 - **Anonymous User Fingerprints**: User-defined identifiers hashed for privacy
 - **Key Pair Management**: Generate, export, and import cryptographic keys
 - **Live HTML Generation**: Real-time output for web publishing
 - **Tamper-Proof Verification**: Text hash included in signature for enhanced security
 - **Web Verification Interface**: Standalone verification tool
-- **Cross-Platform**: Works in any modern web browser
+- **Cross-Platform**: Works in browsers and Node.js environments
 
 ## Quick Start
 
@@ -53,9 +54,12 @@ In an era of AI-generated content flooding the internet, **Human Authorship Veri
 ### Behavioral Logging
 
 While typing, the following events are logged:
-- `keydown`: Key pressed with timestamp
-- `keyup`: Key released with timestamp
-- `diff`: Text changes (added/removed characters) with timestamp
+- `input`: Complete text state changes (most reliable for reconstruction)
+- `insert`: Character insertion at specific cursor position
+- `backspace`: Character deletion before cursor
+- `delete`: Character deletion at cursor position
+- `selection`: Text selection changes
+- `keydown`/`keyup`: Key press/release events with timestamps
 
 ### Enhanced Security Features
 
@@ -84,14 +88,16 @@ The log is a JSON object containing the event log, text hash, and timestamp:
 ```json
 {
   "log": [
-    {"type": "keydown", "key": "H", "time": 1234567890123},
-    {"type": "keyup", "key": "H", "time": 1234567890130},
-    {"type": "diff", "change": {"added": "H", "pos": 0}, "time": 1234567890135}
+    {"type": "input", "oldValue": "", "newValue": "H", "selectionStart": 1, "selectionEnd": 1, "cursor": 1, "time": 1234567890123},
+    {"type": "insert", "char": "e", "cursor": 1, "time": 1234567890150},
+    {"type": "backspace", "cursor": 2, "time": 1234567890200}
   ],
   "textHash": "a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3",
   "timestamp": 1234567890123
 }
 ```
+
+**Binary TLV Format**: For efficient storage, logs can be serialized to binary TLV format with 70%+ space savings using `serializeLog()` and `deserializeLog()` functions.
 
 ## User Interface
 
@@ -229,15 +235,34 @@ This enables:
 ```javascript
 function reconstructText(log) {
   let text = '';
-  log.forEach(entry => {
-    if (entry.type === 'diff' && !entry.change.unchanged) {
-      if (entry.change.added) {
-        text += entry.change.added;
-      } else if (entry.change.removed) {
-        text = text.slice(0, entry.change.pos);
-      }
+  for (const entry of log) {
+    switch (entry.type) {
+      case 'input':
+        // Use the newValue directly from input events - this is the most reliable
+        text = entry.newValue;
+        break;
+      case 'insert':
+        // Insert character at cursor position
+        const cursor = entry.cursor || 0;
+        if (entry.char && entry.char.length === 1) {
+          text = text.slice(0, cursor) + entry.char + text.slice(cursor);
+        }
+        break;
+      case 'backspace':
+        // Remove character before cursor (if cursor > 0)
+        if (entry.cursor > 0) {
+          text = text.slice(0, entry.cursor - 1) + text.slice(entry.cursor);
+        }
+        break;
+      case 'delete':
+        // Remove character at cursor (if cursor < text.length)
+        if (entry.cursor < text.length) {
+          text = text.slice(0, entry.cursor) + text.slice(entry.cursor + 1);
+        }
+        break;
+      // selection, keydown, keyup don't change text content
     }
-  });
+  }
   return text;
 }
 ```
@@ -376,9 +401,13 @@ const { signLog } = require('./hav-core');
 
 // Sign log data with private key
 const log = [
-  { type: 'diff', change: { added: 'Hello', pos: 0 }, time: Date.now() }
+  { type: 'input', oldValue: '', newValue: 'H', selectionStart: 1, selectionEnd: 1, cursor: 1, time: Date.now() },
+  { type: 'insert', char: 'e', cursor: 1, time: Date.now() + 100 },
+  { type: 'insert', char: 'l', cursor: 2, time: Date.now() + 200 },
+  { type: 'insert', char: 'l', cursor: 3, time: Date.now() + 300 },
+  { type: 'insert', char: 'o', cursor: 4, time: Date.now() + 400 }
 ];
-const text = "Hello World";
+const text = "Hello";
 
 const { signature, signedData } = signLog(log, text, privateKey);
 // signature: Base64-encoded signature string
@@ -428,6 +457,16 @@ if (result.isValid) {
 - **Parameters**: `log` - Array of log events
 - **Returns**: Reconstructed text string
 - **Purpose**: Rebuild text from log events
+
+#### `serializeLog(log)`
+- **Parameters**: `log` - Array of log events
+- **Returns**: `Uint8Array` - Binary TLV data
+- **Purpose**: Serialize log to compact binary format (70%+ space savings)
+
+#### `deserializeLog(data)`
+- **Parameters**: `data` - `Uint8Array` binary TLV data
+- **Returns**: Array of log events
+- **Purpose**: Deserialize binary TLV data back to log array
 
 ## Implementation
 
