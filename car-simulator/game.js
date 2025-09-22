@@ -9,6 +9,9 @@ class CarSimulator {
         this.cameraRig = null;
         this.keys = {};
         this.speedDisplay = document.getElementById('speed');
+        this.gearDisplay = document.getElementById('gear');
+        this.minimapCanvas = document.getElementById('minimap-canvas');
+        this.minimapCtx = this.minimapCanvas.getContext('2d');
 
         this.init();
         this.createGround();
@@ -92,18 +95,78 @@ class CarSimulator {
 
     createCar() {
         // Car chassis
-        const chassisShape = new CANNON.Box(new CANNON.Vec3(2, 0.5, 1));
+        const chassisShape = new CANNON.Box(new CANNON.Vec3(1.8, 0.4, 0.8));
         this.carChassis = new CANNON.Body({ mass: 800 });
         this.carChassis.addShape(chassisShape);
         this.carChassis.position.set(0, 2, 0);
         this.world.addBody(this.carChassis);
 
-        // Car mesh
-        const carGeometry = new THREE.BoxGeometry(4, 1, 2);
-        const carMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
-        this.carMesh = new THREE.Mesh(carGeometry, carMaterial);
-        this.carMesh.castShadow = true;
+        // Car body group
+        this.carMesh = new THREE.Group();
         this.scene.add(this.carMesh);
+
+        // Main body
+        const bodyGeometry = new THREE.BoxGeometry(4.2, 1.2, 1.8);
+        const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 0.1;
+        body.castShadow = true;
+        this.carMesh.add(body);
+
+        // Hood
+        const hoodGeometry = new THREE.BoxGeometry(1.5, 0.8, 1.6);
+        const hood = new THREE.Mesh(hoodGeometry, bodyMaterial);
+        hood.position.set(1.2, 0.5, 0);
+        hood.castShadow = true;
+        this.carMesh.add(hood);
+
+        // Trunk
+        const trunkGeometry = new THREE.BoxGeometry(1.2, 0.9, 1.6);
+        const trunk = new THREE.Mesh(trunkGeometry, bodyMaterial);
+        trunk.position.set(-1.4, 0.4, 0);
+        trunk.castShadow = true;
+        this.carMesh.add(trunk);
+
+        // Windows
+        const windowMaterial = new THREE.MeshLambertMaterial({ color: 0x87CEEB, transparent: true, opacity: 0.7 });
+        const windshieldGeometry = new THREE.BoxGeometry(1.8, 0.8, 0.1);
+        const windshield = new THREE.Mesh(windshieldGeometry, windowMaterial);
+        windshield.position.set(0.8, 0.8, 0);
+        this.carMesh.add(windshield);
+
+        const rearWindowGeometry = new THREE.BoxGeometry(0.8, 0.6, 0.1);
+        const rearWindow = new THREE.Mesh(rearWindowGeometry, windowMaterial);
+        rearWindow.position.set(-1.2, 0.7, 0);
+        this.carMesh.add(rearWindow);
+
+        // Side windows
+        const sideWindowGeometry = new THREE.BoxGeometry(0.1, 0.6, 1.4);
+        const leftWindow = new THREE.Mesh(sideWindowGeometry, windowMaterial);
+        leftWindow.position.set(0, 0.7, 0);
+        this.carMesh.add(leftWindow);
+
+        const rightWindow = new THREE.Mesh(sideWindowGeometry, windowMaterial);
+        rightWindow.position.set(0, 0.7, 0);
+        this.carMesh.add(rightWindow);
+
+        // Wheels
+        const wheelGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.2, 16);
+        wheelGeometry.rotateZ(Math.PI / 2);
+        const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
+        const rimMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+
+        this.wheelMeshes = [];
+        for (let i = 0; i < 4; i++) {
+            const wheelGroup = new THREE.Group();
+            const tire = new THREE.Mesh(wheelGeometry, wheelMaterial);
+            const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.22, 16), rimMaterial);
+            rim.rotateZ(Math.PI / 2);
+            wheelGroup.add(tire);
+            wheelGroup.add(rim);
+            wheelGroup.castShadow = true;
+            this.scene.add(wheelGroup);
+            this.wheelMeshes.push(wheelGroup);
+        }
 
         // Raycast vehicle
         this.vehicle = new CANNON.RaycastVehicle({
@@ -145,19 +208,6 @@ class CarSimulator {
 
         // Add vehicle to world
         this.vehicle.addToWorld(this.world); // Correct method for RaycastVehicle
-
-        // Wheel meshes
-        this.wheelMeshes = [];
-        const wheelGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 32);
-        wheelGeometry.rotateZ(Math.PI / 2);
-        const wheelMaterial = new THREE.MeshLambertMaterial({ color: 0x000000 });
-
-        for (let i = 0; i < 4; i++) {
-            const wheelMesh = new THREE.Mesh(wheelGeometry, wheelMaterial);
-            wheelMesh.castShadow = true;
-            this.scene.add(wheelMesh);
-            this.wheelMeshes.push(wheelMesh);
-        }
     }
 
     createProceduralTown() {
@@ -169,13 +219,39 @@ class CarSimulator {
             const width = Math.random() * 10 + 5;
             const depth = Math.random() * 10 + 5;
 
+            // Building group
+            const buildingGroup = new THREE.Group();
+            buildingGroup.position.set(x, 0, z);
+
+            // Main building
             const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
             const buildingMaterial = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
             const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-            building.position.set(x, height / 2, z);
+            building.position.y = height / 2;
             building.castShadow = true;
             building.receiveShadow = true;
-            this.scene.add(building);
+            buildingGroup.add(building);
+
+            // Windows
+            const windowMaterial = new THREE.MeshLambertMaterial({ color: 0xffff88, transparent: true, opacity: 0.8 });
+            const windowRows = Math.floor(height / 2);
+            const windowCols = Math.floor(width / 2);
+            for (let row = 0; row < windowRows; row++) {
+                for (let col = 0; col < windowCols; col++) {
+                    if (Math.random() > 0.3) { // Some windows lit
+                        const windowGeom = new THREE.BoxGeometry(0.8, 0.8, 0.1);
+                        const windowMesh = new THREE.Mesh(windowGeom, windowMaterial);
+                        windowMesh.position.set(
+                            -width/2 + (col + 0.5) * (width / windowCols),
+                            row * 2 + 1,
+                            depth/2 + 0.05
+                        );
+                        buildingGroup.add(windowMesh);
+                    }
+                }
+            }
+
+            this.scene.add(buildingGroup);
 
             const buildingShape = new CANNON.Box(new CANNON.Vec3(width/2, height/2, depth/2));
             const buildingBody = new CANNON.Body({ mass: 0 });
@@ -184,20 +260,103 @@ class CarSimulator {
             this.world.addBody(buildingBody);
         }
 
-        // Roads
+        // Trees
+        for (let i = 0; i < 100; i++) {
+            const x = (Math.random() - 0.5) * 1000;
+            const z = (Math.random() - 0.5) * 1000;
+            if (Math.abs(x) < 100 && Math.abs(z) < 100) continue; // Avoid center
+
+            const treeGroup = new THREE.Group();
+            treeGroup.position.set(x, 0, z);
+
+            // Trunk
+            const trunkGeom = new THREE.CylinderGeometry(0.5, 0.5, 3, 8);
+            const trunkMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+            trunk.position.y = 1.5;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+
+            // Leaves
+            const leavesGeom = new THREE.SphereGeometry(2, 8, 6);
+            const leavesMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+            const leaves = new THREE.Mesh(leavesGeom, leavesMat);
+            leaves.position.y = 3.5;
+            leaves.castShadow = true;
+            treeGroup.add(leaves);
+
+            this.scene.add(treeGroup);
+        }
+
+        // Street lights
+        for (let i = 0; i < 40; i++) {
+            const x = (Math.random() - 0.5) * 600;
+            const z = (Math.random() - 0.5) * 600;
+
+            const lightGroup = new THREE.Group();
+            lightGroup.position.set(x, 0, z);
+
+            // Pole
+            const poleGeom = new THREE.CylinderGeometry(0.1, 0.1, 6, 8);
+            const poleMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+            const pole = new THREE.Mesh(poleGeom, poleMat);
+            pole.position.y = 3;
+            pole.castShadow = true;
+            lightGroup.add(pole);
+
+            // Light
+            const lightGeom = new THREE.SphereGeometry(0.3, 8, 6);
+            const lightMat = new THREE.MeshBasicMaterial({ color: 0xffff88 });
+            const lightMesh = new THREE.Mesh(lightGeom, lightMat);
+            lightMesh.position.set(1, 5.5, 0);
+            lightGroup.add(lightMesh);
+
+            // Arm
+            const armGeom = new THREE.CylinderGeometry(0.05, 0.05, 2, 8);
+            const arm = new THREE.Mesh(armGeom, poleMat);
+            arm.position.set(0.5, 5.5, 0);
+            arm.rotation.z = Math.PI / 2;
+            lightGroup.add(arm);
+
+            this.scene.add(lightGroup);
+
+            // Point light
+            const pointLight = new THREE.PointLight(0xffff88, 0.5, 20);
+            pointLight.position.set(x + 1, 5.5, z);
+            this.scene.add(pointLight);
+        }
+
+        // Roads with lane markings
         const roadMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const lineMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
         for (let i = -10; i <= 10; i++) {
+            // Horizontal roads
             const roadHGeometry = new THREE.PlaneGeometry(1000, 20);
             const roadH = new THREE.Mesh(roadHGeometry, roadMaterial);
             roadH.rotation.x = -Math.PI / 2;
             roadH.position.set(0, 0.01, i * 50);
             this.scene.add(roadH);
 
+            // Center line
+            const lineHGeometry = new THREE.PlaneGeometry(1000, 0.2);
+            const lineH = new THREE.Mesh(lineHGeometry, lineMaterial);
+            lineH.rotation.x = -Math.PI / 2;
+            lineH.position.set(0, 0.02, i * 50);
+            this.scene.add(lineH);
+
+            // Vertical roads
             const roadVGeometry = new THREE.PlaneGeometry(20, 1000);
             const roadV = new THREE.Mesh(roadVGeometry, roadMaterial);
             roadV.rotation.x = -Math.PI / 2;
             roadV.position.set(i * 50, 0.01, 0);
             this.scene.add(roadV);
+
+            // Center line
+            const lineVGeometry = new THREE.PlaneGeometry(0.2, 1000);
+            const lineV = new THREE.Mesh(lineVGeometry, lineMaterial);
+            lineV.rotation.x = -Math.PI / 2;
+            lineV.position.set(i * 50, 0.02, 0);
+            this.scene.add(lineV);
         }
     }
 
@@ -216,8 +375,8 @@ class CarSimulator {
         if (this.keys.KeyD) steer = maxSteerVal;
 
         let accel = 0;
-        if (this.keys.KeyW) accel = -maxForce / 2;
-        if (this.keys.KeyS) accel = maxForce;
+        if (this.keys.KeyW) accel = -maxForce / 2; // Accelerate
+        if (this.keys.KeyS) accel = maxForce; // Brake
 
         let brake = 0;
         if (this.keys.Space) brake = brakeForce;
@@ -257,6 +416,12 @@ class CarSimulator {
         // Speed
         const speed = this.carChassis.velocity.length() * 3.6;
         this.speedDisplay.textContent = `Speed: ${speed.toFixed(1)} km/h`;
+
+        // Gear
+        let gear = 'N';
+        if (this.keys.KeyW) gear = 'D';
+        else if (this.keys.KeyS) gear = 'R';
+        this.gearDisplay.textContent = `Gear: ${gear}`;
     }
 
     updateCamera() {
@@ -273,6 +438,51 @@ class CarSimulator {
         this.camera.lookAt(idealLookAt);
     }
 
+    updateMinimap() {
+        const ctx = this.minimapCtx;
+        const canvas = this.minimapCanvas;
+        const scale = 0.5; // pixels per unit
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        // Clear
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        for (let i = -10; i <= 10; i++) {
+            const x = centerX + i * 50 * scale;
+            const y = centerY + i * 50 * scale;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+
+        // Draw car
+        const carX = centerX + this.carChassis.position.x * scale;
+        const carZ = centerY + this.carChassis.position.z * scale;
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(carX, carZ, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Direction indicator
+        const dir = this.carMesh.getWorldDirection(new THREE.Vector3());
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(carX, carZ);
+        ctx.lineTo(carX + dir.x * 10, carZ + dir.z * 10);
+        ctx.stroke();
+    }
+
     animate() {
         requestAnimationFrame(() => this.animate());
 
@@ -281,6 +491,8 @@ class CarSimulator {
         this.updateCar();
 
         this.updateCamera();
+
+        this.updateMinimap();
 
         this.renderer.render(this.scene, this.camera);
     }
