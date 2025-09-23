@@ -1,3 +1,54 @@
+/**
+ * @typedef {Object} RecipeNutritional
+ * @property {number} calories - Calories per serving/portion (kcal)
+ * @property {number} carbs - Carbohydrates per serving (g)
+ * @property {number} fat - Fat per serving (g)
+ * @property {number} protein - Protein per serving (g)
+ * @property {number} fiber - Fiber per serving (g)
+ * @property {Object} vitamins - Vitamin presence indicators
+ * @property {boolean} vitamins.vitaminA
+ * @property {boolean} vitamins.vitaminC
+ * @property {boolean} vitamins.vitaminD
+ * @property {boolean} vitamins.vitaminE
+ * @property {boolean} vitamins.vitaminK1
+ * @property {boolean} vitamins.vitaminK2
+ * @property {boolean} vitamins.vitaminB12
+ * @property {boolean} vitamins.folate
+ * @property {Object} minerals - Mineral presence indicators
+ * @property {boolean} minerals.calcium
+ * @property {boolean} minerals.iron
+ * @property {boolean} minerals.magnesium
+ * @property {boolean} minerals.potassium
+ * @property {boolean} minerals.zinc
+ */
+
+/**
+ * @typedef {Object} Ingredient
+ * @property {string} name
+ * @property {number} quantity
+ * @property {string} unit
+ */
+
+/**
+ * @typedef {Object} Recipe
+ * @property {number} id
+ * @property {string} name
+ * @property {Ingredient[]} ingredients
+ * @property {string[]} method
+ * @property {RecipeNutritional} nutritional
+ */
+
+/**
+ * @typedef {Object} Calendar
+ * @property {number|null} Monday
+ * @property {number|null} Tuesday
+ * @property {number|null} Wednesday
+ * @property {number|null} Thursday
+ * @property {number|null} Friday
+ * @property {number|null} Saturday
+ * @property {number|null} Sunday
+ */
+
 const { useState, useEffect } = React;
 
 function IngredientDropdown({ value, suggestions, onChange, placeholder }) {
@@ -285,7 +336,7 @@ function RecipeItem({ recipe, onEdit, onDelete }) {
     );
 }
 
-function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe }) {
+function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe, inventory }) {
     const days = Object.keys(calendar);
 
     return React.createElement('div', { className: 'calendar' },
@@ -300,17 +351,25 @@ function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleC
                     handleDrop,
                     handleDragOver,
                     handleCook,
-                    onSelectRecipe
+                    onSelectRecipe,
+                    inventory
                 })
             )
         )
     );
 }
 
-function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, handleCook, onSelectRecipe }) {
+function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, handleCook, onSelectRecipe, inventory }) {
     const recipe = recipeId ? getRecipeById(recipeId) : null;
     const currentDay = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const isCurrentDay = day === currentDay;
+
+    // Check if recipe can be cooked (all ingredients available)
+    const canCook = recipe && recipe.ingredients.every(ing => {
+        const available = inventory[ing.name] || 0;
+        return available >= ing.quantity;
+    });
+
     return React.createElement('div', {
         className: `day-slot ${isCurrentDay ? 'current-day' : ''}`,
         onDrop: (e) => handleDrop(e, day),
@@ -325,6 +384,7 @@ function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, han
         }, recipe ? 'Change Recipe' : 'Select Recipe'),
         recipe && React.createElement('button', {
             onClick: () => handleCook(recipe),
+            className: canCook ? 'cook-btn' : 'cook-btn insufficient',
             style: { marginTop: '5px', width: '100%' }
         }, 'Cook')
     );
@@ -455,11 +515,49 @@ function Inventory({ inventory, updateInventory, recipes, calendar }) {
     );
 }
 
+/**
+ * @param {Object} props
+ * @param {Recipe} props.recipe
+ * @param {Object} props.inventory
+ * @param {Recipe[]} props.recipes
+ * @param {Function} props.onSave
+ * @param {Function} props.onCancel
+ */
 function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
+    const defaultNutritional = {
+        calories: 0,
+        carbs: 0,
+        fat: 0,
+        protein: 0,
+        fiber: 0,
+        vitamins: {
+            vitaminA: false,
+            vitaminC: false,
+            vitaminD: false,
+            vitaminE: false,
+            vitaminK1: false,
+            vitaminK2: false,
+            vitaminB12: false,
+            folate: false
+        },
+        minerals: {
+            calcium: false,
+            iron: false,
+            magnesium: false,
+            potassium: false,
+            zinc: false
+        }
+    };
+
     const [recipeForm, setRecipeForm] = useState({
         name: recipe.name,
-        ingredients: recipe.ingredients || [],
-        method: recipe.method || []
+        ingredients: (recipe.ingredients || []).map(ing => ({
+            name: ing.name,
+            quantity: ing.quantity,
+            unit: ing.unit
+        })),
+        method: recipe.method || [],
+        nutritional: recipe.nutritional || { calories: 0, carbs: 0, fat: 0, protein: 0, fiber: 0, vitamins: { vitaminA: false, vitaminC: false, vitaminD: false, vitaminE: false, vitaminK1: false, vitaminK2: false, vitaminB12: false, folate: false }, minerals: { calcium: false, iron: false, magnesium: false, potassium: false, zinc: false } }
     });
 
     // Get all known ingredients from recipes and inventory
@@ -531,28 +629,31 @@ function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
         React.createElement('div', { className: 'ingredients-list' },
             recipeForm.ingredients.map((ing, index) =>
                 React.createElement('div', { key: index, className: 'ingredient-row' },
-                    React.createElement(IngredientDropdown, {
-                        value: ing.name,
-                        suggestions: getAllIngredients(),
-                        onChange: (value) => updateIngredient(index, 'name', value),
-                        placeholder: 'Ingredient name'
-                    }),
-                    React.createElement('input', {
-                        type: 'number',
-                        value: ing.quantity,
-                        onChange: (e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0),
-                        placeholder: 'Quantity'
-                    }),
-                    React.createElement('input', {
-                        type: 'text',
-                        value: ing.unit,
-                        onChange: (e) => updateIngredient(index, 'unit', e.target.value),
-                        placeholder: 'Unit'
-                    }),
-                    React.createElement('button', {
-                        onClick: () => removeIngredient(index),
-                        className: 'remove-ingredient-btn'
-                    }, 'Remove')
+                    React.createElement('div', { className: 'ingredient-main' },
+                        React.createElement(IngredientDropdown, {
+                            value: ing.name,
+                            suggestions: getAllIngredients(),
+                            onChange: (value) => updateIngredient(index, 'name', value),
+                            placeholder: 'Ingredient name'
+                        }),
+                        React.createElement('input', {
+                            type: 'number',
+                            value: ing.quantity,
+                            onChange: (e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0),
+                            placeholder: 'Quantity'
+                        }),
+                        React.createElement('input', {
+                            type: 'text',
+                            value: ing.unit,
+                            onChange: (e) => updateIngredient(index, 'unit', e.target.value),
+                            placeholder: 'Unit'
+                        }),
+                        React.createElement('button', {
+                            onClick: () => removeIngredient(index),
+                            className: 'remove-ingredient-btn'
+                        }, 'Remove')
+                    ),
+
                 )
             )
         ),
@@ -576,6 +677,16 @@ function EditRecipeForm({ recipe, inventory, recipes, onSave, onCancel }) {
             )
         ),
         React.createElement('button', { onClick: addMethodStep, className: 'add-method-btn' }, 'Add Step'),
+        React.createElement('h4', null, 'Nutritional Info (per serving)'),
+        React.createElement('div', { className: 'recipe-nutritional' },
+            React.createElement('div', { className: 'nutritional-macros' },
+                React.createElement('label', null, 'Calories:', React.createElement('input', { type: 'number', value: recipeForm.nutritional.calories, onChange: (e) => setRecipeForm({ ...recipeForm, nutritional: { ...recipeForm.nutritional, calories: parseFloat(e.target.value) || 0 } }), step: '0.1' })),
+                React.createElement('label', null, 'Carbs (g):', React.createElement('input', { type: 'number', value: recipeForm.nutritional.carbs, onChange: (e) => setRecipeForm({ ...recipeForm, nutritional: { ...recipeForm.nutritional, carbs: parseFloat(e.target.value) || 0 } }), step: '0.1' })),
+                React.createElement('label', null, 'Fat (g):', React.createElement('input', { type: 'number', value: recipeForm.nutritional.fat, onChange: (e) => setRecipeForm({ ...recipeForm, nutritional: { ...recipeForm.nutritional, fat: parseFloat(e.target.value) || 0 } }), step: '0.1' })),
+                React.createElement('label', null, 'Protein (g):', React.createElement('input', { type: 'number', value: recipeForm.nutritional.protein, onChange: (e) => setRecipeForm({ ...recipeForm, nutritional: { ...recipeForm.nutritional, protein: parseFloat(e.target.value) || 0 } }), step: '0.1' })),
+                React.createElement('label', null, 'Fiber (g):', React.createElement('input', { type: 'number', value: recipeForm.nutritional.fiber, onChange: (e) => setRecipeForm({ ...recipeForm, nutritional: { ...recipeForm.nutritional, fiber: parseFloat(e.target.value) || 0 } }), step: '0.1' }))
+            )
+        ),
         React.createElement('div', { className: 'modal-buttons' },
             React.createElement('button', { onClick: handleSave }, 'Save'),
             React.createElement('button', { onClick: onCancel }, 'Cancel')
@@ -638,6 +749,203 @@ function RecipeSelectModal({ showRecipeSelectModal, selectingDay, recipes, onSel
                 React.createElement('button', { onClick: onClearRecipe }, 'Clear Recipe'),
                 React.createElement('button', { onClick: onClose }, 'Cancel')
             )
+        )
+    );
+}
+
+/**
+ * @param {Object} props
+ * @param {Recipe[]} props.recipes
+ * @param {Calendar} props.calendar
+ * @param {Function} props.getRecipeById
+ */
+function Nutrition({ recipes, calendar, getRecipeById }) {
+    const calculateRecipeNutrition = (recipe) => {
+        return recipe.nutritional || { calories: 0, carbs: 0, fat: 0, protein: 0, fiber: 0, vitamins: { vitaminA: false, vitaminC: false, vitaminD: false, vitaminE: false, vitaminK1: false, vitaminK2: false, vitaminB12: false, folate: false }, minerals: { calcium: false, iron: false, magnesium: false, potassium: false, zinc: false } };
+    };
+
+    const dayNutrition = Object.keys(calendar).map(day => {
+        const recipeId = calendar[day];
+        if (!recipeId) return { day, nutrition: null };
+        const recipe = getRecipeById(recipeId);
+        if (!recipe) return { day, nutrition: null };
+        return { day, nutrition: calculateRecipeNutrition(recipe) };
+    });
+
+    const weeklyTotal = dayNutrition.reduce((total, day) => {
+        if (!day.nutrition) return total;
+        return {
+            calories: total.calories + day.nutrition.calories,
+            carbs: total.carbs + day.nutrition.carbs,
+            fat: total.fat + day.nutrition.fat,
+            protein: total.protein + day.nutrition.protein,
+            fiber: total.fiber + day.nutrition.fiber,
+            vitamins: Object.keys(total.vitamins).reduce((vits, vit) => ({ ...vits, [vit]: total.vitamins[vit] || day.nutrition.vitamins[vit] }), {}),
+            minerals: Object.keys(total.minerals).reduce((mins, min) => ({ ...mins, [min]: total.minerals[min] || day.nutrition.minerals[min] }), {})
+        };
+    }, { calories: 0, carbs: 0, fat: 0, protein: 0, fiber: 0, vitamins: { vitaminA: false, vitaminC: false, vitaminD: false, vitaminE: false, vitaminK1: false, vitaminK2: false, vitaminB12: false, folate: false }, minerals: { calcium: false, iron: false, magnesium: false, potassium: false, zinc: false } });
+
+    // Create stacked bar chart data for macronutrients
+    const chartData = {
+        labels: dayNutrition.map(d => d.day.substring(0, 3)), // Short day names
+        datasets: [
+            {
+                label: 'Carbs (g)',
+                data: dayNutrition.map(d => d.nutrition ? d.nutrition.carbs : 0),
+                backgroundColor: 'rgba(52, 152, 219, 0.8)',
+                borderColor: 'rgba(52, 152, 219, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Fat (g)',
+                data: dayNutrition.map(d => d.nutrition ? d.nutrition.fat : 0),
+                backgroundColor: 'rgba(231, 76, 60, 0.8)',
+                borderColor: 'rgba(231, 76, 60, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Protein (g)',
+                data: dayNutrition.map(d => d.nutrition ? d.nutrition.protein : 0),
+                backgroundColor: 'rgba(46, 204, 113, 0.8)',
+                borderColor: 'rgba(46, 204, 113, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Fiber (g)',
+                data: dayNutrition.map(d => d.nutrition ? d.nutrition.fiber : 0),
+                backgroundColor: 'rgba(155, 89, 182, 0.8)',
+                borderColor: 'rgba(155, 89, 182, 1)',
+                borderWidth: 1
+            }
+        ]
+    };
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: {
+                stacked: true,
+                title: {
+                    display: true,
+                    text: 'Day of Week'
+                }
+            },
+            y: {
+                stacked: true,
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Macronutrients (grams)'
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                display: true,
+                position: 'top'
+            },
+            title: {
+                display: true,
+                text: 'Weekly Macronutrient Breakdown'
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        return context.dataset.label + ': ' + context.parsed.y + 'g';
+                    }
+                }
+            }
+        }
+    };
+
+    // Use useEffect to create the charts after component mounts
+    React.useEffect(() => {
+        // Calories chart
+        const caloriesCtx = document.getElementById('caloriesChart');
+        if (caloriesCtx) {
+            const caloriesData = {
+                labels: dayNutrition.map(d => d.day.substring(0, 3)),
+                datasets: [{
+                    label: 'Calories',
+                    data: dayNutrition.map(d => d.nutrition ? d.nutrition.calories : 0),
+                    backgroundColor: 'rgba(52, 152, 219, 0.6)',
+                    borderColor: 'rgba(52, 152, 219, 1)',
+                    borderWidth: 1
+                }]
+            };
+
+            const caloriesOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Calories'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weekly Calorie Intake'
+                    }
+                }
+            };
+
+            new Chart(caloriesCtx, {
+                type: 'bar',
+                data: caloriesData,
+                options: caloriesOptions
+            });
+        }
+
+        // Macronutrients stacked chart
+        const macroCtx = document.getElementById('macroChart');
+        if (macroCtx) {
+            new Chart(macroCtx, {
+                type: 'bar',
+                data: chartData,
+                options: chartOptions
+            });
+        }
+    }, [recipes, calendar]);
+
+    return React.createElement('div', { className: 'nutrition' },
+        React.createElement('h2', null, 'Nutritional Overview'),
+        React.createElement('div', { className: 'nutrition-charts-container' },
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'caloriesChart', width: '400', height: '200' })
+            ),
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'macroChart', width: '400', height: '200' })
+            )
+        ),
+        React.createElement('h3', null, 'Daily Breakdown'),
+        React.createElement('div', { className: 'daily-nutrition' },
+            dayNutrition.map(({ day, nutrition }) =>
+                React.createElement('div', { key: day, className: 'day-nutrition' },
+                    React.createElement('h4', null, day),
+                    nutrition ? React.createElement('div', null,
+                        React.createElement('p', null, `Calories: ${nutrition.calories.toFixed(0)}`),
+                        React.createElement('p', null, `Carbs: ${nutrition.carbs.toFixed(1)}g, Fat: ${nutrition.fat.toFixed(1)}g, Protein: ${nutrition.protein.toFixed(1)}g, Fiber: ${nutrition.fiber.toFixed(1)}g`),
+                        React.createElement('p', null, 'Vitamins: ' + Object.keys(nutrition.vitamins).filter(v => nutrition.vitamins[v]).join(', ')),
+                        React.createElement('p', null, 'Minerals: ' + Object.keys(nutrition.minerals).filter(m => nutrition.minerals[m]).join(', '))
+                    ) : React.createElement('p', null, 'No recipe planned')
+                )
+            )
+        ),
+        React.createElement('h3', null, 'Weekly Totals'),
+        React.createElement('div', { className: 'weekly-nutrition' },
+            React.createElement('p', null, `Total Calories: ${weeklyTotal.calories.toFixed(0)}`),
+            React.createElement('p', null, `Total Carbs: ${weeklyTotal.carbs.toFixed(1)}g, Fat: ${weeklyTotal.fat.toFixed(1)}g, Protein: ${weeklyTotal.protein.toFixed(1)}g, Fiber: ${weeklyTotal.fiber.toFixed(1)}g`),
+            React.createElement('p', null, 'Vitamins present: ' + Object.keys(weeklyTotal.vitamins).filter(v => weeklyTotal.vitamins[v]).join(', ')),
+            React.createElement('p', null, 'Minerals present: ' + Object.keys(weeklyTotal.minerals).filter(m => weeklyTotal.minerals[m]).join(', '))
         )
     );
 }
@@ -878,11 +1186,17 @@ function App() {
     }, [inventory, calendar, recipes]);
 
     const addRecipe = (recipeData) => {
+        const ingredients = (recipeData.ingredients || []).map(ing => ({
+            name: ing.name,
+            quantity: ing.quantity,
+            unit: ing.unit
+        }));
         const newRecipe = {
             id: Date.now(),
             name: recipeData.name,
-            ingredients: recipeData.ingredients || [],
-            method: recipeData.method || []
+            ingredients,
+            method: recipeData.method || [],
+            nutritional: recipeData.nutritional || { calories: 0, carbs: 0, fat: 0, protein: 0, fiber: 0, vitamins: { vitaminA: false, vitaminC: false, vitaminD: false, vitaminE: false, vitaminK1: false, vitaminK2: false, vitaminB12: false, folate: false }, minerals: { calcium: false, iron: false, magnesium: false, potassium: false, zinc: false } }
         };
         setRecipes([...recipes, newRecipe]);
     };
@@ -1120,10 +1434,14 @@ For the method, provide numbered steps that are easy to follow.`
                 React.createElement('button', {
                     className: activeTab === 'shopping' ? 'tab active' : 'tab',
                     onClick: () => setActiveTab('shopping')
-                }, 'Shopping List')
+                }, 'Shopping List'),
+                React.createElement('button', {
+                    className: activeTab === 'nutrition' ? 'tab active' : 'tab',
+                    onClick: () => setActiveTab('nutrition')
+                }, 'Nutrition')
             ),
             (activeTab === 'calendar' || activeTab === 'recipes') && React.createElement('div', { className: 'main-content' },
-                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe }),
+                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe, inventory }),
                 React.createElement(RecipeList, {
                     recipes,
                     inventory,
@@ -1155,7 +1473,8 @@ For the method, provide numbered steps that are easy to follow.`
                 selectedShoppingItems,
                 toggleSelectShoppingItem,
                 transferSelectedToInventory
-            })
+            }),
+            activeTab === 'nutrition' && React.createElement(Nutrition, { recipes, calendar, getRecipeById })
         ),
         ReactDOM.createPortal(
             React.createElement(ModalManager, {
