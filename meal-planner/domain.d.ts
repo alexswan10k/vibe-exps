@@ -139,6 +139,46 @@ export interface RecipeSelectModalProps {
   onClose: () => void;
 }
 
+export interface CookModalProps {
+  show: boolean;
+  recipe: Recipe | null;
+  inventory: Record<string, number>;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export interface EditRecipeModalProps {
+  show: boolean;
+  recipe: Recipe | null;
+  inventory: Record<string, number>;
+  recipes: Recipe[];
+  onSave: (recipeData: Partial<Recipe>) => void;
+  onCancel: () => void;
+}
+
+export interface PasteResultModalProps {
+  show: boolean;
+  pastedResult: string;
+  onPastedResultChange: (e: any) => void;
+  onImport: () => void;
+  onCancel: () => void;
+}
+
+export interface DataManagementModalProps {
+  show: boolean;
+  recipes: Recipe[];
+  inventory: Record<string, number>;
+  ingredientsData: Record<string, any>;
+  calendar: Calendar;
+  shoppingList: Record<string, number>;
+  onLoadSampleData: () => void;
+  onResetToSampleData: () => void;
+  onExportData: () => void;
+  onImportData: (data: any) => void;
+  onClearAllData: () => void;
+  onClose: () => void;
+}
+
 export interface ModalManagerProps {
   showCookModal: boolean;
   cookingRecipe: Recipe | null;
@@ -181,6 +221,10 @@ export declare function Nutrition(props: NutritionProps): any;
 export declare function EditRecipeForm(props: EditRecipeFormProps): any;
 export declare function IngredientDropdown(props: IngredientDropdownProps): any;
 export declare function RecipeSelectModal(props: RecipeSelectModalProps): any;
+export declare function CookModal(props: CookModalProps): any;
+export declare function EditRecipeModal(props: EditRecipeModalProps): any;
+export declare function PasteResultModal(props: PasteResultModalProps): any;
+export declare function DataManagementModal(props: DataManagementModalProps): any;
 export declare function ModalManager(props: ModalManagerProps): any;
 
 // App State Types

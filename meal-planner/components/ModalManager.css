@@ -59,7 +59,6 @@
 }
 
 .insufficient {
-    color: #e74c3c;
     font-weight: bold;
 }
 
@@ -347,5 +346,17 @@
     .modal-buttons button {
         width: 100%;
         min-height: 44px;
+    }
+}
+
+.recipe-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 15px;
+}
+
+@media (max-width: 600px) {
+    .recipe-options {
+        grid-template-columns: 1fr;
     }
 }
