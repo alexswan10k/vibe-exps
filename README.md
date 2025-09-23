@@ -23,6 +23,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Modular Synth**: A modular synthesizer
 - **Multi Note Todo**: A multi-note todo list
 - **Particle Fireworks**: A particle fireworks simulation
+- **Personal Expense Survival Calculator**: Calculate how long your savings will last with inflation and investment risk
 - **Physics Sandbox**: Interactive physics simulation
 - **Planet Generator**: Procedural planet generation tool
 - **Portrait Site**: A portrait website
@@ -49,4 +50,3 @@ A collection of interactive web-based experiments, games, and tools built with H
 - CSS3
 - JavaScript (ES6+)
 - Canvas API for games and visualizations
-
