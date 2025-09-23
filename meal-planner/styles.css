@@ -1434,7 +1434,7 @@ button:active {
 
 .nutrition-chart-container canvas {
     max-width: 100%;
-    height: auto !important;
+    height: 300px !important;
 }
 
 /* Mobile: stack charts vertically */

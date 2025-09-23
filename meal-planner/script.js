@@ -839,10 +839,59 @@ function RecipeSelectModal({ showRecipeSelectModal, selectingDay, recipes, onSel
  * @param {Recipe[]} props.recipes
  * @param {Calendar} props.calendar
  * @param {Function} props.getRecipeById
+ * @param {Object} props.ingredientsData
  */
-function Nutrition({ recipes, calendar, getRecipeById }) {
+function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
     const calculateRecipeNutrition = (recipe) => {
-        return recipe.nutritional || { calories: 0, carbs: 0, fat: 0, protein: 0, fiber: 0, vitamins: { vitaminA: false, vitaminC: false, vitaminD: false, vitaminE: false, vitaminK1: false, vitaminK2: false, vitaminB12: false, folate: false }, minerals: { calcium: false, iron: false, magnesium: false, potassium: false, zinc: false } };
+        // Start with recipe's own nutritional data if available
+        let nutrition = recipe.nutritional || { calories: 0, carbs: 0, fat: 0, protein: 0, fiber: 0, vitamins: {}, minerals: {} };
+
+        // Initialize vitamins and minerals if not present
+        if (!nutrition.vitamins) nutrition.vitamins = {};
+        if (!nutrition.minerals) nutrition.minerals = {};
+
+        // Calculate from ingredients if available
+        if (recipe.ingredients && ingredientsData) {
+            recipe.ingredients.forEach(ing => {
+                const ingData = ingredientsData[ing.name];
+                if (ingData) {
+                    // Aggregate vitamins (OR logic - if any ingredient has it, recipe has it)
+                    if (ingData.vitamins) {
+                        Object.keys(ingData.vitamins).forEach(vitamin => {
+                            if (ingData.vitamins[vitamin]) {
+                                nutrition.vitamins[vitamin] = true;
+                            }
+                        });
+                    }
+                    // Aggregate minerals (OR logic - if any ingredient has it, recipe has it)
+                    if (ingData.minerals) {
+                        Object.keys(ingData.minerals).forEach(mineral => {
+                            if (ingData.minerals[mineral]) {
+                                nutrition.minerals[mineral] = true;
+                            }
+                        });
+                    }
+                }
+            });
+        }
+
+        // Ensure all vitamin and mineral keys exist with default false values
+        const allVitamins = ['vitaminA', 'vitaminC', 'vitaminD', 'vitaminE', 'vitaminK1', 'vitaminK2', 'vitaminB12', 'folate'];
+        const allMinerals = ['calcium', 'iron', 'magnesium', 'potassium', 'zinc'];
+
+        allVitamins.forEach(vitamin => {
+            if (nutrition.vitamins[vitamin] === undefined) {
+                nutrition.vitamins[vitamin] = false;
+            }
+        });
+
+        allMinerals.forEach(mineral => {
+            if (nutrition.minerals[mineral] === undefined) {
+                nutrition.minerals[mineral] = false;
+            }
+        });
+
+        return nutrition;
     };
 
     const dayNutrition = Object.keys(calendar).map(day => {
@@ -995,7 +1044,307 @@ function Nutrition({ recipes, calendar, getRecipeById }) {
                 options: chartOptions
             });
         }
+
+        // Vitamins stacked bar chart
+        const vitaminsCtx = document.getElementById('vitaminsChart');
+        if (vitaminsCtx) {
+            const vitaminNames = ['vitaminA', 'vitaminC', 'vitaminD', 'vitaminE', 'vitaminK1', 'vitaminK2', 'vitaminB12', 'folate'];
+            const vitaminsData = {
+                labels: dayNutrition.map(d => d.day.substring(0, 3)),
+                datasets: vitaminNames.map(vitamin => ({
+                    label: vitamin,
+                    data: dayNutrition.map(d => d.nutrition && d.nutrition.vitamins[vitamin] ? 1 : 0),
+                    backgroundColor: getVitaminColor(vitamin),
+                    borderColor: getVitaminColor(vitamin, true),
+                    borderWidth: 1
+                }))
+            };
+
+            const vitaminsOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: 'Day of Week'
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        max: vitaminNames.length,
+                        title: {
+                            display: true,
+                            text: 'Vitamins Present'
+                        },
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weekly Vitamin Intake'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + (context.parsed.y > 0 ? 'Present' : 'Absent');
+                            }
+                        }
+                    }
+                }
+            };
+
+            new Chart(vitaminsCtx, {
+                type: 'bar',
+                data: vitaminsData,
+                options: vitaminsOptions
+            });
+        }
+
+        // Minerals stacked bar chart
+        const mineralsCtx = document.getElementById('mineralsChart');
+        if (mineralsCtx) {
+            const mineralNames = ['calcium', 'iron', 'magnesium', 'potassium', 'zinc'];
+            const mineralsData = {
+                labels: dayNutrition.map(d => d.day.substring(0, 3)),
+                datasets: mineralNames.map(mineral => ({
+                    label: mineral,
+                    data: dayNutrition.map(d => d.nutrition && d.nutrition.minerals[mineral] ? 1 : 0),
+                    backgroundColor: getMineralColor(mineral),
+                    borderColor: getMineralColor(mineral, true),
+                    borderWidth: 1
+                }))
+            };
+
+            const mineralsOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        stacked: true,
+                        title: {
+                            display: true,
+                            text: 'Day of Week'
+                        }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        max: mineralNames.length,
+                        title: {
+                            display: true,
+                            text: 'Minerals Present'
+                        },
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weekly Mineral Intake'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + (context.parsed.y > 0 ? 'Present' : 'Absent');
+                            }
+                        }
+                    }
+                }
+            };
+
+            new Chart(mineralsCtx, {
+                type: 'bar',
+                data: mineralsData,
+                options: mineralsOptions
+            });
+        }
+
+        // Weekly Vitamins Pie Chart
+        const weeklyVitaminsCtx = document.getElementById('weeklyVitaminsChart');
+        if (weeklyVitaminsCtx) {
+            const vitaminNames = ['vitaminA', 'vitaminC', 'vitaminD', 'vitaminE', 'vitaminK1', 'vitaminK2', 'vitaminB12', 'folate'];
+            const vitaminCounts = vitaminNames.map(vitamin => {
+                return dayNutrition.reduce((count, day) => {
+                    return count + (day.nutrition && day.nutrition.vitamins[vitamin] ? 1 : 0);
+                }, 0);
+            });
+
+            const weeklyVitaminsData = {
+                labels: vitaminNames,
+                datasets: [{
+                    data: vitaminCounts,
+                    backgroundColor: vitaminNames.map(v => getVitaminColor(v)),
+                    borderColor: vitaminNames.map(v => getVitaminColor(v, true)),
+                    borderWidth: 1
+                }]
+            };
+
+            const weeklyVitaminsOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weekly Vitamin Distribution'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + ' days';
+                            }
+                        }
+                    }
+                }
+            };
+
+            new Chart(weeklyVitaminsCtx, {
+                type: 'pie',
+                data: weeklyVitaminsData,
+                options: weeklyVitaminsOptions
+            });
+        }
+
+        // Weekly Minerals Pie Chart
+        const weeklyMineralsCtx = document.getElementById('weeklyMineralsChart');
+        if (weeklyMineralsCtx) {
+            const mineralNames = ['calcium', 'iron', 'magnesium', 'potassium', 'zinc'];
+            const mineralCounts = mineralNames.map(mineral => {
+                return dayNutrition.reduce((count, day) => {
+                    return count + (day.nutrition && day.nutrition.minerals[mineral] ? 1 : 0);
+                }, 0);
+            });
+
+            const weeklyMineralsData = {
+                labels: mineralNames,
+                datasets: [{
+                    data: mineralCounts,
+                    backgroundColor: mineralNames.map(m => getMineralColor(m)),
+                    borderColor: mineralNames.map(m => getMineralColor(m, true)),
+                    borderWidth: 1
+                }]
+            };
+
+            const weeklyMineralsOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weekly Mineral Distribution'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + ' days';
+                            }
+                        }
+                    }
+                }
+            };
+
+            new Chart(weeklyMineralsCtx, {
+                type: 'pie',
+                data: weeklyMineralsData,
+                options: weeklyMineralsOptions
+            });
+        }
+
+        // Weekly Macronutrients Pie Chart
+        const weeklyMacrosCtx = document.getElementById('weeklyMacronutrientsChart');
+        if (weeklyMacrosCtx) {
+            const weeklyMacrosData = window.NutritionCalculations.generateWeeklyMacronutrientsChartData(dayNutrition);
+
+            const weeklyMacrosOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'right'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Weekly Macronutrient Distribution'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.label + ': ' + context.parsed + 'g';
+                            }
+                        }
+                    }
+                }
+            };
+
+            new Chart(weeklyMacrosCtx, {
+                type: 'pie',
+                data: weeklyMacrosData,
+                options: weeklyMacrosOptions
+            });
+        }
     }, [recipes, calendar]);
+
+    // Helper functions for colors
+    function getVitaminColor(vitamin, border = false) {
+        const colors = {
+            vitaminA: border ? 'rgba(255, 99, 132, 1)' : 'rgba(255, 99, 132, 0.8)',
+            vitaminC: border ? 'rgba(54, 162, 235, 1)' : 'rgba(54, 162, 235, 0.8)',
+            vitaminD: border ? 'rgba(255, 205, 86, 1)' : 'rgba(255, 205, 86, 0.8)',
+            vitaminE: border ? 'rgba(75, 192, 192, 1)' : 'rgba(75, 192, 192, 0.8)',
+            vitaminK1: border ? 'rgba(153, 102, 255, 1)' : 'rgba(153, 102, 255, 0.8)',
+            vitaminK2: border ? 'rgba(255, 159, 64, 1)' : 'rgba(255, 159, 64, 0.8)',
+            vitaminB12: border ? 'rgba(199, 199, 199, 1)' : 'rgba(199, 199, 199, 0.8)',
+            folate: border ? 'rgba(83, 102, 255, 1)' : 'rgba(83, 102, 255, 0.8)'
+        };
+        return colors[vitamin] || (border ? 'rgba(128, 128, 128, 1)' : 'rgba(128, 128, 128, 0.8)');
+    }
+
+    function getMineralColor(mineral, border = false) {
+        const colors = {
+            calcium: border ? 'rgba(255, 99, 132, 1)' : 'rgba(255, 99, 132, 0.8)',
+            iron: border ? 'rgba(54, 162, 235, 1)' : 'rgba(54, 162, 235, 0.8)',
+            magnesium: border ? 'rgba(255, 205, 86, 1)' : 'rgba(255, 205, 86, 0.8)',
+            potassium: border ? 'rgba(75, 192, 192, 1)' : 'rgba(75, 192, 192, 0.8)',
+            zinc: border ? 'rgba(153, 102, 255, 1)' : 'rgba(153, 102, 255, 0.8)'
+        };
+        return colors[mineral] || (border ? 'rgba(128, 128, 128, 1)' : 'rgba(128, 128, 128, 0.8)');
+    }
+
+    // Calculate omitted nutrients
+    const allVitamins = ['vitaminA', 'vitaminC', 'vitaminD', 'vitaminE', 'vitaminK1', 'vitaminK2', 'vitaminB12', 'folate'];
+    const allMinerals = ['calcium', 'iron', 'magnesium', 'potassium', 'zinc'];
+
+    const omittedVitamins = allVitamins.filter(vitamin => {
+        return !dayNutrition.some(day => day.nutrition && day.nutrition.vitamins[vitamin]);
+    });
+
+    const omittedMinerals = allMinerals.filter(mineral => {
+        return !dayNutrition.some(day => day.nutrition && day.nutrition.minerals[mineral]);
+    });
 
     return React.createElement('div', { className: 'nutrition' },
         React.createElement('h2', null, 'Nutritional Overview'),
@@ -1005,6 +1354,27 @@ function Nutrition({ recipes, calendar, getRecipeById }) {
             ),
             React.createElement('div', { className: 'nutrition-chart-container' },
                 React.createElement('canvas', { id: 'macroChart', width: '400', height: '200' })
+            )
+        ),
+        React.createElement('h3', null, 'Vitamin & Mineral Intake'),
+        React.createElement('div', { className: 'nutrition-charts-container' },
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'vitaminsChart', width: '400', height: '200' })
+            ),
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'mineralsChart', width: '400', height: '200' })
+            )
+        ),
+        React.createElement('h3', null, 'Weekly Distribution'),
+        React.createElement('div', { className: 'nutrition-charts-container' },
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'weeklyVitaminsChart', width: '400', height: '200' })
+            ),
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'weeklyMineralsChart', width: '400', height: '200' })
+            ),
+            React.createElement('div', { className: 'nutrition-chart-container' },
+                React.createElement('canvas', { id: 'weeklyMacronutrientsChart', width: '400', height: '200' })
             )
         ),
         React.createElement('h3', null, 'Daily Breakdown'),
@@ -1027,6 +1397,11 @@ function Nutrition({ recipes, calendar, getRecipeById }) {
             React.createElement('p', null, `Total Carbs: ${weeklyTotal.carbs.toFixed(1)}g, Fat: ${weeklyTotal.fat.toFixed(1)}g, Protein: ${weeklyTotal.protein.toFixed(1)}g, Fiber: ${weeklyTotal.fiber.toFixed(1)}g`),
             React.createElement('p', null, 'Vitamins present: ' + Object.keys(weeklyTotal.vitamins).filter(v => weeklyTotal.vitamins[v]).join(', ')),
             React.createElement('p', null, 'Minerals present: ' + Object.keys(weeklyTotal.minerals).filter(m => weeklyTotal.minerals[m]).join(', '))
+        ),
+        (omittedVitamins.length > 0 || omittedMinerals.length > 0) && React.createElement('h3', null, 'Omitted Nutrients'),
+        (omittedVitamins.length > 0 || omittedMinerals.length > 0) && React.createElement('div', { className: 'omitted-nutrients' },
+            omittedVitamins.length > 0 && React.createElement('p', null, `Vitamins not present this week: ${omittedVitamins.join(', ')}`),
+            omittedMinerals.length > 0 && React.createElement('p', null, `Minerals not present this week: ${omittedMinerals.join(', ')}`)
         )
     );
 }
@@ -1570,7 +1945,7 @@ For the method, provide numbered steps that are easy to follow.`
                 toggleSelectShoppingItem,
                 transferSelectedToInventory
             }),
-            activeTab === 'nutrition' && React.createElement(Nutrition, { recipes, calendar, getRecipeById })
+            activeTab === 'nutrition' && React.createElement(Nutrition, { recipes, calendar, getRecipeById, ingredientsData })
         ),
         ReactDOM.createPortal(
             React.createElement(ModalManager, {
