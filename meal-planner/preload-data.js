@@ -1,16 +1,15 @@
 // Script to preload common ingredients and recipes into the meal planner
 // Embedded data to avoid CORS issues with JSON file fetching
-
 // Embedded sample data - directly included to avoid fetch/CORS issues
 const SAMPLE_RECIPES = [
     {
         "name": "Grilled Chicken Salad",
         "ingredients": [
-            {"name": "chicken breast", "quantity": 150, "unit": "g"},
-            {"name": "spinach", "quantity": 100, "unit": "g"},
-            {"name": "broccoli", "quantity": 50, "unit": "g"},
-            {"name": "carrots", "quantity": 50, "unit": "g"},
-            {"name": "olive oil", "quantity": 1, "unit": "tbsp"}
+            { "name": "chicken breast", "quantity": 150, "unit": "g" },
+            { "name": "spinach", "quantity": 100, "unit": "g" },
+            { "name": "broccoli", "quantity": 50, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "olive oil", "quantity": 1, "unit": "tbsp" }
         ],
         "method": [
             "Season chicken breast with salt and pepper",
@@ -20,7 +19,7 @@ const SAMPLE_RECIPES = [
             "Slice chicken and serve over salad"
         ],
         "nutritional": {
-            "calories": 350,
+            "calories": 302,
             "carbs": 15,
             "fat": 18,
             "protein": 35,
@@ -30,10 +29,10 @@ const SAMPLE_RECIPES = [
     {
         "name": "Salmon with Quinoa",
         "ingredients": [
-            {"name": "salmon", "quantity": 150, "unit": "g"},
-            {"name": "quinoa", "quantity": 100, "unit": "g"},
-            {"name": "broccoli", "quantity": 100, "unit": "g"},
-            {"name": "olive oil", "quantity": 1, "unit": "tbsp"}
+            { "name": "salmon", "quantity": 150, "unit": "g" },
+            { "name": "quinoa", "quantity": 100, "unit": "g" },
+            { "name": "broccoli", "quantity": 100, "unit": "g" },
+            { "name": "olive oil", "quantity": 1, "unit": "tbsp" }
         ],
         "method": [
             "Cook quinoa according to package instructions",
@@ -43,7 +42,7 @@ const SAMPLE_RECIPES = [
             "Serve salmon over quinoa with broccoli on the side"
         ],
         "nutritional": {
-            "calories": 450,
+            "calories": 566,
             "carbs": 35,
             "fat": 22,
             "protein": 32,
@@ -53,12 +52,12 @@ const SAMPLE_RECIPES = [
     {
         "name": "Vegetable Stir Fry with Tofu",
         "ingredients": [
-            {"name": "tofu", "quantity": 200, "unit": "g"},
-            {"name": "broccoli", "quantity": 100, "unit": "g"},
-            {"name": "bell peppers", "quantity": 100, "unit": "g"},
-            {"name": "carrots", "quantity": 50, "unit": "g"},
-            {"name": "brown rice", "quantity": 100, "unit": "g"},
-            {"name": "olive oil", "quantity": 1, "unit": "tbsp"}
+            { "name": "tofu", "quantity": 200, "unit": "g" },
+            { "name": "broccoli", "quantity": 100, "unit": "g" },
+            { "name": "bell peppers", "quantity": 100, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" },
+            { "name": "olive oil", "quantity": 1, "unit": "tbsp" }
         ],
         "method": [
             "Cook brown rice according to package instructions",
@@ -69,7 +68,7 @@ const SAMPLE_RECIPES = [
             "Serve over brown rice"
         ],
         "nutritional": {
-            "calories": 380,
+            "calories": 162,
             "carbs": 45,
             "fat": 16,
             "protein": 18,
@@ -79,12 +78,12 @@ const SAMPLE_RECIPES = [
     {
         "name": "Beef and Vegetable Stew",
         "ingredients": [
-            {"name": "beef", "quantity": 150, "unit": "g"},
-            {"name": "carrots", "quantity": 100, "unit": "g"},
-            {"name": "potatoes", "quantity": 150, "unit": "g"},
-            {"name": "onion", "quantity": 50, "unit": "g"},
-            {"name": "tomatoes", "quantity": 100, "unit": "g"},
-            {"name": "brown rice", "quantity": 100, "unit": "g"}
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "carrots", "quantity": 100, "unit": "g" },
+            { "name": "potatoes", "quantity": 150, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "tomatoes", "quantity": 100, "unit": "g" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" }
         ],
         "method": [
             "Cook brown rice according to package instructions",
@@ -95,7 +94,7 @@ const SAMPLE_RECIPES = [
             "Serve stew over brown rice"
         ],
         "nutritional": {
-            "calories": 420,
+            "calories": 535,
             "carbs": 50,
             "fat": 12,
             "protein": 28,
@@ -105,11 +104,11 @@ const SAMPLE_RECIPES = [
     {
         "name": "Greek Yogurt Parfait",
         "ingredients": [
-            {"name": "yogurt", "quantity": 200, "unit": "g"},
-            {"name": "strawberries", "quantity": 100, "unit": "g"},
-            {"name": "blueberries", "quantity": 50, "unit": "g"},
-            {"name": "almonds", "quantity": 30, "unit": "g"},
-            {"name": "oats", "quantity": 30, "unit": "g"}
+            { "name": "yogurt", "quantity": 200, "unit": "g" },
+            { "name": "strawberries", "quantity": 100, "unit": "g" },
+            { "name": "blueberries", "quantity": 50, "unit": "g" },
+            { "name": "almonds", "quantity": 30, "unit": "g" },
+            { "name": "oats", "quantity": 30, "unit": "g" }
         ],
         "method": [
             "Layer yogurt in a glass or bowl",
@@ -119,7 +118,7 @@ const SAMPLE_RECIPES = [
             "Serve immediately or chill for 30 minutes"
         ],
         "nutritional": {
-            "calories": 320,
+            "calories": 238,
             "carbs": 35,
             "fat": 14,
             "protein": 16,
@@ -129,12 +128,12 @@ const SAMPLE_RECIPES = [
     {
         "name": "Egg and Vegetable Scramble",
         "ingredients": [
-            {"name": "eggs", "quantity": 2, "unit": "whole"},
-            {"name": "spinach", "quantity": 50, "unit": "g"},
-            {"name": "tomatoes", "quantity": 50, "unit": "g"},
-            {"name": "bell peppers", "quantity": 50, "unit": "g"},
-            {"name": "whole wheat bread", "quantity": 2, "unit": "slices"},
-            {"name": "olive oil", "quantity": 1, "unit": "tsp"}
+            { "name": "eggs", "quantity": 2, "unit": "whole" },
+            { "name": "spinach", "quantity": 50, "unit": "g" },
+            { "name": "tomatoes", "quantity": 50, "unit": "g" },
+            { "name": "bell peppers", "quantity": 50, "unit": "g" },
+            { "name": "whole wheat bread", "quantity": 2, "unit": "slices" },
+            { "name": "olive oil", "quantity": 1, "unit": "tsp" }
         ],
         "method": [
             "Heat olive oil in a pan",
@@ -144,7 +143,7 @@ const SAMPLE_RECIPES = [
             "Toast bread and serve alongside"
         ],
         "nutritional": {
-            "calories": 380,
+            "calories": 263,
             "carbs": 32,
             "fat": 18,
             "protein": 22,
@@ -154,11 +153,11 @@ const SAMPLE_RECIPES = [
     {
         "name": "Turkey and Avocado Wrap",
         "ingredients": [
-            {"name": "turkey", "quantity": 100, "unit": "g"},
-            {"name": "avocado", "quantity": 50, "unit": "g"},
-            {"name": "lettuce", "quantity": 50, "unit": "g"},
-            {"name": "tomatoes", "quantity": 50, "unit": "g"},
-            {"name": "whole wheat bread", "quantity": 2, "unit": "slices"}
+            { "name": "turkey", "quantity": 100, "unit": "g" },
+            { "name": "avocado", "quantity": 50, "unit": "g" },
+            { "name": "lettuce", "quantity": 50, "unit": "g" },
+            { "name": "tomatoes", "quantity": 50, "unit": "g" },
+            { "name": "whole wheat bread", "quantity": 2, "unit": "slices" }
         ],
         "method": [
             "Slice turkey breast thinly",
@@ -168,7 +167,7 @@ const SAMPLE_RECIPES = [
             "Cut in half and serve"
         ],
         "nutritional": {
-            "calories": 340,
+            "calories": 569,
             "carbs": 28,
             "fat": 16,
             "protein": 24,
@@ -178,12 +177,12 @@ const SAMPLE_RECIPES = [
     {
         "name": "Lentil Soup",
         "ingredients": [
-            {"name": "lentils", "quantity": 150, "unit": "g"},
-            {"name": "carrots", "quantity": 100, "unit": "g"},
-            {"name": "onion", "quantity": 50, "unit": "g"},
-            {"name": "garlic", "quantity": 2, "unit": "cloves"},
-            {"name": "tomatoes", "quantity": 100, "unit": "g"},
-            {"name": "olive oil", "quantity": 1, "unit": "tbsp"}
+            { "name": "lentils", "quantity": 150, "unit": "g" },
+            { "name": "carrots", "quantity": 100, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "garlic", "quantity": 2, "unit": "cloves" },
+            { "name": "tomatoes", "quantity": 100, "unit": "g" },
+            { "name": "olive oil", "quantity": 1, "unit": "tbsp" }
         ],
         "method": [
             "Heat olive oil in a pot",
@@ -194,7 +193,7 @@ const SAMPLE_RECIPES = [
             "Season with salt and pepper"
         ],
         "nutritional": {
-            "calories": 320,
+            "calories": 139,
             "carbs": 45,
             "fat": 8,
             "protein": 18,
@@ -204,10 +203,10 @@ const SAMPLE_RECIPES = [
     {
         "name": "Baked Sweet Potato with Beans",
         "ingredients": [
-            {"name": "sweet potato", "quantity": 200, "unit": "g"},
-            {"name": "chickpeas", "quantity": 100, "unit": "g"},
-            {"name": "spinach", "quantity": 50, "unit": "g"},
-            {"name": "olive oil", "quantity": 1, "unit": "tsp"}
+            { "name": "sweet potato", "quantity": 200, "unit": "g" },
+            { "name": "chickpeas", "quantity": 100, "unit": "g" },
+            { "name": "spinach", "quantity": 50, "unit": "g" },
+            { "name": "olive oil", "quantity": 1, "unit": "tsp" }
         ],
         "method": [
             "Preheat oven to 400°F (200°C)",
@@ -217,7 +216,7 @@ const SAMPLE_RECIPES = [
             "Season with salt and pepper"
         ],
         "nutritional": {
-            "calories": 380,
+            "calories": 344,
             "carbs": 55,
             "fat": 10,
             "protein": 14,
@@ -227,10 +226,10 @@ const SAMPLE_RECIPES = [
     {
         "name": "Fruit and Nut Bowl",
         "ingredients": [
-            {"name": "banana", "quantity": 1, "unit": "whole"},
-            {"name": "apples", "quantity": 1, "unit": "whole"},
-            {"name": "almonds", "quantity": 30, "unit": "g"},
-            {"name": "yogurt", "quantity": 150, "unit": "g"}
+            { "name": "banana", "quantity": 1, "unit": "whole" },
+            { "name": "apples", "quantity": 1, "unit": "whole" },
+            { "name": "almonds", "quantity": 30, "unit": "g" },
+            { "name": "yogurt", "quantity": 150, "unit": "g" }
         ],
         "method": [
             "Slice banana and apple",
@@ -239,7 +238,7 @@ const SAMPLE_RECIPES = [
             "Serve immediately"
         ],
         "nutritional": {
-            "calories": 290,
+            "calories": 246,
             "carbs": 40,
             "fat": 12,
             "protein": 10,
@@ -249,11 +248,11 @@ const SAMPLE_RECIPES = [
     {
         "name": "Oatmeal with Berries",
         "ingredients": [
-            {"name": "oats", "quantity": 50, "unit": "g"},
-            {"name": "milk", "quantity": 200, "unit": "ml"},
-            {"name": "strawberries", "quantity": 100, "unit": "g"},
-            {"name": "banana", "quantity": 50, "unit": "g"},
-            {"name": "almonds", "quantity": 20, "unit": "g"}
+            { "name": "oats", "quantity": 50, "unit": "g" },
+            { "name": "milk", "quantity": 200, "unit": "ml" },
+            { "name": "strawberries", "quantity": 100, "unit": "g" },
+            { "name": "banana", "quantity": 50, "unit": "g" },
+            { "name": "almonds", "quantity": 20, "unit": "g" }
         ],
         "method": [
             "Cook oats in milk according to package instructions",
@@ -262,7 +261,7 @@ const SAMPLE_RECIPES = [
             "Serve warm"
         ],
         "nutritional": {
-            "calories": 320,
+            "calories": 246,
             "carbs": 50,
             "fat": 10,
             "protein": 12,
@@ -272,12 +271,12 @@ const SAMPLE_RECIPES = [
     {
         "name": "Tuna Salad Sandwich",
         "ingredients": [
-            {"name": "tuna", "quantity": 100, "unit": "g"},
-            {"name": "lettuce", "quantity": 50, "unit": "g"},
-            {"name": "tomatoes", "quantity": 50, "unit": "g"},
-            {"name": "cucumber", "quantity": 50, "unit": "g"},
-            {"name": "whole wheat bread", "quantity": 2, "unit": "slices"},
-            {"name": "olive oil", "quantity": 1, "unit": "tsp"}
+            { "name": "tuna", "quantity": 100, "unit": "g" },
+            { "name": "lettuce", "quantity": 50, "unit": "g" },
+            { "name": "tomatoes", "quantity": 50, "unit": "g" },
+            { "name": "cucumber", "quantity": 50, "unit": "g" },
+            { "name": "whole wheat bread", "quantity": 2, "unit": "slices" },
+            { "name": "olive oil", "quantity": 1, "unit": "tsp" }
         ],
         "method": [
             "Mix tuna with a little olive oil",
@@ -287,15 +286,362 @@ const SAMPLE_RECIPES = [
             "Serve immediately"
         ],
         "nutritional": {
-            "calories": 340,
+            "calories": 253,
             "carbs": 32,
             "fat": 12,
             "protein": 26,
             "fiber": 6
         }
+    },
+    {
+        "name": "Spaghetti Carbonara",
+        "ingredients": [
+            { "name": "spaghetti", "quantity": 100, "unit": "g" },
+            { "name": "bacon", "quantity": 50, "unit": "g" },
+            { "name": "eggs", "quantity": 1, "unit": "whole" },
+            { "name": "parmesan", "quantity": 30, "unit": "g" },
+            { "name": "garlic", "quantity": 1, "unit": "clove" }
+        ],
+        "method": [
+            "Boil spaghetti until al dente",
+            "Fry bacon until crisp",
+            "Whisk egg with parmesan",
+            "Drain pasta, mix with egg mixture off heat",
+            "Add bacon and pepper"
+        ],
+        "nutritional": {
+            "calories": 440,
+            "carbs": 45,
+            "fat": 20,
+            "protein": 18,
+            "fiber": 2
+        }
+    },
+    {
+        "name": "Spaghetti Bolognese",
+        "ingredients": [
+            { "name": "spaghetti", "quantity": 100, "unit": "g" },
+            { "name": "beef", "quantity": 100, "unit": "g" },
+            { "name": "tomatoes", "quantity": 100, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "garlic", "quantity": 1, "unit": "clove" },
+            { "name": "carrots", "quantity": 50, "unit": "g" }
+        ],
+        "method": [
+            "Brown beef with onion and garlic",
+            "Add carrots and tomatoes, simmer 20 min",
+            "Boil spaghetti",
+            "Serve sauce over pasta"
+        ],
+        "nutritional": {
+            "calories": 667,
+            "carbs": 55,
+            "fat": 11,
+            "protein": 23,
+            "fiber": 6
+        }
+    },
+    {
+        "name": "Chicken Curry",
+        "ingredients": [
+            { "name": "chicken breast", "quantity": 150, "unit": "g" },
+            { "name": "coconut milk", "quantity": 100, "unit": "ml" },
+            { "name": "curry powder", "quantity": 1, "unit": "tbsp" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "garlic", "quantity": 1, "unit": "clove" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" }
+        ],
+        "method": [
+            "Sauté onion and garlic",
+            "Add chicken and curry powder",
+            "Pour in coconut milk, simmer 15 min",
+            "Serve over cooked rice"
+        ],
+        "nutritional": {
+            "calories": 243,
+            "carbs": 40,
+            "fat": 20,
+            "protein": 30,
+            "fiber": 4
+        }
+    },
+    {
+        "name": "Vegetable Curry",
+        "ingredients": [
+            { "name": "broccoli", "quantity": 100, "unit": "g" },
+            { "name": "carrots", "quantity": 100, "unit": "g" },
+            { "name": "coconut milk", "quantity": 100, "unit": "ml" },
+            { "name": "curry powder", "quantity": 1, "unit": "tbsp" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" }
+        ],
+        "method": [
+            "Sauté onion",
+            "Add vegetables and curry powder",
+            "Pour in coconut milk, simmer 15 min",
+            "Serve over cooked rice"
+        ],
+        "nutritional": {
+            "calories": 188,
+            "carbs": 50,
+            "fat": 12,
+            "protein": 10,
+            "fiber": 8
+        }
+    },
+    {
+        "name": "Chicken Pot Pie",
+        "ingredients": [
+            { "name": "chicken breast", "quantity": 100, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "peas", "quantity": 50, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "puff pastry", "quantity": 50, "unit": "g" },
+            { "name": "chicken broth", "quantity": 100, "unit": "ml" }
+        ],
+        "method": [
+            "Cook chicken and vegetables",
+            "Mix with broth",
+            "Top with pastry",
+            "Bake at 400°F for 20 min"
+        ],
+        "nutritional": {
+            "calories": 400,
+            "carbs": 35,
+            "fat": 18,
+            "protein": 25,
+            "fiber": 4
+        }
+    },
+    {
+        "name": "Shepherd's Pie",
+        "ingredients": [
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "potatoes", "quantity": 200, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "peas", "quantity": 50, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" }
+        ],
+        "method": [
+            "Brown beef with vegetables",
+            "Mash potatoes",
+            "Top meat with mash",
+            "Bake at 375°F for 20 min"
+        ],
+        "nutritional": {
+            "calories": 420,
+            "carbs": 40,
+            "fat": 15,
+            "protein": 25,
+            "fiber": 5
+        }
+    },
+    {
+        "name": "Cottage Pie",
+        "ingredients": [
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "potatoes", "quantity": 200, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "tomatoes", "quantity": 50, "unit": "g" }
+        ],
+        "method": [
+            "Brown beef with onion and carrots",
+            "Add tomatoes, simmer",
+            "Top with mashed potatoes",
+            "Bake at 375°F for 20 min"
+        ],
+        "nutritional": {
+            "calories": 358,
+            "carbs": 35,
+            "fat": 14,
+            "protein": 24,
+            "fiber": 5
+        }
+    },
+    {
+        "name": "Beef Bourguignon",
+        "ingredients": [
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "mushrooms", "quantity": 50, "unit": "g" },
+            { "name": "red wine", "quantity": 100, "unit": "ml" },
+            { "name": "beef broth", "quantity": 100, "unit": "ml" }
+        ],
+        "method": [
+            "Brown beef",
+            "Add vegetables, wine, broth",
+            "Simmer 60 min"
+        ],
+        "nutritional": {
+            "calories": 711,
+            "carbs": 15,
+            "fat": 20,
+            "protein": 35,
+            "fiber": 3
+        }
+    },
+    {
+        "name": "Grilled Steak",
+        "ingredients": [
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "olive oil", "quantity": 1, "unit": "tsp" }
+        ],
+        "method": [
+            "Season steak",
+            "Grill 4-5 min per side"
+        ],
+        "nutritional": {
+            "calories": 614,
+            "carbs": 0,
+            "fat": 25,
+            "protein": 40,
+            "fiber": 0
+        }
+    },
+    {
+        "name": "Chicken Stir Fry",
+        "ingredients": [
+            { "name": "chicken breast", "quantity": 150, "unit": "g" },
+            { "name": "broccoli", "quantity": 100, "unit": "g" },
+            { "name": "bell peppers", "quantity": 50, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "soy sauce", "quantity": 1, "unit": "tbsp" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" }
+        ],
+        "method": [
+            "Stir-fry chicken and veggies",
+            "Add soy sauce",
+            "Serve over rice"
+        ],
+        "nutritional": {
+            "calories": 255,
+            "carbs": 45,
+            "fat": 10,
+            "protein": 30,
+            "fiber": 5
+        }
+    },
+    {
+        "name": "Sweet & Sour Chicken",
+        "ingredients": [
+            { "name": "chicken breast", "quantity": 150, "unit": "g" },
+            { "name": "bell peppers", "quantity": 50, "unit": "g" },
+            { "name": "pineapple", "quantity": 50, "unit": "g" },
+            { "name": "soy sauce", "quantity": 1, "unit": "tbsp" },
+            { "name": "vinegar", "quantity": 1, "unit": "tbsp" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" }
+        ],
+        "method": [
+            "Stir-fry chicken and veggies",
+            "Add pineapple, soy, vinegar",
+            "Serve over rice"
+        ],
+        "nutritional": {
+            "calories": 413,
+            "carbs": 50,
+            "fat": 10,
+            "protein": 28,
+            "fiber": 4
+        }
+    },
+    {
+        "name": "Zuurvlees",
+        "ingredients": [
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "vinegar", "quantity": 50, "unit": "ml" },
+            { "name": "brown sugar", "quantity": 10, "unit": "g" },
+            { "name": "bay leaf", "quantity": 1, "unit": "whole" }
+        ],
+        "method": [
+            "Marinate beef in vinegar overnight",
+            "Brown beef and onion",
+            "Add sugar and bay leaf, simmer 60 min"
+        ],
+        "nutritional": {
+            "calories": 538,
+            "carbs": 20,
+            "fat": 18,
+            "protein": 30,
+            "fiber": 2
+        }
+    },
+    {
+        "name": "Stamppot",
+        "ingredients": [
+            { "name": "potatoes", "quantity": 200, "unit": "g" },
+            { "name": "kale", "quantity": 100, "unit": "g" },
+            { "name": "bacon", "quantity": 50, "unit": "g" },
+            { "name": "milk", "quantity": 50, "unit": "ml" }
+        ],
+        "method": [
+            "Boil potatoes and kale",
+            "Mash with milk",
+            "Fry bacon, mix in"
+        ],
+        "nutritional": {
+            "calories": 312,
+            "carbs": 45,
+            "fat": 12,
+            "protein": 15,
+            "fiber": 6
+        }
+    },
+    {
+        "name": "Wiener Schnitzel",
+        "ingredients": [
+            { "name": "veal", "quantity": 150, "unit": "g" },
+            { "name": "flour", "quantity": 20, "unit": "g" },
+            { "name": "eggs", "quantity": 1, "unit": "whole" },
+            { "name": "breadcrumbs", "quantity": 50, "unit": "g" },
+            { "name": "olive oil", "quantity": 2, "unit": "tbsp" },
+            { "name": "lemon", "quantity": 0.25, "unit": "whole" }
+        ],
+        "method": [
+            "Pound veal thin",
+            "Season with salt and pepper",
+            "Dredge in flour, then egg, then breadcrumbs",
+            "Fry in hot oil until golden on both sides",
+            "Serve with lemon wedge"
+        ],
+        "nutritional": {
+            "calories": 550,
+            "carbs": 35,
+            "fat": 30,
+            "protein": 35,
+            "fiber": 2
+        }
+    },
+    {
+        "name": "Sauerbraten",
+        "ingredients": [
+            { "name": "beef", "quantity": 150, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "red wine", "quantity": 100, "unit": "ml" },
+            { "name": "vinegar", "quantity": 50, "unit": "ml" },
+            { "name": "brown sugar", "quantity": 10, "unit": "g" },
+            { "name": "cloves", "quantity": 2, "unit": "whole" },
+            { "name": "juniper berries", "quantity": 3, "unit": "whole" },
+            { "name": "bay leaf", "quantity": 1, "unit": "whole" }
+        ],
+        "method": [
+            "Marinate beef with onion, carrots, wine, vinegar, sugar, and spices for 2-3 days in fridge",
+            "Remove beef, brown in pot",
+            "Add marinade and veggies, simmer 1-2 hours until tender",
+            "Thicken sauce if desired"
+        ],
+        "nutritional": {
+            "calories": 500,
+            "carbs": 25,
+            "fat": 20,
+            "protein": 40,
+            "fiber": 3
+        }
     }
 ];
-
 const SAMPLE_INGREDIENTS = {
     "chicken breast": {
         "vitamins": {
@@ -658,48 +1004,180 @@ const SAMPLE_INGREDIENTS = {
             "magnesium": true,
             "zinc": true
         }
+    },
+    "spaghetti": {
+        "vitamins": {},
+        "minerals": {
+            "iron": true
+        }
+    },
+    "bacon": {
+        "vitamins": {
+            "vitaminB12": true
+        },
+        "minerals": {
+            "zinc": true
+        }
+    },
+    "parmesan": {
+        "vitamins": {
+            "vitaminA": true,
+            "vitaminB12": true
+        },
+        "minerals": {
+            "calcium": true
+        }
+    },
+    "coconut milk": {
+        "vitamins": {},
+        "minerals": {
+            "iron": true
+        }
+    },
+    "curry powder": {
+        "vitamins": {},
+        "minerals": {
+            "iron": true
+        }
+    },
+    "puff pastry": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "chicken broth": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "mushrooms": {
+        "vitamins": {
+            "vitaminD": true
+        },
+        "minerals": {
+            "potassium": true
+        }
+    },
+    "red wine": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "beef broth": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "soy sauce": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "pineapple": {
+        "vitamins": {
+            "vitaminC": true
+        },
+        "minerals": {}
+    },
+    "vinegar": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "brown sugar": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "bay leaf": {
+        "vitamins": {},
+        "minerals": {}
+    },
+    "kale": {
+        "vitamins": {
+            "vitaminA": true,
+            "vitaminC": true,
+            "vitaminK1": true
+        },
+        "minerals": {
+            "calcium": true
+        }
+    },
+    "veal": {
+        "vitamins": {
+            "vitaminB12": true
+        },
+        "minerals": {
+            "iron": true,
+            "zinc": true,
+            "potassium": true
+        }
+    },
+    "flour": {
+        "vitamins": {},
+        "minerals": {
+            "iron": true
+        }
+    },
+    "breadcrumbs": {
+        "vitamins": {},
+        "minerals": {
+            "iron": true
+        }
+    },
+    "lemon": {
+        "vitamins": {
+            "vitaminC": true
+        },
+        "minerals": {
+            "potassium": true
+        }
+    },
+    "cloves": {
+        "vitamins": {
+            "vitaminK1": true
+        },
+        "minerals": {}
+    },
+    "juniper berries": {
+        "vitamins": {
+            "vitaminC": true
+        },
+        "minerals": {}
     }
 };
-
 /**
- * Load common ingredients and recipes into the meal planner
- * Call this function to populate the app with sample data
- */
+
+
+Load common ingredients and recipes into the meal planner
+
+
+Call this function to populate the app with sample data
+*/
 function preloadCommonData() {
     try {
         // Merge with existing ingredients data
         const existingIngredients = JSON.parse(localStorage.getItem('ingredientsData') || '{}');
         const mergedIngredients = { ...existingIngredients, ...SAMPLE_INGREDIENTS };
-
         // Save merged ingredients data
         localStorage.setItem('ingredientsData', JSON.stringify(mergedIngredients));
         console.log('✅ Loaded', Object.keys(SAMPLE_INGREDIENTS).length, 'common ingredients');
-
         // Get existing recipes
         const existingRecipes = JSON.parse(localStorage.getItem('recipes') || '[]');
-
         // Add new recipes with unique IDs
         const newRecipes = SAMPLE_RECIPES.map(recipe => ({
             ...recipe,
             id: Date.now() + Math.random() // Ensure unique IDs
         }));
-
         const mergedRecipes = [...existingRecipes, ...newRecipes];
-
         // Save merged recipes
         localStorage.setItem('recipes', JSON.stringify(mergedRecipes));
         console.log('✅ Loaded', SAMPLE_RECIPES.length, 'common recipes');
-
         console.log('🎉 Common data preload complete. Refresh the page to see the new data.');
-
     } catch (error) {
         console.error('Error preloading data:', error);
     }
 }
 
+
 /**
- * Clear all data and reload with only common data
- */
+
+
+Clear all data and reload with only common data
+*/
 function resetToCommonData() {
     try {
         // Clear existing data
@@ -708,48 +1186,44 @@ function resetToCommonData() {
         localStorage.removeItem('inventory');
         localStorage.removeItem('calendar');
         localStorage.removeItem('shoppingList');
-
         // Load common data
         const ingredientsData = { ...SAMPLE_INGREDIENTS };
         localStorage.setItem('ingredientsData', JSON.stringify(ingredientsData));
-
         const recipes = SAMPLE_RECIPES.map(recipe => ({
             ...recipe,
             id: Date.now() + Math.random()
         }));
         localStorage.setItem('recipes', JSON.stringify(recipes));
-
         console.log('🔄 Reset to common data complete. Refresh the page to see the changes.');
-
     } catch (error) {
         console.error('Error resetting data:', error);
     }
 }
 
+
 /**
- * Check if common data is already loaded
- */
+
+
+Check if common data is already loaded
+*/
 function isCommonDataLoaded() {
     try {
         const ingredients = JSON.parse(localStorage.getItem('ingredientsData') || '{}');
         const recipes = JSON.parse(localStorage.getItem('recipes') || '[]');
-
         // Check if we have some common ingredients
         const hasCommonIngredients = Object.keys(ingredients).some(key =>
             ['chicken breast', 'spinach', 'salmon', 'broccoli'].includes(key)
         );
-
         // Check if we have some common recipes
         const hasCommonRecipes = recipes.some(recipe =>
             ['Grilled Chicken Salad', 'Salmon with Quinoa', 'Vegetable Stir Fry with Tofu'].includes(recipe.name)
         );
-
         return hasCommonIngredients && hasCommonRecipes;
-
     } catch (error) {
         return false;
     }
 }
+
 
 // Export functions for use in browser console or other scripts
 if (typeof window !== 'undefined') {
@@ -759,7 +1233,6 @@ if (typeof window !== 'undefined') {
         isCommonDataLoaded
     };
 }
-
 // Auto-load common data if not already present (uncomment to enable)
 // if (typeof window !== 'undefined' && !isCommonDataLoaded()) {
 //     console.log('🔄 Auto-loading common data...');

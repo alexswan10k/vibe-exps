@@ -349,8 +349,16 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }, 0);
             });
 
+            // Create mapping to strip "vitamin" prefix for display
+            const getVitaminDisplayName = (vitaminName) => {
+                if (vitaminName.startsWith('vitamin')) {
+                    return vitaminName.replace('vitamin', '');
+                }
+                return vitaminName;
+            };
+
             const weeklyVitaminsData = {
-                labels: vitaminNames,
+                labels: vitaminNames.map(name => getVitaminDisplayName(name)),
                 datasets: [{
                     data: vitaminCounts,
                     backgroundColor: vitaminNames.map(v => getVitaminColor(v)),

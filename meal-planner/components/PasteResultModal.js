@@ -7,8 +7,14 @@ function PasteResultModal({
 }) {
     if (!show) return null;
 
-    return React.createElement('div', { className: 'modal-overlay' },
-        React.createElement('div', { className: 'modal paste-modal' },
+    return React.createElement('div', {
+        className: 'modal-overlay',
+        onClick: onCancel
+    },
+        React.createElement('div', {
+            className: 'modal paste-modal',
+            onClick: (e) => e.stopPropagation()
+        },
             React.createElement('h2', null, 'Paste LLM Result'),
             React.createElement('p', null, 'Paste the JSON response from your preferred LLM (ChatGPT, Claude, etc.)'),
             React.createElement('textarea', {

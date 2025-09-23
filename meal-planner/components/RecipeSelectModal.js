@@ -8,8 +8,14 @@ function RecipeSelectModal({
 }) {
     if (!show) return null;
 
-    return React.createElement('div', { className: 'modal-overlay' },
-        React.createElement('div', { className: 'modal recipe-select-modal' },
+    return React.createElement('div', {
+        className: 'modal-overlay',
+        onClick: onClose
+    },
+        React.createElement('div', {
+            className: 'modal recipe-select-modal',
+            onClick: (e) => e.stopPropagation()
+        },
             React.createElement('h2', null, `Select Recipe for ${selectingDay}`),
             React.createElement('div', { className: 'recipe-options' },
                 React.createElement('button', {
