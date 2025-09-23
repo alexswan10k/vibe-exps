@@ -6,6 +6,7 @@ const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
   const [name, setName] = useState(initialData?.name || '');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [inflationRate, setInflationRate] = useState(initialData?.inflationRate || '');
+  const [durationMonths, setDurationMonths] = useState(initialData?.durationMonths || '');
 
   // Update form when initialData changes (for editing)
   useEffect(() => {
@@ -13,11 +14,13 @@ const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
       setName(initialData.name || '');
       setAmount(initialData.amount || '');
       setInflationRate(initialData.inflationRate || '');
+      setDurationMonths(initialData.durationMonths || '');
     } else {
       // Clear form when not editing
       setName('');
       setAmount('');
       setInflationRate('');
+      setDurationMonths('');
     }
   }, [initialData]);
 
@@ -27,13 +30,15 @@ const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
       onAdd({
         name: name.trim(),
         amount: parseFloat(amount),
-        inflationRate: parseFloat(inflationRate) / 100 // Convert percentage to decimal
+        inflationRate: parseFloat(inflationRate) / 100, // Convert percentage to decimal
+        durationMonths: durationMonths ? parseInt(durationMonths) : null
       });
       // Only clear form if not editing
       if (!initialData) {
         setName('');
         setAmount('');
         setInflationRate('');
+        setDurationMonths('');
       }
     }
   };
@@ -81,6 +86,18 @@ const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
           required: true
         })
       ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'expense-duration' }, 'Duration (Months)'),
+        React.createElement('input', {
+          id: 'expense-duration',
+          type: 'number',
+          min: '1',
+          value: durationMonths,
+          onChange: (e) => setDurationMonths(e.target.value),
+          placeholder: 'Leave empty for indefinite',
+          required: false
+        })
+      ),
       React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'end' } },
         React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Expense' : 'Add Expense'),
         initialData && React.createElement('button', { type: 'button', onClick: handleCancel, className: 'btn btn-secondary' }, 'Cancel')
@@ -90,18 +107,87 @@ const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
 };
 
 // Expense List Component
-const ExpenseList = ({ expenses, onRemove, onEdit, onViewChart }) => {
+const ExpenseList = ({ expenses, onRemove, onEdit, onViewChart, onToggleEnabled }) => {
   if (expenses.length === 0) {
     return React.createElement('div', { className: 'no-data' }, 'No expenses added yet');
   }
 
+  const formatDuration = (durationMonths) => {
+    if (durationMonths === null) return 'Ongoing';
+    const years = Math.floor(durationMonths / 12);
+    const months = durationMonths % 12;
+    if (years === 0) return `${months} months`;
+    if (months === 0) return `${years} years`;
+    return `${years}y ${months}m`;
+  };
+
   return React.createElement('div', { className: 'item-list' },
     expenses.map((expense, index) =>
-      React.createElement('div', { key: index, className: 'item' },
+      React.createElement('div', {
+        key: index,
+        className: 'item',
+        style: {
+          opacity: expense.enabled ? 1 : 0.5,
+          borderLeft: expense.enabled ? '4px solid #48bb78' : '4px solid #e2e8f0',
+          backgroundColor: expense.enabled ? '#f0fff4' : '#f7fafc'
+        }
+      },
+        React.createElement('div', { className: 'item-toggle' },
+          React.createElement('label', {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: expense.enabled ? '#2f855a' : '#718096'
+            }
+          },
+            React.createElement('div', {
+              style: {
+                position: 'relative',
+                width: '44px',
+                height: '24px',
+                backgroundColor: expense.enabled ? '#48bb78' : '#e2e8f0',
+                borderRadius: '12px',
+                transition: 'background-color 0.2s',
+                border: '2px solid #cbd5e0'
+              }
+            },
+              React.createElement('div', {
+                style: {
+                  position: 'absolute',
+                  top: '2px',
+                  left: expense.enabled ? '22px' : '2px',
+                  width: '16px',
+                  height: '16px',
+                  backgroundColor: 'white',
+                  borderRadius: '50%',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }
+              }),
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: expense.enabled,
+                onChange: () => onToggleEnabled(index, 'expense'),
+                style: {
+                  position: 'absolute',
+                  opacity: 0,
+                  width: '100%',
+                  height: '100%',
+                  margin: 0,
+                  cursor: 'pointer'
+                }
+              })
+            ),
+          )
+        ),
         React.createElement('div', { className: 'item-info' },
           React.createElement('div', { className: 'item-name' }, expense.name),
           React.createElement('div', { className: 'item-details' },
-            `$${expense.amount.toFixed(2)}/month • ${(expense.inflationRate * 100).toFixed(1)}% inflation`
+            `$${expense.amount.toFixed(2)}/month • ${(expense.inflationRate * 100).toFixed(1)}% inflation • ${formatDuration(expense.durationMonths)}`
           )
         ),
         React.createElement('div', { className: 'item-actions' },
@@ -268,10 +354,13 @@ const SavingsPotForm = ({ onAdd, initialData, onCancel }) => {
 };
 
 // Savings Pot List Component
-const SavingsPotList = ({ savingsPots, onRemove, onEdit, onViewChart }) => {
+const SavingsPotList = ({ savingsPots, onRemove, onEdit, onViewChart, onToggleEnabled }) => {
   if (savingsPots.length === 0) {
     return React.createElement('div', { className: 'no-data' }, 'No savings pots added yet');
   }
+
+  // Sort pots by interest rate for spending priority display
+  const sortedPots = [...savingsPots].sort((a, b) => a.interestRate - b.interestRate);
 
   const formatPaymentDetails = (pot) => {
     const parts = [
@@ -291,30 +380,107 @@ const SavingsPotList = ({ savingsPots, onRemove, onEdit, onViewChart }) => {
     return parts.join(' • ');
   };
 
-  return React.createElement('div', { className: 'item-list' },
-    savingsPots.map((pot, index) =>
-      React.createElement('div', { key: index, className: 'item' },
-        React.createElement('div', { className: 'item-info' },
-          React.createElement('div', { className: 'item-name' }, pot.name),
-          React.createElement('div', { className: 'item-details' },
-            formatPaymentDetails(pot)
-          )
-        ),
-        React.createElement('div', { className: 'item-actions' },
-          React.createElement('button', {
-            onClick: () => onViewChart(pot),
-            className: 'btn btn-secondary btn-small'
-          }, '📈 Chart'),
-          React.createElement('button', {
-            onClick: () => onEdit(index),
-            className: 'btn btn-secondary btn-small'
-          }, 'Edit'),
-          React.createElement('button', {
-            onClick: () => onRemove(index),
-            className: 'btn btn-secondary btn-small'
-          }, 'Remove')
-        )
+  return React.createElement('div', null,
+    React.createElement('div', { style: { marginBottom: '15px', padding: '10px', backgroundColor: '#e8f4fd', borderRadius: '6px', border: '1px solid #b3d9ff' } },
+      React.createElement('div', { style: { fontWeight: 'bold', color: '#2b6cb0', marginBottom: '5px' } }, '💰 Spending Priority Order'),
+      React.createElement('div', { style: { fontSize: '0.9rem', color: '#4a5568' } },
+        'Expenses are deducted from accounts with the lowest interest rates first to preserve higher-yielding investments.'
+      ),
+      React.createElement('div', { style: { fontSize: '0.85rem', color: '#718096', marginTop: '5px' } },
+        'Current order: ', sortedPots.map((pot, index) => `${index + 1}. ${pot.name}`).join(' → ')
       )
+    ),
+    React.createElement('div', { className: 'item-list' },
+      savingsPots.map((pot, index) => {
+        const priorityOrder = sortedPots.findIndex(sortedPot => sortedPot.name === pot.name) + 1;
+        return React.createElement('div', {
+          key: index,
+          className: 'item',
+          style: {
+            opacity: pot.enabled ? 1 : 0.5,
+            borderLeft: pot.enabled ? '4px solid #48bb78' : '4px solid #e2e8f0',
+            backgroundColor: pot.enabled ? '#f0fff4' : '#f7fafc'
+          }
+        },
+          React.createElement('div', { className: 'item-toggle' },
+            React.createElement('label', {
+              style: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: pot.enabled ? '#2f855a' : '#718096'
+              }
+            },
+              React.createElement('div', {
+                style: {
+                  position: 'relative',
+                  width: '44px',
+                  height: '24px',
+                  backgroundColor: pot.enabled ? '#48bb78' : '#e2e8f0',
+                  borderRadius: '12px',
+                  transition: 'background-color 0.2s',
+                  border: '2px solid #cbd5e0'
+                }
+              },
+                React.createElement('div', {
+                  style: {
+                    position: 'absolute',
+                    top: '2px',
+                    left: pot.enabled ? '22px' : '2px',
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                    transition: 'left 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                  }
+                }),
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: pot.enabled,
+                  onChange: () => onToggleEnabled(index, 'savings'),
+                  style: {
+                    position: 'absolute',
+                    opacity: 0,
+                    width: '100%',
+                    height: '100%',
+                    margin: 0,
+                    cursor: 'pointer'
+                  }
+                })
+              ),
+            )
+          ),
+          React.createElement('div', { className: 'item-info' },
+            React.createElement('div', { className: 'item-name' },
+              React.createElement('span', { style: { marginRight: '8px', backgroundColor: '#e2e8f0', color: '#4a5568', padding: '2px 6px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' } },
+                `#${priorityOrder}`
+              ),
+              pot.name
+            ),
+            React.createElement('div', { className: 'item-details' },
+              formatPaymentDetails(pot)
+            )
+          ),
+          React.createElement('div', { className: 'item-actions' },
+            React.createElement('button', {
+              onClick: () => onViewChart(pot),
+              className: 'btn btn-secondary btn-small'
+            }, '📈 Chart'),
+            React.createElement('button', {
+              onClick: () => onEdit(index),
+              className: 'btn btn-secondary btn-small'
+            }, 'Edit'),
+            React.createElement('button', {
+              onClick: () => onRemove(index),
+              className: 'btn btn-secondary btn-small'
+            }, 'Remove')
+          )
+        );
+      })
     )
   );
 };
@@ -1115,7 +1281,7 @@ const App = () => {
 
   const handleAddExpense = (expenseData) => {
     try {
-      const expense = new Expense(expenseData.name, expenseData.amount, expenseData.inflationRate);
+      const expense = new Expense(expenseData.name, expenseData.amount, expenseData.inflationRate, expenseData.durationMonths);
       const newSurvivalData = survivalData.addExpense(expense);
       setSurvivalData(newSurvivalData);
       setEditingExpense(null);
@@ -1130,13 +1296,14 @@ const App = () => {
       index,
       name: expense.name,
       amount: expense.amount.toString(),
-      inflationRate: (expense.inflationRate * 100).toString()
+      inflationRate: (expense.inflationRate * 100).toString(),
+      durationMonths: expense.durationMonths ? expense.durationMonths.toString() : ''
     });
   };
 
   const handleUpdateExpense = (expenseData) => {
     try {
-      const expense = new Expense(expenseData.name, expenseData.amount, expenseData.inflationRate);
+      const expense = new Expense(expenseData.name, expenseData.amount, expenseData.inflationRate, expenseData.durationMonths);
       const newSurvivalData = survivalData.removeExpense(editingExpense.index).addExpense(expense);
       setSurvivalData(newSurvivalData);
       setEditingExpense(null);
@@ -1204,6 +1371,38 @@ const App = () => {
 
   const handleViewSavingsChart = (savingsPot) => {
     setModalState({ isOpen: true, item: savingsPot, itemType: 'savings' });
+  };
+
+  const handleToggleEnabled = (index, type) => {
+    try {
+      if (type === 'expense') {
+        const expense = survivalData.expenses[index];
+        const updatedExpense = new Expense(
+          expense.name,
+          expense.amount,
+          expense.inflationRate,
+          expense.durationMonths,
+          !expense.enabled
+        );
+        const newSurvivalData = survivalData.updateExpense(index, updatedExpense);
+        setSurvivalData(newSurvivalData);
+      } else if (type === 'savings') {
+        const savingsPot = survivalData.savingsPots[index];
+        const updatedSavingsPot = new SavingsPot(
+          savingsPot.name,
+          savingsPot.amount,
+          savingsPot.interestRate,
+          savingsPot.riskRate,
+          savingsPot.monthlyPayment,
+          savingsPot.yearlyPayment,
+          !savingsPot.enabled
+        );
+        const newSurvivalData = survivalData.updateSavingsPot(index, updatedSavingsPot);
+        setSurvivalData(newSurvivalData);
+      }
+    } catch (error) {
+      alert('Error toggling item: ' + error.message);
+    }
   };
 
   const closeModal = () => {
@@ -1313,7 +1512,8 @@ const App = () => {
           expenses: survivalData.expenses,
           onRemove: handleRemoveExpense,
           onEdit: handleEditExpense,
-          onViewChart: handleViewExpenseChart
+          onViewChart: handleViewExpenseChart,
+          onToggleEnabled: handleToggleEnabled
         })
       ),
       React.createElement('div', { className: 'section' },
@@ -1325,7 +1525,8 @@ const App = () => {
           savingsPots: survivalData.savingsPots,
           onRemove: handleRemoveSavingsPot,
           onEdit: handleEditSavingsPot,
-          onViewChart: handleViewSavingsChart
+          onViewChart: handleViewSavingsChart,
+          onToggleEnabled: handleToggleEnabled
         })
       )
     ),

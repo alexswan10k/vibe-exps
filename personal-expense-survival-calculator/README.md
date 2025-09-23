@@ -4,8 +4,10 @@ A comprehensive financial planning tool that calculates how long your savings wi
 
 ## Features
 
-- **📉 Expense Management**: Add, edit, and remove monthly expenses with customizable inflation rates
+- **📉 Expense Management**: Add, edit, and remove monthly expenses with customizable inflation rates and optional duration limits
 - **💰 Savings Pots**: Add, edit, and remove savings accounts with different interest rates and risk factors
+- **🎯 Priority-Based Spending**: Automatically spends from accounts with the lowest interest rates first to preserve higher-yielding investments
+- **✅ Enable/Disable Toggle**: Quickly include or exclude expenses and savings accounts from calculations with modern toggle switches
 - **📊 Risk Analysis**: Calculates minimum and maximum survival times based on investment risk
 - **📈 Visual Charts**: Month-by-month savings progression with Chart.js (updates automatically)
 - **📋 Detailed Analytics**: Comprehensive month-by-month breakdown of individual expenses and savings
@@ -35,9 +37,9 @@ personal-expense-survival-calculator/
 ## Domain Model
 
 ### Expense Class
-- **Properties**: name, amount, inflationRate
-- **Methods**: getInflatedAmount(month), toJSON(), fromJSON()
-- **Validation**: Non-empty name, non-negative amount and inflation rate
+- **Properties**: name, amount, inflationRate, durationMonths
+- **Methods**: getInflatedAmount(month), isActiveInMonth(month), toJSON(), fromJSON()
+- **Validation**: Non-empty name, non-negative amount and inflation rate, durationMonths must be null or positive number
 
 ### SavingsPot Class
 - **Properties**: name, amount, interestRate, riskRate

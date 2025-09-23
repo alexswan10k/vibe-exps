@@ -3,6 +3,8 @@
  * @property {string} name - Name of the expense
  * @property {number} amount - Monthly amount in currency
  * @property {number} inflationRate - Annual inflation rate as decimal (e.g., 0.03 for 3%)
+ * @property {number|null} durationMonths - Number of months this expense lasts (null for indefinite)
+ * @property {boolean} enabled - Whether this expense is included in calculations (default: true)
  */
 
 /**
@@ -13,6 +15,7 @@
  * @property {number} riskRate - Risk rate as decimal (e.g., 0.02 for 2% risk)
  * @property {number} monthlyPayment - Monthly payment amount (e.g., salary contribution)
  * @property {number} yearlyPayment - Yearly payment amount (e.g., bonus, ISA contribution)
+ * @property {boolean} enabled - Whether this savings pot is included in calculations (default: true)
  */
 
 /**
@@ -42,8 +45,10 @@ class Expense {
    * @param {string} name
    * @param {number} amount
    * @param {number} inflationRate
+   * @param {number|null} durationMonths - Number of months this expense lasts (null for indefinite)
+   * @param {boolean} enabled - Whether this expense is included in calculations (default: true)
    */
-  constructor(name, amount, inflationRate) {
+  constructor(name, amount, inflationRate, durationMonths = null, enabled = true) {
     if (!name || typeof name !== 'string') {
       throw new Error('Expense name must be a non-empty string');
     }
@@ -53,18 +58,38 @@ class Expense {
     if (typeof inflationRate !== 'number' || inflationRate < 0) {
       throw new Error('Inflation rate must be a non-negative number');
     }
+    if (durationMonths !== null && (typeof durationMonths !== 'number' || durationMonths < 1)) {
+      throw new Error('Duration months must be null or a positive number');
+    }
+    if (typeof enabled !== 'boolean') {
+      throw new Error('Enabled must be a boolean');
+    }
 
     this.name = name;
     this.amount = amount;
     this.inflationRate = inflationRate;
+    this.durationMonths = durationMonths;
+    this.enabled = enabled;
+  }
+
+  /**
+   * Check if this expense is active in a given month
+   * @param {number} month - Month number (1-based)
+   * @returns {boolean} True if expense is active this month
+   */
+  isActiveInMonth(month) {
+    return this.durationMonths === null || month <= this.durationMonths;
   }
 
   /**
    * Calculate the inflated amount for a given month
    * @param {number} month - Month number (1-based)
-   * @returns {number} Inflated amount
+   * @returns {number} Inflated amount (0 if expense has ended)
    */
   getInflatedAmount(month) {
+    if (!this.isActiveInMonth(month)) {
+      return 0;
+    }
     return this.amount * Math.pow(1 + this.inflationRate, month / 12);
   }
 
@@ -76,7 +101,9 @@ class Expense {
     return {
       name: this.name,
       amount: this.amount,
-      inflationRate: this.inflationRate
+      inflationRate: this.inflationRate,
+      durationMonths: this.durationMonths,
+      enabled: this.enabled
     };
   }
 
@@ -86,7 +113,7 @@ class Expense {
    * @returns {Expense}
    */
   static fromJSON(data) {
-    return new Expense(data.name, data.amount, data.inflationRate);
+    return new Expense(data.name, data.amount, data.inflationRate, data.durationMonths || null, data.enabled !== false);
   }
 }
 
@@ -101,8 +128,9 @@ class SavingsPot {
    * @param {number} riskRate
    * @param {number} monthlyPayment - Monthly payment amount (default: 0)
    * @param {number} yearlyPayment - Yearly payment amount (default: 0)
+   * @param {boolean} enabled - Whether this savings pot is included in calculations (default: true)
    */
-  constructor(name, amount, interestRate, riskRate, monthlyPayment = 0, yearlyPayment = 0) {
+  constructor(name, amount, interestRate, riskRate, monthlyPayment = 0, yearlyPayment = 0, enabled = true) {
     if (!name || typeof name !== 'string') {
       throw new Error('Savings pot name must be a non-empty string');
     }
@@ -121,6 +149,9 @@ class SavingsPot {
     if (typeof yearlyPayment !== 'number' || yearlyPayment < 0) {
       throw new Error('Yearly payment must be a non-negative number');
     }
+    if (typeof enabled !== 'boolean') {
+      throw new Error('Enabled must be a boolean');
+    }
 
     this.name = name;
     this.amount = amount;
@@ -128,6 +159,7 @@ class SavingsPot {
     this.riskRate = riskRate;
     this.monthlyPayment = monthlyPayment;
     this.yearlyPayment = yearlyPayment;
+    this.enabled = enabled;
   }
 
   /**
@@ -170,7 +202,8 @@ class SavingsPot {
       interestRate: this.interestRate,
       riskRate: this.riskRate,
       monthlyPayment: this.monthlyPayment,
-      yearlyPayment: this.yearlyPayment
+      yearlyPayment: this.yearlyPayment,
+      enabled: this.enabled
     };
   }
 
@@ -186,7 +219,8 @@ class SavingsPot {
       data.interestRate,
       data.riskRate,
       data.monthlyPayment || 0,
-      data.yearlyPayment || 0
+      data.yearlyPayment || 0,
+      data.enabled !== false
     );
   }
 }
@@ -239,6 +273,27 @@ class SurvivalData {
   }
 
   /**
+   * Update an expense by index (returns new instance)
+   * @param {number} index
+   * @param {Expense} expense
+   * @returns {SurvivalData} New instance with expense updated
+   */
+  updateExpense(index, expense) {
+    if (index < 0 || index >= this.expenses.length) {
+      throw new Error('Invalid expense index');
+    }
+    if (!(expense instanceof Expense)) {
+      throw new Error('Must provide a valid Expense instance');
+    }
+    const newExpenses = [...this.expenses];
+    newExpenses[index] = expense;
+    const newInstance = new SurvivalData(newExpenses, this.savingsPots);
+    newInstance.lastCalculated = this.lastCalculated;
+    newInstance.saveToLocalStorage();
+    return newInstance;
+  }
+
+  /**
    * Add a savings pot (returns new instance)
    * @param {SavingsPot} savingsPot
    * @returns {SurvivalData} New instance with added savings pot
@@ -272,14 +327,37 @@ class SurvivalData {
   }
 
   /**
+   * Update a savings pot by index (returns new instance)
+   * @param {number} index
+   * @param {SavingsPot} savingsPot
+   * @returns {SurvivalData} New instance with savings pot updated
+   */
+  updateSavingsPot(index, savingsPot) {
+    if (index < 0 || index >= this.savingsPots.length) {
+      throw new Error('Invalid savings pot index');
+    }
+    if (!(savingsPot instanceof SavingsPot)) {
+      throw new Error('Must provide a valid SavingsPot instance');
+    }
+    const newSavingsPots = [...this.savingsPots];
+    newSavingsPots[index] = savingsPot;
+    const newInstance = new SurvivalData(this.expenses, newSavingsPots);
+    newInstance.lastCalculated = this.lastCalculated;
+    newInstance.saveToLocalStorage();
+    return newInstance;
+  }
+
+  /**
    * Calculate total monthly expenses for a given month (with inflation)
    * @param {number} month - Month number (1-based)
    * @returns {number} Total monthly expenses
    */
   getTotalExpenses(month) {
-    return this.expenses.reduce((total, expense) => {
-      return total + expense.getInflatedAmount(month);
-    }, 0);
+    return this.expenses
+      .filter(expense => expense.enabled)
+      .reduce((total, expense) => {
+        return total + expense.getInflatedAmount(month);
+      }, 0);
   }
 
   /**
@@ -288,9 +366,11 @@ class SurvivalData {
    * @returns {number} Total nominal savings
    */
   getTotalNominalSavings(month) {
-    return this.savingsPots.reduce((total, pot) => {
-      return total + pot.getNominalAmount(month);
-    }, 0);
+    return this.savingsPots
+      .filter(pot => pot.enabled)
+      .reduce((total, pot) => {
+        return total + pot.getNominalAmount(month);
+      }, 0);
   }
 
   /**
@@ -299,9 +379,11 @@ class SurvivalData {
    * @returns {number} Total minimum savings
    */
   getTotalMinSavings(month) {
-    return this.savingsPots.reduce((total, pot) => {
-      return total + pot.getMinAmount(month);
-    }, 0);
+    return this.savingsPots
+      .filter(pot => pot.enabled)
+      .reduce((total, pot) => {
+        return total + pot.getMinAmount(month);
+      }, 0);
   }
 
   /**
@@ -310,20 +392,22 @@ class SurvivalData {
    * @returns {number} Total maximum savings
    */
   getTotalMaxSavings(month) {
-    return this.savingsPots.reduce((total, pot) => {
-      return total + pot.getMaxAmount(month);
-    }, 0);
+    return this.savingsPots
+      .filter(pot => pot.enabled)
+      .reduce((total, pot) => {
+        return total + pot.getMaxAmount(month);
+      }, 0);
   }
 
   /**
-   * Calculate next month's savings after applying payments, interest and deducting expenses proportionally
+   * Calculate next month's savings after applying payments, interest and deducting expenses in priority order
    * @param {Object} currentSavings - Current savings by pot name
    * @param {Object} interestRates - Interest rates by pot name
    * @param {Object} monthlyPayments - Monthly payments by pot name
    * @param {Object} yearlyPayments - Yearly payments by pot name
    * @param {number} month - Current month number (1-based)
    * @param {number} totalExpenses - Total expenses for the month
-   * @returns {Object} Individual savings after payments, interest and proportional expense deduction
+   * @returns {Object} Individual savings after payments, interest and priority-based expense deduction
    */
   static calculateNextMonthSavings(currentSavings, interestRates, monthlyPayments, yearlyPayments, month, totalExpenses) {
     const individualSavings = {};
@@ -350,17 +434,28 @@ class SurvivalData {
       totalWithInterest += individualSavings[potName];
     });
 
-    // Deduct expenses proportionally from each pot
-    Object.keys(individualSavings).forEach(potName => {
-      const proportion = individualSavings[potName] / totalWithInterest;
-      const expenseAllocation = totalExpenses * proportion;
-      individualSavings[potName] -= expenseAllocation;
+    // Deduct expenses in priority order (lowest interest rate first)
+    let remainingExpenses = totalExpenses;
+
+    // Sort pots by interest rate (lowest first)
+    const sortedPots = Object.keys(individualSavings).sort((a, b) => {
+      return interestRates[a] - interestRates[b];
     });
+
+    // Deduct from each pot in priority order
+    for (const potName of sortedPots) {
+      if (remainingExpenses <= 0) break;
+
+      const potAmount = individualSavings[potName];
+      const deduction = Math.min(potAmount, remainingExpenses);
+      individualSavings[potName] -= deduction;
+      remainingExpenses -= deduction;
+    }
 
     const totalSavings = Object.values(individualSavings).reduce((sum, val) => sum + val, 0);
 
     return {
-      individualSavings, // Each pot's amount after payments, interest and proportional expenses
+      individualSavings, // Each pot's amount after payments, interest and priority-based expenses
       totalSavings     // Total of all pots (should be same as sum of individualSavings)
     };
   }
@@ -399,12 +494,16 @@ class SurvivalData {
     const monthlyProgression = [];
     let month = 0;
 
+    // Filter enabled items
+    const enabledExpenses = this.expenses.filter(expense => expense.enabled);
+    const enabledSavingsPots = this.savingsPots.filter(pot => pot.enabled);
+
     // Initialize savings amounts for each scenario
     const nominalSavings = {};
     const minSavings = {};
     const maxSavings = {};
 
-    this.savingsPots.forEach(pot => {
+    enabledSavingsPots.forEach(pot => {
       nominalSavings[pot.name] = pot.amount;
       minSavings[pot.name] = pot.amount;
       maxSavings[pot.name] = pot.amount;
@@ -429,9 +528,9 @@ class SurvivalData {
     while (month < 1200) { // Max 100 years (1200 months)
       month++;
 
-      // Calculate expenses for this month (with inflation)
-      const monthlyExpenses = SurvivalData.calculateTotalExpenses(this.expenses, month);
-      const expenseBreakdown = SurvivalData.calculateExpenseBreakdown(this.expenses, month);
+      // Calculate expenses for this month (with inflation) - only enabled expenses
+      const monthlyExpenses = SurvivalData.calculateTotalExpenses(enabledExpenses, month);
+      const expenseBreakdown = SurvivalData.calculateExpenseBreakdown(enabledExpenses, month);
 
       // Calculate next month's savings for each scenario
       // Month 1: No interest applied (initial values minus expenses)
@@ -470,7 +569,7 @@ class SurvivalData {
         const monthlyPayments = {};
         const yearlyPayments = {};
 
-        this.savingsPots.forEach(pot => {
+        enabledSavingsPots.forEach(pot => {
           nominalRates[pot.name] = pot.interestRate;
           minRates[pot.name] = Math.max(0, pot.interestRate - pot.riskRate);
           maxRates[pot.name] = pot.interestRate + pot.riskRate;
