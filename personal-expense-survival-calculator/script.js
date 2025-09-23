@@ -687,6 +687,8 @@ const SurvivalChart = ({ result }) => {
 
 // Detailed Analytics Component
 const DetailedAnalytics = ({ result, survivalData }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (!result || result.monthlyProgression.length === 0) {
     return null;
   }
@@ -707,8 +709,27 @@ const DetailedAnalytics = ({ result, survivalData }) => {
   const expenseNames = [...new Set(survivalData.expenses.map(e => e.name))];
   const savingsNames = [...new Set(survivalData.savingsPots.map(s => s.name))];
 
+  // Limit rows when collapsed - show first 12 months and last month
+  const getLimitedProgression = () => {
+    if (isExpanded) return result.monthlyProgression;
+    if (result.monthlyProgression.length <= 13) return result.monthlyProgression;
+
+    const first12 = result.monthlyProgression.slice(0, 12);
+    const last = result.monthlyProgression[result.monthlyProgression.length - 1];
+    return [...first12, last];
+  };
+
+  const limitedProgression = getLimitedProgression();
+
   return React.createElement('div', { className: 'analytics-section' },
-    React.createElement('h3', { style: { margin: '30px 0 20px 0', color: '#333', fontSize: '1.3rem' } }, '📊 Detailed Month-by-Month Analytics'),
+    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '30px 0 20px 0' } },
+      React.createElement('h3', { style: { margin: 0, color: '#333', fontSize: '1.3rem' } }, '📊 Detailed Month-by-Month Analytics'),
+      React.createElement('button', {
+        onClick: () => setIsExpanded(!isExpanded),
+        className: 'btn btn-secondary btn-small',
+        style: { margin: 0 }
+      }, isExpanded ? 'Collapse Tables' : 'Expand Tables')
+    ),
 
     // Summary Cards
     React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' } },
@@ -745,7 +766,7 @@ const DetailedAnalytics = ({ result, survivalData }) => {
             )
           ),
           React.createElement('tbody', null,
-            result.monthlyProgression.map((progression, index) => // Show ALL months
+            limitedProgression.map((progression, index) =>
               React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
                 React.createElement('td', { style: { padding: '10px' } }, progression.month),
                 React.createElement('td', { style: { padding: '10px', fontWeight: '600' } }, formatCurrency(progression.totalExpenses)),
@@ -779,7 +800,7 @@ const DetailedAnalytics = ({ result, survivalData }) => {
               )
             ),
             React.createElement('tbody', null,
-              result.monthlyProgression.map((progression, index) =>
+              limitedProgression.map((progression, index) =>
                 React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
                   React.createElement('td', { style: { padding: '10px' } }, progression.month),
                   ...savingsNames.map(savingsName =>
@@ -808,7 +829,7 @@ const DetailedAnalytics = ({ result, survivalData }) => {
               )
             ),
             React.createElement('tbody', null,
-              result.monthlyProgression.map((progression, index) =>
+              limitedProgression.map((progression, index) =>
                 React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
                   React.createElement('td', { style: { padding: '10px' } }, progression.month),
                   ...savingsNames.map(savingsName =>
@@ -837,7 +858,7 @@ const DetailedAnalytics = ({ result, survivalData }) => {
               )
             ),
             React.createElement('tbody', null,
-              result.monthlyProgression.map((progression, index) =>
+              limitedProgression.map((progression, index) =>
                 React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
                   React.createElement('td', { style: { padding: '10px' } }, progression.month),
                   ...savingsNames.map(savingsName =>
@@ -1532,9 +1553,6 @@ const App = () => {
     ),
     React.createElement('div', { className: 'section results-section' },
       React.createElement('h2', null, '📊 Survival Results'),
-      React.createElement('div', { style: { textAlign: 'center', marginBottom: '20px', color: '#666', fontSize: '0.9rem' } },
-        'Results update automatically when you add, edit, or remove items'
-      ),
       React.createElement(ResultsDisplay, { result })
     ),
     result && React.createElement('div', { className: 'chart-container' },

@@ -36,6 +36,18 @@
             color: white;
         }
 
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .header-actions {
+                align-self: flex-end;
+            }
+        }
+
         .header-title {
             flex: 1;
         }
@@ -459,7 +471,6 @@
         <header class="header">
             <div class="header-title">
                 <h1>💰 Personal Expense Survival Calculator</h1>
-                <p>Calculate how long your savings will last with inflation and investment risk</p>
             </div>
             <div class="header-actions" id="header-actions"></div>
         </header>
