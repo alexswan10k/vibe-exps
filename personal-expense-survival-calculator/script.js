@@ -113,6 +113,8 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [interestRate, setInterestRate] = useState(initialData?.interestRate || '');
   const [riskRate, setRiskRate] = useState(initialData?.riskRate || '');
+  const [monthlyPayment, setMonthlyPayment] = useState(initialData?.monthlyPayment || '');
+  const [yearlyPayment, setYearlyPayment] = useState(initialData?.yearlyPayment || '');
 
   // Update form when initialData changes (for editing)
   useEffect(() => {
@@ -121,6 +123,8 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
       setAmount(initialData.amount || '');
       setInterestRate(initialData.interestRate || '');
       setRiskRate(initialData.riskRate || '');
+      setMonthlyPayment(initialData.monthlyPayment || '');
+      setYearlyPayment(initialData.yearlyPayment || '');
     }
   }, [initialData]);
 
@@ -131,7 +135,9 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
         name: name.trim(),
         amount: parseFloat(amount),
         interestRate: parseFloat(interestRate) / 100, // Convert percentage to decimal
-        riskRate: parseFloat(riskRate) / 100 // Convert percentage to decimal
+        riskRate: parseFloat(riskRate) / 100, // Convert percentage to decimal
+        monthlyPayment: parseFloat(monthlyPayment) || 0,
+        yearlyPayment: parseFloat(yearlyPayment) || 0
       });
       // Only clear form if not editing
       if (!initialData) {
@@ -139,6 +145,8 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
         setAmount('');
         setInterestRate('');
         setRiskRate('');
+        setMonthlyPayment('');
+        setYearlyPayment('');
       }
     }
   };
@@ -194,8 +202,38 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
           placeholder: '2.0',
           required: true
         })
+      )
+    ),
+    React.createElement('div', { className: 'form-row' },
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-monthly-payment' }, 'Monthly Payment ($)'),
+        React.createElement('input', {
+          id: 'savings-monthly-payment',
+          type: 'number',
+          step: '0.01',
+          min: '0',
+          value: monthlyPayment,
+          onChange: (e) => setMonthlyPayment(e.target.value),
+          placeholder: '0.00 (e.g., salary contribution)',
+          required: false
+        })
       ),
-      React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Savings' : 'Add Savings')
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-yearly-payment' }, 'Yearly Payment ($)'),
+        React.createElement('input', {
+          id: 'savings-yearly-payment',
+          type: 'number',
+          step: '0.01',
+          min: '0',
+          value: yearlyPayment,
+          onChange: (e) => setYearlyPayment(e.target.value),
+          placeholder: '0.00 (e.g., bonus, ISA contribution)',
+          required: false
+        })
+      ),
+      React.createElement('div', { style: { display: 'flex', alignItems: 'end' } },
+        React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Savings' : 'Add Savings')
+      )
     )
   );
 };
@@ -206,13 +244,31 @@ const SavingsPotList = ({ savingsPots, onRemove, onEdit }) => {
     return React.createElement('div', { className: 'no-data' }, 'No savings pots added yet');
   }
 
+  const formatPaymentDetails = (pot) => {
+    const parts = [
+      `$${pot.amount.toFixed(2)}`,
+      `${(pot.interestRate * 100).toFixed(1)}% interest`,
+      `${(pot.riskRate * 100).toFixed(1)}% risk`
+    ];
+
+    if (pot.monthlyPayment > 0) {
+      parts.push(`$${pot.monthlyPayment.toFixed(2)}/month`);
+    }
+
+    if (pot.yearlyPayment > 0) {
+      parts.push(`$${pot.yearlyPayment.toFixed(2)}/year`);
+    }
+
+    return parts.join(' • ');
+  };
+
   return React.createElement('div', { className: 'item-list' },
     savingsPots.map((pot, index) =>
       React.createElement('div', { key: index, className: 'item' },
         React.createElement('div', { className: 'item-info' },
           React.createElement('div', { className: 'item-name' }, pot.name),
           React.createElement('div', { className: 'item-details' },
-            `$${pot.amount.toFixed(2)} • ${(pot.interestRate * 100).toFixed(1)}% interest • ${(pot.riskRate * 100).toFixed(1)}% risk`
+            formatPaymentDetails(pot)
           )
         ),
         React.createElement('div', { className: 'item-actions' },
@@ -237,6 +293,10 @@ const ResultsDisplay = ({ result }) => {
   }
 
   const formatTime = (months) => {
+    // If months equals max simulation period (1200 = 100 years), show "Beyond 100 years"
+    if (months >= 1200) {
+      return 'Beyond 100 years';
+    }
     const years = Math.floor(months / 12);
     const remainingMonths = months % 12;
     if (years === 0) return `${remainingMonths} months`;
@@ -541,11 +601,19 @@ const DetailedAnalytics = ({ result, survivalData }) => {
                 `${expense.name}: ${formatCurrency(expense.amount)}/month (${formatPercent(expense.inflationRate)} inflation)`
               )
             ),
-            ...survivalData.savingsPots.map(pot =>
-              React.createElement('li', { key: pot.name },
-                `${pot.name}: ${formatCurrency(pot.amount)} (${formatPercent(pot.interestRate)} interest, ${formatPercent(pot.riskRate)} risk)`
-              )
-            )
+            ...survivalData.savingsPots.map(pot => {
+              const paymentParts = [];
+              if (pot.monthlyPayment > 0) {
+                paymentParts.push(`${formatCurrency(pot.monthlyPayment)}/month`);
+              }
+              if (pot.yearlyPayment > 0) {
+                paymentParts.push(`${formatCurrency(pot.yearlyPayment)}/year`);
+              }
+              const paymentInfo = paymentParts.length > 0 ? ` + ${paymentParts.join(' + ')}` : '';
+              return React.createElement('li', { key: pot.name },
+                `${pot.name}: ${formatCurrency(pot.amount)}${paymentInfo} (${formatPercent(pot.interestRate)} interest, ${formatPercent(pot.riskRate)} risk)`
+              );
+            })
           )
         ),
         React.createElement('div', null,
@@ -635,7 +703,7 @@ const App = () => {
 
   const handleAddSavingsPot = (savingsData) => {
     try {
-      const savingsPot = new SavingsPot(savingsData.name, savingsData.amount, savingsData.interestRate, savingsData.riskRate);
+      const savingsPot = new SavingsPot(savingsData.name, savingsData.amount, savingsData.interestRate, savingsData.riskRate, savingsData.monthlyPayment, savingsData.yearlyPayment);
       const newSurvivalData = survivalData.addSavingsPot(savingsPot);
       setSurvivalData(newSurvivalData);
       setEditingSavingsPot(null);
@@ -651,13 +719,15 @@ const App = () => {
       name: pot.name,
       amount: pot.amount.toString(),
       interestRate: (pot.interestRate * 100).toString(),
-      riskRate: (pot.riskRate * 100).toString()
+      riskRate: (pot.riskRate * 100).toString(),
+      monthlyPayment: pot.monthlyPayment.toString(),
+      yearlyPayment: pot.yearlyPayment.toString()
     });
   };
 
   const handleUpdateSavingsPot = (savingsData) => {
     try {
-      const savingsPot = new SavingsPot(savingsData.name, savingsData.amount, savingsData.interestRate, savingsData.riskRate);
+      const savingsPot = new SavingsPot(savingsData.name, savingsData.amount, savingsData.interestRate, savingsData.riskRate, savingsData.monthlyPayment, savingsData.yearlyPayment);
       const newSurvivalData = survivalData.removeSavingsPot(editingSavingsPot.index).addSavingsPot(savingsPot);
       setSurvivalData(newSurvivalData);
       setEditingSavingsPot(null);

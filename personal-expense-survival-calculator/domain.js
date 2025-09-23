@@ -11,6 +11,8 @@
  * @property {number} amount - Current amount in currency
  * @property {number} interestRate - Annual interest rate as decimal (e.g., 0.05 for 5%)
  * @property {number} riskRate - Risk rate as decimal (e.g., 0.02 for 2% risk)
+ * @property {number} monthlyPayment - Monthly payment amount (e.g., salary contribution)
+ * @property {number} yearlyPayment - Yearly payment amount (e.g., bonus, ISA contribution)
  */
 
 /**
@@ -97,8 +99,10 @@ class SavingsPot {
    * @param {number} amount
    * @param {number} interestRate
    * @param {number} riskRate
+   * @param {number} monthlyPayment - Monthly payment amount (default: 0)
+   * @param {number} yearlyPayment - Yearly payment amount (default: 0)
    */
-  constructor(name, amount, interestRate, riskRate) {
+  constructor(name, amount, interestRate, riskRate, monthlyPayment = 0, yearlyPayment = 0) {
     if (!name || typeof name !== 'string') {
       throw new Error('Savings pot name must be a non-empty string');
     }
@@ -111,11 +115,19 @@ class SavingsPot {
     if (typeof riskRate !== 'number' || riskRate < 0) {
       throw new Error('Risk rate must be a non-negative number');
     }
+    if (typeof monthlyPayment !== 'number' || monthlyPayment < 0) {
+      throw new Error('Monthly payment must be a non-negative number');
+    }
+    if (typeof yearlyPayment !== 'number' || yearlyPayment < 0) {
+      throw new Error('Yearly payment must be a non-negative number');
+    }
 
     this.name = name;
     this.amount = amount;
     this.interestRate = interestRate;
     this.riskRate = riskRate;
+    this.monthlyPayment = monthlyPayment;
+    this.yearlyPayment = yearlyPayment;
   }
 
   /**
@@ -156,7 +168,9 @@ class SavingsPot {
       name: this.name,
       amount: this.amount,
       interestRate: this.interestRate,
-      riskRate: this.riskRate
+      riskRate: this.riskRate,
+      monthlyPayment: this.monthlyPayment,
+      yearlyPayment: this.yearlyPayment
     };
   }
 
@@ -166,7 +180,14 @@ class SavingsPot {
    * @returns {SavingsPot}
    */
   static fromJSON(data) {
-    return new SavingsPot(data.name, data.amount, data.interestRate, data.riskRate);
+    return new SavingsPot(
+      data.name,
+      data.amount,
+      data.interestRate,
+      data.riskRate,
+      data.monthlyPayment || 0,
+      data.yearlyPayment || 0
+    );
   }
 }
 
@@ -295,19 +316,34 @@ class SurvivalData {
   }
 
   /**
-   * Calculate next month's savings after applying interest and deducting expenses proportionally
+   * Calculate next month's savings after applying payments, interest and deducting expenses proportionally
    * @param {Object} currentSavings - Current savings by pot name
    * @param {Object} interestRates - Interest rates by pot name
+   * @param {Object} monthlyPayments - Monthly payments by pot name
+   * @param {Object} yearlyPayments - Yearly payments by pot name
+   * @param {number} month - Current month number (1-based)
    * @param {number} totalExpenses - Total expenses for the month
-   * @returns {Object} Individual savings after interest and proportional expense deduction
+   * @returns {Object} Individual savings after payments, interest and proportional expense deduction
    */
-  static calculateNextMonthSavings(currentSavings, interestRates, totalExpenses) {
+  static calculateNextMonthSavings(currentSavings, interestRates, monthlyPayments, yearlyPayments, month, totalExpenses) {
     const individualSavings = {};
     let totalWithInterest = 0;
 
-    // Apply interest to each pot individually
+    // Apply payments and interest to each pot individually
     Object.keys(currentSavings).forEach(potName => {
-      const currentAmount = currentSavings[potName];
+      let currentAmount = currentSavings[potName];
+
+      // Add monthly payment
+      const monthlyPayment = monthlyPayments[potName] || 0;
+      currentAmount += monthlyPayment;
+
+      // Add yearly payment if it's the right month (every 12 months)
+      if (month % 12 === 0) {
+        const yearlyPayment = yearlyPayments[potName] || 0;
+        currentAmount += yearlyPayment;
+      }
+
+      // Apply interest
       const interestRate = interestRates[potName] || 0;
       const monthlyInterest = currentAmount * interestRate / 12;
       individualSavings[potName] = currentAmount + monthlyInterest;
@@ -324,7 +360,7 @@ class SurvivalData {
     const totalSavings = Object.values(individualSavings).reduce((sum, val) => sum + val, 0);
 
     return {
-      individualSavings, // Each pot's amount after interest and proportional expenses
+      individualSavings, // Each pot's amount after payments, interest and proportional expenses
       totalSavings     // Total of all pots (should be same as sum of individualSavings)
     };
   }
@@ -390,7 +426,7 @@ class SurvivalData {
     });
 
     // Simulate month by month until savings are depleted
-    while (month < 1200) { // Max 100 years
+    while (month < 1200) { // Max 100 years (1200 months)
       month++;
 
       // Calculate expenses for this month (with inflation)
@@ -427,31 +463,35 @@ class SurvivalData {
           }
         });
       } else {
-        // Month 2+: Apply interest to previous month's remaining balance
+        // Month 2+: Apply payments, interest to previous month's remaining balance
         const nominalRates = {};
         const minRates = {};
         const maxRates = {};
+        const monthlyPayments = {};
+        const yearlyPayments = {};
 
         this.savingsPots.forEach(pot => {
           nominalRates[pot.name] = pot.interestRate;
           minRates[pot.name] = Math.max(0, pot.interestRate - pot.riskRate);
           maxRates[pot.name] = pot.interestRate + pot.riskRate;
+          monthlyPayments[pot.name] = pot.monthlyPayment;
+          yearlyPayments[pot.name] = pot.yearlyPayment;
         });
 
         // Nominal scenario
-        const nominalResult = SurvivalData.calculateNextMonthSavings(nominalSavings, nominalRates, monthlyExpenses);
+        const nominalResult = SurvivalData.calculateNextMonthSavings(nominalSavings, nominalRates, monthlyPayments, yearlyPayments, month, monthlyExpenses);
         Object.keys(nominalSavings).forEach(potName => {
           nominalSavings[potName] = nominalResult.individualSavings[potName];
         });
 
         // Minimum scenario
-        const minResult = SurvivalData.calculateNextMonthSavings(minSavings, minRates, monthlyExpenses);
+        const minResult = SurvivalData.calculateNextMonthSavings(minSavings, minRates, monthlyPayments, yearlyPayments, month, monthlyExpenses);
         Object.keys(minSavings).forEach(potName => {
           minSavings[potName] = minResult.individualSavings[potName];
         });
 
         // Maximum scenario
-        const maxResult = SurvivalData.calculateNextMonthSavings(maxSavings, maxRates, monthlyExpenses);
+        const maxResult = SurvivalData.calculateNextMonthSavings(maxSavings, maxRates, monthlyPayments, yearlyPayments, month, monthlyExpenses);
         Object.keys(maxSavings).forEach(potName => {
           maxSavings[potName] = maxResult.individualSavings[potName];
         });
@@ -471,14 +511,15 @@ class SurvivalData {
         });
       }
 
-      // Break if all scenarios are depleted
+      // Stop if all scenarios are depleted (all three projections are negative/zero)
       const currentProgression = monthlyProgression[monthlyProgression.length - 1];
       if (currentProgression.nominalSavings <= 0 && currentProgression.minSavings <= 0 && currentProgression.maxSavings <= 0) {
         break;
       }
     }
 
-    const nominalMonths = month;
+    // Find when each scenario would be depleted, or use max period if never depleted
+    const nominalMonths = monthlyProgression.find(p => p.nominalSavings <= 0)?.month || month;
     const minMonths = monthlyProgression.find(p => p.minSavings <= 0)?.month || month;
     const maxMonths = monthlyProgression.find(p => p.maxSavings <= 0)?.month || month;
 
