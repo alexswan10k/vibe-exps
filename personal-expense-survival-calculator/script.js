@@ -90,7 +90,7 @@ const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
 };
 
 // Expense List Component
-const ExpenseList = ({ expenses, onRemove, onEdit }) => {
+const ExpenseList = ({ expenses, onRemove, onEdit, onViewChart }) => {
   if (expenses.length === 0) {
     return React.createElement('div', { className: 'no-data' }, 'No expenses added yet');
   }
@@ -105,6 +105,10 @@ const ExpenseList = ({ expenses, onRemove, onEdit }) => {
           )
         ),
         React.createElement('div', { className: 'item-actions' },
+          React.createElement('button', {
+            onClick: () => onViewChart(expense),
+            className: 'btn btn-secondary btn-small'
+          }, '📈 Chart'),
           React.createElement('button', {
             onClick: () => onEdit(index),
             className: 'btn btn-secondary btn-small'
@@ -264,7 +268,7 @@ const SavingsPotForm = ({ onAdd, initialData, onCancel }) => {
 };
 
 // Savings Pot List Component
-const SavingsPotList = ({ savingsPots, onRemove, onEdit }) => {
+const SavingsPotList = ({ savingsPots, onRemove, onEdit, onViewChart }) => {
   if (savingsPots.length === 0) {
     return React.createElement('div', { className: 'no-data' }, 'No savings pots added yet');
   }
@@ -297,6 +301,10 @@ const SavingsPotList = ({ savingsPots, onRemove, onEdit }) => {
           )
         ),
         React.createElement('div', { className: 'item-actions' },
+          React.createElement('button', {
+            onClick: () => onViewChart(pot),
+            className: 'btn btn-secondary btn-small'
+          }, '📈 Chart'),
           React.createElement('button', {
             onClick: () => onEdit(index),
             className: 'btn btn-secondary btn-small'
@@ -363,7 +371,11 @@ const SurvivalChart = ({ result }) => {
         const newChart = new Chart(ctx, {
           type: 'line',
           data: {
-            labels: result.monthlyProgression.map(p => `Month ${p.month}`),
+            labels: result.monthlyProgression.map(p => {
+              const year = Math.floor((p.month - 1) / 12) + 1;
+              const month = ((p.month - 1) % 12) + 1;
+              return `${year}y ${month}m`;
+            }),
             datasets: [
               {
                 label: 'Nominal Savings',
@@ -400,7 +412,46 @@ const SurvivalChart = ({ result }) => {
               x: {
                 title: {
                   display: true,
-                  text: 'Time (Months)'
+                  text: 'Time'
+                },
+                ticks: {
+                  maxTicksLimit: 20,
+                  font: function(context) {
+                    const progression = result.monthlyProgression[context.index];
+                    if (progression && ((progression.month - 1) % 12) === 0) {
+                      // Make year boundary months (month 1 of each year) bold
+                      return {
+                        weight: 'bold',
+                        size: 12
+                      };
+                    }
+                    return {
+                      weight: 'normal',
+                      size: 10
+                    };
+                  }
+                },
+                grid: {
+                  color: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = result.monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Darker grid line at year boundaries
+                        return '#333';
+                      }
+                    }
+                    return '#e2e8f0';
+                  },
+                  lineWidth: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = result.monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Thicker line at year boundaries
+                        return 2;
+                      }
+                    }
+                    return 1;
+                  }
                 }
               },
               y: {
@@ -408,6 +459,7 @@ const SurvivalChart = ({ result }) => {
                   display: true,
                   text: 'Savings Amount ($)'
                 },
+                min: 0,
                 ticks: {
                   callback: function(value) {
                     return '$' + value.toLocaleString();
@@ -422,6 +474,27 @@ const SurvivalChart = ({ result }) => {
               title: {
                 display: true,
                 text: 'Month-on-Month Savings Progression'
+              },
+              annotation: {
+                annotations: result.monthlyProgression
+                  .filter(p => ((p.month - 1) % 12) === 0)
+                  .map(p => {
+                    const year = Math.floor((p.month - 1) / 12) + 1;
+                    return {
+                      type: 'label',
+                      xValue: result.monthlyProgression.indexOf(p),
+                      yValue: Math.max(...result.monthlyProgression.map(pr => pr.nominalSavings)) * 0.95,
+                      content: `${year}y`,
+                      font: {
+                        size: 12,
+                        weight: 'bold'
+                      },
+                      color: '#333',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 4,
+                      padding: 4
+                    };
+                  })
               }
             }
           }
@@ -754,6 +827,250 @@ const HelpSection = ({ isVisible, onToggle }) => {
   );
 };
 
+// Individual Chart Modal Component
+const IndividualChartModal = ({ isOpen, onClose, item, itemType, monthlyProgression }) => {
+  if (!isOpen || !item || !monthlyProgression) return null;
+
+  const [chart, setChart] = useState(null);
+
+  useEffect(() => {
+    if (isOpen && item && monthlyProgression.length > 0) {
+      // Destroy existing chart
+      if (chart) {
+        chart.destroy();
+      }
+
+      const ctx = document.getElementById('individual-chart');
+      if (ctx) {
+        let data, title, yAxisLabel;
+
+        if (itemType === 'expense') {
+          // For expenses, show the inflated amount over time
+          data = monthlyProgression.map(p => ({
+            month: p.month,
+            value: p.expenseBreakdown[item.name] || 0
+          }));
+          title = `Expense Progression: ${item.name}`;
+          yAxisLabel = 'Amount ($)';
+        } else if (itemType === 'savings') {
+          // For savings, show all three scenarios
+          data = monthlyProgression.map(p => ({
+            month: p.month,
+            nominal: p.savingsBreakdown.nominal[item.name] || 0,
+            min: p.savingsBreakdown.min[item.name] || 0,
+            max: p.savingsBreakdown.max[item.name] || 0
+          }));
+          title = `Savings Progression: ${item.name}`;
+          yAxisLabel = 'Amount ($)';
+        }
+
+        const chartData = {
+          labels: data.map(d => {
+            const year = Math.floor((d.month - 1) / 12) + 1;
+            const month = ((d.month - 1) % 12) + 1;
+            return `${year}y ${month}m`;
+          }),
+          datasets: itemType === 'expense' ? [
+            {
+              label: item.name,
+              data: data.map(d => d.value),
+              borderColor: '#667eea',
+              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              borderWidth: 2,
+              fill: false
+            }
+          ] : [
+            {
+              label: 'Nominal',
+              data: data.map(d => d.nominal),
+              borderColor: '#667eea',
+              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              borderWidth: 2,
+              fill: false
+            },
+            {
+              label: 'Minimum (High Risk)',
+              data: data.map(d => d.min),
+              borderColor: '#e53e3e',
+              backgroundColor: 'rgba(229, 62, 62, 0.1)',
+              borderWidth: 2,
+              fill: false,
+              borderDash: [5, 5]
+            },
+            {
+              label: 'Maximum (Low Risk)',
+              data: data.map(d => d.max),
+              borderColor: '#38a169',
+              backgroundColor: 'rgba(56, 161, 105, 0.1)',
+              borderWidth: 2,
+              fill: false,
+              borderDash: [10, 5]
+            }
+          ]
+        };
+
+        const newChart = new Chart(ctx, {
+          type: 'line',
+          data: chartData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: 'Time'
+                },
+                ticks: {
+                  maxTicksLimit: 20,
+                  font: function(context) {
+                    const progression = monthlyProgression[context.index];
+                    if (progression && ((progression.month - 1) % 12) === 0) {
+                      // Make year boundary months (month 1 of each year) bold
+                      return {
+                        weight: 'bold',
+                        size: 12
+                      };
+                    }
+                    return {
+                      weight: 'normal',
+                      size: 10
+                    };
+                  }
+                },
+                grid: {
+                  color: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Darker grid line at year boundaries
+                        return '#333';
+                      }
+                    }
+                    return '#e2e8f0';
+                  },
+                  lineWidth: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Thicker line at year boundaries
+                        return 2;
+                      }
+                    }
+                    return 1;
+                  }
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: yAxisLabel
+                },
+                min: 0,
+                ticks: {
+                  callback: function(value) {
+                    return '$' + value.toLocaleString();
+                  }
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+              },
+              title: {
+                display: true,
+                text: title
+              },
+              annotation: {
+                annotations: monthlyProgression
+                  .filter(p => ((p.month - 1) % 12) === 0)
+                  .map(p => {
+                    const year = Math.floor((p.month - 1) / 12) + 1;
+                    return {
+                      type: 'label',
+                      xValue: monthlyProgression.indexOf(p),
+                      yValue: Math.max(...monthlyProgression.map(pr => {
+                        if (itemType === 'expense') {
+                          return pr.expenseBreakdown[item.name] || 0;
+                        } else {
+                          return Math.max(pr.savingsBreakdown.nominal[item.name] || 0, pr.savingsBreakdown.min[item.name] || 0, pr.savingsBreakdown.max[item.name] || 0);
+                        }
+                      })) * 0.95,
+                      content: `${year}y`,
+                      font: {
+                        size: 12,
+                        weight: 'bold'
+                      },
+                      color: '#333',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 4,
+                      padding: 4
+                    };
+                  })
+              }
+            }
+          }
+        });
+        setChart(newChart);
+      }
+    }
+
+    return () => {
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, [isOpen, item, itemType, monthlyProgression]);
+
+  return React.createElement('div', {
+    style: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    },
+    onClick: onClose
+  },
+    React.createElement('div', {
+      style: {
+        background: 'white',
+        borderRadius: '16px',
+        padding: '24px',
+        maxWidth: '800px',
+        width: '90%',
+        maxHeight: '80vh',
+        overflow: 'auto',
+        position: 'relative'
+      },
+      onClick: (e) => e.stopPropagation()
+    },
+      React.createElement('button', {
+        onClick: onClose,
+        style: {
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          background: 'none',
+          border: 'none',
+          fontSize: '24px',
+          cursor: 'pointer',
+          color: '#666'
+        }
+      }, '×'),
+      React.createElement('div', { style: { height: '400px' } },
+        React.createElement('canvas', { id: 'individual-chart' })
+      )
+    )
+  );
+};
+
 // Main App Component
 const App = () => {
   const [survivalData, setSurvivalData] = useState(new SurvivalData());
@@ -761,6 +1078,7 @@ const App = () => {
   const [editingExpense, setEditingExpense] = useState(null);
   const [editingSavingsPot, setEditingSavingsPot] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [modalState, setModalState] = useState({ isOpen: false, item: null, itemType: null });
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -880,12 +1198,31 @@ const App = () => {
     }
   };
 
+  const handleViewExpenseChart = (expense) => {
+    setModalState({ isOpen: true, item: expense, itemType: 'expense' });
+  };
+
+  const handleViewSavingsChart = (savingsPot) => {
+    setModalState({ isOpen: true, item: savingsPot, itemType: 'savings' });
+  };
+
+  const closeModal = () => {
+    setModalState({ isOpen: false, item: null, itemType: null });
+  };
+
   const formatLastCalculated = () => {
     if (!survivalData.lastCalculated) return '';
     return `Last calculated: ${new Date(survivalData.lastCalculated).toLocaleString()}`;
   };
 
   return React.createElement('div', null,
+    React.createElement(IndividualChartModal, {
+      isOpen: modalState.isOpen,
+      onClose: closeModal,
+      item: modalState.item,
+      itemType: modalState.itemType,
+      monthlyProgression: result ? result.monthlyProgression : []
+    }),
     showHelp && React.createElement('div', { className: 'help-section' },
       React.createElement('div', { className: 'help-header' },
         React.createElement('h2', null, '❓ Help & Instructions')
@@ -975,7 +1312,8 @@ const App = () => {
         React.createElement(ExpenseList, {
           expenses: survivalData.expenses,
           onRemove: handleRemoveExpense,
-          onEdit: handleEditExpense
+          onEdit: handleEditExpense,
+          onViewChart: handleViewExpenseChart
         })
       ),
       React.createElement('div', { className: 'section' },
@@ -986,7 +1324,8 @@ const App = () => {
         React.createElement(SavingsPotList, {
           savingsPots: survivalData.savingsPots,
           onRemove: handleRemoveSavingsPot,
-          onEdit: handleEditSavingsPot
+          onEdit: handleEditSavingsPot,
+          onViewChart: handleViewSavingsChart
         })
       )
     ),
