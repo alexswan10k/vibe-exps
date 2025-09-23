@@ -69,7 +69,7 @@ h1 {
 .main-content {
     display: flex;
     flex-direction: column;
-    gap: 30px;
+    gap: 15px;
 }
 
 .recipe-list, .calendar, .inventory, .shopping-list {

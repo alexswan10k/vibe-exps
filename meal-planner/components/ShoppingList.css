@@ -1,7 +1,22 @@
 /* Shopping List Component Styles */
+.shopping-list {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.shopping-list-header {
+    text-align: right;
+    margin-bottom: 20px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: bold;
+}
+
 .shopping-item {
     display: flex;
-    justify-content: space-between;
     align-items: center;
     padding: 15px 20px;
     margin: 8px 0;
@@ -10,19 +25,14 @@
     border: 1px solid rgba(0, 0, 0, 0.05);
     transition: all 0.3s ease;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.shopping-item input[type="checkbox"] {
-    margin-right: 10px;
-}
-
-.shopping-item {
     cursor: pointer;
     user-select: none;
 }
 
 .shopping-item:hover {
     background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .shopping-checkbox {
@@ -32,15 +42,61 @@
     accent-color: #3498db;
     transform: scale(1.2);
     margin-right: 15px;
+    flex-shrink: 0;
+}
+
+.shopping-item-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    gap: 20px;
+}
+
+.item-name {
+    font-weight: 500;
+    color: #2c3e50;
+    flex: 1;
+}
+
+.cost-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.cost-input label {
+    color: #7f8c8d;
+    font-weight: bold;
+}
+
+.cost-input input {
+    width: 80px;
+    padding: 6px 8px;
+    border: 1px solid #bdc3c7;
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: right;
+    background: white;
+    transition: border-color 0.3s ease;
+}
+
+.cost-input input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.cost-total {
+    color: #27ae60;
+    font-weight: bold;
+    min-width: 60px;
+    text-align: right;
 }
 
 .shopping-item button {
     margin-left: 10px;
     padding: 5px 10px;
     font-size: 14px;
-}
-
-.shopping-checkbox {
-    align-self: flex-start;
-    margin-bottom: 8px;
 }

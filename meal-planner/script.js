@@ -114,7 +114,10 @@ function App() {
         Object.entries(needed).forEach(([item, neededQty]) => {
             const available = inventory[item] || 0;
             if (neededQty > available) {
-                shopping[item] = neededQty - available;
+                shopping[item] = {
+                    quantity: neededQty - available,
+                    unitCost: 0 // Default to 0, user can set this
+                };
             }
         });
         setShoppingList(shopping);
@@ -212,10 +215,23 @@ function App() {
         );
     };
 
+    const updateShoppingItemCost = (item, unitCost) => {
+        const newList = { ...shoppingList };
+        if (newList[item]) {
+            newList[item] = {
+                ...newList[item],
+                unitCost: unitCost
+            };
+            setShoppingList(newList);
+        }
+    };
+
     const transferSelectedToInventory = () => {
         const newInventory = { ...inventory };
         selectedShoppingItems.forEach(item => {
-            newInventory[item] = (newInventory[item] || 0) + shoppingList[item];
+            if (shoppingList[item] && shoppingList[item].quantity) {
+                newInventory[item] = (newInventory[item] || 0) + shoppingList[item].quantity;
+            }
         });
         setInventory(newInventory);
         const newList = { ...shoppingList };
@@ -465,7 +481,8 @@ For the method, provide numbered steps that are easy to follow.`
                 shoppingList,
                 selectedShoppingItems,
                 toggleSelectShoppingItem,
-                transferSelectedToInventory
+                transferSelectedToInventory,
+                updateShoppingItemCost
             }),
             activeTab === 'nutrition' && React.createElement(Nutrition, { recipes, calendar, getRecipeById, ingredientsData })
         ),

@@ -81,6 +81,16 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe,
 
     return React.createElement('div', { className: 'recipe-list' },
         React.createElement('h2', null, 'Recipes'),
+        React.createElement('ul', null,
+            recipes.map(recipe =>
+                React.createElement(RecipeItem, {
+                    key: recipe.id,
+                    recipe,
+                    onEdit: onEditRecipe,
+                    onDelete: deleteRecipe
+                })
+            )
+        ),
         React.createElement('div', { className: 'ai-settings-toggle' },
             React.createElement('div', { className: 'mode-toggle' },
                 React.createElement('button', {
@@ -167,16 +177,6 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe,
                         React.createElement('button', { onClick: () => { setShowPasteModal(false); setPastedResult(''); } }, 'Cancel')
                     )
                 )
-            )
-        ),
-        React.createElement('ul', null,
-            recipes.map(recipe =>
-                React.createElement(RecipeItem, {
-                    key: recipe.id,
-                    recipe,
-                    onEdit: onEditRecipe,
-                    onDelete: deleteRecipe
-                })
             )
         )
     );

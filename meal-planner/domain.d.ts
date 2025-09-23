@@ -102,10 +102,11 @@ export interface InventoryProps {
 }
 
 export interface ShoppingListProps {
-  shoppingList: Record<string, number>;
+  shoppingList: Record<string, {quantity: number, unitCost: number}>;
   selectedShoppingItems: string[];
   toggleSelectShoppingItem: (item: string) => void;
   transferSelectedToInventory: () => void;
+  updateShoppingItemCost: (item: string, unitCost: number) => void;
 }
 
 export interface NutritionProps {
@@ -170,7 +171,7 @@ export interface DataManagementModalProps {
   inventory: Record<string, number>;
   ingredientsData: Record<string, any>;
   calendar: Calendar;
-  shoppingList: Record<string, number>;
+  shoppingList: Record<string, {quantity: number, unitCost: number}>;
   onLoadSampleData: () => void;
   onResetToSampleData: () => void;
   onExportData: () => void;
@@ -207,7 +208,7 @@ export interface ModalManagerProps {
   setInventory: (inventory: Record<string, number>) => void;
   setIngredientsData: (data: Record<string, any>) => void;
   setCalendar: (calendar: Calendar) => void;
-  setShoppingList: (list: Record<string, number>) => void;
+  setShoppingList: (list: Record<string, {quantity: number, unitCost: number}>) => void;
 }
 
 // Component Declarations
@@ -232,7 +233,7 @@ export interface AppState {
   recipes: Recipe[];
   inventory: Record<string, number>;
   ingredientsData: Record<string, any>;
-  shoppingList: Record<string, number>;
+  shoppingList: Record<string, {quantity: number, unitCost: number}>;
   selectedShoppingItems: string[];
   showCookModal: boolean;
   showDataModal: boolean;
