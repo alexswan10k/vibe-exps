@@ -4,14 +4,17 @@ This directory contains pure functions for calculating nutritional data in the m
 
 ## Files
 
+- `domain.d.ts` - TypeScript type definitions for the application
 - `nutrition-calculations.js` - Pure functions for all nutritional calculations
-- `test-nutrition-calculations.js` - Comprehensive test suite
-- `script.js` - Main application code (uses the pure functions)
+- `test-nutrition-calculations.js` - Comprehensive test suite for nutrition functions
+- `react-component-test.js` - Component hierarchy and prop validation tests
+- `script.js` - Main React application code (uses the pure functions)
 - `index.html` - Application UI (loads all scripts)
 - `styles.css` - Application styling
 - `common-ingredients.json` - Common ingredients with nutritional data
 - `common-recipes.json` - Common recipes with ingredients and methods
 - `preload-data.js` - Script to load common data into the app
+- `components/` - Directory containing React component implementations
 
 ## Pure Functions
 

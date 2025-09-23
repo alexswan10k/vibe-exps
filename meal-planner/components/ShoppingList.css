@@ -1,0 +1,46 @@
+/* Shopping List Component Styles */
+.shopping-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    margin: 8px 0;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.shopping-item input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.shopping-item {
+    cursor: pointer;
+    user-select: none;
+}
+
+.shopping-item:hover {
+    background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.shopping-checkbox {
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    accent-color: #3498db;
+    transform: scale(1.2);
+    margin-right: 15px;
+}
+
+.shopping-item button {
+    margin-left: 10px;
+    padding: 5px 10px;
+    font-size: 14px;
+}
+
+.shopping-checkbox {
+    align-self: flex-start;
+    margin-bottom: 8px;
+}

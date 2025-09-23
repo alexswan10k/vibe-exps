@@ -156,72 +156,74 @@ function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsD
                 if (!recipeText) {
                     recipeText = 'Not used in any recipes';
                 }
+                const selectedNutrients = getSelectedNutrients(item);
+                const nutrientSummary = selectedNutrients.length > 0 ? selectedNutrients.map(n => n.name).join(', ') : 'No nutrients';
                 return React.createElement('li', { key: item, className: `inventory-item ${isMissing ? 'missing-ingredient' : ''}` },
                     React.createElement('span', null, item),
                     React.createElement('div', { className: 'recipe-usage' }, recipeText),
-                    React.createElement('div', { className: 'inventory-controls' },
-                        React.createElement('div', { className: 'quantity-controls' },
-                            React.createElement('button', {
-                                onClick: () => handleDecrement(item, quantity),
-                                className: 'quantity-btn'
-                            }, '-'),
-                            React.createElement('input', {
-                                type: 'number',
-                                value: quantity,
-                                onChange: (e) => handleUpdateQuantity(item, e.target.value),
-                                min: '0',
-                                className: 'quantity-input'
-                            }),
-                            React.createElement('button', {
-                                onClick: () => handleIncrement(item, quantity),
-                                className: 'quantity-btn'
-                            }, '+')
-                        ),
-                        React.createElement('button', {
-                            onClick: () => handleRemoveItem(item)
-                        }, 'Remove')
-                    ),
-                    React.createElement('div', { className: 'nutrient-tags' },
-                        getSelectedNutrients(item).map(nutrient =>
-                            React.createElement('span', {
-                                key: nutrient.name,
-                                className: 'nutrient-tag',
-                                onClick: () => updateNutrient(item, nutrient.type, nutrient.name, false)
-                            }, nutrient.name)
-                        ),
-                        React.createElement('button', {
-                            className: 'add-nutrient-btn',
-                            onClick: () => toggleExpanded(item)
-                        }, '+ Add Nutrients'),
-                        expandedItems[item] && React.createElement('div', { className: 'nutrient-details' },
-                            React.createElement('h5', null, 'Vitamins:'),
-                            React.createElement('div', { className: 'checkbox-group' },
-                                Object.keys(defaultNutritional.vitamins).map(vit =>
-                                    React.createElement('label', { key: vit },
-                                        React.createElement('input', {
-                                            type: 'checkbox',
-                                            checked: ingredientsData[item]?.vitamins?.[vit] || false,
-                                            onChange: (e) => updateNutrient(item, 'vitamins', vit, e.target.checked)
-                                        }),
-                                        vit
-                                    )
-                                )
+                    React.createElement('div', { className: 'item-row' },
+                        React.createElement('div', { className: 'quantity-section' },
+                            React.createElement('div', { className: 'quantity-controls' },
+                                React.createElement('button', {
+                                    onClick: () => handleDecrement(item, quantity),
+                                    className: 'quantity-btn'
+                                }, '-'),
+                                React.createElement('input', {
+                                    type: 'number',
+                                    value: quantity,
+                                    onChange: (e) => handleUpdateQuantity(item, e.target.value),
+                                    min: '0',
+                                    className: 'quantity-input'
+                                }),
+                                React.createElement('button', {
+                                    onClick: () => handleIncrement(item, quantity),
+                                    className: 'quantity-btn'
+                                }, '+')
                             ),
-                            React.createElement('h5', null, 'Minerals:'),
-                            React.createElement('div', { className: 'checkbox-group' },
-                                Object.keys(defaultNutritional.minerals).map(min =>
-                                    React.createElement('label', { key: min },
-                                        React.createElement('input', {
-                                            type: 'checkbox',
-                                            checked: ingredientsData[item]?.minerals?.[min] || false,
-                                            onChange: (e) => updateNutrient(item, 'minerals', min, e.target.checked)
-                                        }),
-                                        min
-                                    )
+                            React.createElement('button', {
+                                onClick: () => handleRemoveItem(item),
+                                className: 'remove-btn'
+                            }, 'Remove')
+                        ),
+                        React.createElement('div', { className: 'nutrient-section' },
+                            React.createElement('div', { className: 'nutrient-tags' },
+                                React.createElement('span', { className: 'nutrient-summary-text' }, nutrientSummary),
+                                React.createElement('button', {
+                                    className: 'add-nutrient-btn',
+                                    onClick: () => toggleExpanded(item)
+                                }, '+')
+                            )
+                        )
+                    ),
+                    expandedItems[item] ? React.createElement('div', { className: 'nutrient-details' },
+                        React.createElement('h5', null, 'Vitamins:'),
+                        React.createElement('div', { className: 'checkbox-group' },
+                            Object.keys(defaultNutritional.vitamins).map(vit =>
+                                React.createElement('label', { key: vit },
+                                    React.createElement('input', {
+                                        type: 'checkbox',
+                                        checked: ingredientsData[item]?.vitamins?.[vit] || false,
+                                        onChange: (e) => updateNutrient(item, 'vitamins', vit, e.target.checked)
+                                    }),
+                                    vit
+                                )
+                            )
+                        ),
+                        React.createElement('h5', null, 'Minerals:'),
+                        React.createElement('div', { className: 'checkbox-group' },
+                            Object.keys(defaultNutritional.minerals).map(min =>
+                                React.createElement('label', { key: min },
+                                    React.createElement('input', {
+                                        type: 'checkbox',
+                                        checked: ingredientsData[item]?.minerals?.[min] || false,
+                                        onChange: (e) => updateNutrient(item, 'minerals', min, e.target.checked)
+                                    }),
+                                    min
                                 )
                             )
                         )
-                    )
+                    ) : null
+
                 );
             })
         )

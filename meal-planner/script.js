@@ -1,54 +1,3 @@
-/**
- * @typedef {Object} RecipeNutritional
- * @property {number} calories - Calories per serving/portion (kcal)
- * @property {number} carbs - Carbohydrates per serving (g)
- * @property {number} fat - Fat per serving (g)
- * @property {number} protein - Protein per serving (g)
- * @property {number} fiber - Fiber per serving (g)
- * @property {Object} vitamins - Vitamin presence indicators
- * @property {boolean} vitamins.vitaminA
- * @property {boolean} vitamins.vitaminC
- * @property {boolean} vitamins.vitaminD
- * @property {boolean} vitamins.vitaminE
- * @property {boolean} vitamins.vitaminK1
- * @property {boolean} vitamins.vitaminK2
- * @property {boolean} vitamins.vitaminB12
- * @property {boolean} vitamins.folate
- * @property {Object} minerals - Mineral presence indicators
- * @property {boolean} minerals.calcium
- * @property {boolean} minerals.iron
- * @property {boolean} minerals.magnesium
- * @property {boolean} minerals.potassium
- * @property {boolean} minerals.zinc
- */
-
-/**
- * @typedef {Object} Ingredient
- * @property {string} name
- * @property {number} quantity
- * @property {string} unit
- */
-
-/**
- * @typedef {Object} Recipe
- * @property {number} id
- * @property {string} name
- * @property {Ingredient[]} ingredients
- * @property {string[]} method
- * @property {RecipeNutritional} nutritional
- */
-
-/**
- * @typedef {Object} Calendar
- * @property {number|null} Monday
- * @property {number|null} Tuesday
- * @property {number|null} Wednesday
- * @property {number|null} Thursday
- * @property {number|null} Friday
- * @property {number|null} Saturday
- * @property {number|null} Sunday
- */
-
 const { useState, useEffect } = React;
 
 // Main App Component
@@ -262,8 +211,6 @@ function App() {
             prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]
         );
     };
-
-
 
     const transferSelectedToInventory = () => {
         const newInventory = { ...inventory };
