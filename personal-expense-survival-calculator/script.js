@@ -2,7 +2,7 @@
 const { useState, useEffect } = React;
 
 // Expense Form Component
-const ExpenseForm = ({ onAdd, initialData }) => {
+const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
   const [name, setName] = useState(initialData?.name || '');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [inflationRate, setInflationRate] = useState(initialData?.inflationRate || '');
@@ -13,6 +13,11 @@ const ExpenseForm = ({ onAdd, initialData }) => {
       setName(initialData.name || '');
       setAmount(initialData.amount || '');
       setInflationRate(initialData.inflationRate || '');
+    } else {
+      // Clear form when not editing
+      setName('');
+      setAmount('');
+      setInflationRate('');
     }
   }, [initialData]);
 
@@ -31,6 +36,10 @@ const ExpenseForm = ({ onAdd, initialData }) => {
         setInflationRate('');
       }
     }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) onCancel();
   };
 
   return React.createElement('form', { onSubmit: handleSubmit, className: 'form-group' },
@@ -72,7 +81,10 @@ const ExpenseForm = ({ onAdd, initialData }) => {
           required: true
         })
       ),
-      React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Expense' : 'Add Expense')
+      React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'end' } },
+        React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Expense' : 'Add Expense'),
+        initialData && React.createElement('button', { type: 'button', onClick: handleCancel, className: 'btn btn-secondary' }, 'Cancel')
+      )
     )
   );
 };
@@ -108,7 +120,7 @@ const ExpenseList = ({ expenses, onRemove, onEdit }) => {
 };
 
 // Savings Pot Form Component
-const SavingsPotForm = ({ onAdd, initialData }) => {
+const SavingsPotForm = ({ onAdd, initialData, onCancel }) => {
   const [name, setName] = useState(initialData?.name || '');
   const [amount, setAmount] = useState(initialData?.amount || '');
   const [interestRate, setInterestRate] = useState(initialData?.interestRate || '');
@@ -125,6 +137,14 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
       setRiskRate(initialData.riskRate || '');
       setMonthlyPayment(initialData.monthlyPayment || '');
       setYearlyPayment(initialData.yearlyPayment || '');
+    } else {
+      // Clear form when not editing
+      setName('');
+      setAmount('');
+      setInterestRate('');
+      setRiskRate('');
+      setMonthlyPayment('');
+      setYearlyPayment('');
     }
   }, [initialData]);
 
@@ -149,6 +169,10 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
         setYearlyPayment('');
       }
     }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) onCancel();
   };
 
   return React.createElement('form', { onSubmit: handleSubmit, className: 'form-group' },
@@ -231,8 +255,9 @@ const SavingsPotForm = ({ onAdd, initialData }) => {
           required: false
         })
       ),
-      React.createElement('div', { style: { display: 'flex', alignItems: 'end' } },
-        React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Savings' : 'Add Savings')
+      React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'end' } },
+        React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Savings' : 'Add Savings'),
+        initialData && React.createElement('button', { type: 'button', onClick: handleCancel, className: 'btn btn-secondary' }, 'Cancel')
       )
     )
   );
@@ -753,9 +778,9 @@ const App = () => {
   return React.createElement('div', null,
     React.createElement('div', { className: 'calculator-grid' },
       React.createElement('div', { className: 'section' },
-        React.createElement('h2', null, '📉 Monthly Expenses'),
+        React.createElement('h2', null, editingExpense ? '✏️ Edit Expense' : '📉 Monthly Expenses'),
         editingExpense ?
-          React.createElement(ExpenseForm, { onAdd: handleUpdateExpense, initialData: editingExpense }) :
+          React.createElement(ExpenseForm, { onAdd: handleUpdateExpense, initialData: editingExpense, onCancel: () => setEditingExpense(null) }) :
           React.createElement(ExpenseForm, { onAdd: handleAddExpense }),
         React.createElement(ExpenseList, {
           expenses: survivalData.expenses,
@@ -764,9 +789,9 @@ const App = () => {
         })
       ),
       React.createElement('div', { className: 'section' },
-        React.createElement('h2', null, '💰 Savings Pots'),
+        React.createElement('h2', null, editingSavingsPot ? '✏️ Edit Savings Pot' : '💰 Savings Pots'),
         editingSavingsPot ?
-          React.createElement(SavingsPotForm, { onAdd: handleUpdateSavingsPot, initialData: editingSavingsPot }) :
+          React.createElement(SavingsPotForm, { onAdd: handleUpdateSavingsPot, initialData: editingSavingsPot, onCancel: () => setEditingSavingsPot(null) }) :
           React.createElement(SavingsPotForm, { onAdd: handleAddSavingsPot }),
         React.createElement(SavingsPotList, {
           savingsPots: survivalData.savingsPots,
