@@ -394,12 +394,83 @@
     </div>
 
     <script>
+        const projectComplexities = {
+            "planet-generator": 1175,
+            "image-editor.html": 1032,
+            "sprite-sheet-generator.html": 862,
+            "colony-sim": 2700,
+            "car-simulator": 866,
+            "gta-style-game": 1834,
+            "lambdasafe-sales-page": 1128,
+            "physics-sandbox": 305,
+            "portrait-site": 857,
+            "space-game": 456,
+            "space-game-site": 926,
+            "volume-raycaster": 472,
+            "alex-cv": 2798,
+            "virtual-pet-simulator": 905,
+            "retro-space-shooter": 572,
+            "infinite-maze-explorer": 974,
+            "chatbot-agent/standalone.html": 3619,
+            "particle-fireworks": 241,
+            "dungeon-crawler": 1325,
+            "hacker-simulator": 540,
+            "modular-synth": 3064,
+            "expense-tracker": 1372,
+            "timetracker": 583,
+            "rsvp-tool": 505,
+            "multi-note-todo": 635,
+            "goal-setter": 1612,
+            "meal-planner": 2512,
+            "virtual-aquarium": 2268,
+            "human-authorship-verifier": 5651,
+            "human-authorship-verifier/corporate.html": 5651,
+            "webgpu-feature-detector.html": 1060,
+            "personal-expense-survival-calculator": 3376
+        };
+
+        function getComplexityLevel(loc) {
+            if (loc < 500) return { level: 'Low', color: '#4CAF50', icon: '🟢' };
+            if (loc < 1500) return { level: 'Medium', color: '#FF9800', icon: '🟡' };
+            return { level: 'High', color: '#F44336', icon: '🔴' };
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const clearSearchButton = document.getElementById('clearSearch');
             const shakeButton = document.getElementById('shakeButton');
             const projectGrid = document.querySelector('.project-grid');
             const cards = document.querySelectorAll('.project-card');
+
+            // Add complexity badges to cards
+            cards.forEach(card => {
+                const href = card.getAttribute('href');
+                let key = href;
+                if (href.endsWith('/index.html')) {
+                    key = href.slice(0, -11); // remove /index.html
+                }
+                const loc = projectComplexities[key];
+                if (loc !== undefined) {
+                    const complexity = getComplexityLevel(loc);
+                    const badge = document.createElement('div');
+                    badge.className = 'complexity-badge';
+                    badge.innerHTML = `${complexity.icon} ${loc} LOC`;
+                    badge.style.cssText = `
+                        position: absolute;
+                        bottom: 10px;
+                        right: 10px;
+                        background: ${complexity.color};
+                        color: white;
+                        padding: 4px 8px;
+                        border-radius: 12px;
+                        font-size: 0.7em;
+                        font-weight: bold;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    `;
+                    card.style.position = 'relative';
+                    card.appendChild(badge);
+                }
+            });
 
             let isExploded = false;
             let canvas = null;
