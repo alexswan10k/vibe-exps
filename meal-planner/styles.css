@@ -685,6 +685,80 @@ button:active {
     box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
 }
 
+.nutrient-tags {
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background: #f9f9f9;
+}
+
+.nutrient-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    padding: 2px 0;
+    font-size: 0.85em;
+    color: #666;
+    line-height: 1.2;
+}
+
+.nutrient-summary:hover {
+    color: #333;
+}
+
+.expand-toggle {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    color: #666;
+    transition: all 0.2s ease;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
+.expand-toggle:hover {
+    background: #e9ecef;
+    border-color: #999;
+}
+
+.nutrient-details {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #eee;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    font-size: 0.9em;
+}
+
+.checkbox-group input {
+    margin-right: 5px;
+}
+
+.checkbox-group h5 {
+    margin: 5px 0;
+    font-size: 1em;
+    font-weight: bold;
+    width: 100%;
+}
+
 /* Quantity Controls */
 .quantity-controls {
     display: flex;

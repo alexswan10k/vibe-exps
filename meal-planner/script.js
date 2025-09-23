@@ -390,9 +390,10 @@ function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, han
     );
 }
 
-function Inventory({ inventory, updateInventory, recipes, calendar }) {
+function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsData, updateIngredientsData }) {
     const [newItem, setNewItem] = useState('');
     const [newQuantity, setNewQuantity] = useState(1);
+    const [expandedItems, setExpandedItems] = useState({});
 
     const getAllIngredients = () => {
         const ingredients = new Set();
@@ -449,6 +450,52 @@ function Inventory({ inventory, updateInventory, recipes, calendar }) {
 
     const handleRemoveItem = (item) => {
         updateInventory(item, 0);
+    };
+
+    const defaultNutritional = {
+        vitamins: {
+            vitaminA: false,
+            vitaminC: false,
+            vitaminD: false,
+            vitaminE: false,
+            vitaminK1: false,
+            vitaminK2: false,
+            vitaminB12: false,
+            folate: false
+        },
+        minerals: {
+            calcium: false,
+            iron: false,
+            magnesium: false,
+            potassium: false,
+            zinc: false
+        }
+    };
+
+    const updateNutrient = (item, type, nutrient, checked) => {
+        const newData = { ...ingredientsData };
+        if (!newData[item]) newData[item] = { vitamins: {}, minerals: {} };
+        if (!newData[item][type]) newData[item][type] = {};
+        newData[item][type][nutrient] = checked;
+        updateIngredientsData(newData);
+    };
+
+    const toggleExpanded = (item) => {
+        setExpandedItems(prev => ({
+            ...prev,
+            [item]: !prev[item]
+        }));
+    };
+
+    const getNutrientSummary = (item) => {
+        const data = ingredientsData[item];
+        if (!data) return 'No nutrients';
+
+        const selectedVitamins = Object.keys(data.vitamins || {}).filter(v => data.vitamins[v]);
+        const selectedMinerals = Object.keys(data.minerals || {}).filter(m => data.minerals[m]);
+
+        const allSelected = [...selectedVitamins, ...selectedMinerals];
+        return allSelected.length > 0 ? allSelected.join(', ') : 'No nutrients';
     };
 
     return React.createElement('div', { className: 'inventory' },
@@ -508,6 +555,40 @@ function Inventory({ inventory, updateInventory, recipes, calendar }) {
                         React.createElement('button', {
                             onClick: () => handleRemoveItem(item)
                         }, 'Remove')
+                    ),
+                    React.createElement('div', { className: 'nutrient-tags' },
+                        React.createElement('div', { className: 'nutrient-summary', onClick: () => toggleExpanded(item) },
+                            React.createElement('span', null, getNutrientSummary(item)),
+                            React.createElement('button', { className: 'expand-toggle' }, expandedItems[item] ? '−' : '+')
+                        ),
+                        expandedItems[item] && React.createElement('div', { className: 'nutrient-details' },
+                            React.createElement('h5', null, 'Vitamins:'),
+                            React.createElement('div', { className: 'checkbox-group' },
+                                Object.keys(defaultNutritional.vitamins).map(vit =>
+                                    React.createElement('label', { key: vit },
+                                        React.createElement('input', {
+                                            type: 'checkbox',
+                                            checked: ingredientsData[item]?.vitamins?.[vit] || false,
+                                            onChange: (e) => updateNutrient(item, 'vitamins', vit, e.target.checked)
+                                        }),
+                                        vit
+                                    )
+                                )
+                            ),
+                            React.createElement('h5', null, 'Minerals:'),
+                            React.createElement('div', { className: 'checkbox-group' },
+                                Object.keys(defaultNutritional.minerals).map(min =>
+                                    React.createElement('label', { key: min },
+                                        React.createElement('input', {
+                                            type: 'checkbox',
+                                            checked: ingredientsData[item]?.minerals?.[min] || false,
+                                            onChange: (e) => updateNutrient(item, 'minerals', min, e.target.checked)
+                                        }),
+                                        min
+                                    )
+                                )
+                            )
+                        )
                     )
                 );
             })
@@ -1079,6 +1160,7 @@ function ModalManager({ showCookModal, cookingRecipe, showEditModal, editingReci
 function App() {
     const [recipes, setRecipes] = useState([]);
     const [inventory, setInventory] = useState({});
+    const [ingredientsData, setIngredientsData] = useState({});
     const [shoppingList, setShoppingList] = useState({});
     const [selectedShoppingItems, setSelectedShoppingItems] = useState([]);
     const [showCookModal, setShowCookModal] = useState(false);
@@ -1121,6 +1203,10 @@ function App() {
         if (storedInventory) {
             setInventory(JSON.parse(storedInventory));
         }
+        const storedIngredientsData = localStorage.getItem('ingredientsData');
+        if (storedIngredientsData) {
+            setIngredientsData(JSON.parse(storedIngredientsData));
+        }
         const storedShoppingList = localStorage.getItem('shoppingList');
         if (storedShoppingList) {
             setShoppingList(JSON.parse(storedShoppingList));
@@ -1158,6 +1244,10 @@ function App() {
     useEffect(() => {
         localStorage.setItem('lmStudioModel', lmStudioModel);
     }, [lmStudioModel]);
+
+    useEffect(() => {
+        localStorage.setItem('ingredientsData', JSON.stringify(ingredientsData));
+    }, [ingredientsData]);
 
     // Auto-generate shopping list when inventory or calendar changes
     useEffect(() => {
@@ -1219,6 +1309,10 @@ function App() {
             newInv[item] = quantity;
         }
         setInventory(newInv);
+    };
+
+    const updateIngredientsData = (newData) => {
+        setIngredientsData(newData);
     };
 
     const toggleSelectShoppingItem = (item) => {
@@ -1466,7 +1560,9 @@ For the method, provide numbered steps that are easy to follow.`
                 inventory,
                 updateInventory,
                 recipes,
-                calendar
+                calendar,
+                ingredientsData,
+                updateIngredientsData
             }),
             activeTab === 'shopping' && React.createElement(ShoppingList, {
                 shoppingList,
