@@ -25,13 +25,19 @@
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 15px;
         }
 
         .header {
-            text-align: center;
-            margin-bottom: 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
             color: white;
+        }
+
+        .header-title {
+            flex: 1;
         }
 
         .header h1 {
@@ -45,11 +51,16 @@
             opacity: 0.9;
         }
 
+        .header-actions {
+            display: flex;
+            align-items: center;
+        }
+
         .calculator-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 30px;
-            margin-bottom: 40px;
+            margin-bottom: 20px;
         }
 
         .section {
@@ -290,10 +301,74 @@
             padding: 4px 8px;
         }
 
+        /* Help section styles */
+        .help-section {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+            margin-bottom: 15px;
+        }
+
+        .help-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .help-header h2 {
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .help-content {
+            display: grid;
+            gap: 20px;
+        }
+
+        .help-section-content {
+            background: #f7fafc;
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .help-section-content h3 {
+            margin: 0 0 12px 0;
+            color: #333;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .help-section-content p {
+            margin: 0 0 12px 0;
+            color: #555;
+            line-height: 1.5;
+        }
+
+        .help-section-content ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #555;
+        }
+
+        .help-section-content li {
+            margin-bottom: 6px;
+            line-height: 1.4;
+        }
+
+        .help-toggle {
+            text-align: center;
+        }
+
         @media (max-width: 768px) {
             .calculator-grid {
                 grid-template-columns: 1fr;
-                gap: 20px;
             }
 
             .form-row {
@@ -303,14 +378,27 @@
             .header h1 {
                 font-size: 2rem;
             }
+
+            .help-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .help-header .btn {
+                align-self: flex-end;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1>💰 Personal Expense Survival Calculator</h1>
-            <p>Calculate how long your savings will last with inflation and investment risk</p>
+            <div class="header-title">
+                <h1>💰 Personal Expense Survival Calculator</h1>
+                <p>Calculate how long your savings will last with inflation and investment risk</p>
+            </div>
+            <div class="header-actions" id="header-actions"></div>
         </header>
 
         <div id="app"></div>

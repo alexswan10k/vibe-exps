@@ -655,12 +655,112 @@ const DetailedAnalytics = ({ result, survivalData }) => {
   );
 };
 
+// Help Component
+const HelpSection = ({ isVisible, onToggle }) => {
+  if (!isVisible) {
+    return React.createElement('div', { className: 'help-toggle' },
+      React.createElement('button', {
+        onClick: onToggle,
+        className: 'btn btn-secondary',
+        style: { marginBottom: '20px' }
+      }, '❓ Show Help & Instructions')
+    );
+  }
+
+  return React.createElement('div', { className: 'help-section' },
+    React.createElement('div', { className: 'help-header' },
+      React.createElement('h2', null, '❓ Help & Instructions'),
+      React.createElement('button', {
+        onClick: onToggle,
+        className: 'btn btn-secondary btn-small',
+        style: { marginLeft: 'auto' }
+      }, 'Hide Help')
+    ),
+
+    React.createElement('div', { className: 'help-content' },
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '🎯 What This Tool Does'),
+        React.createElement('p', null,
+          'This calculator helps you determine how long your savings will last based on your monthly expenses, ' +
+          'inflation rates, and investment returns. It simulates three scenarios: nominal (expected returns), ' +
+          'pessimistic (poor market performance), and optimistic (strong market performance).'
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '💸 Adding Monthly Expenses'),
+        React.createElement('ul', null,
+          React.createElement('li', null, 'Enter the name of your expense (e.g., "Rent", "Food", "Utilities")'),
+          React.createElement('li', null, 'Enter the current monthly amount in dollars'),
+          React.createElement('li', null, 'Enter the annual inflation rate as a percentage (e.g., 3.0 for 3% inflation)'),
+          React.createElement('li', null, 'Click "Add Expense" to save it'),
+          React.createElement('li', null, 'You can edit or remove expenses using the buttons next to each item')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '💰 Adding Savings Pots'),
+        React.createElement('ul', null,
+          React.createElement('li', null, 'Enter a name for your savings pot (e.g., "Emergency Fund", "Retirement Account")'),
+          React.createElement('li', null, 'Enter the current amount in dollars'),
+          React.createElement('li', null, 'Enter the annual interest rate as a percentage (e.g., 5.0 for 5% interest)'),
+          React.createElement('li', null, 'Enter the risk rate as a percentage (how much volatility to expect)'),
+          React.createElement('li', null, 'Optional: Add monthly or yearly payment amounts (salary contributions, bonuses, etc.)'),
+          React.createElement('li', null, 'Click "Add Savings" to save it'),
+          React.createElement('li', null, 'You can edit or remove savings pots using the buttons next to each item')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '📊 Understanding the Results'),
+        React.createElement('ul', null,
+          React.createElement('li', null, React.createElement('strong', null, 'Nominal Survival Time:'), ' Expected duration with typical market returns'),
+          React.createElement('li', null, React.createElement('strong', null, 'Minimum Survival Time:'), ' Worst-case scenario with poor market performance'),
+          React.createElement('li', null, React.createElement('strong', null, 'Maximum Survival Time:'), ' Best-case scenario with strong market performance'),
+          React.createElement('li', null, 'Results update automatically when you add, edit, or remove items'),
+          React.createElement('li', null, 'All calculations account for inflation on expenses and compound interest on savings')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '📈 Savings Progression Chart'),
+        React.createElement('p', null,
+          'The chart shows how your savings balance changes month by month across the three scenarios. ' +
+          'The blue line represents nominal returns, red shows the minimum (high risk) scenario, and green shows the maximum (low risk) scenario.'
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '📋 Detailed Analytics'),
+        React.createElement('p', null,
+          'The detailed analytics section provides month-by-month breakdowns of:'
+        ),
+        React.createElement('ul', null,
+          React.createElement('li', null, 'Individual expense amounts (increasing with inflation)'),
+          React.createElement('li', null, 'Individual savings amounts for each pot'),
+          React.createElement('li', null, 'Total expenses and savings progression'),
+          React.createElement('li', null, 'Key metrics summary with initial setup and final results')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '💾 Data Persistence'),
+        React.createElement('p', null,
+          'Your data is automatically saved to your browser\'s local storage. ' +
+          'You can close and reopen the page, and your expenses and savings pots will still be there.'
+        )
+      )
+    )
+  );
+};
+
 // Main App Component
 const App = () => {
   const [survivalData, setSurvivalData] = useState(new SurvivalData());
   const [result, setResult] = useState(null);
   const [editingExpense, setEditingExpense] = useState(null);
   const [editingSavingsPot, setEditingSavingsPot] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   // Load data from localStorage on mount
   useEffect(() => {
@@ -668,6 +768,16 @@ const App = () => {
     if (loadedData) {
       setSurvivalData(loadedData);
     }
+  }, []);
+
+  // Listen for global help state changes
+  useEffect(() => {
+    const listener = (newState) => setShowHelp(newState);
+    helpStateListeners.push(listener);
+    return () => {
+      const index = helpStateListeners.indexOf(listener);
+      if (index > -1) helpStateListeners.splice(index, 1);
+    };
   }, []);
 
   // Auto-calculate when data changes
@@ -776,6 +886,86 @@ const App = () => {
   };
 
   return React.createElement('div', null,
+    showHelp && React.createElement('div', { className: 'help-section' },
+      React.createElement('div', { className: 'help-header' },
+        React.createElement('h2', null, '❓ Help & Instructions')
+      ),
+
+      React.createElement('div', { className: 'help-content' },
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '🎯 What This Tool Does'),
+          React.createElement('p', null,
+            'This calculator helps you determine how long your savings will last based on your monthly expenses, ' +
+            'inflation rates, and investment returns. It simulates three scenarios: nominal (expected returns), ' +
+            'pessimistic (poor market performance), and optimistic (strong market performance).'
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '💸 Adding Monthly Expenses'),
+          React.createElement('ul', null,
+            React.createElement('li', null, 'Enter the name of your expense (e.g., "Rent", "Food", "Utilities")'),
+            React.createElement('li', null, 'Enter the current monthly amount in dollars'),
+            React.createElement('li', null, 'Enter the annual inflation rate as a percentage (e.g., 3.0 for 3% inflation)'),
+            React.createElement('li', null, 'Click "Add Expense" to save it'),
+            React.createElement('li', null, 'You can edit or remove expenses using the buttons next to each item')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '💰 Adding Savings Pots'),
+          React.createElement('ul', null,
+            React.createElement('li', null, 'Enter a name for your savings pot (e.g., "Emergency Fund", "Retirement Account")'),
+            React.createElement('li', null, 'Enter the current amount in dollars'),
+            React.createElement('li', null, 'Enter the annual interest rate as a percentage (e.g., 5.0 for 5% interest)'),
+            React.createElement('li', null, 'Enter the risk rate as a percentage (how much volatility to expect)'),
+            React.createElement('li', null, 'Optional: Add monthly or yearly payment amounts (salary contributions, bonuses, etc.)'),
+            React.createElement('li', null, 'Click "Add Savings" to save it'),
+            React.createElement('li', null, 'You can edit or remove savings pots using the buttons next to each item')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '📊 Understanding the Results'),
+          React.createElement('ul', null,
+            React.createElement('li', null, React.createElement('strong', null, 'Nominal Survival Time:'), ' Expected duration with typical market returns'),
+            React.createElement('li', null, React.createElement('strong', null, 'Minimum Survival Time:'), ' Worst-case scenario with poor market performance'),
+            React.createElement('li', null, React.createElement('strong', null, 'Maximum Survival Time:'), ' Best-case scenario with strong market performance'),
+            React.createElement('li', null, 'Results update automatically when you add, edit, or remove items'),
+            React.createElement('li', null, 'All calculations account for inflation on expenses and compound interest on savings')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '📈 Savings Progression Chart'),
+          React.createElement('p', null,
+            'The chart shows how your savings balance changes month by month across the three scenarios. ' +
+            'The blue line represents nominal returns, red shows the minimum (high risk) scenario, and green shows the maximum (low risk) scenario.'
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '📋 Detailed Analytics'),
+          React.createElement('p', null,
+            'The detailed analytics section provides month-by-month breakdowns of:'
+          ),
+          React.createElement('ul', null,
+            React.createElement('li', null, 'Individual expense amounts (increasing with inflation)'),
+            React.createElement('li', null, 'Individual savings amounts for each pot'),
+            React.createElement('li', null, 'Total expenses and savings progression'),
+            React.createElement('li', null, 'Key metrics summary with initial setup and final results')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '💾 Data Persistence'),
+          React.createElement('p', null,
+            'Your data is automatically saved to your browser\'s local storage. ' +
+            'You can close and reopen the page, and your expenses and savings pots will still be there.'
+          )
+        )
+      )
+    ),
     React.createElement('div', { className: 'calculator-grid' },
       React.createElement('div', { className: 'section' },
         React.createElement('h2', null, editingExpense ? '✏️ Edit Expense' : '📉 Monthly Expenses'),
@@ -816,6 +1006,47 @@ const App = () => {
   );
 };
 
+// Global help state
+let globalHelpState = false;
+const helpStateListeners = [];
+
+// Function to update global help state and notify listeners
+const setGlobalHelpState = (newState) => {
+  globalHelpState = newState;
+  helpStateListeners.forEach(listener => listener(newState));
+};
+
 // Render the app
 const root = ReactDOM.createRoot(document.getElementById('app'));
 root.render(React.createElement(App));
+
+// Render help toggle in header
+const headerRoot = ReactDOM.createRoot(document.getElementById('header-actions'));
+const HeaderHelpToggle = () => {
+  const [showHelp, setShowHelp] = useState(globalHelpState);
+
+  const handleToggle = () => {
+    const newState = !showHelp;
+    setShowHelp(newState);
+    setGlobalHelpState(newState);
+  };
+
+  // Listen for global state changes
+  useEffect(() => {
+    const listener = (newState) => setShowHelp(newState);
+    helpStateListeners.push(listener);
+    return () => {
+      const index = helpStateListeners.indexOf(listener);
+      if (index > -1) helpStateListeners.splice(index, 1);
+    };
+  }, []);
+
+  return React.createElement('div', { className: 'help-toggle' },
+    React.createElement('button', {
+      onClick: handleToggle,
+      className: 'btn btn-secondary',
+      style: { marginBottom: '0' }
+    }, showHelp ? '❓ Hide Help' : '❓ Show Help & Instructions')
+  );
+};
+headerRoot.render(React.createElement(HeaderHelpToggle));
