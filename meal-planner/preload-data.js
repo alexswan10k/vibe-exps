@@ -1178,23 +1178,31 @@ Call this function to populate the app with sample data
 */
 function preloadCommonData() {
     try {
-        // Merge with existing ingredients data
+        // Merge with existing ingredients data (existing takes precedence to avoid overwriting, case insensitive)
         const existingIngredients = JSON.parse(localStorage.getItem('ingredientsData') || '{}');
-        const mergedIngredients = { ...existingIngredients, ...SAMPLE_INGREDIENTS };
+        const lowerExistingIngredients = {};
+        for (const key in existingIngredients) {
+            lowerExistingIngredients[key.toLowerCase()] = existingIngredients[key];
+        }
+        const mergedIngredients = { ...SAMPLE_INGREDIENTS, ...lowerExistingIngredients };
         // Save merged ingredients data
         localStorage.setItem('ingredientsData', JSON.stringify(mergedIngredients));
-        console.log('✅ Loaded', Object.keys(SAMPLE_INGREDIENTS).length, 'common ingredients');
+        const addedIngredients = Object.keys(SAMPLE_INGREDIENTS).filter(key => !lowerExistingIngredients.hasOwnProperty(key)).length;
+        console.log('✅ Added', addedIngredients, 'new common ingredients');
         // Get existing recipes
         const existingRecipes = JSON.parse(localStorage.getItem('recipes') || '[]');
-        // Add new recipes with unique IDs
-        const newRecipes = SAMPLE_RECIPES.map(recipe => ({
-            ...recipe,
-            id: Date.now() + Math.random() // Ensure unique IDs
-        }));
+        const existingRecipeNames = new Set(existingRecipes.map(r => r.name.toLowerCase()));
+        // Add only new recipes with unique names (case insensitive)
+        const newRecipes = SAMPLE_RECIPES
+            .filter(recipe => !existingRecipeNames.has(recipe.name.toLowerCase()))
+            .map(recipe => ({
+                ...recipe,
+                id: Date.now() + Math.random() // Ensure unique IDs
+            }));
         const mergedRecipes = [...existingRecipes, ...newRecipes];
         // Save merged recipes
         localStorage.setItem('recipes', JSON.stringify(mergedRecipes));
-        console.log('✅ Loaded', SAMPLE_RECIPES.length, 'common recipes');
+        console.log('✅ Added', newRecipes.length, 'new common recipes');
         console.log('🎉 Common data preload complete. Refresh the page to see the new data.');
     } catch (error) {
         console.error('Error preloading data:', error);

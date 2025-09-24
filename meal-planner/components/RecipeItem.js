@@ -28,7 +28,9 @@ function RecipeItem({ recipe, onEdit, onDelete }) {
             React.createElement('button', {
                 onClick: (e) => {
                     e.stopPropagation();
-                    onDelete(recipe.id);
+                    if (window.confirm(`Are you sure you want to delete "${recipe.name}"?`)) {
+                        onDelete(recipe.id);
+                    }
                 },
                 className: 'delete-btn'
             }, 'Delete')

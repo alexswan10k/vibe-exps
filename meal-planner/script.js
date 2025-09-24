@@ -195,17 +195,24 @@ function App() {
     };
 
     const loadSampleData = () => {
-        // Load sample ingredients from preload-data.js
-        const existingIngredients = { ...ingredientsData };
-        const mergedIngredients = { ...existingIngredients, ...SAMPLE_INGREDIENTS };
+        // Merge with existing ingredients data (existing takes precedence to avoid overwriting, case insensitive)
+        const lowerExistingIngredients = {};
+        for (const key in ingredientsData) {
+            lowerExistingIngredients[key.toLowerCase()] = ingredientsData[key];
+        }
+        const mergedIngredients = { ...SAMPLE_INGREDIENTS, ...lowerExistingIngredients };
         setIngredientsData(mergedIngredients);
         localStorage.setItem('ingredientsData', JSON.stringify(mergedIngredients));
 
-        // Load sample recipes from preload-data.js
-        const newRecipes = SAMPLE_RECIPES.map(recipe => ({
-            ...recipe,
-            id: Date.now() + Math.random()
-        }));
+        // Get existing recipes
+        const existingRecipeNames = new Set(recipes.map(r => r.name.toLowerCase()));
+        // Add only new recipes with unique names (case insensitive)
+        const newRecipes = SAMPLE_RECIPES
+            .filter(recipe => !existingRecipeNames.has(recipe.name.toLowerCase()))
+            .map(recipe => ({
+                ...recipe,
+                id: Date.now() + Math.random() // Ensure unique IDs
+            }));
 
         const mergedRecipes = [...recipes, ...newRecipes];
         setRecipes(mergedRecipes);
