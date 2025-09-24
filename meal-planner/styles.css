@@ -29,6 +29,10 @@ body {
         padding: 10px;
         margin: 0 5px;
     }
+
+    .header {
+        padding-left: 0;
+    }
 }
 
 /* Header styles */
@@ -37,7 +41,7 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    padding: 10px 0;
+    padding: 10px 0 10px 20px;
     border-bottom: 1px solid #ddd;
 }
 
