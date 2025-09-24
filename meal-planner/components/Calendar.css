@@ -1,4 +1,37 @@
 /* Calendar Component Styles */
+.calendar-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    justify-content: center;
+}
+
+.generate-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #3498db;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.generate-btn:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
+}
+
+.ai-btn {
+    background: #9b59b6;
+}
+
+.ai-btn:hover {
+    background: #8e44ad;
+    box-shadow: 0 4px 12px rgba(155, 89, 182, 0.4);
+}
+
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -7,6 +40,16 @@
 
 /* Mobile Styles */
 @media (max-width: 768px) {
+    .calendar-controls {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .generate-btn {
+        width: 100%;
+        max-width: 200px;
+    }
+
     .calendar-grid {
         grid-template-columns: repeat(3, 1fr);
         gap: 10px;

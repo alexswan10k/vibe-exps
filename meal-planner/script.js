@@ -348,6 +348,47 @@ function App() {
         }
     };
 
+    const generateRandomMealPlan = () => {
+        if (recipes.length === 0) {
+            alert('No recipes available to generate a meal plan.');
+            return;
+        }
+        const shuffled = [...recipes].sort(() => Math.random() - 0.5);
+        const newCalendar = {};
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        days.forEach((day, index) => {
+            newCalendar[day] = shuffled[index % shuffled.length].id;
+        });
+        setCalendar(newCalendar);
+    };
+
+    const generateAIMealPlan = async () => {
+        if (recipes.length === 0) {
+            alert('No recipes available to generate a meal plan.');
+            return;
+        }
+        const config = {
+            provider: llmProvider,
+            lmStudioEndpoint,
+            lmStudioModel,
+            openRouterApiKey,
+            openRouterModel
+        };
+        const result = await LLMService.generateMealPlan(recipes, calendar, config);
+        if (result.success) {
+            const newCalendar = {};
+            Object.entries(result.mealPlan).forEach(([day, recipeName]) => {
+                const recipe = recipes.find(r => r.name === recipeName);
+                if (recipe) {
+                    newCalendar[day] = recipe.id;
+                }
+            });
+            setCalendar(newCalendar);
+        } else {
+            alert('Failed to generate AI meal plan: ' + result.error);
+        }
+    };
+
     return React.createElement(React.Fragment, null,
         React.createElement('div', { className: 'app' },
             React.createElement('div', { className: 'header' },
@@ -377,7 +418,7 @@ function App() {
                 }, 'Nutrition')
             ),
             (activeTab === 'calendar' || activeTab === 'recipes') && React.createElement('div', { className: 'main-content' },
-                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe, inventory }),
+                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe, inventory, onGenerateRandom: generateRandomMealPlan, onGenerateAI: generateAIMealPlan }),
                 React.createElement(RecipeList, {
                     recipes,
                     inventory,
