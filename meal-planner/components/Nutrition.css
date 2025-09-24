@@ -36,3 +36,44 @@
         gap: 15px;
     }
 }
+
+/* Text sections styling */
+.daily-nutrition, .weekly-nutrition, .omitted-nutrients {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.day-nutrition {
+    margin-bottom: 15px;
+    padding: 15px;
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.day-nutrition h4 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+    font-size: 1.1rem;
+}
+
+.day-nutrition p {
+    margin: 5px 0;
+    color: #34495e;
+    line-height: 1.4;
+}
+
+.weekly-nutrition p, .omitted-nutrients p {
+    margin: 8px 0;
+    color: #34495e;
+    line-height: 1.5;
+}
+
+.omitted-nutrients {
+    background: rgba(255, 235, 235, 0.95);
+    border-left: 4px solid #e74c3c;
+}

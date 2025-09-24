@@ -454,6 +454,11 @@ function App() {
                 React.createElement('h1', null, 'Meal Planner'),
                 React.createElement('div', { className: 'header-buttons' },
                     React.createElement('button', {
+                        className: 'nutrition-btn',
+                        onClick: () => window.open('nutrition.html', '_blank'),
+                        title: 'View Nutrition Overview'
+                    }, '🥗'),
+                    React.createElement('button', {
                         className: 'log-btn',
                         onClick: () => window.open('event-log.html', '_blank'),
                         title: 'View Event Log'
@@ -477,11 +482,7 @@ function App() {
                 React.createElement('button', {
                     className: activeTab === 'shopping' ? 'tab active' : 'tab',
                     onClick: () => setActiveTab('shopping')
-                }, 'Shopping List'),
-                React.createElement('button', {
-                    className: activeTab === 'nutrition' ? 'tab active' : 'tab',
-                    onClick: () => setActiveTab('nutrition')
-                }, 'Nutrition')
+                }, 'Shopping List')
             ),
             (activeTab === 'calendar' || activeTab === 'recipes') && React.createElement('div', { className: 'main-content' },
                 React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe, inventory, onGenerateRandom: generateRandomMealPlan, onGenerateAI: generateAIMealPlan }),
@@ -519,8 +520,7 @@ function App() {
                 toggleSelectShoppingItem,
                 transferSelectedToInventory,
                 updateShoppingItemCost
-            }),
-            activeTab === 'nutrition' && React.createElement(Nutrition, { recipes, calendar, getRecipeById, ingredientsData })
+            })
         ),
         ReactDOM.createPortal(
             React.createElement(ModalManager, {

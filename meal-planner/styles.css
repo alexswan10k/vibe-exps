@@ -46,6 +46,22 @@ body {
     gap: 10px;
 }
 
+.nutrition-btn {
+    background: #27ae60;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background-color 0.2s;
+}
+
+.nutrition-btn:hover {
+    background: #229954;
+}
+
 .log-btn {
     background: #17a2b8;
     color: white;

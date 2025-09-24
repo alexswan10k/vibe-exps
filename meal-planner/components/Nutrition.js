@@ -155,6 +155,8 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
 
     // Use useEffect to create the charts after component mounts
     React.useEffect(() => {
+        const chartRefs = {};
+
         // Calories chart
         const caloriesCtx = document.getElementById('caloriesChart');
         if (caloriesCtx) {
@@ -192,7 +194,7 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }
             };
 
-            new Chart(caloriesCtx, {
+            chartRefs.caloriesChart = new Chart(caloriesCtx, {
                 type: 'bar',
                 data: caloriesData,
                 options: caloriesOptions
@@ -202,7 +204,7 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
         // Macronutrients stacked chart
         const macroCtx = document.getElementById('macroChart');
         if (macroCtx) {
-            new Chart(macroCtx, {
+            chartRefs.macroChart = new Chart(macroCtx, {
                 type: 'bar',
                 data: chartData,
                 options: chartOptions
@@ -267,7 +269,7 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }
             };
 
-            new Chart(vitaminsCtx, {
+            chartRefs.vitaminsChart = new Chart(vitaminsCtx, {
                 type: 'bar',
                 data: vitaminsData,
                 options: vitaminsOptions
@@ -332,7 +334,7 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }
             };
 
-            new Chart(mineralsCtx, {
+            chartRefs.mineralsChart = new Chart(mineralsCtx, {
                 type: 'bar',
                 data: mineralsData,
                 options: mineralsOptions
@@ -389,7 +391,7 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }
             };
 
-            new Chart(weeklyVitaminsCtx, {
+            chartRefs.weeklyVitaminsChart = new Chart(weeklyVitaminsCtx, {
                 type: 'pie',
                 data: weeklyVitaminsData,
                 options: weeklyVitaminsOptions
@@ -438,7 +440,7 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }
             };
 
-            new Chart(weeklyMineralsCtx, {
+            chartRefs.weeklyMineralsChart = new Chart(weeklyMineralsCtx, {
                 type: 'pie',
                 data: weeklyMineralsData,
                 options: weeklyMineralsOptions
@@ -472,12 +474,21 @@ function Nutrition({ recipes, calendar, getRecipeById, ingredientsData }) {
                 }
             };
 
-            new Chart(weeklyMacrosCtx, {
+            chartRefs.weeklyMacronutrientsChart = new Chart(weeklyMacrosCtx, {
                 type: 'pie',
                 data: weeklyMacrosData,
                 options: weeklyMacrosOptions
             });
         }
+
+        // Cleanup function
+        return () => {
+            Object.values(chartRefs).forEach(chart => {
+                if (chart) {
+                    chart.destroy();
+                }
+            });
+        };
     }, [recipes, calendar]);
 
     // Helper functions for colors
