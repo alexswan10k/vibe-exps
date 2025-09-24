@@ -640,6 +640,103 @@ const SAMPLE_RECIPES = [
             "protein": 40,
             "fiber": 3
         }
+    },
+    {
+        "name": "Fish and Chips",
+        "ingredients": [
+            { "name": "cod", "quantity": 150, "unit": "g" },
+            { "name": "potatoes", "quantity": 200, "unit": "g" },
+            { "name": "peas", "quantity": 100, "unit": "g" },
+            { "name": "flour", "quantity": 50, "unit": "g" },
+            { "name": "olive oil", "quantity": 2, "unit": "tbsp" }
+        ],
+        "method": [
+            "Cut potatoes into chips and fry",
+            "Batter cod with flour and fry",
+            "Boil peas",
+            "Serve together"
+        ],
+        "nutritional": {
+            "calories": 500,
+            "carbs": 50,
+            "fat": 25,
+            "protein": 30,
+            "fiber": 5
+        }
+    },
+    {
+        "name": "Full English Breakfast",
+        "ingredients": [
+            { "name": "eggs", "quantity": 2, "unit": "whole" },
+            { "name": "bacon", "quantity": 50, "unit": "g" },
+            { "name": "sausage", "quantity": 100, "unit": "g" },
+            { "name": "tomatoes", "quantity": 50, "unit": "g" },
+            { "name": "mushrooms", "quantity": 50, "unit": "g" },
+            { "name": "whole wheat bread", "quantity": 2, "unit": "slices" }
+        ],
+        "method": [
+            "Fry bacon and sausage",
+            "Fry eggs",
+            "Grill tomatoes and mushrooms",
+            "Toast bread",
+            "Serve all together"
+        ],
+        "nutritional": {
+            "calories": 600,
+            "carbs": 30,
+            "fat": 35,
+            "protein": 30,
+            "fiber": 4
+        }
+    },
+    {
+        "name": "Butter Chicken",
+        "ingredients": [
+            { "name": "chicken breast", "quantity": 150, "unit": "g" },
+            { "name": "tomatoes", "quantity": 100, "unit": "g" },
+            { "name": "onion", "quantity": 50, "unit": "g" },
+            { "name": "garlic", "quantity": 1, "unit": "clove" },
+            { "name": "butter", "quantity": 20, "unit": "g" },
+            { "name": "curry powder", "quantity": 1, "unit": "tbsp" },
+            { "name": "coconut milk", "quantity": 100, "unit": "ml" },
+            { "name": "brown rice", "quantity": 100, "unit": "g" }
+        ],
+        "method": [
+            "Sauté onion and garlic in butter",
+            "Add chicken and curry powder",
+            "Add tomatoes and coconut milk, simmer 15 min",
+            "Serve over rice"
+        ],
+        "nutritional": {
+            "calories": 450,
+            "carbs": 40,
+            "fat": 25,
+            "protein": 30,
+            "fiber": 4
+        }
+    },
+    {
+        "name": "Chow Mein",
+        "ingredients": [
+            { "name": "spaghetti", "quantity": 100, "unit": "g" },
+            { "name": "chicken breast", "quantity": 100, "unit": "g" },
+            { "name": "carrots", "quantity": 50, "unit": "g" },
+            { "name": "bell peppers", "quantity": 50, "unit": "g" },
+            { "name": "soy sauce", "quantity": 1, "unit": "tbsp" },
+            { "name": "olive oil", "quantity": 1, "unit": "tbsp" }
+        ],
+        "method": [
+            "Boil spaghetti",
+            "Stir-fry chicken and veggies in oil",
+            "Add soy sauce and mix with noodles"
+        ],
+        "nutritional": {
+            "calories": 400,
+            "carbs": 45,
+            "fat": 15,
+            "protein": 25,
+            "fiber": 5
+        }
     }
 ];
 const SAMPLE_INGREDIENTS = {
@@ -652,7 +749,7 @@ const SAMPLE_INGREDIENTS = {
             "zinc": true,
             "potassium": true
         },
-        "price": 5.99
+        "price": 0.0061
     },
     "spinach": {
         "vitamins": {
@@ -667,7 +764,7 @@ const SAMPLE_INGREDIENTS = {
             "magnesium": true,
             "potassium": true
         },
-        "price": 2.49
+        "price": 0.0064
     },
     "orange": {
         "vitamins": {
@@ -675,7 +772,7 @@ const SAMPLE_INGREDIENTS = {
             "vitaminC": true
         },
         "minerals": {},
-        "price": 0.89
+        "price": 0.15
     },
     "almonds": {
         "vitamins": {
@@ -685,7 +782,7 @@ const SAMPLE_INGREDIENTS = {
             "calcium": true,
             "magnesium": true
         },
-        "price": 4.99
+        "price": 0.0105
     },
     "salmon": {
         "vitamins": {
@@ -699,7 +796,7 @@ const SAMPLE_INGREDIENTS = {
             "zinc": true,
             "potassium": true
         },
-        "price": 8.99
+        "price": 0.018
     },
     "broccoli": {
         "vitamins": {
@@ -713,7 +810,7 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "potassium": true
         },
-        "price": 1.99
+        "price": 0.0022
     },
     "sweet potato": {
         "vitamins": {
@@ -723,7 +820,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 1.29
+        "price": 0.0015
     },
     "quinoa": {
         "vitamins": {
@@ -734,7 +831,7 @@ const SAMPLE_INGREDIENTS = {
             "magnesium": true,
             "potassium": true
         },
-        "price": 3.99
+        "price": 0.005
     },
     "eggs": {
         "vitamins": {
@@ -747,7 +844,7 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true
         },
-        "price": 2.99
+        "price": 0.21
     },
     "milk": {
         "vitamins": {
@@ -758,7 +855,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "calcium": true
         },
-        "price": 1.49
+        "price": 0.00138
     },
     "yogurt": {
         "vitamins": {
@@ -769,7 +866,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "calcium": true
         },
-        "price": 2.49
+        "price": 0.0022
     },
     "cheese": {
         "vitamins": {
@@ -780,7 +877,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "calcium": true
         },
-        "price": 3.99
+        "price": 0.007
     },
     "beef": {
         "vitamins": {
@@ -790,7 +887,7 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true
         },
-        "price": 6.99
+        "price": 0.012
     },
     "pork": {
         "vitamins": {
@@ -800,7 +897,7 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true
         },
-        "price": 4.99
+        "price": 0.006
     },
     "turkey": {
         "vitamins": {
@@ -810,7 +907,7 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true
         },
-        "price": 5.49
+        "price": 0.008
     },
     "tuna": {
         "vitamins": {
@@ -822,7 +919,7 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true
         },
-        "price": 2.99
+        "price": 0.005
     },
     "avocado": {
         "vitamins": {
@@ -834,7 +931,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 1.49
+        "price": 0.00375
     },
     "banana": {
         "vitamins": {
@@ -844,7 +941,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 0.49
+        "price": 0.0009
     },
     "strawberries": {
         "vitamins": {
@@ -852,7 +949,7 @@ const SAMPLE_INGREDIENTS = {
             "vitaminC": true
         },
         "minerals": {},
-        "price": 3.99
+        "price": 0.0088
     },
     "blueberries": {
         "vitamins": {
@@ -860,7 +957,7 @@ const SAMPLE_INGREDIENTS = {
             "vitaminC": true
         },
         "minerals": {},
-        "price": 4.49
+        "price": 0.01
     },
     "apples": {
         "vitamins": {
@@ -868,7 +965,7 @@ const SAMPLE_INGREDIENTS = {
             "vitaminC": true
         },
         "minerals": {},
-        "price": 1.29
+        "price": 0.002
     },
     "carrots": {
         "vitamins": {
@@ -877,7 +974,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 0.99
+        "price": 0.00069
     },
     "bell peppers": {
         "vitamins": {
@@ -885,7 +982,7 @@ const SAMPLE_INGREDIENTS = {
             "vitaminC": true
         },
         "minerals": {},
-        "price": 1.99
+        "price": 0.003
     },
     "tomatoes": {
         "vitamins": {
@@ -895,7 +992,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 1.99
+        "price": 0.0023
     },
     "cucumber": {
         "vitamins": {
@@ -905,7 +1002,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 0.79
+        "price": 0.0016
     },
     "lettuce": {
         "vitamins": {
@@ -916,7 +1013,7 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "potassium": true
         },
-        "price": 1.49
+        "price": 0.002
     },
     "brown rice": {
         "vitamins": {},
@@ -925,7 +1022,7 @@ const SAMPLE_INGREDIENTS = {
             "magnesium": true,
             "potassium": true
         },
-        "price": 2.49
+        "price": 0.002
     },
     "oats": {
         "vitamins": {},
@@ -934,7 +1031,7 @@ const SAMPLE_INGREDIENTS = {
             "magnesium": true,
             "potassium": true
         },
-        "price": 2.99
+        "price": 0.0015
     },
     "whole wheat bread": {
         "vitamins": {
@@ -943,33 +1040,37 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "iron": true
         },
-        "price": 2.99
+        "price": 0.00075
     },
     "olive oil": {
         "vitamins": {
             "vitaminE": true,
             "vitaminK1": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.0975
     },
     "butter": {
         "vitamins": {
             "vitaminA": true,
             "vitaminD": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.008
     },
     "garlic": {
         "vitamins": {
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.002
     },
     "onion": {
         "vitamins": {
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.001
     },
     "potatoes": {
         "vitamins": {
@@ -977,7 +1078,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 0.0009
     },
     "peas": {
         "vitamins": {
@@ -987,7 +1089,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 0.0015
     },
     "lentils": {
         "vitamins": {
@@ -997,7 +1100,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "magnesium": true,
             "potassium": true
-        }
+        },
+        "price": 0.002
     },
     "chickpeas": {
         "vitamins": {
@@ -1007,7 +1111,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "magnesium": true,
             "potassium": true
-        }
+        },
+        "price": 0.0015
     },
     "tofu": {
         "vitamins": {},
@@ -1015,7 +1120,8 @@ const SAMPLE_INGREDIENTS = {
             "calcium": true,
             "iron": true,
             "magnesium": true
-        }
+        },
+        "price": 0.004
     },
     "nuts": {
         "vitamins": {
@@ -1038,7 +1144,8 @@ const SAMPLE_INGREDIENTS = {
         "vitamins": {},
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 0.0015
     },
     "bacon": {
         "vitamins": {
@@ -1046,7 +1153,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "zinc": true
-        }
+        },
+        "price": 0.005
     },
     "parmesan": {
         "vitamins": {
@@ -1055,27 +1163,32 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "calcium": true
-        }
+        },
+        "price": 0.015
     },
     "coconut milk": {
         "vitamins": {},
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 0.0025
     },
     "curry powder": {
         "vitamins": {},
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 0.01
     },
     "puff pastry": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.0047
     },
     "chicken broth": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.001
     },
     "mushrooms": {
         "vitamins": {
@@ -1083,37 +1196,45 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 0.003
     },
     "red wine": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.006
     },
     "beef broth": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.001
     },
     "soy sauce": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.002
     },
     "pineapple": {
         "vitamins": {
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.001
     },
     "vinegar": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.001
     },
     "brown sugar": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.002
     },
     "bay leaf": {
         "vitamins": {},
-        "minerals": {}
+        "minerals": {},
+        "price": 0.001
     },
     "kale": {
         "vitamins": {
@@ -1123,7 +1244,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "calcium": true
-        }
+        },
+        "price": 0.004
     },
     "veal": {
         "vitamins": {
@@ -1133,19 +1255,22 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true,
             "potassium": true
-        }
+        },
+        "price": 0.015
     },
     "flour": {
         "vitamins": {},
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 0.001
     },
     "breadcrumbs": {
         "vitamins": {},
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 0.002
     },
     "lemon": {
         "vitamins": {
@@ -1153,19 +1278,46 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 0.002
     },
     "cloves": {
         "vitamins": {
             "vitaminK1": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.01
     },
     "juniper berries": {
         "vitamins": {
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.02
+    },
+    "cod": {
+        "vitamins": {
+            "vitaminA": true,
+            "vitaminD": true,
+            "vitaminB12": true
+        },
+        "minerals": {
+            "calcium": true,
+            "iron": true,
+            "zinc": true,
+            "potassium": true
+        },
+        "price": 0.012
+    },
+    "sausage": {
+        "vitamins": {
+            "vitaminB12": true
+        },
+        "minerals": {
+            "iron": true,
+            "zinc": true
+        },
+        "price": 0.005
     }
 };
 /**
