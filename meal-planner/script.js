@@ -38,6 +38,18 @@ function App() {
         return recipes.find(recipe => recipe.id == id);
     };
 
+    // Helper function to append to event log
+    const appendToEventLog = (action, details) => {
+        const entry = {
+            timestamp: Date.now(),
+            action,
+            details
+        };
+        const existingLog = JSON.parse(localStorage.getItem('eventLog') || '[]');
+        existingLog.push(entry);
+        localStorage.setItem('eventLog', JSON.stringify(existingLog));
+    };
+
     useEffect(() => {
         const storedRecipes = localStorage.getItem('recipes');
         if (storedRecipes) {
@@ -181,6 +193,7 @@ function App() {
     };
 
     const updateInventory = (item, quantity) => {
+        const oldQuantity = inventory[item] || 0;
         const newInv = { ...inventory };
         if (quantity <= 0) {
             delete newInv[item];
@@ -188,6 +201,15 @@ function App() {
             newInv[item] = quantity;
         }
         setInventory(newInv);
+
+        // Log inventory change
+        const changeType = quantity > oldQuantity ? 'add' : 'remove';
+        appendToEventLog('inventory_change', {
+            item,
+            oldQuantity,
+            newQuantity: quantity <= 0 ? 0 : quantity,
+            changeType
+        });
     };
 
     const updateIngredientsData = (newData) => {
@@ -266,12 +288,31 @@ function App() {
 
     const transferSelectedToInventory = () => {
         const newInventory = { ...inventory };
+        const boughtItems = [];
+        let totalCost = 0;
+
         selectedShoppingItems.forEach(item => {
             if (shoppingList[item] && shoppingList[item].quantity) {
                 newInventory[item] = (newInventory[item] || 0) + shoppingList[item].quantity;
+                boughtItems.push({
+                    name: item,
+                    quantity: shoppingList[item].quantity,
+                    unitCost: shoppingList[item].unitCost
+                });
+                totalCost += shoppingList[item].quantity * shoppingList[item].unitCost;
             }
         });
+
         setInventory(newInventory);
+
+        // Log buying event
+        if (boughtItems.length > 0) {
+            appendToEventLog('buy', {
+                items: boughtItems,
+                totalCost
+            });
+        }
+
         const newList = { ...shoppingList };
         selectedShoppingItems.forEach(item => delete newList[item]);
         setShoppingList(newList);
@@ -291,6 +332,17 @@ function App() {
                 newInventory[ing.name] = Math.max(0, current - ing.quantity);
             });
             setInventory(newInventory);
+
+            // Log cooking event
+            appendToEventLog('cook', {
+                recipeName: cookingRecipe.name,
+                ingredientsConsumed: cookingRecipe.ingredients.map(ing => ({
+                    name: ing.name,
+                    quantity: ing.quantity,
+                    unit: ing.unit
+                }))
+            });
+
             alert(`Successfully cooked ${cookingRecipe.name}! Ingredients have been consumed from your inventory.`);
         }
         setShowCookModal(false);
@@ -400,11 +452,18 @@ function App() {
         React.createElement('div', { className: 'app' },
             React.createElement('div', { className: 'header' },
                 React.createElement('h1', null, 'Meal Planner'),
-                React.createElement('button', {
-                    className: 'hamburger-btn',
-                    onClick: () => setShowDataModal(true),
-                    title: 'Data Management'
-                }, '☰')
+                React.createElement('div', { className: 'header-buttons' },
+                    React.createElement('button', {
+                        className: 'log-btn',
+                        onClick: () => window.open('event-log.html', '_blank'),
+                        title: 'View Event Log'
+                    }, '📊'),
+                    React.createElement('button', {
+                        className: 'hamburger-btn',
+                        onClick: () => setShowDataModal(true),
+                        title: 'Data Management'
+                    }, '☰')
+                )
             ),
             React.createElement('div', { className: 'tabs' },
                 React.createElement('button', {

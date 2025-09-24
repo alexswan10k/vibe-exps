@@ -138,6 +138,8 @@ The pure functions are used in the main application to:
 - **Chart Integration**: Generates data structures compatible with Chart.js
 - **Nutrient Tracking**: Tracks 8 vitamins and 5 minerals
 - **OR Logic**: If any ingredient contains a nutrient, the recipe contains it
+- **Event Logging**: Automatically logs cooking, shopping, and inventory changes
+- **Analytics Dashboard**: View charts and statistics about your meal planning activity
 
 ## Example Usage
 
@@ -221,3 +223,41 @@ PreloadData.isCommonDataLoaded();
 - Tuna Salad Sandwich
 
 Each recipe includes complete nutritional information and cooking instructions.
+
+## Event Logging & Analytics
+
+The meal planner automatically tracks and logs all user activities for analytics and insights.
+
+### Logged Events
+
+The system logs three types of events:
+
+1. **Cooking Events**: When you cook a recipe, it records:
+   - Recipe name
+   - List of ingredients consumed with quantities and units
+
+2. **Shopping Events**: When you transfer items from shopping list to inventory, it records:
+   - Items purchased with quantities and unit costs
+   - Total cost of the purchase
+
+3. **Inventory Changes**: When you manually add/remove inventory items, it records:
+   - Item name
+   - Old quantity → new quantity
+   - Change type (add/remove)
+
+### Event Log Page
+
+Access the event log by clicking the 📊 button in the main app header. The analytics dashboard includes:
+
+- **Action Types Chart**: Pie chart showing distribution of cooking, shopping, and inventory activities
+- **Top Ingredients Consumed**: Bar chart of most frequently used ingredients
+- **Daily Activity**: Line chart showing activity levels over time
+- **Detailed Log**: Chronological list of all logged events with timestamps
+
+### Data Storage
+
+All event logs are stored locally in the browser's localStorage under the key `eventLog`. The log persists between sessions and can be cleared from the analytics page.
+
+### Privacy
+
+All logging happens locally in your browser. No data is transmitted to external servers.

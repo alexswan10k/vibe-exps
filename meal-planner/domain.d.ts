@@ -286,6 +286,38 @@ export interface AppState {
   selectingDay: string | null;
 }
 
+// Event Log Types
+export interface EventLogEntry {
+  timestamp: number;
+  action: 'cook' | 'buy' | 'inventory_change';
+  details: any;
+}
+
+export interface CookEventDetails {
+  recipeName: string;
+  ingredientsConsumed: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+  }>;
+}
+
+export interface BuyEventDetails {
+  items: Array<{
+    name: string;
+    quantity: number;
+    unitCost: number;
+  }>;
+  totalCost: number;
+}
+
+export interface InventoryChangeEventDetails {
+  item: string;
+  oldQuantity: number;
+  newQuantity: number;
+  changeType: 'add' | 'remove';
+}
+
 // Utility Types
 export type DayOfWeek = keyof Calendar;
 export type VitaminType = keyof RecipeNutritional['vitamins'];

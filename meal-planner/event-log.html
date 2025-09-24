@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Log - Meal Planner</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .event-log-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .event-log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .event-log-header h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin: 0;
+        }
+
+        .clear-log-btn {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+        }
+
+        .clear-log-btn:hover {
+            background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+        }
+
+        .analytics-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-container h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+        }
+
+        .chart-container canvas {
+            max-width: 100%;
+            height: 300px !important;
+        }
+
+        .log-entries {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .log-entries h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.4rem;
+        }
+
+        .log-entry {
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        .log-entry:last-child {
+            margin-bottom: 0;
+        }
+
+        .log-entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .log-entry-type {
+            font-weight: bold;
+            font-size: 1.1rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .log-entry-type.cook {
+            background: #27ae60;
+            color: white;
+        }
+
+        .log-entry-type.buy {
+            background: #3498db;
+            color: white;
+        }
+
+        .log-entry-type.inventory_change {
+            background: #f39c12;
+            color: white;
+        }
+
+        .log-entry-time {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+
+        .log-entry-details {
+            color: #34495e;
+            line-height: 1.5;
+        }
+
+        .log-entry-details ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+
+        .log-entry-details li {
+            margin-bottom: 5px;
+        }
+
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            z-index: 1000;
+        }
+
+        .back-btn:hover {
+            background: #138496;
+        }
+
+        .no-entries {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            padding: 40px;
+        }
+
+        @media (max-width: 768px) {
+            .event-log-header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+
+            .analytics-section {
+                grid-template-columns: 1fr;
+            }
+
+            .log-entry-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="back-btn" onclick="window.location.href='index.html'">← Back to Meal Planner</button>
+
+    <div id="event-log-root"></div>
+
+    <script>
+        const { useState, useEffect, useRef } = React;
+
+        function EventLogApp() {
+            const [logEntries, setLogEntries] = useState([]);
+            const chartRefs = useRef({
+                actionTypes: null,
+                ingredientConsumption: null,
+                dailyActivity: null
+            });
+
+            useEffect(() => {
+                loadLogEntries();
+            }, []);
+
+            const loadLogEntries = () => {
+                const stored = localStorage.getItem('eventLog');
+                if (stored) {
+                    const entries = JSON.parse(stored);
+                    // Sort by timestamp descending (newest first)
+                    entries.sort((a, b) => b.timestamp - a.timestamp);
+                    setLogEntries(entries);
+                }
+            };
+
+            const clearLog = () => {
+                if (confirm('Are you sure you want to clear all event logs? This action cannot be undone.')) {
+                    localStorage.removeItem('eventLog');
+                    setLogEntries([]);
+                }
+            };
+
+            const formatTimestamp = (timestamp) => {
+                return new Date(timestamp).toLocaleString();
+            };
+
+            const formatEventDetails = (entry) => {
+                switch (entry.action) {
+                    case 'cook':
+                        return React.createElement('div', null,
+                            React.createElement('strong', null, `Cooked: ${entry.details.recipeName}`),
+                            React.createElement('ul', null,
+                                entry.details.ingredientsConsumed.map((ing, idx) =>
+                                    React.createElement('li', { key: idx },
+                                        `${ing.name}: ${ing.quantity} ${ing.unit}`
+                                    )
+                                )
+                            )
+                        );
+                    case 'buy':
+                        return React.createElement('div', null,
+                            React.createElement('strong', null, `Purchased items (Total: $${entry.details.totalCost.toFixed(2)})`),
+                            React.createElement('ul', null,
+                                entry.details.items.map((item, idx) =>
+                                    React.createElement('li', { key: idx },
+                                        `${item.name}: ${item.quantity} units @ $${item.unitCost.toFixed(2)} each`
+                                    )
+                                )
+                            )
+                        );
+                    case 'inventory_change':
+                        const change = entry.details.changeType === 'add' ? '+' : '-';
+                        return React.createElement('div', null,
+                            React.createElement('strong', null,
+                                `${entry.details.changeType === 'add' ? 'Added to' : 'Removed from'} inventory: ${entry.details.item}`
+                            ),
+                            React.createElement('p', null,
+                                `Quantity: ${entry.details.oldQuantity} → ${entry.details.newQuantity} (${change}${Math.abs(entry.details.newQuantity - entry.details.oldQuantity)})`
+                            )
+                        );
+                    default:
+                        return React.createElement('div', null, JSON.stringify(entry.details, null, 2));
+                }
+            };
+
+            // Generate analytics data
+            const generateAnalyticsData = () => {
+                const actionCounts = {};
+                const ingredientConsumption = {};
+                const dailyActivity = {};
+
+                logEntries.forEach(entry => {
+                    // Count actions
+                    actionCounts[entry.action] = (actionCounts[entry.action] || 0) + 1;
+
+                    // Track ingredient consumption
+                    if (entry.action === 'cook') {
+                        entry.details.ingredientsConsumed.forEach(ing => {
+                            ingredientConsumption[ing.name] = (ingredientConsumption[ing.name] || 0) + ing.quantity;
+                        });
+                    }
+
+                    // Track daily activity
+                    const date = new Date(entry.timestamp).toDateString();
+                    dailyActivity[date] = (dailyActivity[date] || 0) + 1;
+                });
+
+                return { actionCounts, ingredientConsumption, dailyActivity };
+            };
+
+            const analytics = generateAnalyticsData();
+
+            useEffect(() => {
+                // Destroy existing charts
+                Object.values(chartRefs.current).forEach(chart => {
+                    if (chart) {
+                        chart.destroy();
+                    }
+                });
+
+                // Action types chart
+                const actionCtx = document.getElementById('actionTypesChart');
+                if (actionCtx && Object.keys(analytics.actionCounts).length > 0) {
+                    chartRefs.current.actionTypes = new Chart(actionCtx, {
+                        type: 'pie',
+                        data: {
+                            labels: Object.keys(analytics.actionCounts),
+                            datasets: [{
+                                data: Object.values(analytics.actionCounts),
+                                backgroundColor: ['#27ae60', '#3498db', '#f39c12'],
+                                borderWidth: 2,
+                                borderColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom'
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Ingredient consumption chart
+                const ingredientCtx = document.getElementById('ingredientConsumptionChart');
+                if (ingredientCtx && Object.keys(analytics.ingredientConsumption).length > 0) {
+                    const topIngredients = Object.entries(analytics.ingredientConsumption)
+                        .sort(([,a], [,b]) => b - a)
+                        .slice(0, 10);
+
+                    chartRefs.current.ingredientConsumption = new Chart(ingredientCtx, {
+                        type: 'bar',
+                        data: {
+                            labels: topIngredients.map(([name]) => name),
+                            datasets: [{
+                                label: 'Units Consumed',
+                                data: topIngredients.map(([, qty]) => qty),
+                                backgroundColor: '#3498db',
+                                borderColor: '#2980b9',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Daily activity chart
+                const dailyCtx = document.getElementById('dailyActivityChart');
+                if (dailyCtx && Object.keys(analytics.dailyActivity).length > 0) {
+                    const sortedDays = Object.entries(analytics.dailyActivity)
+                        .sort(([a], [b]) => new Date(a) - new Date(b));
+
+                    chartRefs.current.dailyActivity = new Chart(dailyCtx, {
+                        type: 'line',
+                        data: {
+                            labels: sortedDays.map(([date]) => new Date(date).toLocaleDateString()),
+                            datasets: [{
+                                label: 'Activities',
+                                data: sortedDays.map(([, count]) => count),
+                                borderColor: '#27ae60',
+                                backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        stepSize: 1
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // Cleanup function to destroy charts when component unmounts
+                return () => {
+                    Object.values(chartRefs.current).forEach(chart => {
+                        if (chart) {
+                            chart.destroy();
+                        }
+                    });
+                };
+            }, [logEntries]);
+
+            return React.createElement('div', { className: 'event-log-container' },
+                React.createElement('div', { className: 'event-log-header' },
+                    React.createElement('h1', null, 'Event Log & Analytics'),
+                    React.createElement('button', {
+                        className: 'clear-log-btn',
+                        onClick: clearLog,
+                        disabled: logEntries.length === 0
+                    }, 'Clear Log')
+                ),
+
+                React.createElement('div', { className: 'analytics-section' },
+                    React.createElement('div', { className: 'chart-container' },
+                        React.createElement('h3', null, 'Action Types'),
+                        React.createElement('canvas', { id: 'actionTypesChart' })
+                    ),
+                    React.createElement('div', { className: 'chart-container' },
+                        React.createElement('h3', null, 'Top Ingredients Consumed'),
+                        React.createElement('canvas', { id: 'ingredientConsumptionChart' })
+                    ),
+                    React.createElement('div', { className: 'chart-container' },
+                        React.createElement('h3', null, 'Daily Activity'),
+                        React.createElement('canvas', { id: 'dailyActivityChart' })
+                    )
+                ),
+
+                React.createElement('div', { className: 'log-entries' },
+                    React.createElement('h3', null, `Log Entries (${logEntries.length})`),
+                    logEntries.length === 0
+                        ? React.createElement('div', { className: 'no-entries' }, 'No events logged yet. Start cooking, shopping, or managing inventory to see activity here.')
+                        : logEntries.map((entry, index) =>
+                            React.createElement('div', { key: index, className: 'log-entry' },
+                                React.createElement('div', { className: 'log-entry-header' },
+                                    React.createElement('span', { className: `log-entry-type ${entry.action}` }, entry.action.replace('_', ' ')),
+                                    React.createElement('span', { className: 'log-entry-time' }, formatTimestamp(entry.timestamp))
+                                ),
+                                React.createElement('div', { className: 'log-entry-details' },
+                                    formatEventDetails(entry)
+                                )
+                            )
+                        )
+                )
+            );
+        }
+
+        ReactDOM.render(React.createElement(EventLogApp), document.getElementById('event-log-root'));
+    </script>
+</body>
+</html>
