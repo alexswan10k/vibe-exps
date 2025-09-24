@@ -26,8 +26,10 @@ export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 export interface ChatMessage {
   role: MessageRole;
   content: string;
-  type?: 'normal' | 'thinking' | 'thinking-summary';
+  type?: 'normal' | 'thinking' | 'thinking-summary' | 'system-collapsed';
   timestamp?: number;
+  collapsed?: boolean;
+  tps?: string;
 }
 
 export interface LLMMessage {
@@ -54,10 +56,13 @@ export interface WorkflowChatProps {
   workflowParams: WorkflowParameters;
   llmConfig: LLMConfig;
   onComplete: (payload: WorkflowPayload) => void;
+  scenario?: string;
 }
 
 export interface MessageListProps {
   messages: ChatMessage[];
+  onToggleSystemMessage?: (index: number) => void;
+  onToggleThinkingMessage?: (index: number) => void;
 }
 
 export interface MessageInputProps {
@@ -65,6 +70,26 @@ export interface MessageInputProps {
   disabled?: boolean;
   placeholder?: string;
 }
+
+// WorkflowDomain Declarations
+export declare const WorkflowDomain: {
+    parseWorkflowParameters(searchParams: URLSearchParams): {
+        prompt: string | null;
+        schema: any | null;
+        returnUrl: string | null;
+    };
+    decodeBase64(base64String: string): string;
+    validateWorkflowParameters(params: {
+        prompt: string | null;
+        schema: any | null;
+        returnUrl: string | null;
+    }): ValidationResult;
+    validatePayload(payload: any, schema: any): ValidationResult;
+    validateObjectAgainstSchema(obj: any, schema: any, path?: string): string[];
+    generateSystemPrompt(userPrompt: string, schema: any): string;
+    createCompleteTool(schema: any): ToolDefinition;
+    completeWorkflow(payload: any, returnUrl: string, metadata?: any): void;
+};
 
 // Component Declarations
 export declare function WorkflowChat(props: WorkflowChatProps): any;

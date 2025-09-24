@@ -37,6 +37,9 @@ function MessageComponent({ message, index, onToggleSystemMessage, onToggleThink
     const messageClasses = `message ${message.role}-message`;
     const timestamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : '';
 
+    // Debug logging
+    console.log('Rendering message:', index, message.type, message.role, message.content?.substring(0, 50));
+
     if (message.type === 'system-collapsed') {
         return React.createElement('div', { key: index, className: 'message system-message system-collapsed-message' },
             React.createElement('div', {
@@ -82,6 +85,14 @@ function MessageComponent({ message, index, onToggleSystemMessage, onToggleThink
                 timestamp: timestamp
             }),
             finalContent.trim() && React.createElement('div', { className: 'message-content' }, finalContent.trim()),
+            message.tps && React.createElement('div', { className: 'message-tps' }, `${message.tps} t/s`)
+        );
+    }
+
+    if (message.type === 'normal') {
+        return React.createElement('div', { key: index, className: messageClasses },
+            React.createElement('div', { className: 'message-content' }, message.content),
+            timestamp && React.createElement('span', { className: 'timestamp' }, timestamp),
             message.tps && React.createElement('div', { className: 'message-tps' }, `${message.tps} t/s`)
         );
     }

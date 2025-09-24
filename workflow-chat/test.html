@@ -204,6 +204,7 @@
     <div class="header">
         <h1>🧪 Workflow Chat Test Page</h1>
         <p>Test the workflow chat prototype with different scenarios</p>
+        <p><a href="README.md" style="color: #007bff; text-decoration: none;">📖 View Documentation</a></p>
     </div>
 
     <div class="instructions">
@@ -312,7 +313,7 @@
         // Test scenarios configuration
         const testScenarios = {
             recipe: {
-                prompt: "Create a new recipe. Ask the user for the recipe name, ingredients with quantities and units, and cooking instructions. Make sure ingredients are in lowercase and use standard grocery store names.",
+                prompt: "Create a new recipe. Ask the user for the recipe name. You may then infer the ingredients with quantities and units, and cooking instructions. Make sure ingredients are in lowercase and use standard grocery store names.",
                 schema: {
                     type: "object",
                     properties: {

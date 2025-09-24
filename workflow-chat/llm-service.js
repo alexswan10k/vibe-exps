@@ -77,8 +77,9 @@ const LLMService = {
      * @param {Function} onChunk - Callback for each chunk received
      * @param {Function} onComplete - Callback when streaming is complete
      * @param {Function} onError - Callback for errors
+     * @param {Function} onToolCall - Callback when tool calls are detected during streaming
      */
-    async processStreamingResponse(response, onChunk, onComplete, onError) {
+    async processStreamingResponse(response, onChunk, onComplete, onError, onToolCall) {
         try {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -136,10 +137,12 @@ const LLMService = {
 
                             // Handle tool calls
                             if (delta.tool_calls) {
+                                let hasNewToolCalls = false;
                                 for (const toolCall of delta.tool_calls) {
                                     if (toolCall.index !== undefined) {
                                         if (!toolCalls[toolCall.index]) {
                                             toolCalls[toolCall.index] = { id: '', function: { name: '', arguments: '' } };
+                                            hasNewToolCalls = true;
                                         }
                                         if (toolCall.id) toolCalls[toolCall.index].id += toolCall.id;
                                         if (toolCall.function) {
@@ -147,6 +150,10 @@ const LLMService = {
                                             if (toolCall.function.arguments) toolCalls[toolCall.index].function.arguments += toolCall.function.arguments;
                                         }
                                     }
+                                }
+                                // Notify when tool calls are first detected
+                                if (hasNewToolCalls && onToolCall) {
+                                    onToolCall(toolCalls);
                                 }
                             }
                         } catch (e) {

@@ -223,7 +223,6 @@ INSTRUCTIONS:
 3. Be helpful and guide the user through the process
 4. When you have all the information needed to complete the workflow, call the "complete" tool with a payload that matches the expected schema
 5. The payload should contain only the data specified in the schema - no extra fields
-6. If the user provides incomplete or invalid information, ask for clarification rather than making assumptions
 
 TOOL USAGE:
 - Use the "complete" tool ONLY when you have gathered all required information

@@ -2,9 +2,18 @@
  * MessageInput Component
  * Handles user input with support for sending messages and keyboard shortcuts
  */
-function MessageInput({ onSendMessage, disabled = false, placeholder = "Type your message..." }) {
+const MessageInput = React.forwardRef(function MessageInput({ onSendMessage, disabled = false, placeholder = "Type your message..." }, ref) {
     const [message, setMessage] = React.useState('');
     const textareaRef = React.useRef(null);
+
+    // Forward ref to textarea
+    React.useImperativeHandle(ref, () => ({
+        focus: () => {
+            if (textareaRef.current) {
+                textareaRef.current.focus();
+            }
+        }
+    }));
 
 // Expose globally for script tag loading
 window.MessageInput = MessageInput;
@@ -22,6 +31,12 @@ window.MessageInput = MessageInput;
         if (message.trim() && !disabled) {
             onSendMessage(message.trim());
             setMessage('');
+            // Refocus on textarea after sending message
+            setTimeout(() => {
+                if (textareaRef.current) {
+                    textareaRef.current.focus();
+                }
+            }, 0);
         }
     };
 
@@ -55,4 +70,4 @@ window.MessageInput = MessageInput;
             React.createElement('small', null, 'Press Enter to send, Shift+Enter for new line')
         )
     );
-}
+});

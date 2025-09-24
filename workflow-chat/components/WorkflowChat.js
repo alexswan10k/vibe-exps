@@ -7,9 +7,11 @@ function WorkflowChat({ workflowParams, llmConfig, onComplete, scenario = 'custo
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
     const [tokensPerSecond, setTokensPerSecond] = React.useState(0);
+    const [isAttemptingToolCall, setIsAttemptingToolCall] = React.useState(false);
     const abortControllerRef = React.useRef(null);
     const streamingStartTimeRef = React.useRef(null);
     const tokenCountRef = React.useRef(0);
+    const messageInputRef = React.useRef(null);
 
 // Expose globally for script tag loading
 window.WorkflowChat = WorkflowChat;
@@ -92,7 +94,7 @@ window.WorkflowChat = WorkflowChat;
             setMessages(prev => [...prev, {
                 role: 'assistant',
                 content: '',
-                type: 'thinking',
+                type: 'normal',
                 timestamp: Date.now()
             }]);
 
@@ -100,7 +102,8 @@ window.WorkflowChat = WorkflowChat;
                 result.response,
                 handleStreamChunk,
                 handleStreamComplete,
-                handleStreamError
+                handleStreamError,
+                handleToolCallAttempt
             );
 
         } catch (err) {
@@ -125,7 +128,7 @@ window.WorkflowChat = WorkflowChat;
 
             if (lastMsg) {
                 let newContent = lastMsg.content + chunk.content;
-                let newType = lastMsg.type;
+                let newType = 'normal'; // Default to normal
 
                 // Update message type based on accumulated content containing thinking tags
                 if (newContent.includes('<think>')) {
@@ -166,9 +169,23 @@ window.WorkflowChat = WorkflowChat;
         setIsLoading(false);
         setTokensPerSecond(0);
 
+        // Focus the input after streaming completes
+        setTimeout(() => {
+            if (messageInputRef.current) {
+                messageInputRef.current.focus();
+            }
+        }, 100);
+
         // Handle tool calls
         if (result.toolCalls && result.toolCalls.length > 0) {
-            handleToolCalls(result.toolCalls);
+            // Show tool call feedback briefly before processing
+            setIsAttemptingToolCall(true);
+            setTimeout(() => {
+                setIsAttemptingToolCall(false);
+                handleToolCalls(result.toolCalls);
+            }, 1000); // Show for 1 second
+        } else {
+            setIsAttemptingToolCall(false);
         }
     };
 
@@ -177,6 +194,11 @@ window.WorkflowChat = WorkflowChat;
         setError('Error receiving response from LLM');
         setIsLoading(false);
         setTokensPerSecond(0);
+        setIsAttemptingToolCall(false);
+    };
+
+    const handleToolCallAttempt = (toolCalls) => {
+        setIsAttemptingToolCall(true);
     };
 
     const handleToolCalls = (toolCalls) => {
@@ -234,6 +256,7 @@ window.WorkflowChat = WorkflowChat;
             abortControllerRef.current.abort();
         }
         setIsLoading(false);
+        setIsAttemptingToolCall(false);
     };
 
     return React.createElement('div', { className: 'workflow-chat' },
@@ -276,15 +299,20 @@ window.WorkflowChat = WorkflowChat;
 
             React.createElement('div', { className: 'input-section' },
                 React.createElement(MessageInput, {
+                    ref: messageInputRef,
                     onSendMessage: handleSendMessage,
                     disabled: isLoading,
-                    placeholder: isLoading ? 'AI is thinking...' : 'Type your response...'
+                    placeholder: isLoading ? (isAttemptingToolCall ? 'AI is calling tools...' : 'AI is thinking...') : 'Type your response...'
                 }),
 
                 isLoading && React.createElement('button', {
                     onClick: stopGeneration,
                     className: 'stop-button'
-                }, '⏹️ Stop')
+                }, '⏹️ Stop'),
+
+                isAttemptingToolCall && React.createElement('div', { className: 'tool-call-indicator' },
+                    React.createElement('small', null, '🔧 Attempting tool call...')
+                )
             )
         )
     );
