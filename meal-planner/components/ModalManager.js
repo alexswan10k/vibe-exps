@@ -31,7 +31,17 @@ function ModalManager({
     setInventory,
     setIngredientsData,
     setCalendar,
-    setShoppingList
+    setShoppingList,
+    llmProvider,
+    setLlmProvider,
+    lmStudioEndpoint,
+    setLmStudioEndpoint,
+    lmStudioModel,
+    setLmStudioModel,
+    openRouterApiKey,
+    setOpenRouterApiKey,
+    openRouterModel,
+    setOpenRouterModel
 }) {
     const handleImportRecipe = () => {
         if (pastedResult.trim()) {
@@ -141,7 +151,17 @@ function ModalManager({
             },
             onImportData: handleImportData,
             onClearAllData: handleClearAllData,
-            onClose: () => setShowDataModal(false)
+            onClose: () => setShowDataModal(false),
+            llmProvider,
+            setLlmProvider,
+            lmStudioEndpoint,
+            setLmStudioEndpoint,
+            lmStudioModel,
+            setLmStudioModel,
+            openRouterApiKey,
+            setOpenRouterApiKey,
+            openRouterModel,
+            setOpenRouterModel
         })
     );
 }

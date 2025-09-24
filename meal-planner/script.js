@@ -22,8 +22,11 @@ function App() {
         Saturday: null,
         Sunday: null
     });
+    const [llmProvider, setLlmProvider] = useState('lmStudio');
     const [lmStudioEndpoint, setLmStudioEndpoint] = useState('http://localhost:1234');
     const [lmStudioModel, setLmStudioModel] = useState('qwen/qwen3-4b-thinking-2507');
+    const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+    const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o');
     const [aiMode, setAiMode] = useState(false);
     const [showPasteModal, setShowPasteModal] = useState(false);
     const [pastedResult, setPastedResult] = useState('');
@@ -56,6 +59,10 @@ function App() {
         if (storedShoppingList) {
             setShoppingList(JSON.parse(storedShoppingList));
         }
+        const storedProvider = localStorage.getItem('llmProvider');
+        if (storedProvider) {
+            setLlmProvider(storedProvider);
+        }
         const storedEndpoint = localStorage.getItem('lmStudioEndpoint');
         if (storedEndpoint) {
             setLmStudioEndpoint(storedEndpoint);
@@ -63,6 +70,14 @@ function App() {
         const storedModel = localStorage.getItem('lmStudioModel');
         if (storedModel) {
             setLmStudioModel(storedModel);
+        }
+        const storedOpenRouterApiKey = localStorage.getItem('openRouterApiKey');
+        if (storedOpenRouterApiKey) {
+            setOpenRouterApiKey(storedOpenRouterApiKey);
+        }
+        const storedOpenRouterModel = localStorage.getItem('openRouterModel');
+        if (storedOpenRouterModel) {
+            setOpenRouterModel(storedOpenRouterModel);
         }
     }, []);
 
@@ -83,12 +98,24 @@ function App() {
     }, [shoppingList]);
 
     useEffect(() => {
+        localStorage.setItem('llmProvider', llmProvider);
+    }, [llmProvider]);
+
+    useEffect(() => {
         localStorage.setItem('lmStudioEndpoint', lmStudioEndpoint);
     }, [lmStudioEndpoint]);
 
     useEffect(() => {
         localStorage.setItem('lmStudioModel', lmStudioModel);
     }, [lmStudioModel]);
+
+    useEffect(() => {
+        localStorage.setItem('openRouterApiKey', openRouterApiKey);
+    }, [openRouterApiKey]);
+
+    useEffect(() => {
+        localStorage.setItem('openRouterModel', openRouterModel);
+    }, [openRouterModel]);
 
     useEffect(() => {
         localStorage.setItem('ingredientsData', JSON.stringify(ingredientsData));
@@ -302,124 +329,22 @@ function App() {
     };
 
     const generateRecipeWithAI = async (prompt) => {
-        try {
-            const response = await fetch(`${lmStudioEndpoint}/v1/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    model: lmStudioModel,
-                    messages: [
-                        {
-                            role: 'user',
-                            content: `Generate a recipe based on: "${prompt}"
+        const config = {
+            provider: llmProvider,
+            lmStudioEndpoint,
+            lmStudioModel,
+            openRouterApiKey,
+            openRouterModel
+        };
 
-IMPORTANT INSTRUCTIONS:
-- All ingredient names must be in lowercase
-- Use simple, unambiguous ingredient names that can be found in a grocery store
-- Avoid compound ingredients - break them down to basic items
-- Use standard grocery product names (e.g., "chicken breast" not "chicken", "olive oil" not "oil")
-- Include specific quantities and units that make sense for shopping
-- Focus on actual purchasable items for a shopping list
-- Provide clear, step-by-step cooking method/instructions
+        const result = await LLMService.generateRecipe(prompt, config);
 
-Examples of good ingredient names:
-- "chicken breast" (not "chicken")
-- "olive oil" (not "oil")
-- "brown rice" (not "rice")
-- "canned tomatoes" (not "tomatoes")
-- "garlic cloves" (not "garlic")
-
-For the method, provide numbered steps that are easy to follow.`
-                        }
-                    ],
-                    response_format: {
-                        type: "json_schema",
-                        json_schema: {
-                            name: "recipe_response",
-                            strict: false,
-                            schema: {
-                                type: "object",
-                                properties: {
-                                    name: {
-                                        type: "string",
-                                        description: "The name of the recipe"
-                                    },
-                                    ingredients: {
-                                        type: "array",
-                                        description: "List of ingredients with name, quantity, and unit",
-                                        items: {
-                                            type: "object",
-                                            properties: {
-                                                name: {
-                                                    type: "string",
-                                                    description: "Name of the ingredient"
-                                                },
-                                                quantity: {
-                                                    type: "number",
-                                                    description: "Quantity of the ingredient"
-                                                },
-                                                unit: {
-                                                    type: "string",
-                                                    description: "Unit of measurement (cups, tbsp, etc.)"
-                                                }
-                                            },
-                                            required: ["name", "quantity", "unit"]
-                                        }
-                                    },
-                                    method: {
-                                        type: "array",
-                                        description: "Step-by-step cooking instructions",
-                                        items: {
-                                            type: "string",
-                                            description: "A single cooking instruction step"
-                                        }
-                                    }
-                                },
-                                required: ["name", "ingredients"]
-                            }
-                        }
-                    },
-                    temperature: 0.7,
-                    max_tokens: 1000
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            const content = data.choices[0].message.content.trim();
-
-            // Try to parse the JSON response
-            const recipeData = JSON.parse(content);
-
-            // Validate the structure (method is now optional)
-            if (!recipeData.name || !Array.isArray(recipeData.ingredients)) {
-                throw new Error('Invalid recipe format received from AI. Missing name or ingredients array.');
-            }
-
-            // Ensure method is an array if it exists
-            if (recipeData.method && !Array.isArray(recipeData.method)) {
-                recipeData.method = [];
-            }
-
-            // Add the recipe
-            addRecipe(recipeData);
+        if (result.success) {
+            // Add the recipe to the app
+            addRecipe(result.recipeData);
             return { success: true };
-
-        } catch (error) {
-            console.error('AI generation error:', error);
-            // Check if it's a CORS error
-            if (error.message.includes('CORS') || error.message.includes('Access-Control')) {
-                return {
-                    success: false,
-                    error: 'CORS Error: Please run the meal planner through a local web server. Try: python -m http.server 8000'
-                };
-            }
-            return { success: false, error: error.message };
+        } else {
+            return result;
         }
     };
 
@@ -524,7 +449,17 @@ For the method, provide numbered steps that are easy to follow.`
                 setInventory,
                 setIngredientsData,
                 setCalendar,
-                setShoppingList
+                setShoppingList,
+                llmProvider,
+                setLlmProvider,
+                lmStudioEndpoint,
+                setLmStudioEndpoint,
+                lmStudioModel,
+                setLmStudioModel,
+                openRouterApiKey,
+                setOpenRouterApiKey,
+                openRouterModel,
+                setOpenRouterModel
             }),
             document.body
         )

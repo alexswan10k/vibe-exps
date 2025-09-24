@@ -10,7 +10,17 @@ function DataManagementModal({
     onExportData,
     onImportData,
     onClearAllData,
-    onClose
+    onClose,
+    llmProvider,
+    setLlmProvider,
+    lmStudioEndpoint,
+    setLmStudioEndpoint,
+    lmStudioModel,
+    setLmStudioModel,
+    openRouterApiKey,
+    setOpenRouterApiKey,
+    openRouterModel,
+    setOpenRouterModel
 }) {
     if (!show) return null;
 
@@ -118,6 +128,61 @@ function DataManagementModal({
                                     }
                                 }
                             })
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'data-section' },
+                    React.createElement('h3', null, 'LLM Configuration'),
+                    React.createElement('div', { className: 'llm-config' },
+                        React.createElement('div', { className: 'setting-row' },
+                            React.createElement('label', null, 'Provider:'),
+                            React.createElement('select', {
+                                value: llmProvider,
+                                onChange: (e) => setLlmProvider(e.target.value)
+                            },
+                                React.createElement('option', { value: 'lmStudio' }, 'LMStudio'),
+                                React.createElement('option', { value: 'openRouter' }, 'OpenRouter')
+                            )
+                        ),
+                        llmProvider === 'lmStudio' && React.createElement(React.Fragment, null,
+                            React.createElement('div', { className: 'setting-row' },
+                                React.createElement('label', null, 'LMStudio Endpoint:'),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: lmStudioEndpoint,
+                                    onChange: (e) => setLmStudioEndpoint(e.target.value),
+                                    placeholder: 'http://localhost:1234'
+                                })
+                            ),
+                            React.createElement('div', { className: 'setting-row' },
+                                React.createElement('label', null, 'Model:'),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: lmStudioModel,
+                                    onChange: (e) => setLmStudioModel(e.target.value),
+                                    placeholder: 'qwen/qwen3-4b-thinking-2507'
+                                })
+                            )
+                        ),
+                        llmProvider === 'openRouter' && React.createElement(React.Fragment, null,
+                            React.createElement('div', { className: 'setting-row' },
+                                React.createElement('label', null, 'API Key:'),
+                                React.createElement('input', {
+                                    type: 'password',
+                                    value: openRouterApiKey,
+                                    onChange: (e) => setOpenRouterApiKey(e.target.value),
+                                    placeholder: 'sk-or-v1-...'
+                                })
+                            ),
+                            React.createElement('div', { className: 'setting-row' },
+                                React.createElement('label', null, 'Model:'),
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: openRouterModel,
+                                    onChange: (e) => setOpenRouterModel(e.target.value),
+                                    placeholder: 'openai/gpt-4o'
+                                })
+                            )
                         )
                     )
                 ),

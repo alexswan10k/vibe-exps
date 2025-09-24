@@ -102,31 +102,9 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe,
                     onClick: () => setAiMode(true)
                 }, 'AI Generate')
             ),
-            aiMode && React.createElement('button', {
-                onClick: () => setShowSettings(!showSettings),
-                className: 'settings-toggle-btn'
-            }, showSettings ? 'Hide Settings' : 'Show AI Settings')
+            React.createElement('div', { className: 'settings-hint' }, 'Configure AI settings in the ☰ menu')
         ),
-        showSettings && React.createElement('div', { className: 'ai-settings' },
-            React.createElement('div', { className: 'setting-row' },
-                React.createElement('label', null, 'LMStudio Endpoint:'),
-                React.createElement('input', {
-                    type: 'text',
-                    value: lmStudioEndpoint,
-                    onChange: (e) => setLmStudioEndpoint(e.target.value),
-                    placeholder: 'http://localhost:1234'
-                })
-            ),
-            React.createElement('div', { className: 'setting-row' },
-                React.createElement('label', null, 'Model:'),
-                React.createElement('input', {
-                    type: 'text',
-                    value: lmStudioModel,
-                    onChange: (e) => setLmStudioModel(e.target.value),
-                    placeholder: 'google/gemma-3-4b'
-                })
-            )
-        ),
+
         !aiMode ? React.createElement('form', { onSubmit: handleManualSubmit },
             React.createElement('input', {
                 type: 'text',
