@@ -1,7 +1,7 @@
 // Shared Event Analytics Components
 // Handles chart creation and analytics data processing
 
-const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
+const AnalyticsCharts = ({ logEntries, ingredientsData, recipes }) => {
     const chartRefs = React.useRef({
         actionTypes: null,
         ingredientConsumption: null,
@@ -33,7 +33,7 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
         const ingredientConsumption = {};
         const nutrientConsumption = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
         const dailyActivity = {};
-        const dailyVitaminConsumption = {}; // Track vitamins and calories per day
+        const dailyNutritionConsumption = {}; // Track vitamins, calories, and macronutrients per day
 
         logEntries.forEach(entry => {
             // Track recipe cooking frequency
@@ -41,33 +41,40 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
                 recipeFrequency[entry.details.recipeName] = (recipeFrequency[entry.details.recipeName] || 0) + 1;
 
                 const date = new Date(entry.timestamp).toDateString();
-                if (!dailyVitaminConsumption[date]) {
-                    dailyVitaminConsumption[date] = {
-                        calories: 0,
+                if (!dailyNutritionConsumption[date]) {
+                    dailyNutritionConsumption[date] = {
+                        calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0,
                         vitaminA: 0, vitaminC: 0, vitaminD: 0, vitaminE: 0,
                         vitaminK1: 0, vitaminK2: 0, vitaminB12: 0, folate: 0
                     };
                 }
 
-                // Track ingredient consumption with nutritional data
+                // Find the recipe by name and use its nutritional data
+                const recipe = recipes.find(r => r.name === entry.details.recipeName);
+                if (recipe && recipe.nutritional) {
+                    const nutrition = recipe.nutritional;
+                    dailyNutritionConsumption[date].calories += nutrition.calories || 0;
+                    dailyNutritionConsumption[date].protein += nutrition.protein || 0;
+                    dailyNutritionConsumption[date].carbs += nutrition.carbs || 0;
+                    dailyNutritionConsumption[date].fat += nutrition.fat || 0;
+                    dailyNutritionConsumption[date].fiber += nutrition.fiber || 0;
+                }
+
+                // Track ingredient consumption and calculate vitamins from ingredients
                 entry.details.ingredientsConsumed.forEach(ing => {
                     ingredientConsumption[ing.name] = (ingredientConsumption[ing.name] || 0) + ing.quantity;
 
-                    // Add nutritional data if available
+                    // Calculate vitamins from ingredients data
                     const nutritionData = getBasicNutritionData(ing.name);
-                    if (nutritionData) {
-                        // For now, just track vitamin consumption
-                        dailyVitaminConsumption[date].calories += nutritionData.calories * ing.quantity;
-                        if (nutritionData.vitamins) {
-                            dailyVitaminConsumption[date].vitaminA += nutritionData.vitamins.vitaminA ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].vitaminC += nutritionData.vitamins.vitaminC ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].vitaminD += nutritionData.vitamins.vitaminD ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].vitaminE += nutritionData.vitamins.vitaminE ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].vitaminK1 += nutritionData.vitamins.vitaminK1 ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].vitaminK2 += nutritionData.vitamins.vitaminK2 ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].vitaminB12 += nutritionData.vitamins.vitaminB12 ? ing.quantity : 0;
-                            dailyVitaminConsumption[date].folate += nutritionData.vitamins.folate ? ing.quantity : 0;
-                        }
+                    if (nutritionData && nutritionData.vitamins) {
+                        dailyNutritionConsumption[date].vitaminA += nutritionData.vitamins.vitaminA ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].vitaminC += nutritionData.vitamins.vitaminC ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].vitaminD += nutritionData.vitamins.vitaminD ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].vitaminE += nutritionData.vitamins.vitaminE ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].vitaminK1 += nutritionData.vitamins.vitaminK1 ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].vitaminK2 += nutritionData.vitamins.vitaminK2 ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].vitaminB12 += nutritionData.vitamins.vitaminB12 ? ing.quantity : 0;
+                        dailyNutritionConsumption[date].folate += nutritionData.vitamins.folate ? ing.quantity : 0;
                     }
                 });
             }
@@ -77,7 +84,7 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
             dailyActivity[date] = (dailyActivity[date] || 0) + 1;
         });
 
-        return { recipeFrequency, ingredientConsumption, nutrientConsumption, dailyActivity, dailyVitaminConsumption };
+        return { recipeFrequency, ingredientConsumption, nutrientConsumption, dailyActivity, dailyNutritionConsumption };
     };
 
     const analytics = generateAnalyticsData();
@@ -205,35 +212,57 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
             });
         }
 
-        // Daily calories line chart (placeholder)
+        // Daily calories stacked bar chart (macronutrients)
         const caloriesCtx = document.getElementById('dailyCaloriesChart');
-        if (caloriesCtx && Object.keys(analytics.dailyVitaminConsumption).length > 0) {
-            const sortedDays = Object.entries(analytics.dailyVitaminConsumption)
+        if (caloriesCtx && Object.keys(analytics.dailyNutritionConsumption).length > 0) {
+            const sortedDays = Object.entries(analytics.dailyNutritionConsumption)
                 .sort(([a], [b]) => new Date(a) - new Date(b))
                 .slice(-7); // Show last 7 days
 
             chartRefs.current.dailyCalories = new Chart(caloriesCtx, {
-                type: 'line',
+                type: 'bar',
                 data: {
                     labels: sortedDays.map(([date]) => new Date(date).toLocaleDateString()),
-                    datasets: [{
-                        label: 'Calories Consumed',
-                        data: sortedDays.map(([, dayData]) => dayData.calories),
-                        borderColor: '#e74c3c',
-                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                        tension: 0.4,
-                        fill: true,
-                        pointBackgroundColor: '#e74c3c',
-                        pointBorderColor: '#c0392b',
-                        pointBorderWidth: 2,
-                        pointRadius: 5
-                    }]
+                    datasets: [
+                        {
+                            label: 'Protein (g)',
+                            data: sortedDays.map(([, dayData]) => dayData.protein),
+                            backgroundColor: '#e74c3c',
+                            borderColor: '#c0392b',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Carbs (g)',
+                            data: sortedDays.map(([, dayData]) => dayData.carbs),
+                            backgroundColor: '#f39c12',
+                            borderColor: '#e67e22',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Fat (g)',
+                            data: sortedDays.map(([, dayData]) => dayData.fat),
+                            backgroundColor: '#27ae60',
+                            borderColor: '#229954',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Fiber (g)',
+                            data: sortedDays.map(([, dayData]) => dayData.fiber),
+                            backgroundColor: '#3498db',
+                            borderColor: '#2980b9',
+                            borderWidth: 1
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
+                        x: {
+                            stacked: true
+                        },
                         y: {
+                            stacked: true,
                             beginAtZero: true,
                             ticks: {
                                 callback: function(value) {
@@ -244,7 +273,13 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
                     },
                     plugins: {
                         legend: {
-                            display: false
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                font: {
+                                    size: 11
+                                }
+                            }
                         }
                     }
                 }
@@ -253,8 +288,8 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
 
         // Daily vitamins stacked bar chart
         const vitaminsCtx = document.getElementById('dailyVitaminsChart');
-        if (vitaminsCtx && Object.keys(analytics.dailyVitaminConsumption).length > 0) {
-            const sortedDays = Object.entries(analytics.dailyVitaminConsumption)
+        if (vitaminsCtx && Object.keys(analytics.dailyNutritionConsumption).length > 0) {
+            const sortedDays = Object.entries(analytics.dailyNutritionConsumption)
                 .sort(([a], [b]) => new Date(a) - new Date(b))
                 .slice(-7); // Show last 7 days
 
@@ -359,7 +394,7 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
                 }
             });
         };
-    }, [logEntries, ingredientsData]);
+    }, [logEntries, ingredientsData, recipes]);
 
     return React.createElement('div', { className: 'analytics-section' },
         React.createElement('div', { className: 'chart-container' },
@@ -377,7 +412,7 @@ const AnalyticsCharts = ({ logEntries, ingredientsData }) => {
 
         React.createElement('div', { className: 'analytics-section-four' },
             React.createElement('div', { className: 'chart-container' },
-                React.createElement('h3', null, 'Daily Calories'),
+                React.createElement('h3', null, 'Daily Macronutrients'),
                 React.createElement('canvas', { id: 'dailyCaloriesChart' })
             ),
             React.createElement('div', { className: 'chart-container' },

@@ -205,7 +205,6 @@
     </style>
 </head>
 <body>
-    <button class="back-btn" onclick="window.location.href='index.html'">← Back to Meal Planner</button>
     <div id="event-log-root"></div>
 
     <!-- Load shared components -->
@@ -220,10 +219,12 @@
         function EventLogApp() {
             const [logEntries, setLogEntries] = useState([]);
             const [ingredientsData, setIngredientsData] = useState({});
+            const [recipes, setRecipes] = useState([]);
 
             useEffect(() => {
                 loadLogEntries();
                 loadIngredientsData();
+                loadRecipes();
             }, []);
 
             const loadLogEntries = () => {
@@ -240,6 +241,13 @@
                 const stored = localStorage.getItem('ingredientsData');
                 if (stored) {
                     setIngredientsData(JSON.parse(stored));
+                }
+            };
+
+            const loadRecipes = () => {
+                const stored = localStorage.getItem('recipes');
+                if (stored) {
+                    setRecipes(JSON.parse(stored));
                 }
             };
 
@@ -260,7 +268,7 @@
                     }, 'Clear Log')
                 ),
 
-                React.createElement(AnalyticsChartsComponent, { logEntries, ingredientsData }),
+                React.createElement(AnalyticsChartsComponent, { logEntries, ingredientsData, recipes }),
 
                 React.createElement(EventLogComponent, { logEntries })
             );
