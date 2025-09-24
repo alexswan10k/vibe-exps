@@ -651,7 +651,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true,
             "potassium": true
-        }
+        },
+        "price": 5.99
     },
     "spinach": {
         "vitamins": {
@@ -665,14 +666,16 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "magnesium": true,
             "potassium": true
-        }
+        },
+        "price": 2.49
     },
     "orange": {
         "vitamins": {
             "vitaminA": true,
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 0.89
     },
     "almonds": {
         "vitamins": {
@@ -681,7 +684,8 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "calcium": true,
             "magnesium": true
-        }
+        },
+        "price": 4.99
     },
     "salmon": {
         "vitamins": {
@@ -694,7 +698,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "zinc": true,
             "potassium": true
-        }
+        },
+        "price": 8.99
     },
     "broccoli": {
         "vitamins": {
@@ -707,7 +712,8 @@ const SAMPLE_INGREDIENTS = {
             "calcium": true,
             "iron": true,
             "potassium": true
-        }
+        },
+        "price": 1.99
     },
     "sweet potato": {
         "vitamins": {
@@ -716,7 +722,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 1.29
     },
     "quinoa": {
         "vitamins": {
@@ -726,7 +733,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "magnesium": true,
             "potassium": true
-        }
+        },
+        "price": 3.99
     },
     "eggs": {
         "vitamins": {
@@ -738,7 +746,8 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "iron": true,
             "zinc": true
-        }
+        },
+        "price": 2.99
     },
     "milk": {
         "vitamins": {
@@ -748,7 +757,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "calcium": true
-        }
+        },
+        "price": 1.49
     },
     "yogurt": {
         "vitamins": {
@@ -758,7 +768,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "calcium": true
-        }
+        },
+        "price": 2.49
     },
     "cheese": {
         "vitamins": {
@@ -768,7 +779,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "calcium": true
-        }
+        },
+        "price": 3.99
     },
     "beef": {
         "vitamins": {
@@ -777,7 +789,8 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "iron": true,
             "zinc": true
-        }
+        },
+        "price": 6.99
     },
     "pork": {
         "vitamins": {
@@ -786,7 +799,8 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "iron": true,
             "zinc": true
-        }
+        },
+        "price": 4.99
     },
     "turkey": {
         "vitamins": {
@@ -795,7 +809,8 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "iron": true,
             "zinc": true
-        }
+        },
+        "price": 5.49
     },
     "tuna": {
         "vitamins": {
@@ -806,7 +821,8 @@ const SAMPLE_INGREDIENTS = {
         "minerals": {
             "iron": true,
             "zinc": true
-        }
+        },
+        "price": 2.99
     },
     "avocado": {
         "vitamins": {
@@ -817,7 +833,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 1.49
     },
     "banana": {
         "vitamins": {
@@ -826,28 +843,32 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 0.49
     },
     "strawberries": {
         "vitamins": {
             "vitaminA": true,
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 3.99
     },
     "blueberries": {
         "vitamins": {
             "vitaminA": true,
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 4.49
     },
     "apples": {
         "vitamins": {
             "vitaminA": true,
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 1.29
     },
     "carrots": {
         "vitamins": {
@@ -855,14 +876,16 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 0.99
     },
     "bell peppers": {
         "vitamins": {
             "vitaminA": true,
             "vitaminC": true
         },
-        "minerals": {}
+        "minerals": {},
+        "price": 1.99
     },
     "tomatoes": {
         "vitamins": {
@@ -871,7 +894,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 1.99
     },
     "cucumber": {
         "vitamins": {
@@ -880,7 +904,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 0.79
     },
     "lettuce": {
         "vitamins": {
@@ -890,7 +915,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "potassium": true
-        }
+        },
+        "price": 1.49
     },
     "brown rice": {
         "vitamins": {},
@@ -898,7 +924,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "magnesium": true,
             "potassium": true
-        }
+        },
+        "price": 2.49
     },
     "oats": {
         "vitamins": {},
@@ -906,7 +933,8 @@ const SAMPLE_INGREDIENTS = {
             "iron": true,
             "magnesium": true,
             "potassium": true
-        }
+        },
+        "price": 2.99
     },
     "whole wheat bread": {
         "vitamins": {
@@ -914,7 +942,8 @@ const SAMPLE_INGREDIENTS = {
         },
         "minerals": {
             "iron": true
-        }
+        },
+        "price": 2.99
     },
     "olive oil": {
         "vitamins": {

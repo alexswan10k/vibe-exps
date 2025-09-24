@@ -114,9 +114,13 @@ function App() {
         Object.entries(needed).forEach(([item, neededQty]) => {
             const available = inventory[item] || 0;
             if (neededQty > available) {
+                // Get price from ingredients data, default to 0 if not found
+                const ingredientData = ingredientsData[item];
+                const defaultPrice = ingredientData && ingredientData.price ? ingredientData.price : 0;
+
                 shopping[item] = {
                     quantity: neededQty - available,
-                    unitCost: 0 // Default to 0, user can set this
+                    unitCost: defaultPrice
                 };
             }
         });
