@@ -5,6 +5,119 @@
 
 const LLMService = {
     /**
+     * Get available models from LMStudio
+     * @param {string} endpoint - LMStudio server endpoint
+     * @returns {Promise<Object>} - {success: boolean, models?: Array, error?: string}
+     */
+    async getAvailableModels(endpoint) {
+        try {
+            // Try multiple possible endpoints for LMStudio
+            const endpoints = [
+                `${endpoint}/v1/models`,
+                `${endpoint}/api/tags`,
+                `${endpoint}/api/v1/models`,
+                `${endpoint}/models`
+            ];
+
+            let response = null;
+            let data = null;
+
+            for (const url of endpoints) {
+                try {
+                    console.log('Trying endpoint:', url);
+                    response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+
+                    if (response.ok) {
+                        data = await response.json();
+                        console.log('Success with endpoint:', url, data);
+                        break;
+                    }
+                } catch (e) {
+                    console.log('Failed endpoint:', url, e.message);
+                    continue;
+                }
+            }
+
+            if (!response || !response.ok) {
+                throw new Error(`No working endpoint found. Last status: ${response?.status || 'unknown'}`);
+            }
+
+            // LMStudio returns models in different formats, handle all known formats
+            let models = [];
+
+            if (data.models && Array.isArray(data.models)) {
+                // LMStudio format: { models: [...] }
+                models = data.models.map(model => ({
+                    id: model.name || model.id || model,
+                    name: model.name || model.id || model,
+                    size: model.size || 'Unknown'
+                }));
+            } else if (data.data && Array.isArray(data.data)) {
+                // OpenAI-style format
+                models = data.data.map(model => ({
+                    id: model.id,
+                    name: model.id,
+                    size: model.size || 'Unknown'
+                }));
+            } else if (Array.isArray(data)) {
+                // Direct array format
+                models = data.map(model => ({
+                    id: typeof model === 'string' ? model : model.name || model.id || model,
+                    name: typeof model === 'string' ? model : model.name || model.id || model,
+                    size: model.size || 'Unknown'
+                }));
+            } else if (data.object === 'list' && data.data) {
+                // OpenAI list format
+                models = data.data.map(model => ({
+                    id: model.id,
+                    name: model.id,
+                    size: 'Unknown'
+                }));
+            }
+
+            console.log('Parsed models:', models);
+
+            // If no models found, provide some common LMStudio model suggestions
+            if (models.length === 0) {
+                console.log('No models found from API, providing common suggestions');
+                models = [
+                    { id: 'qwen/qwen3-4b-thinking-2507', name: 'Qwen 3 4B Thinking', size: '4.7GB' },
+                    { id: 'meta-llama-3.1-8b-instruct', name: 'Llama 3.1 8B Instruct', size: '4.7GB' },
+                    { id: 'microsoft/wizardlm-2-8x22b', name: 'WizardLM 2 8x22B', size: 'Unknown' },
+                    { id: 'mistralai/mistral-7b-instruct-v0.3', name: 'Mistral 7B Instruct v0.3', size: '4.1GB' },
+                    { id: 'meta-llama-3-8b-instruct', name: 'Llama 3 8B Instruct', size: '4.7GB' },
+                    { id: 'qwen/qwen2.5-7b-instruct', name: 'Qwen 2.5 7B Instruct', size: '4.7GB' }
+                ];
+            }
+
+            return { success: true, models };
+        } catch (error) {
+            console.error('Error fetching models:', error);
+
+            // On error, still provide common model suggestions
+            const fallbackModels = [
+                { id: 'qwen/qwen3-4b-thinking-2507', name: 'Qwen 3 4B Thinking', size: '4.7GB' },
+                { id: 'meta-llama-3.1-8b-instruct', name: 'Llama 3.1 8B Instruct', size: '4.7GB' },
+                { id: 'microsoft/wizardlm-2-8x22b', name: 'WizardLM 2 8x22B', size: 'Unknown' },
+                { id: 'mistralai/mistral-7b-instruct-v0.3', name: 'Mistral 7B Instruct v0.3', size: '4.1GB' },
+                { id: 'meta-llama-3-8b-instruct', name: 'Llama 3 8B Instruct', size: '4.7GB' },
+                { id: 'qwen/qwen2.5-7b-instruct', name: 'Qwen 2.5 7B Instruct', size: '4.7GB' }
+            ];
+
+            return {
+                success: true,
+                models: fallbackModels,
+                warning: `Could not connect to LMStudio (${error.message}), showing common model suggestions`
+            };
+        }
+    },
+
+    /**
      * Send a message to the LLM and handle tool calling
      * @param {Array} messages - Conversation messages
      * @param {Object} config - LLM configuration

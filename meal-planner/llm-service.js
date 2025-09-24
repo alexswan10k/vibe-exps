@@ -3,6 +3,58 @@
 
 const LLMService = {
     /**
+     * Get available models from LMStudio
+     * @param {string} endpoint - LMStudio server endpoint
+     * @returns {Promise<Object>} - {success: boolean, models?: Array, error?: string}
+     */
+    async getAvailableModels(endpoint) {
+        try {
+            const response = await fetch(`${endpoint}/v1/models`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // LMStudio returns models in different formats, handle both
+            let models = [];
+            if (data.data && Array.isArray(data.data)) {
+                // OpenAI-style format
+                models = data.data.map(model => ({
+                    id: model.id,
+                    name: model.id,
+                    size: model.size || 'Unknown'
+                }));
+            } else if (data.models && Array.isArray(data.models)) {
+                // Alternative format
+                models = data.models.map(model => ({
+                    id: model.name || model.id,
+                    name: model.name || model.id,
+                    size: model.size || 'Unknown'
+                }));
+            } else if (Array.isArray(data)) {
+                // Direct array format
+                models = data.map(model => ({
+                    id: typeof model === 'string' ? model : model.name || model.id,
+                    name: typeof model === 'string' ? model : model.name || model.id,
+                    size: model.size || 'Unknown'
+                }));
+            }
+
+            return { success: true, models };
+        } catch (error) {
+            console.error('Error fetching models:', error);
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
      * Generate a recipe using AI
      * @param {string} prompt - The recipe description prompt
      * @param {Object} inventory - Current inventory with ingredient quantities

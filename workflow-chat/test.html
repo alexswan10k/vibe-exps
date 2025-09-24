@@ -198,6 +198,102 @@
             background: #e9ecef;
             border-color: #007bff;
         }
+
+        .refresh-btn {
+            padding: 8px 12px;
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 6px rgba(127, 140, 141, 0.3);
+            margin-left: 8px;
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: linear-gradient(135deg, #7f8c8d 0%, #6c7b7d 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(127, 140, 141, 0.4);
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .model-error {
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: rgba(231, 76, 60, 0.1);
+            color: #e74c3c;
+            border: 1px solid rgba(231, 76, 60, 0.2);
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .preset-btn.selected {
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);
+        }
+
+        .preset-btn.selected:hover {
+            background: linear-gradient(135deg, #229954 0%, #27ae60 100%);
+            box-shadow: 0 6px 20px rgba(39, 174, 96, 0.5);
+        }
+
+        .refresh-btn-small {
+            padding: 6px 10px;
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(127, 140, 141, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .refresh-btn-small:hover {
+            background: linear-gradient(135deg, #7f8c8d 0%, #6c7b7d 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 6px rgba(127, 140, 141, 0.4);
+        }
+
+        .model-loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+        }
+
+        .model-fallback {
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 6px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .model-fallback input {
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -231,7 +327,13 @@
 
             <div class="config-item lmStudio-config">
                 <label>Model:</label>
-                <input type="text" id="lmstudio-model" value="qwen/qwen3-4b-thinking-2507" placeholder="qwen/qwen3-4b-thinking-2507">
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <div id="model-input-container" style="flex: 1;">
+                        <input type="text" id="lmstudio-model" value="qwen/qwen3-4b-thinking-2507" placeholder="qwen/qwen3-4b-thinking-2507" style="width: 100%;">
+                    </div>
+                    <button id="refresh-models-btn" class="refresh-btn" onclick="fetchAvailableModels()" title="Refresh available models" style="display: none;">🔄</button>
+                </div>
+                <div id="model-error" class="model-error" style="display: none;"></div>
             </div>
 
             <div class="config-item openRouter-config" style="display: none;">
@@ -246,7 +348,7 @@
         </div>
 
         <div class="preset-buttons">
-            <h4>Quick Setup - Popular Models:</h4>
+            <h4 id="models-title">Quick Setup - Popular Models:</h4>
             <div class="preset-grid" id="lmstudio-presets">
                 <button class="preset-btn" onclick="setModel('lmStudio', 'qwen/qwen3-4b-thinking-2507')">Qwen 3 4B Thinking</button>
                 <button class="preset-btn" onclick="setModel('lmStudio', 'meta-llama-3.1-8b-instruct')">Llama 3.1 8B</button>
@@ -309,7 +411,117 @@
         <button class="clear-results" onclick="clearResults()">Clear Results</button>
     </div>
 
+    <script src="llm-service.js"></script>
     <script>
+        // Global state for model management
+        let availableModels = [];
+        let modelsLoading = false;
+        let modelsError = null;
+        let modelsWarning = null;
+
+        // Fetch available models from LMStudio
+        async function fetchAvailableModels() {
+            const endpoint = document.getElementById('lmstudio-endpoint').value;
+            if (!endpoint.trim()) return;
+
+            modelsLoading = true;
+            modelsError = null;
+            updateModelInput();
+
+            try {
+                const result = await LLMService.getAvailableModels(endpoint);
+                if (result.success) {
+                    availableModels = result.models;
+                } else {
+                    modelsError = result.error;
+                    availableModels = [];
+                }
+            } catch (error) {
+                modelsError = error.message;
+                availableModels = [];
+            } finally {
+                modelsLoading = false;
+                updateModelInput();
+            }
+        }
+
+        // Update the model input field (switch between dropdown and text input)
+        function updateModelInput() {
+            const container = document.getElementById('model-input-container');
+            const refreshBtn = document.getElementById('refresh-models-btn');
+            const errorDiv = document.getElementById('model-error');
+            const currentModelValue = localStorage.getItem('lmStudioModel') || 'qwen/qwen3-4b-thinking-2507';
+
+            // Show refresh button when LMStudio is selected
+            refreshBtn.style.display = 'inline-flex';
+
+            if (modelsLoading) {
+                container.innerHTML = '<input type="text" id="lmstudio-model" placeholder="Loading models..." style="width: 100%;" disabled>';
+                errorDiv.style.display = 'none';
+            } else if (availableModels.length > 0) {
+                // Create dropdown with available models
+                let options = '<option value="">Select a model...</option>';
+                availableModels.forEach(model => {
+                    const displayName = `${model.name}${model.size && model.size !== 'Unknown' ? ` (${model.size})` : ''}`;
+                    const selected = model.id === currentModelValue ? ' selected' : '';
+                    options += `<option value="${model.id}"${selected}>${displayName}</option>`;
+                });
+                container.innerHTML = `<select id="lmstudio-model" style="width: 100%;">${options}</select>`;
+
+                // Set the value programmatically to ensure it's selected
+                setTimeout(() => {
+                    const selectElement = document.getElementById('lmstudio-model');
+                    if (selectElement) {
+                        selectElement.value = currentModelValue;
+                    }
+                }, 0);
+
+                errorDiv.style.display = 'none';
+            } else {
+                // Fallback to text input
+                container.innerHTML = `<input type="text" id="lmstudio-model" value="${currentModelValue}" placeholder="Enter model name manually" style="width: 100%;">`;
+                if (modelsError) {
+                    errorDiv.textContent = `⚠️ Could not load models: ${modelsError}`;
+                    errorDiv.style.display = 'block';
+                } else {
+                    errorDiv.style.display = 'none';
+                }
+            }
+        }
+
+        // Update the model display section (replace preset buttons with actual models)
+        function updateModelDisplay() {
+            const lmStudioPresets = document.getElementById('lmstudio-presets');
+
+            if (modelsLoading) {
+                lmStudioPresets.innerHTML = '<div class="model-loading">Loading models...</div>';
+            } else if (modelsError) {
+                lmStudioPresets.innerHTML = `
+                    <div class="model-error">
+                        ⚠️ Could not load models: ${modelsError}
+                        <button class="refresh-btn-small" onclick="fetchAvailableModels()" title="Try again">🔄 Retry</button>
+                    </div>
+                `;
+            } else if (availableModels.length > 0) {
+                // Show actual installed models
+                const modelButtons = availableModels.map(model => {
+                    const displayName = `${model.name}${model.size && model.size !== 'Unknown' ? ` (${model.size})` : ''}`;
+                    const selectedClass = document.getElementById('lmstudio-model')?.value === model.id ? ' selected' : '';
+                    return `<button class="preset-btn${selectedClass}" onclick="setModel('lmStudio', '${model.id}')">${displayName}</button>`;
+                }).join('');
+
+                lmStudioPresets.innerHTML = modelButtons + '<button class="refresh-btn-small" onclick="fetchAvailableModels()" title="Refresh models">🔄</button>';
+            } else {
+                // Fallback to manual input
+                lmStudioPresets.innerHTML = `
+                    <div class="model-fallback">
+                        <div>No models found. Enter manually:</div>
+                        <input type="text" id="lmstudio-model-fallback" value="${document.getElementById('lmstudio-model')?.value || 'qwen/qwen3-4b-thinking-2507'}" placeholder="Enter model name manually" style="width: 100%; margin-top: 8px;" oninput="document.getElementById('lmstudio-model').value = this.value">
+                    </div>
+                `;
+            }
+        }
+
         // Test scenarios configuration
         const testScenarios = {
             recipe: {
@@ -817,17 +1029,21 @@
             const openRouterElements = document.querySelectorAll('.openRouter-config');
             const lmStudioPresets = document.getElementById('lmstudio-presets');
             const openRouterPresets = document.getElementById('openrouter-presets');
+            const modelsTitle = document.getElementById('models-title');
 
             if (provider === 'lmStudio') {
                 lmStudioElements.forEach(el => el.style.display = 'block');
                 openRouterElements.forEach(el => el.style.display = 'none');
                 lmStudioPresets.style.display = 'grid';
                 openRouterPresets.style.display = 'none';
+                modelsTitle.textContent = 'Available Models:';
+                updateModelDisplay();
             } else {
                 lmStudioElements.forEach(el => el.style.display = 'none');
                 openRouterElements.forEach(el => el.style.display = 'block');
                 lmStudioPresets.style.display = 'none';
                 openRouterPresets.style.display = 'grid';
+                modelsTitle.textContent = 'Quick Setup - Popular Models:';
             }
         });
 
@@ -866,6 +1082,11 @@
             // Trigger provider change to show/hide appropriate fields
             document.getElementById('llm-provider').dispatchEvent(new Event('change'));
 
+            // Fetch models if LMStudio is selected
+            if (config.provider === 'lmStudio') {
+                fetchAvailableModels();
+            }
+
             // Check for workflow results
             const urlParams = new URLSearchParams(window.location.search);
             const payload = urlParams.get('payload');
@@ -889,8 +1110,29 @@
         });
 
         // Save configuration when inputs change
-        ['llm-provider', 'lmstudio-endpoint', 'lmstudio-model', 'openrouter-key', 'openrouter-model'].forEach(id => {
+        ['llm-provider', 'lmstudio-endpoint', 'openrouter-key', 'openrouter-model'].forEach(id => {
             document.getElementById(id).addEventListener('input', saveConfig);
+        });
+
+        // Handle LMStudio endpoint changes to fetch models
+        document.getElementById('lmstudio-endpoint').addEventListener('input', function(e) {
+            if (document.getElementById('llm-provider').value === 'lmStudio' && e.target.value.trim()) {
+                fetchAvailableModels();
+            }
+        });
+
+        // Handle model input changes (for saving config)
+        document.addEventListener('input', function(e) {
+            if (e.target.id === 'lmstudio-model') {
+                saveConfig();
+            }
+        });
+
+        // Handle model select changes (for saving config)
+        document.addEventListener('change', function(e) {
+            if (e.target.id === 'lmstudio-model') {
+                saveConfig();
+            }
         });
 
         function saveConfig() {

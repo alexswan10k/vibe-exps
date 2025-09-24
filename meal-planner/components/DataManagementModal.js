@@ -22,6 +22,36 @@ function DataManagementModal({
     openRouterModel,
     setOpenRouterModel
 }) {
+    const [availableModels, setAvailableModels] = React.useState([]);
+    const [modelsLoading, setModelsLoading] = React.useState(false);
+    const [modelsError, setModelsError] = React.useState(null);
+
+    // Fetch available models when LMStudio endpoint changes
+    React.useEffect(() => {
+        if (llmProvider === 'lmStudio' && lmStudioEndpoint.trim()) {
+            fetchAvailableModels();
+        }
+    }, [llmProvider, lmStudioEndpoint]);
+
+    const fetchAvailableModels = async () => {
+        setModelsLoading(true);
+        setModelsError(null);
+        try {
+            const result = await LLMService.getAvailableModels(lmStudioEndpoint);
+            if (result.success) {
+                setAvailableModels(result.models);
+            } else {
+                setModelsError(result.error);
+                setAvailableModels([]);
+            }
+        } catch (error) {
+            setModelsError(error.message);
+            setAvailableModels([]);
+        } finally {
+            setModelsLoading(false);
+        }
+    };
+
     if (!show) return null;
 
     return React.createElement('div', {
@@ -154,34 +184,37 @@ function DataManagementModal({
                                     placeholder: 'http://localhost:1234'
                                 })
                             ),
-                            React.createElement('div', { className: 'setting-row' },
-                                React.createElement('label', null, 'Model:'),
-                                React.createElement('input', {
-                                    type: 'text',
-                                    value: lmStudioModel,
-                                    onChange: (e) => setLmStudioModel(e.target.value),
-                                    placeholder: 'Select a model below or enter manually'
-                                })
-                            ),
                             React.createElement('div', { className: 'preset-buttons' },
-                                React.createElement('h4', null, 'Quick Setup - Popular Models:'),
-                                React.createElement('div', { className: 'preset-grid' },
+                                React.createElement('h4', null, 'Available Models:'),
+                                modelsLoading ? React.createElement('div', { className: 'model-loading' }, 'Loading models...') :
+                                modelsError ? React.createElement('div', { className: 'model-error' },
+                                    React.createElement('div', null, `⚠️ Could not load models: ${modelsError}`),
                                     React.createElement('button', {
-                                        className: 'preset-btn',
-                                        onClick: () => setLmStudioModel('qwen/qwen3-4b-thinking-2507')
-                                    }, 'Qwen 3 4B Thinking'),
+                                        className: 'refresh-btn-small',
+                                        onClick: fetchAvailableModels,
+                                        title: 'Try again'
+                                    }, '🔄 Retry')
+                                ) :
+                                availableModels.length > 0 ? React.createElement('div', { className: 'preset-grid' },
+                                    ...availableModels.map(model => React.createElement('button', {
+                                        key: model.id,
+                                        className: `preset-btn ${lmStudioModel === model.id ? 'selected' : ''}`,
+                                        onClick: () => setLmStudioModel(model.id)
+                                    }, `${model.name}${model.size && model.size !== 'Unknown' ? ` (${model.size})` : ''}`)),
                                     React.createElement('button', {
-                                        className: 'preset-btn',
-                                        onClick: () => setLmStudioModel('meta-llama-3.1-8b-instruct')
-                                    }, 'Llama 3.1 8B'),
-                                    React.createElement('button', {
-                                        className: 'preset-btn',
-                                        onClick: () => setLmStudioModel('microsoft/wizardlm-2-8x22b')
-                                    }, 'WizardLM 2 8x22B'),
-                                    React.createElement('button', {
-                                        className: 'preset-btn',
-                                        onClick: () => setLmStudioModel('mistralai/mistral-7b-instruct-v0.3')
-                                    }, 'Mistral 7B')
+                                        className: 'refresh-btn-small',
+                                        onClick: fetchAvailableModels,
+                                        title: 'Refresh models'
+                                    }, '🔄')
+                                ) : React.createElement('div', { className: 'model-fallback' },
+                                    React.createElement('div', null, 'No models found. Enter manually:'),
+                                    React.createElement('input', {
+                                        type: 'text',
+                                        value: lmStudioModel,
+                                        onChange: (e) => setLmStudioModel(e.target.value),
+                                        placeholder: 'Enter model name manually',
+                                        style: { width: '100%', marginTop: '8px' }
+                                    })
                                 )
                             )
                         ),
