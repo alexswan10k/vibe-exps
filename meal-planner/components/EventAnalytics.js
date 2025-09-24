@@ -67,14 +67,14 @@ const AnalyticsCharts = ({ logEntries, ingredientsData, recipes }) => {
                     // Calculate vitamins from ingredients data
                     const nutritionData = getBasicNutritionData(ing.name);
                     if (nutritionData && nutritionData.vitamins) {
-                        dailyNutritionConsumption[date].vitaminA += nutritionData.vitamins.vitaminA ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].vitaminC += nutritionData.vitamins.vitaminC ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].vitaminD += nutritionData.vitamins.vitaminD ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].vitaminE += nutritionData.vitamins.vitaminE ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].vitaminK1 += nutritionData.vitamins.vitaminK1 ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].vitaminK2 += nutritionData.vitamins.vitaminK2 ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].vitaminB12 += nutritionData.vitamins.vitaminB12 ? ing.quantity : 0;
-                        dailyNutritionConsumption[date].folate += nutritionData.vitamins.folate ? ing.quantity : 0;
+                        if (nutritionData.vitamins.vitaminA) dailyNutritionConsumption[date].vitaminA = 1;
+                        if (nutritionData.vitamins.vitaminC) dailyNutritionConsumption[date].vitaminC = 1;
+                        if (nutritionData.vitamins.vitaminD) dailyNutritionConsumption[date].vitaminD = 1;
+                        if (nutritionData.vitamins.vitaminE) dailyNutritionConsumption[date].vitaminE = 1;
+                        if (nutritionData.vitamins.vitaminK1) dailyNutritionConsumption[date].vitaminK1 = 1;
+                        if (nutritionData.vitamins.vitaminK2) dailyNutritionConsumption[date].vitaminK2 = 1;
+                        if (nutritionData.vitamins.vitaminB12) dailyNutritionConsumption[date].vitaminB12 = 1;
+                        if (nutritionData.vitamins.folate) dailyNutritionConsumption[date].folate = 1;
                     }
                 });
             }
