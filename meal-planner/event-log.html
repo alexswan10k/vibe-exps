@@ -26,6 +26,41 @@
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
         }
 
+        .date-filters {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .date-filters button {
+            padding: 8px 16px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .date-filters button:hover {
+            background: #2980b9;
+        }
+
+        .date-filters label {
+            font-size: 14px;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .date-filters input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
         .event-log-header h1 {
             color: #2c3e50;
             font-size: 2.5rem;
@@ -53,14 +88,7 @@
 
         .analytics-section {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .analytics-section-four {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -220,6 +248,8 @@
             const [logEntries, setLogEntries] = useState([]);
             const [ingredientsData, setIngredientsData] = useState({});
             const [recipes, setRecipes] = useState([]);
+            const [startDate, setStartDate] = useState('');
+            const [endDate, setEndDate] = useState('');
 
             useEffect(() => {
                 loadLogEntries();
@@ -258,9 +288,37 @@
                 }
             };
 
+            const filteredLogEntries = logEntries.filter(entry => {
+                const entryDate = new Date(entry.timestamp);
+                const start = startDate ? new Date(startDate) : null;
+                const end = endDate ? new Date(endDate) : null;
+                if (start && entryDate < start) return false;
+                if (end && entryDate > end) return false;
+                return true;
+            });
+
             return React.createElement('div', { className: 'event-log-container' },
                 React.createElement('div', { className: 'event-log-header' },
                     React.createElement('h1', null, 'Event Log & Analytics'),
+                    React.createElement('div', { className: 'date-filters' },
+                        React.createElement('label', null, 'Start Date:',
+                            React.createElement('input', {
+                                type: 'date',
+                                value: startDate,
+                                onChange: e => setStartDate(e.target.value)
+                            })
+                        ),
+                        React.createElement('label', null, 'End Date:',
+                            React.createElement('input', {
+                                type: 'date',
+                                value: endDate,
+                                onChange: e => setEndDate(e.target.value)
+                            })
+                        ),
+                        React.createElement('button', {
+                            onClick: () => { setStartDate(''); setEndDate(''); }
+                        }, 'Reset Dates')
+                    ),
                     React.createElement('button', {
                         className: 'clear-log-btn',
                         onClick: clearLog,
@@ -268,9 +326,9 @@
                     }, 'Clear Log')
                 ),
 
-                React.createElement(AnalyticsChartsComponent, { logEntries, ingredientsData, recipes }),
+                React.createElement(AnalyticsChartsComponent, { logEntries: filteredLogEntries, ingredientsData, recipes }),
 
-                React.createElement(EventLogComponent, { logEntries })
+                React.createElement(EventLogComponent, { logEntries: filteredLogEntries })
             );
         }
 

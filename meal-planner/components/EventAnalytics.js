@@ -180,16 +180,15 @@ const AnalyticsCharts = ({ logEntries, ingredientsData, recipes }) => {
                 .sort(([a], [b]) => new Date(a) - new Date(b));
 
             chartRefs.current.dailyActivity = new Chart(dailyCtx, {
-                type: 'line',
+                type: 'bar',
                 data: {
                     labels: sortedDays.map(([date]) => new Date(date).toLocaleDateString()),
                     datasets: [{
-                        label: 'Activities',
+                        label: 'Events',
                         data: sortedDays.map(([, count]) => count),
-                        borderColor: '#27ae60',
-                        backgroundColor: 'rgba(39, 174, 96, 0.1)',
-                        tension: 0.4,
-                        fill: true
+                        backgroundColor: '#f39c12',
+                        borderColor: '#e67e22',
+                        borderWidth: 1
                     }]
                 },
                 options: {
@@ -409,16 +408,13 @@ const AnalyticsCharts = ({ logEntries, ingredientsData, recipes }) => {
             React.createElement('h3', null, 'Daily Activity'),
             React.createElement('canvas', { id: 'dailyActivityChart' })
         ),
-
-        React.createElement('div', { className: 'analytics-section-four' },
-            React.createElement('div', { className: 'chart-container' },
-                React.createElement('h3', null, 'Daily Macronutrients'),
-                React.createElement('canvas', { id: 'dailyCaloriesChart' })
-            ),
-            React.createElement('div', { className: 'chart-container' },
-                React.createElement('h3', null, 'Daily Vitamins'),
-                React.createElement('canvas', { id: 'dailyVitaminsChart' })
-            )
+        React.createElement('div', { className: 'chart-container' },
+            React.createElement('h3', null, 'Daily Macronutrients'),
+            React.createElement('canvas', { id: 'dailyCaloriesChart' })
+        ),
+        React.createElement('div', { className: 'chart-container' },
+            React.createElement('h3', null, 'Daily Vitamins'),
+            React.createElement('canvas', { id: 'dailyVitaminsChart' })
         )
     );
 };
