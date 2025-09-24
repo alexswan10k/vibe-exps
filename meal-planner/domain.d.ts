@@ -286,11 +286,51 @@ export interface AppState {
   selectingDay: string | null;
 }
 
+// Nutrition Data Types
+export interface IngredientNutritionData {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  vitamins: {
+    vitaminA: boolean;
+    vitaminC: boolean;
+    vitaminD: boolean;
+    vitaminE: boolean;
+    vitaminK1: boolean;
+    vitaminK2: boolean;
+    vitaminB12: boolean;
+    folate: boolean;
+  };
+}
+
+export interface IngredientData {
+  vitamins: {
+    vitaminA?: boolean;
+    vitaminC?: boolean;
+    vitaminD?: boolean;
+    vitaminE?: boolean;
+    vitaminK1?: boolean;
+    vitaminK2?: boolean;
+    vitaminB12?: boolean;
+    folate?: boolean;
+  };
+  minerals: {
+    calcium?: boolean;
+    iron?: boolean;
+    magnesium?: boolean;
+    potassium?: boolean;
+    zinc?: boolean;
+  };
+  price?: number;
+}
+
 // Event Log Types
 export interface EventLogEntry {
   timestamp: number;
   action: 'cook' | 'buy' | 'inventory_change';
-  details: any;
+  details: CookEventDetails | BuyEventDetails | InventoryChangeEventDetails;
 }
 
 export interface CookEventDetails {
