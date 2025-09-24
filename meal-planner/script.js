@@ -503,7 +503,8 @@ function App() {
                     setLmStudioModel,
                     setAiMode,
                     generateRecipeWithAI,
-                    setShowPasteModal
+                    setShowPasteModal,
+                    onLoadSampleData: loadSampleData
                 })
             ),
             activeTab === 'inventory' && React.createElement(Inventory, {

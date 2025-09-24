@@ -96,6 +96,7 @@ export interface RecipeListProps {
   setAiMode: (mode: boolean) => void;
   generateRecipeWithAI: (prompt: string) => Promise<{ success: boolean; error?: string }>;
   setShowPasteModal: (show: boolean) => void;
+  onLoadSampleData: () => void;
 }
 
 export interface RecipeItemProps {

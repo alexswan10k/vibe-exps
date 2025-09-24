@@ -1,4 +1,4 @@
-function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe, onEditRecipe, lmStudioEndpoint, lmStudioModel, aiMode, setLmStudioEndpoint, setLmStudioModel, setAiMode, generateRecipeWithAI }) {
+function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe, onEditRecipe, lmStudioEndpoint, lmStudioModel, aiMode, setLmStudioEndpoint, setLmStudioModel, setAiMode, generateRecipeWithAI, onLoadSampleData }) {
     const [newRecipe, setNewRecipe] = useState('');
     const [aiPrompt, setAiPrompt] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
@@ -81,6 +81,15 @@ function RecipeList({ recipes, inventory, addRecipe, updateRecipe, deleteRecipe,
 
     return React.createElement('div', { className: 'recipe-list' },
         React.createElement('h2', null, 'Recipes'),
+        recipes.length === 0 && React.createElement('div', { className: 'empty-recipes' },
+            React.createElement('button', {
+                className: 'seed-btn',
+                onClick: () => {
+                    onLoadSampleData();
+                    alert('Sample data loaded! The new recipes and ingredients are now available.');
+                }
+            }, '🌱 Seed')
+        ),
         React.createElement('ul', null,
             recipes.map(recipe =>
                 React.createElement(RecipeItem, {

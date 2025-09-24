@@ -80,6 +80,39 @@
     box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
 }
 
+/* Empty Recipes State */
+.empty-recipes {
+    text-align: center;
+    margin: 40px 0;
+}
+
+.seed-btn {
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    color: white;
+    border: none;
+    padding: 20px 40px;
+    font-size: 24px;
+    font-weight: bold;
+    border-radius: 15px;
+    cursor: pointer;
+    box-shadow: 0 8px 25px rgba(39, 174, 96, 0.4);
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    min-width: 200px;
+}
+
+.seed-btn:hover {
+    background: linear-gradient(135deg, #229954 0%, #27ae60 100%);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(39, 174, 96, 0.5);
+}
+
+.seed-btn:active {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+}
+
 /* Mobile Styles */
 @media (max-width: 768px) {
     /* Recipe items mobile styles */
@@ -99,5 +132,12 @@
         padding: 6px 12px;
         font-size: 12px;
         min-height: 36px;
+    }
+
+    /* Mobile seed button */
+    .seed-btn {
+        padding: 16px 32px;
+        font-size: 20px;
+        min-width: 160px;
     }
 }
