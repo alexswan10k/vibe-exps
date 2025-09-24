@@ -1,8 +1,12 @@
 /* Calendar Component Styles */
+.calendar {
+    margin-bottom: 15px;
+}
+
 .calendar-controls {
     display: flex;
     gap: 10px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     justify-content: center;
 }
 
@@ -35,7 +39,7 @@
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    gap: 15px;
+    gap: 10px;
 }
 
 /* Mobile Styles */
@@ -92,16 +96,16 @@
 }
 
 .day-slot {
-    padding: 25px 15px;
+    padding: 15px;
     border: 2px dashed #bdc3c7;
     border-radius: 12px;
-    min-height: 120px;
+    min-height: 140px;
     text-align: center;
     background: linear-gradient(135deg, #f8f9fa 0%, #ecf0f1 100%);
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     position: relative;
 }
@@ -141,4 +145,15 @@
     font-weight: 500;
     color: #34495e;
     line-height: 1.4;
+}
+
+.day-slot-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 100%;
+}
+
+.day-slot-buttons button {
+    width: 100%;
 }

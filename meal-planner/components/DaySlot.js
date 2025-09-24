@@ -16,15 +16,15 @@ function DaySlot({ day, recipeId, getRecipeById, handleDrop, handleDragOver, han
     },
         React.createElement('h3', null, day),
         recipe ? React.createElement('p', { className: canCook ? '' : 'insufficient-recipe' }, recipe.name) : React.createElement('p', null, 'Drop recipe here'),
-        React.createElement('button', {
-            onClick: () => onSelectRecipe(day),
-            className: 'select-recipe-btn',
-            style: { marginTop: '10px', width: '100%', marginBottom: '5px' }
-        }, recipe ? 'Change Recipe' : 'Select Recipe'),
-        recipe && React.createElement('button', {
-            onClick: () => handleCook(recipe),
-            className: canCook ? 'cook-btn' : 'cook-btn insufficient',
-            style: { marginTop: '5px', width: '100%' }
-        }, 'Cook')
+        React.createElement('div', { className: 'day-slot-buttons' },
+            React.createElement('button', {
+                onClick: () => onSelectRecipe(day),
+                className: 'select-recipe-btn'
+            }, recipe ? 'Change Recipe' : 'Select Recipe'),
+            recipe && React.createElement('button', {
+                onClick: () => handleCook(recipe),
+                className: canCook ? 'cook-btn' : 'cook-btn insufficient'
+            }, 'Cook')
+        )
     );
 }
