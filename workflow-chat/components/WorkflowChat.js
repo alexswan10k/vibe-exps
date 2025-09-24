@@ -6,7 +6,10 @@ function WorkflowChat({ workflowParams, llmConfig, onComplete, scenario = 'custo
     const [messages, setMessages] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
+    const [tokensPerSecond, setTokensPerSecond] = React.useState(0);
     const abortControllerRef = React.useRef(null);
+    const streamingStartTimeRef = React.useRef(null);
+    const tokenCountRef = React.useRef(0);
 
 // Expose globally for script tag loading
 window.WorkflowChat = WorkflowChat;
@@ -79,6 +82,11 @@ window.WorkflowChat = WorkflowChat;
                 throw new Error(result.error);
             }
 
+            // Initialize streaming metrics
+            streamingStartTimeRef.current = Date.now();
+            tokenCountRef.current = 0;
+            setTokensPerSecond(0);
+
             // Add initial streaming message to messages array
             const streamingMessageIndex = messages.length + 1; // +1 because we already added user message
             setMessages(prev => [...prev, {
@@ -103,6 +111,14 @@ window.WorkflowChat = WorkflowChat;
     };
 
     const handleStreamChunk = (chunk) => {
+        // Update token count and TPS
+        if (chunk.content) {
+            tokenCountRef.current += 1;
+            const elapsedSeconds = (Date.now() - streamingStartTimeRef.current) / 1000;
+            const tps = elapsedSeconds > 0 ? (tokenCountRef.current / elapsedSeconds).toFixed(1) : 0;
+            setTokensPerSecond(tps);
+        }
+
         setMessages(prev => {
             const newMessages = [...prev];
             const lastMsg = newMessages[newMessages.length - 1];
@@ -111,12 +127,9 @@ window.WorkflowChat = WorkflowChat;
                 let newContent = lastMsg.content + chunk.content;
                 let newType = lastMsg.type;
 
-                // Update message type based on content
-                if (chunk.isThinking && newType !== 'thinking') {
+                // Update message type based on accumulated content containing thinking tags
+                if (newContent.includes('<think>')) {
                     newType = 'thinking';
-                } else if (!chunk.isThinking && newType === 'thinking') {
-                    // Transition from thinking to final content
-                    newType = 'normal';
                 }
 
                 lastMsg.content = newContent;
@@ -128,6 +141,10 @@ window.WorkflowChat = WorkflowChat;
     };
 
     const handleStreamComplete = (result) => {
+        // Calculate final TPS
+        const elapsedSeconds = streamingStartTimeRef.current ? (Date.now() - streamingStartTimeRef.current) / 1000 : 0;
+        const finalTps = elapsedSeconds > 0 && tokenCountRef.current > 0 ? (tokenCountRef.current / elapsedSeconds).toFixed(1) : 0;
+
         setMessages(prev => {
             const newMessages = [...prev];
             const lastMsg = newMessages[newMessages.length - 1];
@@ -136,12 +153,18 @@ window.WorkflowChat = WorkflowChat;
                 // Content is already properly formatted with <think> tags from streaming
                 lastMsg.content = result.content;
                 lastMsg.type = result.thinkingContent ? 'thinking' : 'normal';
+                lastMsg.tps = finalTps;
+                // Collapse thinking section by default when complete
+                if (result.thinkingContent) {
+                    lastMsg.collapsed = true;
+                }
             }
 
             return newMessages;
         });
 
         setIsLoading(false);
+        setTokensPerSecond(0);
 
         // Handle tool calls
         if (result.toolCalls && result.toolCalls.length > 0) {
@@ -153,6 +176,7 @@ window.WorkflowChat = WorkflowChat;
         console.error('Streaming error:', error);
         setError('Error receiving response from LLM');
         setIsLoading(false);
+        setTokensPerSecond(0);
     };
 
     const handleToolCalls = (toolCalls) => {
@@ -233,6 +257,16 @@ window.WorkflowChat = WorkflowChat;
                         const newMessages = [...prev];
                         const msg = newMessages[index];
                         if (msg && msg.type === 'system-collapsed') {
+                            msg.collapsed = !msg.collapsed;
+                        }
+                        return newMessages;
+                    });
+                },
+                onToggleThinkingMessage: (index) => {
+                    setMessages(prev => {
+                        const newMessages = [...prev];
+                        const msg = newMessages[index];
+                        if (msg && msg.type === 'thinking') {
                             msg.collapsed = !msg.collapsed;
                         }
                         return newMessages;

@@ -37,8 +37,6 @@ const LLMService = {
             const requestBody = {
                 model,
                 messages,
-                temperature: 0.7,
-                max_tokens: 2000,
                 stream: true // Enable streaming for real-time responses
             };
 
@@ -112,18 +110,21 @@ const LLMService = {
                             if (delta.content) {
                                 const content = delta.content;
 
-                                // Track thinking blocks
-                                if (content.includes('<think>')) {
-                                    isThinking = true;
-                                } else if (content.includes('</think>')) {
-                                    isThinking = false;
-                                }
-
-                                if (isThinking) {
-                                    thinkingContent += content.replace('<think>', '').replace('</think>', '');
-                                }
                                 // Always accumulate raw content with tags for proper parsing
                                 accumulatedContent += content;
+
+                                // Determine current thinking state by counting tags in accumulated content
+                                const thinkOpenCount = (accumulatedContent.match(/<think>/g) || []).length;
+                                const thinkCloseCount = (accumulatedContent.match(/<\/think>/g) || []).length;
+                                isThinking = thinkOpenCount > thinkCloseCount;
+
+                                // Extract thinking content for legacy compatibility (though not used in current UI)
+                                if (isThinking) {
+                                    const lastThinkStart = accumulatedContent.lastIndexOf('<think>');
+                                    if (lastThinkStart !== -1) {
+                                        thinkingContent = accumulatedContent.substring(lastThinkStart + 7).replace(/<\/think>.*$/, '');
+                                    }
+                                }
 
                                 onChunk({
                                     content: delta.content,

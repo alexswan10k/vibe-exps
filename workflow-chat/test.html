@@ -782,8 +782,8 @@
 
             container.innerHTML = results.map((result, index) => {
                 const validationStatus = result.schemaValidation?.isValid ? '✅ Valid' : '❌ Invalid';
-                const scenarioName = result.scenario.charAt(0).toUpperCase() + result.scenario.slice(1);
-                const promptPreview = result.prompt.substring(0, 100) + (result.prompt.length > 100 ? '...' : '');
+                const scenarioName = (result.scenario || 'unknown').charAt(0).toUpperCase() + (result.scenario || 'unknown').slice(1);
+                const promptPreview = (result.prompt || '').substring(0, 100) + ((result.prompt || '').length > 100 ? '...' : '');
 
                 return `
                     <div class="result-item">
