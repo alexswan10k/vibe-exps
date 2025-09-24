@@ -1,4 +1,4 @@
-function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe, inventory, onGenerateRandom, onGenerateAI }) {
+function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe, inventory, onGenerateRandom, onGenerateAI, aiPlanLoading, isLLMConfigured }) {
     const days = Object.keys(calendar);
 
     return React.createElement('div', { className: 'calendar' },
@@ -8,10 +8,11 @@ function Calendar({ calendar, handleDrop, handleDragOver, getRecipeById, handleC
                 className: 'generate-btn',
                 onClick: onGenerateRandom
             }, 'Generate Random Plan'),
-            React.createElement('button', {
+            isLLMConfigured && React.createElement('button', {
                 className: 'generate-btn ai-btn',
-                onClick: onGenerateAI
-            }, 'Generate AI Plan')
+                onClick: onGenerateAI,
+                disabled: aiPlanLoading
+            }, aiPlanLoading ? 'Generating...' : 'Generate AI Plan')
         ),
         React.createElement('div', { className: 'calendar-grid' },
             days.map(day =>

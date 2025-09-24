@@ -160,8 +160,29 @@ function DataManagementModal({
                                     type: 'text',
                                     value: lmStudioModel,
                                     onChange: (e) => setLmStudioModel(e.target.value),
-                                    placeholder: 'qwen/qwen3-4b-thinking-2507'
+                                    placeholder: 'Select a model below or enter manually'
                                 })
+                            ),
+                            React.createElement('div', { className: 'preset-buttons' },
+                                React.createElement('h4', null, 'Quick Setup - Popular Models:'),
+                                React.createElement('div', { className: 'preset-grid' },
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setLmStudioModel('qwen/qwen3-4b-thinking-2507')
+                                    }, 'Qwen 3 4B Thinking'),
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setLmStudioModel('meta-llama-3.1-8b-instruct')
+                                    }, 'Llama 3.1 8B'),
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setLmStudioModel('microsoft/wizardlm-2-8x22b')
+                                    }, 'WizardLM 2 8x22B'),
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setLmStudioModel('mistralai/mistral-7b-instruct-v0.3')
+                                    }, 'Mistral 7B')
+                                )
                             )
                         ),
                         llmProvider === 'openRouter' && React.createElement(React.Fragment, null,
@@ -180,8 +201,29 @@ function DataManagementModal({
                                     type: 'text',
                                     value: openRouterModel,
                                     onChange: (e) => setOpenRouterModel(e.target.value),
-                                    placeholder: 'openai/gpt-4o'
+                                    placeholder: 'Select a model below or enter manually'
                                 })
+                            ),
+                            React.createElement('div', { className: 'preset-buttons' },
+                                React.createElement('h4', null, 'Quick Setup - Popular Models:'),
+                                React.createElement('div', { className: 'preset-grid' },
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setOpenRouterModel('openai/gpt-4o')
+                                    }, 'GPT-4o'),
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setOpenRouterModel('anthropic/claude-3.5-sonnet')
+                                    }, 'Claude 3.5 Sonnet'),
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setOpenRouterModel('meta-llama/llama-3.1-70b-instruct')
+                                    }, 'Llama 3.1 70B'),
+                                    React.createElement('button', {
+                                        className: 'preset-btn',
+                                        onClick: () => setOpenRouterModel('google/gemini-pro-1.5')
+                                    }, 'Gemini Pro 1.5')
+                                )
                             )
                         )
                     )

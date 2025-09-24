@@ -5,6 +5,7 @@ const LLMService = {
     /**
      * Generate a recipe using AI
      * @param {string} prompt - The recipe description prompt
+     * @param {Object} inventory - Current inventory with ingredient quantities
      * @param {Object} config - Configuration object
      * @param {string} config.provider - 'lmStudio' or 'openRouter'
      * @param {string} config.lmStudioEndpoint - LMStudio server endpoint
@@ -13,7 +14,7 @@ const LLMService = {
      * @param {string} config.openRouterModel - OpenRouter model name
      * @returns {Promise<Object>} - {success: boolean, error?: string}
      */
-    async generateRecipe(prompt, config) {
+    async generateRecipe(prompt, inventory, config) {
         try {
             const { provider, lmStudioEndpoint, lmStudioModel, openRouterApiKey, openRouterModel } = config;
 
@@ -36,7 +37,17 @@ const LLMService = {
                 model = lmStudioModel;
             }
 
-            const basePrompt = `Generate a recipe based on: "${prompt}"
+            // Format inventory for the prompt
+            const availableIngredients = Object.entries(inventory)
+                .filter(([_, qty]) => qty > 0)
+                .map(([item, qty]) => `${item} (${qty})`)
+                .join(', ');
+
+            const inventoryText = availableIngredients ?
+                `\n\nAvailable ingredients in your inventory: ${availableIngredients}. Try to use as many of these ingredients as possible to minimize shopping needs.` :
+                '\n\nNo ingredients currently in inventory.';
+
+            const basePrompt = `Generate a recipe based on: "${prompt}"${inventoryText}
 
 IMPORTANT INSTRUCTIONS:
 - All ingredient names must be in lowercase
@@ -46,6 +57,7 @@ IMPORTANT INSTRUCTIONS:
 - Include specific quantities and units that make sense for shopping
 - Focus on actual purchasable items for a shopping list
 - Provide clear, step-by-step cooking method/instructions
+- Prioritize using ingredients already in inventory when possible
 
 Examples of good ingredient names:
 - "chicken breast" (not "chicken")
@@ -183,6 +195,7 @@ No additional text or explanation.`
      * Generate a meal plan using AI
      * @param {Array} recipes - List of available recipes
      * @param {Object} currentCalendar - Current week's calendar to avoid repetition
+     * @param {Object} inventory - Current inventory with ingredient quantities
      * @param {Object} config - Configuration object
      * @param {string} config.provider - 'lmStudio' or 'openRouter'
      * @param {string} config.lmStudioEndpoint - LMStudio server endpoint
@@ -191,7 +204,7 @@ No additional text or explanation.`
      * @param {string} config.openRouterModel - OpenRouter model name
      * @returns {Promise<Object>} - {success: boolean, mealPlan?: Object, error?: string}
      */
-    async generateMealPlan(recipes, currentCalendar, config) {
+    async generateMealPlan(recipes, currentCalendar, inventory, config) {
         try {
             const { provider, lmStudioEndpoint, lmStudioModel, openRouterApiKey, openRouterModel } = config;
 
@@ -225,16 +238,27 @@ No additional text or explanation.`
                 return `- ${r.name} (Calories: ${nutrition.calories || 0}, Protein: ${nutrition.protein || 0}g, Carbs: ${nutrition.carbs || 0}g, Fat: ${nutrition.fat || 0}g)`;
             }).join('\n');
 
+            // Format inventory for the prompt
+            const availableIngredients = Object.entries(inventory)
+                .filter(([_, qty]) => qty > 0)
+                .map(([item, qty]) => `${item} (${qty})`)
+                .join(', ');
+
+            const inventoryText = availableIngredients ?
+                `\n\nAvailable ingredients in your inventory: ${availableIngredients}. Prioritize recipes that use these ingredients to minimize shopping needs.` :
+                '\n\nNo ingredients currently in inventory.';
+
             const previousWeekText = previousRecipes.length > 0 ? `\n\nPrevious week's meals (avoid repeating these): ${previousRecipes.join(', ')}` : '';
 
             const basePrompt = `Create a nutritionally balanced weekly meal plan using the following recipes:
 
-${recipesWithNutrition}
+${recipesWithNutrition}${inventoryText}
 
 Assign one recipe to each day of the week: Monday through Sunday. Consider:
 - Nutritional balance across the week (variety in protein sources, carbs, fats)
 - Calorie distribution
 - Meal variety and practicality
+- Prioritize recipes that use ingredients already in inventory
 - Avoid repeating recipes from the previous week${previousWeekText}
 
 Aim for balanced nutrition:
@@ -242,6 +266,7 @@ Aim for balanced nutrition:
 - Include vegetables and complex carbs
 - Balance calorie intake across days
 - Consider meal prep practicality
+- Maximize use of available inventory to reduce food waste and shopping
 
 Return ONLY valid JSON in this exact format:
 {

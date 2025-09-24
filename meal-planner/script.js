@@ -24,14 +24,15 @@ function App() {
     });
     const [llmProvider, setLlmProvider] = useState('lmStudio');
     const [lmStudioEndpoint, setLmStudioEndpoint] = useState('http://localhost:1234');
-    const [lmStudioModel, setLmStudioModel] = useState('qwen/qwen3-4b-thinking-2507');
+    const [lmStudioModel, setLmStudioModel] = useState('');
     const [openRouterApiKey, setOpenRouterApiKey] = useState('');
-    const [openRouterModel, setOpenRouterModel] = useState('openai/gpt-4o');
+    const [openRouterModel, setOpenRouterModel] = useState('');
     const [aiMode, setAiMode] = useState(false);
     const [showPasteModal, setShowPasteModal] = useState(false);
     const [pastedResult, setPastedResult] = useState('');
     const [showRecipeSelectModal, setShowRecipeSelectModal] = useState(false);
     const [selectingDay, setSelectingDay] = useState(null);
+    const [aiPlanLoading, setAiPlanLoading] = useState(false);
 
     // Helper function to get current recipe by ID
     const getRecipeById = (id) => {
@@ -396,7 +397,7 @@ function App() {
             openRouterModel
         };
 
-        const result = await LLMService.generateRecipe(prompt, config);
+        const result = await LLMService.generateRecipe(prompt, inventory, config);
 
         if (result.success) {
             // Add the recipe to the app
@@ -421,30 +422,50 @@ function App() {
         setCalendar(newCalendar);
     };
 
+    const isLLMConfigured = () => {
+        if (llmProvider === 'lmStudio') {
+            return lmStudioEndpoint.trim() !== '' && lmStudioModel.trim() !== '';
+        } else if (llmProvider === 'openRouter') {
+            return openRouterApiKey.trim() !== '' && openRouterModel.trim() !== '';
+        }
+        return false;
+    };
+
     const generateAIMealPlan = async () => {
         if (recipes.length === 0) {
             alert('No recipes available to generate a meal plan.');
             return;
         }
-        const config = {
-            provider: llmProvider,
-            lmStudioEndpoint,
-            lmStudioModel,
-            openRouterApiKey,
-            openRouterModel
-        };
-        const result = await LLMService.generateMealPlan(recipes, calendar, config);
-        if (result.success) {
-            const newCalendar = {};
-            Object.entries(result.mealPlan).forEach(([day, recipeName]) => {
-                const recipe = recipes.find(r => r.name === recipeName);
-                if (recipe) {
-                    newCalendar[day] = recipe.id;
-                }
-            });
-            setCalendar(newCalendar);
-        } else {
-            alert('Failed to generate AI meal plan: ' + result.error);
+
+        if (!isLLMConfigured()) {
+            setShowDataModal(true);
+            return;
+        }
+
+        setAiPlanLoading(true);
+        try {
+            const config = {
+                provider: llmProvider,
+                lmStudioEndpoint,
+                lmStudioModel,
+                openRouterApiKey,
+                openRouterModel
+            };
+            const result = await LLMService.generateMealPlan(recipes, calendar, inventory, config);
+            if (result.success) {
+                const newCalendar = {};
+                Object.entries(result.mealPlan).forEach(([day, recipeName]) => {
+                    const recipe = recipes.find(r => r.name === recipeName);
+                    if (recipe) {
+                        newCalendar[day] = recipe.id;
+                    }
+                });
+                setCalendar(newCalendar);
+            } else {
+                alert('Failed to generate AI meal plan: ' + result.error);
+            }
+        } finally {
+            setAiPlanLoading(false);
         }
     };
 
@@ -485,7 +506,7 @@ function App() {
                 }, 'Shopping List')
             ),
             (activeTab === 'calendar' || activeTab === 'recipes') && React.createElement('div', { className: 'main-content' },
-                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe, inventory, onGenerateRandom: generateRandomMealPlan, onGenerateAI: generateAIMealPlan }),
+                React.createElement(Calendar, { calendar, handleDrop, handleDragOver, getRecipeById, handleCook, onSelectRecipe: handleSelectRecipe, inventory, onGenerateRandom: generateRandomMealPlan, onGenerateAI: generateAIMealPlan, aiPlanLoading, isLLMConfigured }),
                 React.createElement(RecipeList, {
                     recipes,
                     inventory,

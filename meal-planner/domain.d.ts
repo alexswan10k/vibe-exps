@@ -68,6 +68,10 @@ export interface CalendarProps {
   handleCook: (recipe: Recipe) => void;
   onSelectRecipe: (day: string) => void;
   inventory: Record<string, number>;
+  onGenerateRandom: () => void;
+  onGenerateAI: () => void;
+  aiPlanLoading: boolean;
+  isLLMConfigured: () => boolean;
 }
 
 export interface DaySlotProps {
@@ -285,6 +289,7 @@ export interface AppState {
   pastedResult: string;
   showRecipeSelectModal: boolean;
   selectingDay: string | null;
+  aiPlanLoading: boolean;
 }
 
 // Nutrition Data Types
