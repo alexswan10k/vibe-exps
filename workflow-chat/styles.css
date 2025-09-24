@@ -1,0 +1,352 @@
+/* Workflow Chat Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #f5f5f5;
+    color: #333;
+    line-height: 1.6;
+}
+
+.workflow-chat {
+    max-width: 800px;
+    margin: 0 auto;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    box-shadow: 0 0 20px rgba(0,0,0,0.1);
+}
+
+.chat-header {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    background: #fafafa;
+}
+
+.chat-header h2 {
+    margin-bottom: 5px;
+    color: #2c3e50;
+}
+
+.workflow-info {
+    color: #666;
+}
+
+.error-banner {
+    background: #ffebee;
+    color: #c62828;
+    padding: 10px 20px;
+    border-bottom: 1px solid #ffcdd2;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.error-banner button {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #c62828;
+}
+
+.chat-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.message-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    max-height: calc(100vh - 200px);
+}
+
+.empty-messages {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    margin-top: 40px;
+}
+
+.message {
+    margin-bottom: 20px;
+    padding: 15px;
+    border-radius: 8px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background: #007bff;
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+.ai-message {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+}
+
+.tool-message {
+    background: #e3f2fd;
+    border: 1px solid #bbdefb;
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.message-content {
+    margin-bottom: 5px;
+}
+
+.timestamp {
+    font-size: 11px;
+    opacity: 0.7;
+    text-align: right;
+}
+
+/* Thinking message styles */
+.thinking-message {
+    border: 1px solid #ff9800;
+    background: #fff3e0;
+}
+
+.thinking-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-icon {
+    font-weight: bold;
+    transition: transform 0.2s;
+}
+
+.thinking-content {
+    background: #fff8e1;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    white-space: pre-wrap;
+    border: 1px solid #ffe082;
+}
+
+.final-content {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e0e0e0;
+}
+
+/* Input section */
+.input-section {
+    border-top: 1px solid #e0e0e0;
+    padding: 20px;
+    background: #fafafa;
+}
+
+.message-input-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.input-container {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.message-textarea {
+    flex: 1;
+    min-height: 40px;
+    max-height: 120px;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    resize: none;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.4;
+    transition: border-color 0.2s;
+}
+
+.message-textarea:focus {
+    outline: none;
+    border-color: #007bff;
+}
+
+.message-textarea:disabled {
+    background: #f8f9fa;
+    cursor: not-allowed;
+}
+
+.send-button {
+    padding: 12px 16px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.send-button:hover:not(:disabled) {
+    background: #0056b3;
+}
+
+.send-button:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.input-help {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+}
+
+/* Stop button */
+.stop-button {
+    padding: 8px 12px;
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    margin-top: 10px;
+    align-self: center;
+}
+
+.stop-button:hover {
+    background: #c82333;
+}
+
+/* Error page styles */
+.error-page {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 30px;
+    text-align: center;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.error-page h1 {
+    color: #dc3545;
+    margin-bottom: 20px;
+}
+
+.error-details {
+    text-align: left;
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 6px;
+    margin: 20px 0;
+}
+
+.error-details code {
+    background: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    word-break: break-all;
+}
+
+.error-details ul {
+    margin: 10px 0;
+}
+
+.error-details li {
+    margin-bottom: 5px;
+}
+
+.error-page button {
+    padding: 10px 20px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.error-page button:hover {
+    background: #0056b3;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .workflow-chat {
+        height: 100vh;
+        max-width: 100%;
+        margin: 0;
+    }
+
+    .chat-header {
+        padding: 15px;
+    }
+
+    .message-list {
+        padding: 15px;
+    }
+
+    .input-section {
+        padding: 15px;
+    }
+
+    .message {
+        max-width: 90%;
+    }
+
+    .input-container {
+        flex-direction: column;
+    }
+
+    .send-button {
+        align-self: stretch;
+    }
+}
+
+/* Loading states */
+.message-textarea::placeholder {
+    color: #999;
+}
+
+/* Scrollbar styling */
+.message-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.message-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.message-list::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.message-list::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
