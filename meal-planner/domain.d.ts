@@ -1,3 +1,14 @@
+// LLM Provider Types
+export type LLMProvider = 'lmStudio' | 'openRouter';
+
+export interface LLMConfig {
+  provider: LLMProvider;
+  lmStudioEndpoint: string;
+  lmStudioModel: string;
+  openRouterApiKey: string;
+  openRouterModel: string;
+}
+
 // Domain Model Types
 export interface RecipeNutritional {
   calories: number; // Calories per serving/portion (kcal)
@@ -84,6 +95,7 @@ export interface RecipeListProps {
   setLmStudioModel: (model: string) => void;
   setAiMode: (mode: boolean) => void;
   generateRecipeWithAI: (prompt: string) => Promise<{ success: boolean; error?: string }>;
+  setShowPasteModal: (show: boolean) => void;
 }
 
 export interface RecipeItemProps {
@@ -178,6 +190,16 @@ export interface DataManagementModalProps {
   onImportData: (data: any) => void;
   onClearAllData: () => void;
   onClose: () => void;
+  llmProvider: 'lmStudio' | 'openRouter';
+  setLlmProvider: (provider: 'lmStudio' | 'openRouter') => void;
+  lmStudioEndpoint: string;
+  setLmStudioEndpoint: (endpoint: string) => void;
+  lmStudioModel: string;
+  setLmStudioModel: (model: string) => void;
+  openRouterApiKey: string;
+  setOpenRouterApiKey: (apiKey: string) => void;
+  openRouterModel: string;
+  setOpenRouterModel: (model: string) => void;
 }
 
 export interface ModalManagerProps {
@@ -209,6 +231,16 @@ export interface ModalManagerProps {
   setIngredientsData: (data: Record<string, any>) => void;
   setCalendar: (calendar: Calendar) => void;
   setShoppingList: (list: Record<string, {quantity: number, unitCost: number}>) => void;
+  llmProvider: 'lmStudio' | 'openRouter';
+  setLlmProvider: (provider: 'lmStudio' | 'openRouter') => void;
+  lmStudioEndpoint: string;
+  setLmStudioEndpoint: (endpoint: string) => void;
+  lmStudioModel: string;
+  setLmStudioModel: (model: string) => void;
+  openRouterApiKey: string;
+  setOpenRouterApiKey: (apiKey: string) => void;
+  openRouterModel: string;
+  setOpenRouterModel: (model: string) => void;
 }
 
 // Component Declarations
@@ -242,8 +274,11 @@ export interface AppState {
   editingRecipe: Recipe | null;
   activeTab: 'calendar' | 'inventory' | 'shopping' | 'nutrition';
   calendar: Calendar;
+  llmProvider: LLMProvider;
   lmStudioEndpoint: string;
   lmStudioModel: string;
+  openRouterApiKey: string;
+  openRouterModel: string;
   aiMode: boolean;
   showPasteModal: boolean;
   pastedResult: string;
