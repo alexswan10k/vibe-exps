@@ -86,47 +86,46 @@ const WorkflowDomain = {
                     const value = payload[prop];
                     const expectedType = propSchema.type;
 
-                    // More lenient type checking - allow some flexibility
                     if (expectedType) {
                         if (expectedType === 'array') {
                             if (!Array.isArray(value)) {
-                                // Try to convert single object to array
-                                if (typeof value === 'object' && value !== null) {
-                                    try {
-                                        payload[prop] = [value];
-                                        console.log(`Converted single ${prop} object to array`);
-                                    } catch (e) {
-                                        errors.push(`Property '${prop}' must be an array, got '${typeof value}'`);
+                                errors.push(`Property '${prop}' must be an array, got '${typeof value}'`);
+                            } else {
+                                // Validate array items if schema is defined
+                                if (propSchema.items) {
+                                    for (let i = 0; i < value.length; i++) {
+                                        const itemErrors = this.validateObjectAgainstSchema(value[i], propSchema.items, `${prop}[${i}]`);
+                                        errors.push(...itemErrors);
                                     }
-                                } else {
-                                    errors.push(`Property '${prop}' must be an array, got '${typeof value}'`);
                                 }
                             }
                         } else if (expectedType === 'object') {
                             if (typeof value !== 'object' || Array.isArray(value) || value === null) {
                                 errors.push(`Property '${prop}' must be an object, got '${typeof value}'`);
+                            } else {
+                                // Validate nested object
+                                const nestedErrors = this.validateObjectAgainstSchema(value, propSchema, prop);
+                                errors.push(...nestedErrors);
                             }
                         } else if (expectedType === 'string') {
                             if (typeof value !== 'string') {
-                                // Try to convert to string
-                                try {
-                                    payload[prop] = String(value);
-                                    console.log(`Converted ${prop} to string: ${payload[prop]}`);
-                                } catch (e) {
-                                    errors.push(`Property '${prop}' must be a string, got '${typeof value}'`);
-                                }
+                                errors.push(`Property '${prop}' must be a string, got '${typeof value}'`);
                             }
                         } else if (expectedType === 'number') {
-                            if (typeof value !== 'number') {
-                                // Try to convert to number
-                                const numValue = Number(value);
-                                if (!isNaN(numValue)) {
-                                    payload[prop] = numValue;
-                                    console.log(`Converted ${prop} to number: ${payload[prop]}`);
-                                } else {
-                                    errors.push(`Property '${prop}' must be a number, got '${typeof value}'`);
-                                }
+                            if (typeof value !== 'number' || isNaN(value)) {
+                                errors.push(`Property '${prop}' must be a number, got '${typeof value}'`);
                             }
+                        } else if (expectedType === 'boolean') {
+                            if (typeof value !== 'boolean') {
+                                errors.push(`Property '${prop}' must be a boolean, got '${typeof value}'`);
+                            }
+                        }
+                    }
+
+                    // Check enum values
+                    if (propSchema.enum && propSchema.enum.length > 0) {
+                        if (!propSchema.enum.includes(value)) {
+                            errors.push(`Property '${prop}' must be one of: ${propSchema.enum.join(', ')}, got '${value}'`);
                         }
                     }
                 }
@@ -137,6 +136,68 @@ const WorkflowDomain = {
             isValid: errors.length === 0,
             errors
         };
+    },
+
+    /**
+     * Validate an object against a schema (helper for nested validation)
+     * @param {Object} obj - Object to validate
+     * @param {Object} schema - Schema to validate against
+     * @param {string} path - Path for error messages
+     * @returns {Array} Array of error messages
+     */
+    validateObjectAgainstSchema(obj, schema, path = '') {
+        const errors = [];
+
+        if (schema.required) {
+            for (const requiredProp of schema.required) {
+                if (!(requiredProp in obj)) {
+                    errors.push(`Required property '${path ? path + '.' : ''}${requiredProp}' is missing`);
+                }
+            }
+        }
+
+        if (schema.properties) {
+            for (const [prop, propSchema] of Object.entries(schema.properties)) {
+                if (prop in obj) {
+                    const value = obj[prop];
+                    const expectedType = propSchema.type;
+                    const propPath = path ? `${path}.${prop}` : prop;
+
+                    if (expectedType) {
+                        if (expectedType === 'array') {
+                            if (!Array.isArray(value)) {
+                                errors.push(`Property '${propPath}' must be an array, got '${typeof value}'`);
+                            }
+                        } else if (expectedType === 'object') {
+                            if (typeof value !== 'object' || Array.isArray(value) || value === null) {
+                                errors.push(`Property '${propPath}' must be an object, got '${typeof value}'`);
+                            }
+                        } else if (expectedType === 'string') {
+                            if (typeof value !== 'string') {
+                                errors.push(`Property '${propPath}' must be a string, got '${typeof value}'`);
+                            }
+                        } else if (expectedType === 'number') {
+                            if (typeof value !== 'number' || isNaN(value)) {
+                                errors.push(`Property '${propPath}' must be a number, got '${typeof value}'`);
+                            }
+                        } else if (expectedType === 'boolean') {
+                            if (typeof value !== 'boolean') {
+                                errors.push(`Property '${propPath}' must be a boolean, got '${typeof value}'`);
+                            }
+                        }
+                    }
+
+                    // Check enum values
+                    if (propSchema.enum && propSchema.enum.length > 0) {
+                        if (!propSchema.enum.includes(value)) {
+                            errors.push(`Property '${propPath}' must be one of: ${propSchema.enum.join(', ')}, got '${value}'`);
+                        }
+                    }
+                }
+            }
+        }
+
+        return errors;
     },
 
     /**
@@ -198,9 +259,21 @@ Remember: Your role is to facilitate the completion of this specific workflow th
      * Handle workflow completion
      * @param {Object} payload - Workflow payload
      * @param {string} returnUrl - URL to redirect to
+     * @param {Object} metadata - Additional metadata (scenario, validation status, etc.)
      */
-    completeWorkflow(payload, returnUrl) {
-        const encodedPayload = btoa(JSON.stringify(payload));
+    completeWorkflow(payload, returnUrl, metadata = {}) {
+        const result = {
+            payload,
+            metadata: {
+                scenario: metadata.scenario || 'custom',
+                timestamp: new Date().toISOString(),
+                schemaValidation: metadata.schemaValidation || { isValid: true, errors: [] },
+                prompt: metadata.prompt || '',
+                ...metadata
+            }
+        };
+
+        const encodedPayload = btoa(JSON.stringify(result));
         const separator = returnUrl.includes('?') ? '&' : '?';
         const finalUrl = `${returnUrl}${separator}payload=${encodedPayload}`;
 

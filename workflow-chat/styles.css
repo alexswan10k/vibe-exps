@@ -110,12 +110,58 @@ body {
 
 .message-content {
     margin-bottom: 5px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 
 .timestamp {
     font-size: 11px;
     opacity: 0.7;
     text-align: right;
+}
+
+/* System message styles */
+.system-message {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+}
+
+.system-collapsed-message {
+    border: 1px solid #007bff;
+    background: #e3f2fd;
+}
+
+.system-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0;
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 15px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #007bff;
+}
+
+.system-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-top: 1px solid #e9ecef;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.system-content pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
 }
 
 /* Thinking message styles */

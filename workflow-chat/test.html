@@ -285,6 +285,18 @@
             <p>Test with custom prompt and schema parameters.</p>
             <button class="test-button" onclick="launchTest('custom')">Launch Custom Workflow</button>
         </div>
+
+        <div class="scenario-card">
+            <h3>👨‍🍳 Complex Recipe</h3>
+            <p>Create a multi-course meal with nutrition info, timeline, and wine pairings.</p>
+            <button class="test-button" onclick="launchTest('complexRecipe')">Launch Complex Recipe</button>
+        </div>
+
+        <div class="scenario-card">
+            <h3>📋 Project Planning</h3>
+            <p>Plan a software development project with requirements, timeline, and risk assessment.</p>
+            <button class="test-button" onclick="launchTest('projectPlanning')">Launch Project Planning</button>
+        </div>
     </div>
 
     <div class="results-section">
@@ -323,6 +335,30 @@
                         }
                     },
                     required: ["name", "ingredients"]
+                },
+                seedData: {
+                    name: "Chocolate Chip Cookies",
+                    ingredients: [
+                        { name: "all-purpose flour", quantity: 2.25, unit: "cups" },
+                        { name: "baking soda", quantity: 1, unit: "tsp" },
+                        { name: "salt", quantity: 1, unit: "tsp" },
+                        { name: "butter", quantity: 1, unit: "cup" },
+                        { name: "granulated sugar", quantity: 0.75, unit: "cup" },
+                        { name: "brown sugar", quantity: 0.75, unit: "cup" },
+                        { name: "eggs", quantity: 2, unit: "large" },
+                        { name: "vanilla extract", quantity: 2, unit: "tsp" },
+                        { name: "chocolate chips", quantity: 2, unit: "cups" }
+                    ],
+                    method: [
+                        "Preheat oven to 375°F (190°C)",
+                        "Cream together butter and sugars until light and fluffy",
+                        "Beat in eggs one at a time, then vanilla",
+                        "Mix dry ingredients and gradually add to wet mixture",
+                        "Fold in chocolate chips",
+                        "Drop rounded tablespoons onto ungreased baking sheets",
+                        "Bake 9-11 minutes until golden brown",
+                        "Cool on baking sheet for 2 minutes before transferring to wire rack"
+                    ]
                 }
             },
 
@@ -346,6 +382,18 @@
                         notes: { type: "string" }
                     },
                     required: ["items"]
+                },
+                seedData: {
+                    items: [
+                        { name: "chicken breasts", quantity: 4, unit: "pieces" },
+                        { name: "rice", quantity: 2, unit: "cups" },
+                        { name: "broccoli", quantity: 1, unit: "head" },
+                        { name: "soy sauce", quantity: 0.25, unit: "cup" },
+                        { name: "garlic", quantity: 3, unit: "cloves" },
+                        { name: "ginger", quantity: 1, unit: "tbsp" },
+                        { name: "sesame oil", quantity: 1, unit: "tbsp" }
+                    ],
+                    notes: "Planning to make stir-fry for dinner tonight. Already have salt, pepper, and cooking oil."
                 }
             },
 
@@ -369,6 +417,14 @@
                         }
                     },
                     required: ["updates"]
+                },
+                seedData: {
+                    updates: [
+                        { item: "milk", quantity: 1, unit: "gallon", action: "add" },
+                        { item: "bread", quantity: 2, unit: "loaves", action: "set" },
+                        { item: "eggs", quantity: 12, unit: "count", action: "add" },
+                        { item: "cheese", quantity: 0.5, unit: "lbs", action: "set" }
+                    ]
                 }
             },
 
@@ -382,6 +438,255 @@
                         details: { type: "object" }
                     },
                     required: ["task", "result"]
+                },
+                seedData: {
+                    task: "Plan a weekend hiking trip",
+                    result: "Complete itinerary with routes, gear list, and safety considerations",
+                    details: {
+                        location: "Rocky Mountain National Park",
+                        duration: "2 days",
+                        difficulty: "moderate",
+                        participants: 4,
+                        gear: ["backpack", "hiking boots", "water filter", "first aid kit"],
+                        routes: ["Bear Lake Trail", "Emerald Lake Trail"]
+                    }
+                }
+            },
+
+            complexRecipe: {
+                prompt: "Create a complex multi-course meal recipe with detailed nutritional information, preparation timeline, and dietary considerations. Include wine pairings and presentation suggestions.",
+                schema: {
+                    type: "object",
+                    properties: {
+                        title: { type: "string" },
+                        courses: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string" },
+                                    ingredients: {
+                                        type: "array",
+                                        items: {
+                                            type: "object",
+                                            properties: {
+                                                name: { type: "string" },
+                                                quantity: { type: "number" },
+                                                unit: { type: "string" },
+                                                notes: { type: "string" }
+                                            },
+                                            required: ["name", "quantity", "unit"]
+                                        }
+                                    },
+                                    instructions: {
+                                        type: "array",
+                                        items: { type: "string" }
+                                    },
+                                    prepTime: { type: "number" },
+                                    cookTime: { type: "number" },
+                                    nutrition: {
+                                        type: "object",
+                                        properties: {
+                                            calories: { type: "number" },
+                                            protein: { type: "number" },
+                                            carbs: { type: "number" },
+                                            fat: { type: "number" }
+                                        }
+                                    }
+                                },
+                                required: ["name", "ingredients", "instructions"]
+                            }
+                        },
+                        totalTime: { type: "number" },
+                        servings: { type: "number" },
+                        dietary: {
+                            type: "array",
+                            items: { type: "string" }
+                        },
+                        winePairing: { type: "string" },
+                        presentation: { type: "string" }
+                    },
+                    required: ["title", "courses", "servings"]
+                },
+                seedData: {
+                    title: "French Bistro Dinner Party",
+                    courses: [
+                        {
+                            name: "Coq au Vin",
+                            ingredients: [
+                                { name: "chicken thighs", quantity: 8, unit: "pieces", notes: "bone-in, skin-on" },
+                                { name: "red wine", quantity: 750, unit: "ml", notes: "Burgundy or Pinot Noir" },
+                                { name: "pearl onions", quantity: 20, unit: "pieces" },
+                                { name: "mushrooms", quantity: 300, unit: "g", notes: "button or cremini" },
+                                { name: "carrots", quantity: 4, unit: "medium" },
+                                { name: "garlic", quantity: 4, unit: "cloves" },
+                                { name: "thyme", quantity: 4, unit: "sprigs" },
+                                { name: "bay leaves", quantity: 2, unit: "pieces" }
+                            ],
+                            instructions: [
+                                "Season chicken with salt and pepper",
+                                "Brown chicken in batches, set aside",
+                                "Sauté onions, mushrooms, carrots",
+                                "Add garlic, herbs, deglaze with wine",
+                                "Return chicken, simmer 45 minutes",
+                                "Adjust seasoning and serve"
+                            ],
+                            prepTime: 30,
+                            cookTime: 60,
+                            nutrition: {
+                                calories: 450,
+                                protein: 35,
+                                carbs: 12,
+                                fat: 22
+                            }
+                        }
+                    ],
+                    totalTime: 120,
+                    servings: 4,
+                    dietary: ["gluten-free"],
+                    winePairing: "Burgundy Pinot Noir",
+                    presentation: "Serve in copper bowls with crusty bread"
+                }
+            },
+
+            projectPlanning: {
+                prompt: "Plan a software development project. Gather requirements, estimate timeline, identify risks, and create a detailed project plan with milestones and deliverables.",
+                schema: {
+                    type: "object",
+                    properties: {
+                        projectName: { type: "string" },
+                        description: { type: "string" },
+                        requirements: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    category: { type: "string" },
+                                    items: {
+                                        type: "array",
+                                        items: { type: "string" }
+                                    }
+                                },
+                                required: ["category", "items"]
+                            }
+                        },
+                        timeline: {
+                            type: "object",
+                            properties: {
+                                startDate: { type: "string" },
+                                endDate: { type: "string" },
+                                totalWeeks: { type: "number" }
+                            }
+                        },
+                        milestones: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    name: { type: "string" },
+                                    week: { type: "number" },
+                                    deliverables: {
+                                        type: "array",
+                                        items: { type: "string" }
+                                    }
+                                },
+                                required: ["name", "week"]
+                            }
+                        },
+                        team: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    role: { type: "string" },
+                                    count: { type: "number" },
+                                    skills: {
+                                        type: "array",
+                                        items: { type: "string" }
+                                    }
+                                },
+                                required: ["role", "count"]
+                            }
+                        },
+                        risks: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    risk: { type: "string" },
+                                    impact: { type: "string", enum: ["low", "medium", "high"] },
+                                    mitigation: { type: "string" }
+                                },
+                                required: ["risk", "impact", "mitigation"]
+                            }
+                        },
+                        budget: {
+                            type: "object",
+                            properties: {
+                                total: { type: "number" },
+                                breakdown: {
+                                    type: "object",
+                                    properties: {
+                                        development: { type: "number" },
+                                        design: { type: "number" },
+                                        testing: { type: "number" },
+                                        infrastructure: { type: "number" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    required: ["projectName", "requirements", "timeline", "milestones"]
+                },
+                seedData: {
+                    projectName: "E-commerce Platform Redesign",
+                    description: "Complete overhaul of existing e-commerce platform with modern UI/UX, improved performance, and mobile-first design",
+                    requirements: [
+                        {
+                            category: "Functional",
+                            items: ["User authentication", "Product catalog", "Shopping cart", "Payment processing", "Order management"]
+                        },
+                        {
+                            category: "Technical",
+                            items: ["React frontend", "Node.js backend", "PostgreSQL database", "Redis caching", "AWS deployment"]
+                        },
+                        {
+                            category: "Design",
+                            items: ["Mobile-responsive", "Accessibility compliant", "Brand consistency", "User testing validation"]
+                        }
+                    ],
+                    timeline: {
+                        startDate: "2024-01-15",
+                        endDate: "2024-06-15",
+                        totalWeeks: 20
+                    },
+                    milestones: [
+                        { name: "Requirements Complete", week: 2, deliverables: ["Requirements document", "Wireframes"] },
+                        { name: "Design Complete", week: 6, deliverables: ["UI mockups", "Design system"] },
+                        { name: "MVP Ready", week: 12, deliverables: ["Working prototype", "Core features"] },
+                        { name: "Beta Release", week: 16, deliverables: ["Full feature set", "User testing results"] },
+                        { name: "Launch", week: 20, deliverables: ["Production deployment", "Documentation"] }
+                    ],
+                    team: [
+                        { role: "Frontend Developer", count: 3, skills: ["React", "TypeScript", "CSS"] },
+                        { role: "Backend Developer", count: 2, skills: ["Node.js", "PostgreSQL", "API design"] },
+                        { role: "UI/UX Designer", count: 1, skills: ["Figma", "User research", "Prototyping"] },
+                        { role: "QA Engineer", count: 1, skills: ["Testing", "Automation", "Bug tracking"] }
+                    ],
+                    risks: [
+                        { risk: "Third-party payment integration delays", impact: "high", mitigation: "Have backup payment providers ready" },
+                        { risk: "Scope creep from stakeholders", impact: "medium", mitigation: "Strict change management process" },
+                        { risk: "Key team member leaves", impact: "high", mitigation: "Cross-training and documentation" }
+                    ],
+                    budget: {
+                        total: 250000,
+                        breakdown: {
+                            development: 150000,
+                            design: 40000,
+                            testing: 30000,
+                            infrastructure: 30000
+                        }
+                    }
                 }
             }
         };
@@ -407,7 +712,8 @@
                 prompt: btoa(config.prompt),
                 schema: btoa(JSON.stringify(config.schema)),
                 returnUrl: window.location.href,
-                llmConfig: btoa(JSON.stringify(llmConfig))
+                llmConfig: btoa(JSON.stringify(llmConfig)),
+                scenario: scenario // Pass scenario name for logging
             });
 
             // Launch workflow chat
@@ -443,12 +749,19 @@
             loadResults();
         });
 
-        function saveResult(payload) {
+        function saveResult(result) {
             const results = JSON.parse(localStorage.getItem('workflow-test-results') || '[]');
-            results.unshift({
-                timestamp: new Date().toISOString(),
-                payload: payload
-            });
+
+            // Handle both old format (direct payload) and new format (payload + metadata)
+            const processedResult = {
+                timestamp: result.metadata?.timestamp || new Date().toISOString(),
+                scenario: result.metadata?.scenario || 'unknown',
+                prompt: result.metadata?.prompt || '',
+                schemaValidation: result.metadata?.schemaValidation || { isValid: true, errors: [] },
+                payload: result.payload || result
+            };
+
+            results.unshift(processedResult);
 
             // Keep only last 10 results
             if (results.length > 10) {
@@ -467,13 +780,33 @@
                 return;
             }
 
-            container.innerHTML = results.map((result, index) => `
-                <div class="result-item">
-                    <h4>Workflow ${index + 1}</h4>
-                    <small>${new Date(result.timestamp).toLocaleString()}</small>
-                    <div class="result-payload">${JSON.stringify(result.payload, null, 2)}</div>
-                </div>
-            `).join('');
+            container.innerHTML = results.map((result, index) => {
+                const validationStatus = result.schemaValidation?.isValid ? '✅ Valid' : '❌ Invalid';
+                const scenarioName = result.scenario.charAt(0).toUpperCase() + result.scenario.slice(1);
+                const promptPreview = result.prompt.substring(0, 100) + (result.prompt.length > 100 ? '...' : '');
+
+                return `
+                    <div class="result-item">
+                        <h4>Workflow ${index + 1}: ${scenarioName}</h4>
+                        <div style="margin-bottom: 8px;">
+                            <small>
+                                <strong>Timestamp:</strong> ${new Date(result.timestamp).toLocaleString()}<br>
+                                <strong>Validation:</strong> ${validationStatus}<br>
+                                <strong>Prompt:</strong> ${promptPreview}
+                            </small>
+                        </div>
+                        ${result.schemaValidation?.errors?.length > 0 ? `
+                            <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 8px; margin-bottom: 10px;">
+                                <strong>Validation Errors:</strong>
+                                <ul style="margin: 5px 0; padding-left: 20px;">
+                                    ${result.schemaValidation.errors.map(error => `<li>${error}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        <div class="result-payload">${JSON.stringify(result.payload, null, 2)}</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         // LLM Provider switching
@@ -508,19 +841,29 @@
 
         // Load saved configuration on page load
         window.addEventListener('load', function() {
-            // Load saved LLM config
-            const savedConfig = localStorage.getItem('workflow-test-llm-config');
-            if (savedConfig) {
-                const config = JSON.parse(savedConfig);
-                document.getElementById('llm-provider').value = config.provider || 'lmStudio';
-                document.getElementById('lmstudio-endpoint').value = config.lmStudioEndpoint || 'http://localhost:1234';
-                document.getElementById('lmstudio-model').value = config.lmStudioModel || 'qwen/qwen3-4b-thinking-2507';
-                document.getElementById('openrouter-key').value = config.openRouterApiKey || '';
-                document.getElementById('openrouter-model').value = config.openRouterModel || 'openai/gpt-4o';
+            // Debug: Check what keys exist in localStorage
+            console.log('Available localStorage keys:', Object.keys(localStorage));
+            console.log('openRouterApiKey value:', localStorage.getItem('openRouterApiKey'));
+            console.log('llmProvider value:', localStorage.getItem('llmProvider'));
 
-                // Trigger provider change to show/hide appropriate fields
-                document.getElementById('llm-provider').dispatchEvent(new Event('change'));
-            }
+            // Load LLM config from meal planner keys (shared with meal planner)
+            const config = {
+                provider: localStorage.getItem('llmProvider') || 'lmStudio',
+                lmStudioEndpoint: localStorage.getItem('lmStudioEndpoint') || 'http://localhost:1234',
+                lmStudioModel: localStorage.getItem('lmStudioModel') || 'qwen/qwen3-4b-thinking-2507',
+                openRouterApiKey: localStorage.getItem('openRouterApiKey') || '',
+                openRouterModel: localStorage.getItem('openRouterModel') || 'openai/gpt-4o'
+            };
+            console.log('Loaded config from meal planner keys:', config);
+
+            document.getElementById('llm-provider').value = config.provider;
+            document.getElementById('lmstudio-endpoint').value = config.lmStudioEndpoint;
+            document.getElementById('lmstudio-model').value = config.lmStudioModel;
+            document.getElementById('openrouter-key').value = config.openRouterApiKey;
+            document.getElementById('openrouter-model').value = config.openRouterModel;
+
+            // Trigger provider change to show/hide appropriate fields
+            document.getElementById('llm-provider').dispatchEvent(new Event('change'));
 
             // Check for workflow results
             const urlParams = new URLSearchParams(window.location.search);
@@ -550,14 +893,12 @@
         });
 
         function saveConfig() {
-            const config = {
-                provider: document.getElementById('llm-provider').value,
-                lmStudioEndpoint: document.getElementById('lmstudio-endpoint').value,
-                lmStudioModel: document.getElementById('lmstudio-model').value,
-                openRouterApiKey: document.getElementById('openrouter-key').value,
-                openRouterModel: document.getElementById('openrouter-model').value
-            };
-            localStorage.setItem('workflow-test-llm-config', JSON.stringify(config));
+            // Save to meal planner keys (shared configuration)
+            localStorage.setItem('llmProvider', document.getElementById('llm-provider').value);
+            localStorage.setItem('lmStudioEndpoint', document.getElementById('lmstudio-endpoint').value);
+            localStorage.setItem('lmStudioModel', document.getElementById('lmstudio-model').value);
+            localStorage.setItem('openRouterApiKey', document.getElementById('openrouter-key').value);
+            localStorage.setItem('openRouterModel', document.getElementById('openrouter-model').value);
         }
 
         // Utility function to show URL encoding example

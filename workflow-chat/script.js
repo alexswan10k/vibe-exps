@@ -9,6 +9,7 @@ function initWorkflowChat() {
         // Parse URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const workflowParams = WorkflowDomain.parseWorkflowParameters(urlParams);
+        const scenario = urlParams.get('scenario') || 'custom';
 
         // Validate parameters
         const validation = WorkflowDomain.validateWorkflowParameters(workflowParams);
@@ -17,18 +18,18 @@ function initWorkflowChat() {
             return;
         }
 
-        // Get LLM configuration from URL or use defaults
+        // Get LLM configuration from URL, localStorage, or use defaults
         let llmConfig;
         const llmConfigParam = urlParams.get('llmConfig');
         if (llmConfigParam) {
             try {
                 llmConfig = JSON.parse(atob(llmConfigParam));
             } catch (error) {
-                console.warn('Failed to parse LLM config from URL, using defaults:', error);
-                llmConfig = LLMService.getDefaultConfig();
+                console.warn('Failed to parse LLM config from URL, using localStorage or defaults:', error);
+                llmConfig = loadLLMConfigFromStorage();
             }
         } else {
-            llmConfig = LLMService.getDefaultConfig();
+            llmConfig = loadLLMConfigFromStorage();
         }
 
         // Check if LLM is configured
@@ -42,6 +43,7 @@ function initWorkflowChat() {
             React.createElement(WorkflowChat, {
                 workflowParams,
                 llmConfig,
+                scenario,
                 onComplete: (payload) => {
                     console.log('Workflow completed with payload:', payload);
                 }
@@ -53,6 +55,17 @@ function initWorkflowChat() {
         console.error('Error initializing workflow chat:', error);
         showError(`Failed to initialize workflow chat: ${error.message}`);
     }
+}
+
+function loadLLMConfigFromStorage() {
+    // Load LLM config from meal planner keys (shared configuration)
+    return {
+        provider: localStorage.getItem('llmProvider') || 'lmStudio',
+        lmStudioEndpoint: localStorage.getItem('lmStudioEndpoint') || 'http://localhost:1234',
+        lmStudioModel: localStorage.getItem('lmStudioModel') || 'qwen/qwen3-4b-thinking-2507',
+        openRouterApiKey: localStorage.getItem('openRouterApiKey') || '',
+        openRouterModel: localStorage.getItem('openRouterModel') || 'openai/gpt-4o'
+    };
 }
 
 function showError(message) {

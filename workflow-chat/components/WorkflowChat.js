@@ -2,7 +2,7 @@
  * WorkflowChat Component
  * Main component that manages the workflow chat interface and LLM interactions
  */
-function WorkflowChat({ workflowParams, llmConfig, onComplete }) {
+function WorkflowChat({ workflowParams, llmConfig, onComplete, scenario = 'custom' }) {
     const [messages, setMessages] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [error, setError] = React.useState(null);
@@ -17,11 +17,13 @@ window.WorkflowChat = WorkflowChat;
     }, []);
 
     const initializeWorkflow = () => {
-        // Add system message with workflow context
+        // Add system message with workflow context (collapsed by default)
         const systemMessage = {
             role: 'system',
             content: WorkflowDomain.generateSystemPrompt(workflowParams.prompt, workflowParams.schema),
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            type: 'system-collapsed',
+            collapsed: true
         };
 
         // Add initial assistant message to start conversation
@@ -181,9 +183,13 @@ window.WorkflowChat = WorkflowChat;
                     };
                     setMessages(prev => [...prev, completeMsg]);
 
-                    // Complete workflow after a short delay
+                    // Complete workflow after a short delay with metadata
                     setTimeout(() => {
-                        WorkflowDomain.completeWorkflow(payload, workflowParams.returnUrl);
+                        WorkflowDomain.completeWorkflow(payload, workflowParams.returnUrl, {
+                            scenario,
+                            schemaValidation: validation,
+                            prompt: workflowParams.prompt
+                        });
                     }, 1500);
 
                 } catch (err) {
@@ -220,7 +226,19 @@ window.WorkflowChat = WorkflowChat;
         ),
 
         React.createElement('div', { className: 'chat-container' },
-            React.createElement(MessageList, { messages }),
+            React.createElement(MessageList, {
+                messages,
+                onToggleSystemMessage: (index) => {
+                    setMessages(prev => {
+                        const newMessages = [...prev];
+                        const msg = newMessages[index];
+                        if (msg && msg.type === 'system-collapsed') {
+                            msg.collapsed = !msg.collapsed;
+                        }
+                        return newMessages;
+                    });
+                }
+            }),
 
             React.createElement('div', { className: 'input-section' },
                 React.createElement(MessageInput, {

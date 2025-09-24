@@ -2,7 +2,7 @@
  * MessageList Component
  * Displays the conversation messages with support for thinking blocks and tool calls
  */
-function MessageList({ messages }) {
+function MessageList({ messages, onToggleSystemMessage }) {
     const messagesEndRef = React.useRef(null);
 
 // Expose globally for script tag loading
@@ -13,11 +13,32 @@ window.MessageList = MessageList;
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    const toggleSystemMessage = (index) => {
+        if (onToggleSystemMessage) {
+            onToggleSystemMessage(index);
+        }
+    };
+
     const renderMessage = (message, index) => {
         const messageClasses = `message ${message.role}-message`;
         const timestamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : '';
 
-        if (message.type === 'thinking') {
+        if (message.type === 'system-collapsed') {
+            // Handle collapsible system message
+            return React.createElement('div', { key: index, className: 'message system-message system-collapsed-message' },
+                React.createElement('div', {
+                    className: 'system-header',
+                    onClick: () => toggleSystemMessage(index)
+                },
+                    React.createElement('span', null, '📋 System Prompt'),
+                    React.createElement('span', { className: 'toggle-icon' }, message.collapsed ? '▶' : '▼'),
+                    timestamp && React.createElement('span', { className: 'timestamp' }, timestamp)
+                ),
+                !message.collapsed && React.createElement('div', { className: 'system-content' },
+                    React.createElement('pre', null, message.content)
+                )
+            );
+        } else if (message.type === 'thinking') {
             // Handle thinking messages with collapsible content
             const fullContent = message.content;
             const thinkStart = fullContent.indexOf('<think>');
