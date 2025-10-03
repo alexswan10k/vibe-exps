@@ -6,66 +6,16 @@
     <title>3D Matrix Transformations Visualization</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <link rel="stylesheet" href="style.css">
-    <style>
-        #threejs-container {
-            width: 100%;
-            height: 600px;
-            border: 2px solid #333;
-        }
-    </style>
 </head>
 <body>
     <h1>3D Matrix Transformations Visualization</h1>
     <p><a href="index.html">Switch to 2D Visualization</a></p>
     <div class="container">
         <div id="threejs-container"></div>
-        <div class="controls">
-            <div class="transform-controls">
-                <h2>Transformation Matrix</h2>
-                <div class="matrix-display">
-                    <div id="matrixDisplay">
-                        [1, 0, 0, 0]<br>
-                        [0, 1, 0, 0]<br>
-                        [0, 0, 1, 0]<br>
-                        [0, 0, 0, 1]
-                    </div>
-                </div>
-            </div>
-            <div class="parameter-controls">
-                <h2>Transformation Parameters</h2>
-                <div class="control-group">
-                    <h3>Rotation</h3>
-                    <label>Rotate X: <input type="number" id="rotationXInput" min="0" max="360" value="0" step="1">° <span id="rotationXValue">0</span>°</label>
-                    <input type="range" id="rotationXSlider" min="0" max="360" value="0">
-                    <label>Rotate Y: <input type="number" id="rotationYInput" min="0" max="360" value="0" step="1">° <span id="rotationYValue">0</span>°</label>
-                    <input type="range" id="rotationYSlider" min="0" max="360" value="0">
-                    <label>Rotate Z: <input type="number" id="rotationZInput" min="0" max="360" value="0" step="1">° <span id="rotationZValue">0</span>°</label>
-                    <input type="range" id="rotationZSlider" min="0" max="360" value="0">
-                </div>
-                <div class="control-group">
-                    <h3>Scaling</h3>
-                    <label>Scale X: <input type="number" id="scaleXInput" min="0.1" max="3" value="1" step="0.1"> <span id="scaleXValue">1</span></label>
-                    <input type="range" id="scaleXSlider" min="0.1" max="3" value="1" step="0.1">
-                    <label>Scale Y: <input type="number" id="scaleYInput" min="0.1" max="3" value="1" step="0.1"> <span id="scaleYValue">1</span></label>
-                    <input type="range" id="scaleYSlider" min="0.1" max="3" value="1" step="0.1">
-                    <label>Scale Z: <input type="number" id="scaleZInput" min="0.1" max="3" value="1" step="0.1"> <span id="scaleZValue">1</span></label>
-                    <input type="range" id="scaleZSlider" min="0.1" max="3" value="1" step="0.1">
-                </div>
-                <div class="control-group">
-                    <h3>Translation</h3>
-                    <label>Translate X: <input type="number" id="translateXInput" min="-50" max="50" value="0" step="5"> <span id="translateXValue">0</span></label>
-                    <input type="range" id="translateXSlider" min="-50" max="50" value="0">
-                    <label>Translate Y: <input type="number" id="translateYInput" min="-50" max="50" value="0" step="5"> <span id="translateYValue">0</span></label>
-                    <input type="range" id="translateYSlider" min="-50" max="50" value="0">
-                    <label>Translate Z: <input type="number" id="translateZInput" min="-50" max="50" value="0" step="5"> <span id="translateZValue">0</span></label>
-                    <input type="range" id="translateZSlider" min="-50" max="50" value="0">
-                </div>
-            </div>
-            <div class="options">
-                <label><input type="checkbox" id="showOriginal"> Show original shape</label>
-            </div>
-        </div>
+        <div id="react-root"></div>
         <div class="side-panel">
             <div class="presets">
                 <h2>Preset Transformations</h2>

@@ -1,7 +1,7 @@
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, 600 / 600, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer();
-renderer.setSize(600, 600);
+renderer.setSize(400, 400);
 document.getElementById('threejs-container').appendChild(renderer.domElement);
 
 camera.position.set(150, 150, 150);
@@ -25,57 +25,7 @@ scene.add(axesHelper);
 const gridHelper = new THREE.GridHelper(200, 20);
 scene.add(gridHelper);
 
-// Get control elements
-const rotationXSlider = document.getElementById('rotationXSlider');
-const rotationXInput = document.getElementById('rotationXInput');
-const rotationXValue = document.getElementById('rotationXValue');
-
-const rotationYSlider = document.getElementById('rotationYSlider');
-const rotationYInput = document.getElementById('rotationYInput');
-const rotationYValue = document.getElementById('rotationYValue');
-
-const rotationZSlider = document.getElementById('rotationZSlider');
-const rotationZInput = document.getElementById('rotationZInput');
-const rotationZValue = document.getElementById('rotationZValue');
-
-const scaleXSlider = document.getElementById('scaleXSlider');
-const scaleXInput = document.getElementById('scaleXInput');
-const scaleXValue = document.getElementById('scaleXValue');
-
-const scaleYSlider = document.getElementById('scaleYSlider');
-const scaleYInput = document.getElementById('scaleYInput');
-const scaleYValue = document.getElementById('scaleYValue');
-
-const scaleZSlider = document.getElementById('scaleZSlider');
-const scaleZInput = document.getElementById('scaleZInput');
-const scaleZValue = document.getElementById('scaleZValue');
-
-const translateXSlider = document.getElementById('translateXSlider');
-const translateXInput = document.getElementById('translateXInput');
-const translateXValue = document.getElementById('translateXValue');
-
-const translateYSlider = document.getElementById('translateYSlider');
-const translateYInput = document.getElementById('translateYInput');
-const translateYValue = document.getElementById('translateYValue');
-
-const translateZSlider = document.getElementById('translateZSlider');
-const translateZInput = document.getElementById('translateZInput');
-const translateZValue = document.getElementById('translateZValue');
-
-const showOriginalCheck = document.getElementById('showOriginal');
-const matrixDisplay = document.getElementById('matrixDisplay');
-const shapeSelect = document.getElementById('shapeSelect');
-
-// Preset buttons
-const identityBtn = document.getElementById('identityBtn');
-const rotateX45Btn = document.getElementById('rotateX45Btn');
-const rotateY45Btn = document.getElementById('rotateY45Btn');
-const rotateZ45Btn = document.getElementById('rotateZ45Btn');
-const scale2xBtn = document.getElementById('scale2xBtn');
-const translateBtn = document.getElementById('translateBtn');
-const complexBtn = document.getElementById('complexBtn');
-
-// 3D Shapes
+// Shape management
 let currentShape;
 let originalShape;
 
@@ -97,20 +47,10 @@ function createSphere() {
     return new THREE.Mesh(geometry, material);
 }
 
-function createWireframe(shape) {
-    const wireframe = new THREE.LineSegments(
-        new THREE.EdgesGeometry(shape.geometry),
-        new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 })
-    );
-    return wireframe;
-}
-
-function updateShape() {
+function updateShape(shapeType, showOriginal) {
     // Remove existing shapes
     if (currentShape) scene.remove(currentShape);
     if (originalShape) scene.remove(originalShape);
-
-    const shapeType = shapeSelect.value;
 
     if (shapeType === 'cube') {
         currentShape = createCube();
@@ -127,51 +67,40 @@ function updateShape() {
     }
 
     scene.add(currentShape);
-    if (showOriginalCheck.checked) {
+    if (showOriginal) {
         scene.add(originalShape);
     }
-
-    updateTransform();
 }
 
-function getCombinedMatrix() {
-    const rotX = THREE.MathUtils.degToRad(parseFloat(rotationXSlider.value));
-    const rotY = THREE.MathUtils.degToRad(parseFloat(rotationYSlider.value));
-    const rotZ = THREE.MathUtils.degToRad(parseFloat(rotationZSlider.value));
-
-    const scaleX = parseFloat(scaleXSlider.value);
-    const scaleY = parseFloat(scaleYSlider.value);
-    const scaleZ = parseFloat(scaleZSlider.value);
-
-    const transX = parseFloat(translateXSlider.value);
-    const transY = parseFloat(translateYSlider.value);
-    const transZ = parseFloat(translateZSlider.value);
-
-    // Create transformation matrix
+function getCombinedMatrix(transforms) {
     const matrix = new THREE.Matrix4();
 
-    // Apply transformations in order: translate -> rotate Z -> rotate Y -> rotate X -> scale
-    matrix.makeTranslation(transX, transY, transZ);
-
-    const rotZMatrix = new THREE.Matrix4().makeRotationZ(rotZ);
-    matrix.multiply(rotZMatrix);
-
-    const rotYMatrix = new THREE.Matrix4().makeRotationY(rotY);
-    matrix.multiply(rotYMatrix);
-
-    const rotXMatrix = new THREE.Matrix4().makeRotationX(rotX);
-    matrix.multiply(rotXMatrix);
-
-    const scaleMatrix = new THREE.Matrix4().makeScale(scaleX, scaleY, scaleZ);
-    matrix.multiply(scaleMatrix);
+    for (let transform of transforms) {
+        let transformMatrix;
+        if (transform.type === 'translate') {
+            transformMatrix = new THREE.Matrix4().makeTranslation(transform.translateX, transform.translateY, transform.translateZ);
+        } else if (transform.type === 'rotateX') {
+            const rad = THREE.MathUtils.degToRad(transform.angle);
+            transformMatrix = new THREE.Matrix4().makeRotationX(rad);
+        } else if (transform.type === 'rotateY') {
+            const rad = THREE.MathUtils.degToRad(transform.angle);
+            transformMatrix = new THREE.Matrix4().makeRotationY(rad);
+        } else if (transform.type === 'rotateZ') {
+            const rad = THREE.MathUtils.degToRad(transform.angle);
+            transformMatrix = new THREE.Matrix4().makeRotationZ(rad);
+        } else if (transform.type === 'scale') {
+            transformMatrix = new THREE.Matrix4().makeScale(transform.scaleX, transform.scaleY, transform.scaleZ);
+        }
+        matrix.multiply(transformMatrix);
+    }
 
     return matrix;
 }
 
-function updateTransform() {
+function updateTransformDisplay(transforms) {
     if (!currentShape) return;
 
-    const matrix = getCombinedMatrix();
+    const matrix = getCombinedMatrix(transforms);
     currentShape.matrix.copy(matrix);
     currentShape.matrixAutoUpdate = false;
 
@@ -189,220 +118,306 @@ function updateMatrixDisplay(matrix) {
         `[${elements[2].toFixed(2)}, ${elements[6].toFixed(2)}, ${elements[10].toFixed(2)}, ${elements[14].toFixed(2)}]`,
         `[${elements[3].toFixed(2)}, ${elements[7].toFixed(2)}, ${elements[11].toFixed(2)}, ${elements[15].toFixed(2)}]`
     ].join('<br>');
-    matrixDisplay.innerHTML = formatted;
+    document.getElementById('matrixDisplay').innerHTML = formatted;
 }
 
-function updateUI() {
-    rotationXValue.textContent = rotationXSlider.value;
-    rotationXInput.value = rotationXSlider.value;
+// React Components
+function TransformBlock({ transform, index, onUpdate, onMoveUp, onMoveDown, onDelete }) {
+    const handleChange = (field, value) => {
+        onUpdate(index, { ...transform, [field]: parseFloat(value) });
+    };
 
-    rotationYValue.textContent = rotationYSlider.value;
-    rotationYInput.value = rotationYSlider.value;
+    const renderControls = () => {
+        if (transform.type === 'rotateX' || transform.type === 'rotateY' || transform.type === 'rotateZ') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Angle: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0,
+                        max: 360,
+                        value: transform.angle,
+                        step: 1,
+                        onChange: (e) => handleChange('angle', e.target.value)
+                    }),
+                    '° ',
+                    React.createElement('span', null, transform.angle + '°')
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0,
+                    max: 360,
+                    value: transform.angle,
+                    onChange: (e) => handleChange('angle', e.target.value)
+                })
+            );
+        } else if (transform.type === 'scale') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Scale X: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0.1,
+                        max: 3,
+                        value: transform.scaleX,
+                        step: 0.1,
+                        onChange: (e) => handleChange('scaleX', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.scaleX)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0.1,
+                    max: 3,
+                    value: transform.scaleX,
+                    step: 0.1,
+                    onChange: (e) => handleChange('scaleX', e.target.value)
+                }),
+                React.createElement('label', null, 'Scale Y: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0.1,
+                        max: 3,
+                        value: transform.scaleY,
+                        step: 0.1,
+                        onChange: (e) => handleChange('scaleY', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.scaleY)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0.1,
+                    max: 3,
+                    value: transform.scaleY,
+                    step: 0.1,
+                    onChange: (e) => handleChange('scaleY', e.target.value)
+                }),
+                React.createElement('label', null, 'Scale Z: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0.1,
+                        max: 3,
+                        value: transform.scaleZ,
+                        step: 0.1,
+                        onChange: (e) => handleChange('scaleZ', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.scaleZ)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0.1,
+                    max: 3,
+                    value: transform.scaleZ,
+                    step: 0.1,
+                    onChange: (e) => handleChange('scaleZ', e.target.value)
+                })
+            );
+        } else if (transform.type === 'translate') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Translate X: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -50,
+                        max: 50,
+                        value: transform.translateX,
+                        step: 5,
+                        onChange: (e) => handleChange('translateX', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.translateX)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -50,
+                    max: 50,
+                    value: transform.translateX,
+                    onChange: (e) => handleChange('translateX', e.target.value)
+                }),
+                React.createElement('label', null, 'Translate Y: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -50,
+                        max: 50,
+                        value: transform.translateY,
+                        step: 5,
+                        onChange: (e) => handleChange('translateY', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.translateY)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -50,
+                    max: 50,
+                    value: transform.translateY,
+                    onChange: (e) => handleChange('translateY', e.target.value)
+                }),
+                React.createElement('label', null, 'Translate Z: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -50,
+                        max: 50,
+                        value: transform.translateZ,
+                        step: 5,
+                        onChange: (e) => handleChange('translateZ', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.translateZ)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -50,
+                    max: 50,
+                    value: transform.translateZ,
+                    onChange: (e) => handleChange('translateZ', e.target.value)
+                })
+            );
+        }
+    };
 
-    rotationZValue.textContent = rotationZSlider.value;
-    rotationZInput.value = rotationZSlider.value;
+    const displayName = transform.type === 'rotateX' ? 'Rotate X' :
+                       transform.type === 'rotateY' ? 'Rotate Y' :
+                       transform.type === 'rotateZ' ? 'Rotate Z' :
+                       transform.type.charAt(0).toUpperCase() + transform.type.slice(1);
 
-    scaleXValue.textContent = scaleXSlider.value;
-    scaleXInput.value = scaleXSlider.value;
-
-    scaleYValue.textContent = scaleYSlider.value;
-    scaleYInput.value = scaleYSlider.value;
-
-    scaleZValue.textContent = scaleZSlider.value;
-    scaleZInput.value = scaleZSlider.value;
-
-    translateXValue.textContent = translateXSlider.value;
-    translateXInput.value = translateXSlider.value;
-
-    translateYValue.textContent = translateYSlider.value;
-    translateYInput.value = translateYSlider.value;
-
-    translateZValue.textContent = translateZSlider.value;
-    translateZInput.value = translateZSlider.value;
+    return React.createElement('div', { className: 'control-group' },
+        React.createElement('h3', null,
+            displayName,
+            React.createElement('button', { onClick: () => onMoveUp(index) }, '↑'),
+            React.createElement('button', { onClick: () => onMoveDown(index) }, '↓'),
+            React.createElement('button', { onClick: () => onDelete(index) }, 'X')
+        ),
+        renderControls()
+    );
 }
 
-// Event listeners
-rotationXSlider.addEventListener('input', () => {
-    rotationXInput.value = rotationXSlider.value;
-    updateTransform();
-    updateUI();
-});
+function App({ initialTransforms, initialShape, initialShowOriginal }) {
+    const [transforms, setTransforms] = React.useState(initialTransforms || [
+        { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 },
+        { type: 'rotateZ', angle: 0 },
+        { type: 'rotateY', angle: 0 },
+        { type: 'rotateX', angle: 0 },
+        { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 }
+    ]);
+    const [shape, setShape] = React.useState(initialShape || 'cube');
+    const [showOriginal, setShowOriginal] = React.useState(initialShowOriginal || false);
 
-rotationXInput.addEventListener('input', () => {
-    rotationXSlider.value = rotationXInput.value;
-    updateTransform();
-    updateUI();
-});
+    React.useEffect(() => {
+        if (initialTransforms) {
+            setTransforms(initialTransforms);
+        }
+    }, [initialTransforms]);
 
-rotationYSlider.addEventListener('input', () => {
-    rotationYInput.value = rotationYSlider.value;
-    updateTransform();
-    updateUI();
-});
+    React.useEffect(() => {
+        if (initialShape) {
+            setShape(initialShape);
+        }
+    }, [initialShape]);
 
-rotationYInput.addEventListener('input', () => {
-    rotationYSlider.value = rotationYInput.value;
-    updateTransform();
-    updateUI();
-});
+    React.useEffect(() => {
+        setShowOriginal(initialShowOriginal || false);
+    }, [initialShowOriginal]);
 
-rotationZSlider.addEventListener('input', () => {
-    rotationZInput.value = rotationZSlider.value;
-    updateTransform();
-    updateUI();
-});
+    const updateTransform = (index, newTransform) => {
+        const newTransforms = [...transforms];
+        newTransforms[index] = newTransform;
+        setTransforms(newTransforms);
+    };
 
-rotationZInput.addEventListener('input', () => {
-    rotationZSlider.value = rotationZInput.value;
-    updateTransform();
-    updateUI();
-});
+    const moveUp = (index) => {
+        if (index > 0) {
+            const newTransforms = [...transforms];
+            [newTransforms[index], newTransforms[index - 1]] = [newTransforms[index - 1], newTransforms[index]];
+            setTransforms(newTransforms);
+        }
+    };
 
-scaleXSlider.addEventListener('input', () => {
-    scaleXInput.value = scaleXSlider.value;
-    updateTransform();
-    updateUI();
-});
+    const moveDown = (index) => {
+        if (index < transforms.length - 1) {
+            const newTransforms = [...transforms];
+            [newTransforms[index], newTransforms[index + 1]] = [newTransforms[index + 1], newTransforms[index]];
+            setTransforms(newTransforms);
+        }
+    };
 
-scaleXInput.addEventListener('input', () => {
-    scaleXSlider.value = scaleXInput.value;
-    updateTransform();
-    updateUI();
-});
+    const deleteTransform = (index) => {
+        const newTransforms = transforms.filter((_, i) => i !== index);
+        setTransforms(newTransforms);
+    };
 
-scaleYSlider.addEventListener('input', () => {
-    scaleYInput.value = scaleYSlider.value;
-    updateTransform();
-    updateUI();
-});
+    const addTransform = (type) => {
+        let newTransform;
+        if (type === 'translate') {
+            newTransform = { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 };
+        } else if (type === 'rotateX') {
+            newTransform = { type: 'rotateX', angle: 0 };
+        } else if (type === 'rotateY') {
+            newTransform = { type: 'rotateY', angle: 0 };
+        } else if (type === 'rotateZ') {
+            newTransform = { type: 'rotateZ', angle: 0 };
+        } else if (type === 'scale') {
+            newTransform = { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 };
+        }
+        setTransforms([...transforms, newTransform]);
+    };
 
-scaleYInput.addEventListener('input', () => {
-    scaleYSlider.value = scaleYInput.value;
-    updateTransform();
-    updateUI();
-});
+    React.useEffect(() => {
+        updateShape(shape, showOriginal);
+        updateTransformDisplay(transforms);
+        window.currentTransforms = transforms;
+        window.currentShape = shape;
+        window.currentShowOriginal = showOriginal;
+    }, [transforms, shape, showOriginal]);
 
-scaleZSlider.addEventListener('input', () => {
-    scaleZInput.value = scaleZSlider.value;
-    updateTransform();
-    updateUI();
-});
+    return React.createElement('div', { className: 'controls' },
+        React.createElement('div', { className: 'transform-controls' },
+            React.createElement('h2', null, 'Transformation Matrix'),
+            React.createElement('div', { className: 'matrix-display' },
+                React.createElement('div', { id: 'matrixDisplay' },
+                    '[1, 0, 0, 0]<br>[0, 1, 0, 0]<br>[0, 0, 1, 0]<br>[0, 0, 0, 1]'
+                )
+            )
+        ),
+        React.createElement('div', { className: 'parameter-controls' },
+            React.createElement('h2', null, 'Transformation Parameters'),
+            transforms.map((transform, index) =>
+                React.createElement(TransformBlock, {
+                    key: index,
+                    transform: transform,
+                    index: index,
+                    onUpdate: updateTransform,
+                    onMoveUp: moveUp,
+                    onMoveDown: moveDown,
+                    onDelete: deleteTransform
+                })
+            )
+        ),
+        React.createElement('div', { className: 'options' },
+            React.createElement('label', null,
+                React.createElement('input', {
+                    type: 'checkbox',
+                    checked: showOriginal,
+                    onChange: (e) => setShowOriginal(e.target.checked)
+                }), ' Show original shape'
+            )
+        ),
+        React.createElement('div', { className: 'add-transform' },
+            React.createElement('select', { id: 'addTransformSelect' },
+                React.createElement('option', { value: 'translate' }, 'Translate'),
+                React.createElement('option', { value: 'rotateX' }, 'Rotate X'),
+                React.createElement('option', { value: 'rotateY' }, 'Rotate Y'),
+                React.createElement('option', { value: 'rotateZ' }, 'Rotate Z'),
+                React.createElement('option', { value: 'scale' }, 'Scale')
+            ),
+            React.createElement('button', { id: 'addTransformBtn', onClick: () => addTransform(document.getElementById('addTransformSelect').value) }, 'Add Transform')
+        )
+    );
+}
 
-scaleZInput.addEventListener('input', () => {
-    scaleZSlider.value = scaleZInput.value;
-    updateTransform();
-    updateUI();
-});
-
-translateXSlider.addEventListener('input', () => {
-    translateXInput.value = translateXSlider.value;
-    updateTransform();
-    updateUI();
-});
-
-translateXInput.addEventListener('input', () => {
-    translateXSlider.value = translateXInput.value;
-    updateTransform();
-    updateUI();
-});
-
-translateYSlider.addEventListener('input', () => {
-    translateYInput.value = translateYSlider.value;
-    updateTransform();
-    updateUI();
-});
-
-translateYInput.addEventListener('input', () => {
-    translateYSlider.value = translateYInput.value;
-    updateTransform();
-    updateUI();
-});
-
-translateZSlider.addEventListener('input', () => {
-    translateZInput.value = translateZSlider.value;
-    updateTransform();
-    updateUI();
-});
-
-translateZInput.addEventListener('input', () => {
-    translateZSlider.value = translateZInput.value;
-    updateTransform();
-    updateUI();
-});
-
-showOriginalCheck.addEventListener('change', () => {
-    if (showOriginalCheck.checked && originalShape) {
-        scene.add(originalShape);
-    } else if (originalShape) {
-        scene.remove(originalShape);
-    }
-    renderer.render(scene, camera);
-});
-
-shapeSelect.addEventListener('change', updateShape);
-
-// Preset buttons
-identityBtn.addEventListener('click', () => {
-    rotationXSlider.value = 0;
-    rotationYSlider.value = 0;
-    rotationZSlider.value = 0;
-    scaleXSlider.value = 1;
-    scaleYSlider.value = 1;
-    scaleZSlider.value = 1;
-    translateXSlider.value = 0;
-    translateYSlider.value = 0;
-    translateZSlider.value = 0;
-    updateTransform();
-    updateUI();
-});
-
-rotateX45Btn.addEventListener('click', () => {
-    rotationXSlider.value = 45;
-    updateTransform();
-    updateUI();
-});
-
-rotateY45Btn.addEventListener('click', () => {
-    rotationYSlider.value = 45;
-    updateTransform();
-    updateUI();
-});
-
-rotateZ45Btn.addEventListener('click', () => {
-    rotationZSlider.value = 45;
-    updateTransform();
-    updateUI();
-});
-
-scale2xBtn.addEventListener('click', () => {
-    scaleXSlider.value = 2;
-    scaleYSlider.value = 2;
-    scaleZSlider.value = 2;
-    updateTransform();
-    updateUI();
-});
-
-translateBtn.addEventListener('click', () => {
-    translateXSlider.value = 20;
-    translateYSlider.value = 15;
-    translateZSlider.value = 10;
-    updateTransform();
-    updateUI();
-});
-
-complexBtn.addEventListener('click', () => {
-    rotationXSlider.value = 30;
-    rotationYSlider.value = 45;
-    rotationZSlider.value = 15;
-    scaleXSlider.value = 1.5;
-    scaleYSlider.value = 0.8;
-    scaleZSlider.value = 1.2;
-    translateXSlider.value = 10;
-    translateYSlider.value = -5;
-    translateZSlider.value = 8;
-    updateTransform();
-    updateUI();
-});
+// Render React app
+const root = ReactDOM.createRoot(document.getElementById('react-root'));
+root.render(React.createElement(App));
 
 // Animation loop
 function animate() {
@@ -410,8 +425,97 @@ function animate() {
     controls.update();
     renderer.render(scene, camera);
 }
-
-// Initialize
-updateShape();
-updateUI();
 animate();
+
+// Event listeners for non-React elements
+const shapeSelect = document.getElementById('shapeSelect');
+shapeSelect.addEventListener('change', () => {
+    window.currentShape = shapeSelect.value;
+    updateShape(window.currentShape, window.currentShowOriginal || false);
+    updateTransformDisplay(window.currentTransforms || []);
+});
+
+// Preset buttons
+const identityBtn = document.getElementById('identityBtn');
+identityBtn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 },
+        { type: 'rotateZ', angle: 0 },
+        { type: 'rotateY', angle: 0 },
+        { type: 'rotateX', angle: 0 },
+        { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});
+
+const rotateX45Btn = document.getElementById('rotateX45Btn');
+rotateX45Btn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 },
+        { type: 'rotateZ', angle: 0 },
+        { type: 'rotateY', angle: 0 },
+        { type: 'rotateX', angle: 45 },
+        { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});
+
+const rotateY45Btn = document.getElementById('rotateY45Btn');
+rotateY45Btn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 },
+        { type: 'rotateZ', angle: 0 },
+        { type: 'rotateY', angle: 45 },
+        { type: 'rotateX', angle: 0 },
+        { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});
+
+const rotateZ45Btn = document.getElementById('rotateZ45Btn');
+rotateZ45Btn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 },
+        { type: 'rotateZ', angle: 45 },
+        { type: 'rotateY', angle: 0 },
+        { type: 'rotateX', angle: 0 },
+        { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});
+
+const scale2xBtn = document.getElementById('scale2xBtn');
+scale2xBtn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 0, translateY: 0, translateZ: 0 },
+        { type: 'rotateZ', angle: 0 },
+        { type: 'rotateY', angle: 0 },
+        { type: 'rotateX', angle: 0 },
+        { type: 'scale', scaleX: 2, scaleY: 2, scaleZ: 2 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});
+
+const translateBtn = document.getElementById('translateBtn');
+translateBtn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 20, translateY: 15, translateZ: 10 },
+        { type: 'rotateZ', angle: 0 },
+        { type: 'rotateY', angle: 0 },
+        { type: 'rotateX', angle: 0 },
+        { type: 'scale', scaleX: 1, scaleY: 1, scaleZ: 1 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});
+
+const complexBtn = document.getElementById('complexBtn');
+complexBtn.addEventListener('click', () => {
+    const newTransforms = [
+        { type: 'translate', translateX: 10, translateY: -5, translateZ: 8 },
+        { type: 'rotateZ', angle: 15 },
+        { type: 'rotateY', angle: 45 },
+        { type: 'rotateX', angle: 30 },
+        { type: 'scale', scaleX: 1.5, scaleY: 0.8, scaleZ: 1.2 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
+});

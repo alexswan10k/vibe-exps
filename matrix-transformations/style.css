@@ -21,11 +21,14 @@ h1 {
 .canvas-container {
     display: flex;
     justify-content: center;
+    max-width: 400px;
 }
 
 #transformCanvas {
     border: 2px solid #333;
     background-color: white;
+    width: 400px;
+    height: 400px;
 }
 
 .controls {
@@ -133,4 +136,83 @@ input[type="number"] {
     margin: 5px 0;
     font-size: 0.9em;
     color: #555;
+}
+
+#threejs-container {
+    width: 100%;
+    height: 400px;
+    max-width: 400px;
+    border: 2px solid #333;
+}
+
+.add-transform {
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+}
+
+.add-transform select {
+    margin-right: 10px;
+    padding: 5px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+}
+
+.add-transform button {
+    padding: 5px 10px;
+    background-color: #2196F3;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.add-transform button:hover {
+    background-color: #0b7dda;
+}
+
+.control-group h3 button {
+    margin-left: 5px;
+    padding: 2px 5px;
+    font-size: 0.8em;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.control-group h3 button:hover {
+    background-color: #d32f2f;
+}
+
+.control-group label button {
+    margin-left: 5px;
+    padding: 2px 5px;
+    font-size: 0.8em;
+    background-color: #f44336;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.control-group label button:hover {
+    background-color: #d32f2f;
+}
+
+.control-group button {
+    margin-left: 5px;
+    padding: 2px 5px;
+    font-size: 0.8em;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.control-group button:hover {
+    background-color: #45a049;
 }

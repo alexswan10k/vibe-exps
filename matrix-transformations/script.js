@@ -5,39 +5,7 @@ const centerX = canvas.width / 2;
 const centerY = canvas.height / 2;
 const scale = 1;
 
-// Get control elements
-const rotationSlider = document.getElementById('rotationSlider');
-const rotationInput = document.getElementById('rotationInput');
-const rotationValue = document.getElementById('rotationValue');
-
-const scaleXSlider = document.getElementById('scaleXSlider');
-const scaleXInput = document.getElementById('scaleXInput');
-const scaleXValue = document.getElementById('scaleXValue');
-
-const scaleYSlider = document.getElementById('scaleYSlider');
-const scaleYInput = document.getElementById('scaleYInput');
-const scaleYValue = document.getElementById('scaleYValue');
-
-const translateXSlider = document.getElementById('translateXSlider');
-const translateXInput = document.getElementById('translateXInput');
-const translateXValue = document.getElementById('translateXValue');
-
-const translateYSlider = document.getElementById('translateYSlider');
-const translateYInput = document.getElementById('translateYInput');
-const translateYValue = document.getElementById('translateYValue');
-
-const shearXSlider = document.getElementById('shearXSlider');
-const shearXInput = document.getElementById('shearXInput');
-const shearXValue = document.getElementById('shearXValue');
-
-const shearYSlider = document.getElementById('shearYSlider');
-const shearYInput = document.getElementById('shearYInput');
-const shearYValue = document.getElementById('shearYValue');
-
-const showOriginalCheck = document.getElementById('showOriginal');
 const showGridCheck = document.getElementById('showGrid');
-const matrixDisplay = document.getElementById('matrixDisplay');
-const shapeSelect = document.getElementById('shapeSelect');
 
 // Preset buttons
 const identityBtn = document.getElementById('identityBtn');
@@ -88,14 +56,6 @@ function createShearMatrix(shx, shy) {
     return [
         [1, shx, 0],
         [shy, 1, 0],
-        [0, 0, 1]
-    ];
-}
-
-function createReflectionXMatrix() {
-    return [
-        [1, 0, 0],
-        [0, -1, 0],
         [0, 0, 1]
     ];
 }
@@ -216,207 +176,434 @@ function drawGrid() {
     ctx.stroke();
 }
 
-function updateMatrixDisplay(matrix) {
+function updateMatrixDisplay(matrix, element) {
     const formatted = matrix.map(row =>
         `[${row.map(val => val.toFixed(2)).join(', ')}]`
     ).join('<br>');
-    matrixDisplay.innerHTML = formatted;
+    if (element) element.innerHTML = formatted;
 }
 
-function getCombinedMatrix() {
-    const rotation = parseFloat(rotationSlider.value);
-    const scaleX = parseFloat(scaleXSlider.value);
-    const scaleY = parseFloat(scaleYSlider.value);
-    const translateX = parseFloat(translateXSlider.value);
-    const translateY = parseFloat(translateYSlider.value);
-    const shearX = parseFloat(shearXSlider.value);
-    const shearY = parseFloat(shearYSlider.value);
-
-    // Apply transformations in order: scale -> shear -> rotate -> translate
-    const scaleMatrix = createScalingMatrix(scaleX, scaleY);
-    const shearMatrix = createShearMatrix(shearX, shearY);
-    const rotationMatrix = createRotationMatrix(rotation);
-    const translationMatrix = createTranslationMatrix(translateX, translateY);
-
-    let matrix = multiplyMatrices(shearMatrix, scaleMatrix);
-    matrix = multiplyMatrices(rotationMatrix, matrix);
-    matrix = multiplyMatrices(translationMatrix, matrix);
-
-    return matrix;
-}
-
-function draw() {
+function draw(transforms, shape, showOriginal) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawGrid();
 
-    const currentShape = shapes[shapeSelect.value];
-    const matrix = getCombinedMatrix();
+    const currentShape = shapes[shape];
+    const matrix = getCombinedMatrix(transforms);
     const transformedShape = transformPoints(matrix, currentShape);
 
     // Draw original shape if checked
-    if (showOriginalCheck.checked) {
+    if (showOriginal) {
         drawShape(currentShape, 'rgba(255, 0, 0, 0.5)', true);
     }
 
     // Draw transformed shape
     drawShape(transformedShape, 'blue', false);
 
-    // Update matrix display
-    updateMatrixDisplay(matrix);
-
-    // Update UI values
-    rotationValue.textContent = rotationSlider.value;
-    rotationInput.value = rotationSlider.value;
-
-    scaleXValue.textContent = scaleXSlider.value;
-    scaleXInput.value = scaleXSlider.value;
-
-    scaleYValue.textContent = scaleYSlider.value;
-    scaleYInput.value = scaleYSlider.value;
-
-    translateXValue.textContent = translateXSlider.value;
-    translateXInput.value = translateXSlider.value;
-
-    translateYValue.textContent = translateYSlider.value;
-    translateYInput.value = translateYSlider.value;
-
-    shearXValue.textContent = shearXSlider.value;
-    shearXInput.value = shearXSlider.value;
-
-    shearYValue.textContent = shearYSlider.value;
-    shearYInput.value = shearYSlider.value;
+    return matrix;
 }
 
-// Event listeners for sliders
-rotationSlider.addEventListener('input', () => {
-    rotationInput.value = rotationSlider.value;
-    draw();
+function getCombinedMatrix(transforms) {
+    let matrix = createIdentityMatrix();
+
+    for (let transform of transforms) {
+        let transformMatrix;
+        if (transform.type === 'scale') {
+            transformMatrix = createScalingMatrix(transform.scaleX, transform.scaleY);
+        } else if (transform.type === 'shear') {
+            transformMatrix = createShearMatrix(transform.shearX, transform.shearY);
+        } else if (transform.type === 'rotate') {
+            transformMatrix = createRotationMatrix(transform.angle);
+        } else if (transform.type === 'translate') {
+            transformMatrix = createTranslationMatrix(transform.translateX, transform.translateY);
+        }
+        matrix = multiplyMatrices(transformMatrix, matrix);
+    }
+
+    return matrix;
+}
+
+// React Components
+function TransformBlock({ transform, index, onUpdate, onMoveUp, onMoveDown, onDelete }) {
+    const handleChange = (field, value) => {
+        onUpdate(index, { ...transform, [field]: parseFloat(value) });
+    };
+
+    const renderControls = () => {
+        if (transform.type === 'rotate') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Angle: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0,
+                        max: 360,
+                        value: transform.angle,
+                        step: 1,
+                        onChange: (e) => handleChange('angle', e.target.value)
+                    }),
+                    '° ',
+                    React.createElement('span', null, transform.angle + '°')
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0,
+                    max: 360,
+                    value: transform.angle,
+                    onChange: (e) => handleChange('angle', e.target.value)
+                })
+            );
+        } else if (transform.type === 'scale') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Scale X: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0.1,
+                        max: 3,
+                        value: transform.scaleX,
+                        step: 0.1,
+                        onChange: (e) => handleChange('scaleX', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.scaleX)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0.1,
+                    max: 3,
+                    value: transform.scaleX,
+                    step: 0.1,
+                    onChange: (e) => handleChange('scaleX', e.target.value)
+                }),
+                React.createElement('label', null, 'Scale Y: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: 0.1,
+                        max: 3,
+                        value: transform.scaleY,
+                        step: 0.1,
+                        onChange: (e) => handleChange('scaleY', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.scaleY)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: 0.1,
+                    max: 3,
+                    value: transform.scaleY,
+                    step: 0.1,
+                    onChange: (e) => handleChange('scaleY', e.target.value)
+                })
+            );
+        } else if (transform.type === 'translate') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Translate X: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -100,
+                        max: 100,
+                        value: transform.translateX,
+                        step: 5,
+                        onChange: (e) => handleChange('translateX', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.translateX)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -100,
+                    max: 100,
+                    value: transform.translateX,
+                    onChange: (e) => handleChange('translateX', e.target.value)
+                }),
+                React.createElement('label', null, 'Translate Y: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -100,
+                        max: 100,
+                        value: transform.translateY,
+                        step: 5,
+                        onChange: (e) => handleChange('translateY', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.translateY)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -100,
+                    max: 100,
+                    value: transform.translateY,
+                    onChange: (e) => handleChange('translateY', e.target.value)
+                })
+            );
+        } else if (transform.type === 'shear') {
+            return React.createElement('div', null,
+                React.createElement('label', null, 'Shear X: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -1,
+                        max: 1,
+                        value: transform.shearX,
+                        step: 0.1,
+                        onChange: (e) => handleChange('shearX', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.shearX)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -1,
+                    max: 1,
+                    value: transform.shearX,
+                    step: 0.1,
+                    onChange: (e) => handleChange('shearX', e.target.value)
+                }),
+                React.createElement('label', null, 'Shear Y: ',
+                    React.createElement('input', {
+                        type: 'number',
+                        min: -1,
+                        max: 1,
+                        value: transform.shearY,
+                        step: 0.1,
+                        onChange: (e) => handleChange('shearY', e.target.value)
+                    }),
+                    ' ',
+                    React.createElement('span', null, transform.shearY)
+                ),
+                React.createElement('input', {
+                    type: 'range',
+                    min: -1,
+                    max: 1,
+                    value: transform.shearY,
+                    step: 0.1,
+                    onChange: (e) => handleChange('shearY', e.target.value)
+                })
+            );
+        }
+    };
+
+    return React.createElement('div', { className: 'control-group' },
+        React.createElement('h3', null,
+            transform.type.charAt(0).toUpperCase() + transform.type.slice(1),
+            React.createElement('button', { onClick: () => onMoveUp(index) }, '↑'),
+            React.createElement('button', { onClick: () => onMoveDown(index) }, '↓'),
+            React.createElement('button', { onClick: () => onDelete(index) }, 'X')
+        ),
+        renderControls()
+    );
+}
+
+function App({ initialTransforms, initialShape, initialShowOriginal }) {
+    const [transforms, setTransforms] = React.useState(initialTransforms || [
+        { type: 'scale', scaleX: 1, scaleY: 1 },
+        { type: 'shear', shearX: 0, shearY: 0 },
+        { type: 'rotate', angle: 0 },
+        { type: 'translate', translateX: 0, translateY: 0 }
+    ]);
+    const [shape, setShape] = React.useState(initialShape || 'square');
+    const [showOriginal, setShowOriginal] = React.useState(initialShowOriginal || false);
+    const matrixDisplayRef = React.useRef();
+
+    React.useEffect(() => {
+        if (initialTransforms) {
+            setTransforms(initialTransforms);
+        }
+    }, [initialTransforms]);
+
+    React.useEffect(() => {
+        if (initialShape) {
+            setShape(initialShape);
+        }
+    }, [initialShape]);
+
+    React.useEffect(() => {
+        setShowOriginal(initialShowOriginal || false);
+    }, [initialShowOriginal]);
+
+    const updateTransform = (index, newTransform) => {
+        const newTransforms = [...transforms];
+        newTransforms[index] = newTransform;
+        setTransforms(newTransforms);
+    };
+
+    const moveUp = (index) => {
+        if (index > 0) {
+            const newTransforms = [...transforms];
+            [newTransforms[index], newTransforms[index - 1]] = [newTransforms[index - 1], newTransforms[index]];
+            setTransforms(newTransforms);
+        }
+    };
+
+    const moveDown = (index) => {
+        if (index < transforms.length - 1) {
+            const newTransforms = [...transforms];
+            [newTransforms[index], newTransforms[index + 1]] = [newTransforms[index + 1], newTransforms[index]];
+            setTransforms(newTransforms);
+        }
+    };
+
+    const deleteTransform = (index) => {
+        const newTransforms = transforms.filter((_, i) => i !== index);
+        setTransforms(newTransforms);
+    };
+
+    const addTransform = (type) => {
+        let newTransform;
+        if (type === 'scale') {
+            newTransform = { type: 'scale', scaleX: 1, scaleY: 1 };
+        } else if (type === 'shear') {
+            newTransform = { type: 'shear', shearX: 0, shearY: 0 };
+        } else if (type === 'rotate') {
+            newTransform = { type: 'rotate', angle: 0 };
+        } else if (type === 'translate') {
+            newTransform = { type: 'translate', translateX: 0, translateY: 0 };
+        }
+        setTransforms([...transforms, newTransform]);
+    };
+
+    React.useEffect(() => {
+        const matrix = draw(transforms, shape, showOriginal);
+        updateMatrixDisplay(matrix, matrixDisplayRef.current);
+        window.currentTransforms = transforms;
+        window.currentShape = shape;
+        window.currentShowOriginal = showOriginal;
+    }, [transforms, shape, showOriginal]);
+
+    return React.createElement('div', { className: 'controls' },
+        React.createElement('div', { className: 'transform-controls' },
+            React.createElement('h2', null, 'Transformation Matrix'),
+            React.createElement('div', { className: 'matrix-display' },
+                React.createElement('div', { ref: matrixDisplayRef, id: 'matrixDisplay' },
+                    '[1, 0, 0]<br>[0, 1, 0]<br>[0, 0, 1]'
+                )
+            )
+        ),
+        React.createElement('div', { className: 'parameter-controls' },
+            React.createElement('h2', null, 'Transformation Parameters'),
+            transforms.map((transform, index) =>
+                React.createElement(TransformBlock, {
+                    key: index,
+                    transform: transform,
+                    index: index,
+                    onUpdate: updateTransform,
+                    onMoveUp: moveUp,
+                    onMoveDown: moveDown,
+                    onDelete: deleteTransform
+                })
+            )
+        ),
+        React.createElement('div', { className: 'options' },
+            React.createElement('label', null,
+                React.createElement('input', {
+                    type: 'checkbox',
+                    checked: showOriginal,
+                    onChange: (e) => setShowOriginal(e.target.checked)
+                }), ' Show original shape'
+            )
+        ),
+        React.createElement('div', { className: 'shape-selector' },
+            React.createElement('h2', null, 'Shape'),
+            React.createElement('select', {
+                value: shape,
+                onChange: (e) => setShape(e.target.value)
+            },
+                React.createElement('option', { value: 'square' }, 'Square'),
+                React.createElement('option', { value: 'triangle' }, 'Triangle'),
+                React.createElement('option', { value: 'circle' }, 'Circle'),
+                React.createElement('option', { value: 'arrow' }, 'Arrow')
+            )
+        ),
+        React.createElement('div', { className: 'add-transform' },
+            React.createElement('select', { id: 'addTransformSelect' },
+                React.createElement('option', { value: 'scale' }, 'Scale'),
+                React.createElement('option', { value: 'shear' }, 'Shear'),
+                React.createElement('option', { value: 'rotate' }, 'Rotate'),
+                React.createElement('option', { value: 'translate' }, 'Translate')
+            ),
+            React.createElement('button', { id: 'addTransformBtn', onClick: () => addTransform(document.getElementById('addTransformSelect').value) }, 'Add Transform')
+        )
+    );
+}
+
+// Render React app
+const root = ReactDOM.createRoot(document.getElementById('react-root'));
+root.render(React.createElement(App));
+
+// Event listeners for non-React elements
+showGridCheck.addEventListener('change', () => {
+    const matrix = draw(window.currentTransforms || [], window.currentShape || 'square', window.currentShowOriginal || false);
+    updateMatrixDisplay(matrix, document.getElementById('matrixDisplay'));
 });
-
-scaleXSlider.addEventListener('input', () => {
-    scaleXInput.value = scaleXSlider.value;
-    draw();
-});
-
-scaleYSlider.addEventListener('input', () => {
-    scaleYInput.value = scaleYSlider.value;
-    draw();
-});
-
-translateXSlider.addEventListener('input', () => {
-    translateXInput.value = translateXSlider.value;
-    draw();
-});
-
-translateYSlider.addEventListener('input', () => {
-    translateYInput.value = translateYSlider.value;
-    draw();
-});
-
-// Event listeners for number inputs
-rotationInput.addEventListener('input', () => {
-    rotationSlider.value = rotationInput.value;
-    draw();
-});
-
-scaleXInput.addEventListener('input', () => {
-    scaleXSlider.value = scaleXInput.value;
-    draw();
-});
-
-scaleYInput.addEventListener('input', () => {
-    scaleYSlider.value = scaleYSlider.value;
-    draw();
-});
-
-translateXInput.addEventListener('input', () => {
-    translateXSlider.value = translateXInput.value;
-    draw();
-});
-
-translateYInput.addEventListener('input', () => {
-    translateYSlider.value = translateYInput.value;
-    draw();
-});
-
-shearXSlider.addEventListener('input', () => {
-    shearXInput.value = shearXSlider.value;
-    draw();
-});
-
-shearXInput.addEventListener('input', () => {
-    shearXSlider.value = shearXInput.value;
-    draw();
-});
-
-shearYSlider.addEventListener('input', () => {
-    shearYInput.value = shearYSlider.value;
-    draw();
-});
-
-shearYInput.addEventListener('input', () => {
-    shearYSlider.value = shearYInput.value;
-    draw();
-});
-
-// Checkbox listeners
-showOriginalCheck.addEventListener('change', draw);
-showGridCheck.addEventListener('change', draw);
-
-// Shape selector
-shapeSelect.addEventListener('change', draw);
 
 // Preset buttons
 identityBtn.addEventListener('click', () => {
-    rotationSlider.value = 0;
-    scaleXSlider.value = 1;
-    scaleYSlider.value = 1;
-    translateXSlider.value = 0;
-    translateYSlider.value = 0;
-    shearXSlider.value = 0;
-    shearYSlider.value = 0;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 1, scaleY: 1 },
+        { type: 'shear', shearX: 0, shearY: 0 },
+        { type: 'rotate', angle: 0 },
+        { type: 'translate', translateX: 0, translateY: 0 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
 rotate45Btn.addEventListener('click', () => {
-    rotationSlider.value = 45;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 1, scaleY: 1 },
+        { type: 'shear', shearX: 0, shearY: 0 },
+        { type: 'rotate', angle: 45 },
+        { type: 'translate', translateX: 0, translateY: 0 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
 scale2xBtn.addEventListener('click', () => {
-    scaleXSlider.value = 2;
-    scaleYSlider.value = 2;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 2, scaleY: 2 },
+        { type: 'shear', shearX: 0, shearY: 0 },
+        { type: 'rotate', angle: 0 },
+        { type: 'translate', translateX: 0, translateY: 0 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
 translate50Btn.addEventListener('click', () => {
-    translateXSlider.value = 50;
-    translateYSlider.value = 30;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 1, scaleY: 1 },
+        { type: 'shear', shearX: 0, shearY: 0 },
+        { type: 'rotate', angle: 0 },
+        { type: 'translate', translateX: 50, translateY: 30 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
 shearBtn.addEventListener('click', () => {
-    shearXSlider.value = 0.5;
-    shearYSlider.value = 0.3;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 1, scaleY: 1 },
+        { type: 'shear', shearX: 0.5, shearY: 0.3 },
+        { type: 'rotate', angle: 0 },
+        { type: 'translate', translateX: 0, translateY: 0 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
 reflectXBtn.addEventListener('click', () => {
-    scaleYSlider.value = -1;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 1, scaleY: -1 },
+        { type: 'shear', shearX: 0, shearY: 0 },
+        { type: 'rotate', angle: 0 },
+        { type: 'translate', translateX: 0, translateY: 0 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
 complexBtn.addEventListener('click', () => {
-    rotationSlider.value = 30;
-    scaleXSlider.value = 1.5;
-    scaleYSlider.value = 0.8;
-    translateXSlider.value = 20;
-    translateYSlider.value = -15;
-    shearXSlider.value = 0.2;
-    shearYSlider.value = -0.1;
-    draw();
+    const newTransforms = [
+        { type: 'scale', scaleX: 1.5, scaleY: 0.8 },
+        { type: 'shear', shearX: 0.2, shearY: -0.1 },
+        { type: 'rotate', angle: 30 },
+        { type: 'translate', translateX: 20, translateY: -15 }
+    ];
+    root.render(React.createElement(App, { initialTransforms: newTransforms, initialShape: window.currentShape, initialShowOriginal: window.currentShowOriginal }));
 });
 
-// Initial draw
-draw();
+// Initial draw handled by React useEffect
