@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Dot and Cross Product Visualization</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Vector Operations Visualization</h1>
+    <p><a href="3d.html">Switch to 3D Visualization</a></p>
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="vectorCanvas" width="600" height="600"></canvas>
+        </div>
+        <div class="controls">
+            <div class="vector-controls">
+                <h2>Vector A</h2>
+                <label>Angle: <input type="number" id="angleAInput" min="0" max="360" value="0">° <span id="angleA">0</span>°</label>
+                <input type="range" id="angleASlider" min="0" max="360" value="0">
+                <label>Magnitude: <input type="number" id="magAInput" min="10" max="200" value="100"> <span id="magA">100</span></label>
+                <input type="range" id="magASlider" min="10" max="200" value="100">
+                <p>Components: x=<span id="compAX">100</span>, y=<span id="compAY">0</span></p>
+            </div>
+            <div class="vector-controls">
+                <h2>Vector B</h2>
+                <label>Angle: <input type="number" id="angleBInput" min="0" max="360" value="90">° <span id="angleB">90</span>°</label>
+                <input type="range" id="angleBSlider" min="0" max="360" value="90">
+                <label>Magnitude: <input type="number" id="magBInput" min="10" max="200" value="100"> <span id="magB">100</span></label>
+                <input type="range" id="magBSlider" min="10" max="200" value="100">
+                <p>Components: x=<span id="compBX">0</span>, y=<span id="compBY">100</span></p>
+            </div>
+            <div class="options">
+                <label><input type="checkbox" id="normalizeCheck"> Normalize vectors (magnitude = 1)</label>
+            </div>
+        </div>
+        <div class="side-panel">
+            <div class="presets">
+                <h2>Preset Angles</h2>
+                <button id="sameBtn">Same Direction (0°)</button>
+                <button id="thirtyBtn">30° Apart</button>
+                <button id="fortyFiveBtn">45° Apart</button>
+                <button id="ninetyBtn">90° Apart</button>
+                <button id="oneThirtyFiveBtn">135° Apart</button>
+                <button id="invertedBtn">Inverted (180°)</button>
+            </div>
+            <div class="results">
+                <h2>Results</h2>
+                <p>Dot Product: <span id="dotProduct">0</span></p>
+                <p>Cross Product (2D): <span id="crossProduct">0</span></p>
+                <p>Angle Between: <span id="angleBetween">90</span>°</p>
+                <div class="explanation">
+                    <p><strong>Dot Product:</strong> Measures alignment. 0 when perpendicular, max |A|×|B| when aligned, min -|A|×|B| when opposite.</p>
+                    <p><strong>Cross Product:</strong> In 2D, scalar perpendicular to plane. Max |A|×|B| at 90°.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

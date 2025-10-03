@@ -1,0 +1,101 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f0f0f0;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.canvas-container {
+    display: flex;
+    justify-content: center;
+}
+
+#vectorCanvas {
+    border: 2px solid #333;
+    background-color: white;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.side-panel {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.vector-controls {
+    margin-bottom: 20px;
+}
+
+.vector-controls h2 {
+    margin-bottom: 10px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+input[type="range"] {
+    width: 100%;
+}
+
+.presets {
+    margin-bottom: 20px;
+}
+
+.presets button {
+    display: block;
+    width: 100%;
+    margin-bottom: 5px;
+    padding: 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.presets button:hover {
+    background-color: #45a049;
+}
+
+.options {
+    margin-bottom: 20px;
+}
+
+.results {
+    background-color: #e7e7e7;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.results p {
+    margin: 5px 0;
+}
+
+.explanation {
+    margin-top: 15px;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.explanation p {
+    margin: 5px 0;
+}

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Vector Dot and Cross Product Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        #threejs-container {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>3D Vector Operations Visualization</h1>
+    <p><a href="index.html">Switch to 2D Visualization</a></p>
+    <div class="container">
+        <div id="threejs-container"></div>
+        <div class="controls">
+            <div class="vector-controls">
+                <h2>Vector A</h2>
+                <label>Azimuth: <input type="number" id="azimuthAInput" min="0" max="360" value="0">° <span id="azA">0</span>°</label>
+                <input type="range" id="azimuthASlider" min="0" max="360" value="0">
+                <label>Elevation: <input type="number" id="elevationAInput" min="-90" max="90" value="0">° <span id="elA">0</span>°</label>
+                <input type="range" id="elevationASlider" min="-90" max="90" value="0">
+                <label>Magnitude: <input type="number" id="magAInput" min="10" max="200" value="100"> <span id="magA">100</span></label>
+                <input type="range" id="magASlider" min="10" max="200" value="100">
+                <p>Components: x=<span id="compAX">100</span>, y=<span id="compAY">0</span>, z=<span id="compAZ">0</span></p>
+            </div>
+            <div class="vector-controls">
+                <h2>Vector B</h2>
+                <label>Azimuth: <input type="number" id="azimuthBInput" min="0" max="360" value="90">° <span id="azB">90</span>°</label>
+                <input type="range" id="azimuthBSlider" min="0" max="360" value="90">
+                <label>Elevation: <input type="number" id="elevationBInput" min="-90" max="90" value="0">° <span id="elB">0</span>°</label>
+                <input type="range" id="elevationBSlider" min="-90" max="90" value="0">
+                <label>Magnitude: <input type="number" id="magBInput" min="10" max="200" value="100"> <span id="magB">100</span></label>
+                <input type="range" id="magBSlider" min="10" max="200" value="100">
+                <p>Components: x=<span id="compBX">0</span>, y=<span id="compBY">100</span>, z=<span id="compBZ">0</span></p>
+            </div>
+            <div class="options">
+                <label><input type="checkbox" id="normalizeCheck"> Normalize vectors (magnitude = 1)</label>
+            </div>
+        </div>
+        <div class="side-panel">
+            <div class="presets">
+                <h2>Preset Angles</h2>
+                <button id="sameBtn">Same Direction</button>
+                <button id="fortyFiveBtn">45° Azimuth</button>
+                <button id="perpBtn">Perpendicular</button>
+                <button id="oneThirtyFiveBtn">135° Azimuth</button>
+                <button id="oppBtn">Opposite</button>
+                <button id="elevBtn">Elevated 45°</button>
+            </div>
+            <div class="results">
+                <h2>Results</h2>
+                <p>Dot Product: <span id="dotProduct">0</span></p>
+                <p>Cross Product: (<span id="crossX">0</span>, <span id="crossY">0</span>, <span id="crossZ">0</span>)</p>
+                <div class="explanation">
+                    <p><strong>Dot Product:</strong> Measures alignment. 0 when perpendicular, max |A|×|B| when aligned.</p>
+                    <p><strong>Cross Product:</strong> Vector perpendicular to both. Magnitude max |A|×|B| when perpendicular.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, 600 / 600, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(600, 600);
+        document.getElementById('threejs-container').appendChild(renderer.domElement);
+
+        camera.position.set(200, 200, 200);
+        camera.lookAt(0, 0, 0);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.update();
+
+        // Axes
+        const axesHelper = new THREE.AxesHelper(100);
+        scene.add(axesHelper);
+
+        // Grid
+        const gridHelper = new THREE.GridHelper(200, 20);
+        scene.add(gridHelper);
+
+        // Vectors
+        const dirA = new THREE.Vector3(1, 0, 0);
+        const dirB = new THREE.Vector3(0, 1, 0);
+        const origin = new THREE.Vector3(0, 0, 0);
+
+        const arrowA = new THREE.ArrowHelper(dirA, origin, 100, 0xff0000, 20, 10);
+        const arrowB = new THREE.ArrowHelper(dirB, origin, 100, 0x00ff00, 20, 10);
+        scene.add(arrowA);
+        scene.add(arrowB);
+
+        // Controls
+        const azimuthASlider = document.getElementById('azimuthASlider');
+        const azimuthAInput = document.getElementById('azimuthAInput');
+        const elevationASlider = document.getElementById('elevationASlider');
+        const elevationAInput = document.getElementById('elevationAInput');
+        const magASlider = document.getElementById('magASlider');
+        const magAInput = document.getElementById('magAInput');
+        const azimuthBSlider = document.getElementById('azimuthBSlider');
+        const azimuthBInput = document.getElementById('azimuthBInput');
+        const elevationBSlider = document.getElementById('elevationBSlider');
+        const elevationBInput = document.getElementById('elevationBInput');
+        const magBSlider = document.getElementById('magBSlider');
+        const magBInput = document.getElementById('magBInput');
+
+        const azAValue = document.getElementById('azA');
+        const elAValue = document.getElementById('elA');
+        const magAValue = document.getElementById('magA');
+        const compAX = document.getElementById('compAX');
+        const compAY = document.getElementById('compAY');
+        const compAZ = document.getElementById('compAZ');
+        const azBValue = document.getElementById('azB');
+        const elBValue = document.getElementById('elB');
+        const magBValue = document.getElementById('magB');
+        const compBX = document.getElementById('compBX');
+        const compBY = document.getElementById('compBY');
+        const compBZ = document.getElementById('compBZ');
+
+        const normalizeCheck = document.getElementById('normalizeCheck');
+
+        const dotProductValue = document.getElementById('dotProduct');
+        const crossX = document.getElementById('crossX');
+        const crossY = document.getElementById('crossY');
+        const crossZ = document.getElementById('crossZ');
+
+        const sameBtn = document.getElementById('sameBtn');
+        const fortyFiveBtn = document.getElementById('fortyFiveBtn');
+        const perpBtn = document.getElementById('perpBtn');
+        const oneThirtyFiveBtn = document.getElementById('oneThirtyFiveBtn');
+        const oppBtn = document.getElementById('oppBtn');
+        const elevBtn = document.getElementById('elevBtn');
+
+        function updateVectors() {
+            let azA = THREE.MathUtils.degToRad(parseFloat(azimuthASlider.value));
+            let elA = THREE.MathUtils.degToRad(parseFloat(elevationASlider.value));
+            let magA = parseFloat(magASlider.value);
+
+            let azB = THREE.MathUtils.degToRad(parseFloat(azimuthBSlider.value));
+            let elB = THREE.MathUtils.degToRad(parseFloat(elevationBSlider.value));
+            let magB = parseFloat(magBSlider.value);
+
+            if (normalizeCheck.checked) {
+                magA = 1;
+                magB = 1;
+            }
+
+            // Convert spherical to cartesian
+            dirA.set(
+                magA * Math.cos(elA) * Math.cos(azA),
+                magA * Math.cos(elA) * Math.sin(azA),
+                magA * Math.sin(elA)
+            );
+            dirB.set(
+                magB * Math.cos(elB) * Math.cos(azB),
+                magB * Math.cos(elB) * Math.sin(azB),
+                magB * Math.sin(elB)
+            );
+
+            arrowA.setDirection(dirA.clone().normalize());
+            arrowA.setLength(Math.max(dirA.length(), 50)); // Minimum length for visibility
+
+            arrowB.setDirection(dirB.clone().normalize());
+            arrowB.setLength(Math.max(dirB.length(), 50));
+
+            // Update displays
+            azAValue.textContent = azimuthASlider.value;
+            azimuthAInput.value = azimuthASlider.value;
+            elAValue.textContent = elevationASlider.value;
+            elevationAInput.value = elevationASlider.value;
+            magAValue.textContent = magA;
+            magAInput.value = magA;
+            compAX.textContent = dirA.x.toFixed(2);
+            compAY.textContent = dirA.y.toFixed(2);
+            compAZ.textContent = dirA.z.toFixed(2);
+
+            azBValue.textContent = azimuthBSlider.value;
+            azimuthBInput.value = azimuthBSlider.value;
+            elBValue.textContent = elevationBSlider.value;
+            elevationBInput.value = elevationBSlider.value;
+            magBValue.textContent = magB;
+            magBInput.value = magB;
+            compBX.textContent = dirB.x.toFixed(2);
+            compBY.textContent = dirB.y.toFixed(2);
+            compBZ.textContent = dirB.z.toFixed(2);
+
+            const dot = dirA.dot(dirB);
+            const cross = new THREE.Vector3().crossVectors(dirA, dirB);
+
+            dotProductValue.textContent = dot.toFixed(2);
+            crossX.textContent = cross.x.toFixed(2);
+            crossY.textContent = cross.y.toFixed(2);
+            crossZ.textContent = cross.z.toFixed(2);
+
+            renderer.render(scene, camera);
+        }
+
+        azimuthASlider.addEventListener('input', () => {
+            azimuthAInput.value = azimuthASlider.value;
+            updateVectors();
+        });
+        elevationASlider.addEventListener('input', () => {
+            elevationAInput.value = elevationASlider.value;
+            updateVectors();
+        });
+        magASlider.addEventListener('input', () => {
+            magAInput.value = magASlider.value;
+            updateVectors();
+        });
+        azimuthBSlider.addEventListener('input', () => {
+            azimuthBInput.value = azimuthBSlider.value;
+            updateVectors();
+        });
+        elevationBSlider.addEventListener('input', () => {
+            elevationBInput.value = elevationBSlider.value;
+            updateVectors();
+        });
+        magBSlider.addEventListener('input', () => {
+            magBInput.value = magBSlider.value;
+            updateVectors();
+        });
+
+        azimuthAInput.addEventListener('input', () => {
+            azimuthASlider.value = azimuthAInput.value;
+            updateVectors();
+        });
+        elevationAInput.addEventListener('input', () => {
+            elevationASlider.value = elevationAInput.value;
+            updateVectors();
+        });
+        magAInput.addEventListener('input', () => {
+            magASlider.value = magAInput.value;
+            updateVectors();
+        });
+        azimuthBInput.addEventListener('input', () => {
+            azimuthBSlider.value = azimuthBInput.value;
+            updateVectors();
+        });
+        elevationBInput.addEventListener('input', () => {
+            elevationBSlider.value = elevationBInput.value;
+            updateVectors();
+        });
+        magBInput.addEventListener('input', () => {
+            magBSlider.value = magBInput.value;
+            updateVectors();
+        });
+
+        normalizeCheck.addEventListener('change', updateVectors);
+
+        sameBtn.addEventListener('click', () => {
+            azimuthBSlider.value = azimuthASlider.value;
+            azimuthBInput.value = azimuthBSlider.value;
+            elevationBSlider.value = elevationASlider.value;
+            elevationBInput.value = elevationBSlider.value;
+            updateVectors();
+        });
+
+        fortyFiveBtn.addEventListener('click', () => {
+            azimuthBSlider.value = (parseFloat(azimuthASlider.value) + 45) % 360;
+            azimuthBInput.value = azimuthBSlider.value;
+            elevationBSlider.value = elevationASlider.value;
+            elevationBInput.value = elevationBSlider.value;
+            updateVectors();
+        });
+
+        perpBtn.addEventListener('click', () => {
+            // Set to standard perpendicular: A along x, B along y
+            azimuthASlider.value = 0;
+            azimuthAInput.value = 0;
+            elevationASlider.value = 0;
+            elevationAInput.value = 0;
+            azimuthBSlider.value = 90;
+            azimuthBInput.value = 90;
+            elevationBSlider.value = 0;
+            elevationBInput.value = 0;
+            updateVectors();
+        });
+
+        oneThirtyFiveBtn.addEventListener('click', () => {
+            azimuthBSlider.value = (parseFloat(azimuthASlider.value) + 135) % 360;
+            azimuthBInput.value = azimuthBSlider.value;
+            elevationBSlider.value = elevationASlider.value;
+            elevationBInput.value = elevationBSlider.value;
+            updateVectors();
+        });
+
+        oppBtn.addEventListener('click', () => {
+            // Set to opposite: B opposite to A
+            azimuthBSlider.value = (parseFloat(azimuthASlider.value) + 180) % 360;
+            azimuthBInput.value = azimuthBSlider.value;
+            elevationBSlider.value = -parseFloat(elevationASlider.value);
+            elevationBInput.value = elevationBSlider.value;
+            updateVectors();
+        });
+
+        elevBtn.addEventListener('click', () => {
+            elevationBSlider.value = 45;
+            elevationBInput.value = elevationBSlider.value;
+            azimuthBSlider.value = azimuthASlider.value;
+            azimuthBInput.value = azimuthBSlider.value;
+            updateVectors();
+        });
+
+        // Initial
+        updateVectors();
+
+        // Animation loop (for interactivity)
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>

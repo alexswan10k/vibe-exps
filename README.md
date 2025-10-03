@@ -34,6 +34,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Sprite Sheet Generator**: Tool for generating sprite sheets
 - **Time Tracker**: A time tracking application
 - **Virtual Aquarium**: A virtual aquarium simulation
+- **Vector Visualization**: Interactive 2D and 3D vector operations with dot and cross products
 - **Virtual Pet Simulator**: A virtual pet simulation
 - **Volume Raycaster**: 3D volume rendering with raycasting
 - **WebGPU Feature Detector**: A tool to detect WebGPU features
