@@ -1,0 +1,136 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f0f0f0;
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 40px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.canvas-container {
+    display: flex;
+    justify-content: center;
+}
+
+#transformCanvas {
+    border: 2px solid #333;
+    background-color: white;
+}
+
+.controls {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.side-panel {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.transform-controls {
+    margin-bottom: 20px;
+}
+
+.matrix-display {
+    background-color: #e7e7e7;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: monospace;
+    text-align: center;
+    margin-bottom: 15px;
+}
+
+.parameter-controls h2 {
+    margin-bottom: 15px;
+}
+
+.control-group {
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 5px;
+}
+
+.control-group h3 {
+    margin-bottom: 10px;
+    color: #555;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+}
+
+input[type="range"] {
+    width: 100%;
+}
+
+input[type="number"] {
+    width: 60px;
+}
+
+.presets {
+    margin-bottom: 20px;
+}
+
+.presets button {
+    display: block;
+    width: 100%;
+    margin-bottom: 5px;
+    padding: 8px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.presets button:hover {
+    background-color: #45a049;
+}
+
+.shape-selector {
+    margin-bottom: 20px;
+}
+
+.shape-selector select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 3px;
+    border: 1px solid #ccc;
+}
+
+.options {
+    margin-bottom: 20px;
+}
+
+.options label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.info {
+    background-color: #e7e7e7;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.info p {
+    margin: 5px 0;
+    font-size: 0.9em;
+    color: #555;
+}

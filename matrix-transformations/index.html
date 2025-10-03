@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Transformations Visualization</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Matrix Transformations Visualization</h1>
+    <p><a href="3d.html">Switch to 3D Visualization</a></p>
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="transformCanvas" width="600" height="600"></canvas>
+        </div>
+        <div class="controls">
+            <div class="transform-controls">
+                <h2>Transformation Matrix</h2>
+                <div class="matrix-display">
+                    <div id="matrixDisplay">
+                        [1, 0, 0]<br>
+                        [0, 1, 0]<br>
+                        [0, 0, 1]
+                    </div>
+                </div>
+            </div>
+            <div class="parameter-controls">
+                <h2>Transformation Parameters</h2>
+                <div class="control-group">
+                    <h3>Rotation</h3>
+                    <label>Angle: <input type="number" id="rotationInput" min="0" max="360" value="0" step="1">° <span id="rotationValue">0</span>°</label>
+                    <input type="range" id="rotationSlider" min="0" max="360" value="0">
+                </div>
+                <div class="control-group">
+                    <h3>Scaling</h3>
+                    <label>Scale X: <input type="number" id="scaleXInput" min="0.1" max="3" value="1" step="0.1"> <span id="scaleXValue">1</span></label>
+                    <input type="range" id="scaleXSlider" min="0.1" max="3" value="1" step="0.1">
+                    <label>Scale Y: <input type="number" id="scaleYInput" min="0.1" max="3" value="1" step="0.1"> <span id="scaleYValue">1</span></label>
+                    <input type="range" id="scaleYSlider" min="0.1" max="3" value="1" step="0.1">
+                </div>
+                <div class="control-group">
+                    <h3>Translation</h3>
+                    <label>Translate X: <input type="number" id="translateXInput" min="-100" max="100" value="0" step="5"> <span id="translateXValue">0</span></label>
+                    <input type="range" id="translateXSlider" min="-100" max="100" value="0">
+                    <label>Translate Y: <input type="number" id="translateYInput" min="-100" max="100" value="0" step="5"> <span id="translateYValue">0</span></label>
+                    <input type="range" id="translateYSlider" min="-100" max="100" value="0">
+                </div>
+                <div class="control-group">
+                    <h3>Shear</h3>
+                    <label>Shear X: <input type="number" id="shearXInput" min="-1" max="1" value="0" step="0.1"> <span id="shearXValue">0</span></label>
+                    <input type="range" id="shearXSlider" min="-1" max="1" value="0" step="0.1">
+                    <label>Shear Y: <input type="number" id="shearYInput" min="-1" max="1" value="0" step="0.1"> <span id="shearYValue">0</span></label>
+                    <input type="range" id="shearYSlider" min="-1" max="1" value="0" step="0.1">
+                </div>
+            </div>
+            <div class="options">
+                <label><input type="checkbox" id="showOriginal"> Show original shape</label>
+                <label><input type="checkbox" id="showGrid" checked> Show grid</label>
+            </div>
+        </div>
+        <div class="side-panel">
+            <div class="presets">
+                <h2>Preset Transformations</h2>
+                <button id="identityBtn">Identity</button>
+                <button id="rotate45Btn">Rotate 45°</button>
+                <button id="scale2xBtn">Scale 2x</button>
+                <button id="translate50Btn">Translate (50, 30)</button>
+                <button id="shearBtn">Shear</button>
+                <button id="reflectXBtn">Reflect over X-axis</button>
+                <button id="complexBtn">Complex Transform</button>
+            </div>
+            <div class="shape-selector">
+                <h2>Shape</h2>
+                <select id="shapeSelect">
+                    <option value="square">Square</option>
+                    <option value="triangle">Triangle</option>
+                    <option value="circle">Circle</option>
+                    <option value="arrow">Arrow</option>
+                </select>
+            </div>
+            <div class="info">
+                <h2>Info</h2>
+                <p>Matrix transformations combine rotation, scaling, and translation to transform shapes in 2D space.</p>
+                <p>The transformation matrix is applied to each point of the shape.</p>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
