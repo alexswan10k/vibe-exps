@@ -104,9 +104,6 @@ function updateTransformDisplay(transforms) {
     currentShape.matrix.copy(matrix);
     currentShape.matrixAutoUpdate = false;
 
-    // Update matrix display
-    updateMatrixDisplay(matrix);
-
     renderer.render(scene, camera);
 }
 
@@ -119,6 +116,69 @@ function updateMatrixDisplay(matrix) {
         `[${elements[3].toFixed(2)}, ${elements[7].toFixed(2)}, ${elements[11].toFixed(2)}, ${elements[15].toFixed(2)}]`
     ].join('<br>');
     document.getElementById('matrixDisplay').innerHTML = formatted;
+}
+
+function getSingleTransformMatrix(transform) {
+    const matrix = new THREE.Matrix4();
+    if (transform.type === 'translate') {
+        matrix.makeTranslation(transform.translateX, transform.translateY, transform.translateZ);
+    } else if (transform.type === 'rotateX') {
+        const rad = THREE.MathUtils.degToRad(transform.angle);
+        matrix.makeRotationX(rad);
+    } else if (transform.type === 'rotateY') {
+        const rad = THREE.MathUtils.degToRad(transform.angle);
+        matrix.makeRotationY(rad);
+    } else if (transform.type === 'rotateZ') {
+        const rad = THREE.MathUtils.degToRad(transform.angle);
+        matrix.makeRotationZ(rad);
+    } else if (transform.type === 'scale') {
+        matrix.makeScale(transform.scaleX, transform.scaleY, transform.scaleZ);
+    }
+    return matrix;
+}
+
+function updatePipelineDisplay(transforms) {
+    const element = document.getElementById('pipelineDisplay');
+    if (!element) return;
+
+    let html = '';
+    for (let i = 0; i < transforms.length; i++) {
+        const transform = transforms[i];
+        const matrix = getSingleTransformMatrix(transform);
+        const elements = matrix.elements;
+        const name = transform.type === 'rotateX' ? `Rotate X(${transform.angle}°)` :
+                     transform.type === 'rotateY' ? `Rotate Y(${transform.angle}°)` :
+                     transform.type === 'rotateZ' ? `Rotate Z(${transform.angle}°)` :
+                     transform.type === 'scale' ? `Scale(${transform.scaleX}, ${transform.scaleY}, ${transform.scaleZ})` :
+                     transform.type === 'translate' ? `Translate(${transform.translateX}, ${transform.translateY}, ${transform.translateZ})` : transform.type;
+        html += `<div><strong>${name}</strong><br>`;
+        html += [
+            `[${elements[0].toFixed(2)}, ${elements[4].toFixed(2)}, ${elements[8].toFixed(2)}, ${elements[12].toFixed(2)}]`,
+            `[${elements[1].toFixed(2)}, ${elements[5].toFixed(2)}, ${elements[9].toFixed(2)}, ${elements[13].toFixed(2)}]`,
+            `[${elements[2].toFixed(2)}, ${elements[6].toFixed(2)}, ${elements[10].toFixed(2)}, ${elements[14].toFixed(2)}]`,
+            `[${elements[3].toFixed(2)}, ${elements[7].toFixed(2)}, ${elements[11].toFixed(2)}, ${elements[15].toFixed(2)}]`
+        ].join('<br>');
+        html += '</div>';
+        if (i < transforms.length - 1) {
+            html += '<div style="text-align: center; margin: 5px 0;">×</div>';
+        }
+    }
+    if (transforms.length > 0) {
+        const combined = getCombinedMatrix(transforms);
+        const elements = combined.elements;
+        html += '<div style="text-align: center; margin: 10px 0; font-weight: bold;">=</div>';
+        html += '<div><strong>Combined Matrix</strong><br>';
+        html += [
+            `[${elements[0].toFixed(2)}, ${elements[4].toFixed(2)}, ${elements[8].toFixed(2)}, ${elements[12].toFixed(2)}]`,
+            `[${elements[1].toFixed(2)}, ${elements[5].toFixed(2)}, ${elements[9].toFixed(2)}, ${elements[13].toFixed(2)}]`,
+            `[${elements[2].toFixed(2)}, ${elements[6].toFixed(2)}, ${elements[10].toFixed(2)}, ${elements[14].toFixed(2)}]`,
+            `[${elements[3].toFixed(2)}, ${elements[7].toFixed(2)}, ${elements[11].toFixed(2)}, ${elements[15].toFixed(2)}]`
+        ].join('<br>');
+        html += '</div>';
+    } else {
+        html = 'No transformations applied.';
+    }
+    element.innerHTML = html;
 }
 
 // React Components
@@ -365,20 +425,13 @@ function App({ initialTransforms, initialShape, initialShowOriginal }) {
     React.useEffect(() => {
         updateShape(shape, showOriginal);
         updateTransformDisplay(transforms);
+        updatePipelineDisplay(transforms);
         window.currentTransforms = transforms;
         window.currentShape = shape;
         window.currentShowOriginal = showOriginal;
     }, [transforms, shape, showOriginal]);
 
     return React.createElement('div', { className: 'controls' },
-        React.createElement('div', { className: 'transform-controls' },
-            React.createElement('h2', null, 'Transformation Matrix'),
-            React.createElement('div', { className: 'matrix-display' },
-                React.createElement('div', { id: 'matrixDisplay' },
-                    '[1, 0, 0, 0]<br>[0, 1, 0, 0]<br>[0, 0, 1, 0]<br>[0, 0, 0, 1]'
-                )
-            )
-        ),
         React.createElement('div', { className: 'parameter-controls' },
             React.createElement('h2', null, 'Transformation Parameters'),
             transforms.map((transform, index) =>

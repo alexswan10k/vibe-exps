@@ -183,6 +183,50 @@ function updateMatrixDisplay(matrix, element) {
     if (element) element.innerHTML = formatted;
 }
 
+function getSingleTransformMatrix(transform) {
+    if (transform.type === 'scale') {
+        return createScalingMatrix(transform.scaleX, transform.scaleY);
+    } else if (transform.type === 'shear') {
+        return createShearMatrix(transform.shearX, transform.shearY);
+    } else if (transform.type === 'rotate') {
+        return createRotationMatrix(transform.angle);
+    } else if (transform.type === 'translate') {
+        return createTranslationMatrix(transform.translateX, transform.translateY);
+    }
+    return createIdentityMatrix();
+}
+
+function updatePipelineDisplay(transforms) {
+    const element = document.getElementById('pipelineDisplay');
+    if (!element) return;
+
+    let html = '';
+    for (let i = 0; i < transforms.length; i++) {
+        const transform = transforms[i];
+        const matrix = getSingleTransformMatrix(transform);
+        const name = transform.type === 'rotate' ? `Rotate(${transform.angle}°)` :
+                     transform.type === 'scale' ? `Scale(${transform.scaleX}, ${transform.scaleY})` :
+                     transform.type === 'translate' ? `Translate(${transform.translateX}, ${transform.translateY})` :
+                     transform.type === 'shear' ? `Shear(${transform.shearX}, ${transform.shearY})` : transform.type;
+        html += `<div><strong>${name}</strong><br>`;
+        html += matrix.map(row => `[${row.map(val => val.toFixed(2)).join(', ')}]`).join('<br>');
+        html += '</div>';
+        if (i < transforms.length - 1) {
+            html += '<div style="text-align: center; margin: 5px 0;">×</div>';
+        }
+    }
+    if (transforms.length > 0) {
+        const combined = getCombinedMatrix(transforms);
+        html += '<div style="text-align: center; margin: 10px 0; font-weight: bold;">=</div>';
+        html += '<div><strong>Combined Matrix</strong><br>';
+        html += combined.map(row => `[${row.map(val => val.toFixed(2)).join(', ')}]`).join('<br>');
+        html += '</div>';
+    } else {
+        html = 'No transformations applied.';
+    }
+    element.innerHTML = html;
+}
+
 function draw(transforms, shape, showOriginal) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -199,8 +243,6 @@ function draw(transforms, shape, showOriginal) {
 
     // Draw transformed shape
     drawShape(transformedShape, 'blue', false);
-
-    return matrix;
 }
 
 function getCombinedMatrix(transforms) {
@@ -402,7 +444,6 @@ function App({ initialTransforms, initialShape, initialShowOriginal }) {
     ]);
     const [shape, setShape] = React.useState(initialShape || 'square');
     const [showOriginal, setShowOriginal] = React.useState(initialShowOriginal || false);
-    const matrixDisplayRef = React.useRef();
 
     React.useEffect(() => {
         if (initialTransforms) {
@@ -462,22 +503,14 @@ function App({ initialTransforms, initialShape, initialShowOriginal }) {
     };
 
     React.useEffect(() => {
-        const matrix = draw(transforms, shape, showOriginal);
-        updateMatrixDisplay(matrix, matrixDisplayRef.current);
+        draw(transforms, shape, showOriginal);
+        updatePipelineDisplay(transforms);
         window.currentTransforms = transforms;
         window.currentShape = shape;
         window.currentShowOriginal = showOriginal;
     }, [transforms, shape, showOriginal]);
 
     return React.createElement('div', { className: 'controls' },
-        React.createElement('div', { className: 'transform-controls' },
-            React.createElement('h2', null, 'Transformation Matrix'),
-            React.createElement('div', { className: 'matrix-display' },
-                React.createElement('div', { ref: matrixDisplayRef, id: 'matrixDisplay' },
-                    '[1, 0, 0]<br>[0, 1, 0]<br>[0, 0, 1]'
-                )
-            )
-        ),
         React.createElement('div', { className: 'parameter-controls' },
             React.createElement('h2', null, 'Transformation Parameters'),
             transforms.map((transform, index) =>
