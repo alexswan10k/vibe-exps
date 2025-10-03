@@ -203,6 +203,50 @@
             transform: translateY(0);
         }
 
+        .category-filters {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .category-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            outline: none;
+        }
+        .category-btn:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+        }
+        .category-btn.active {
+            background: linear-gradient(45deg, #ff4757, #ff3838);
+            color: white;
+        }
+        .category-btn.active:hover {
+            background: linear-gradient(45deg, #ff3838, #ff2828);
+        }
+
+        .filters-section {
+            display: block;
+        }
+
+        @media (max-width: 768px) {
+            .filters-section {
+                display: none;
+            }
+            h1, p {
+                display: none;
+            }
+        }
 
 
     </style>
@@ -211,186 +255,195 @@
     <h1>Project Navigator</h1>
     <p>Welcome! Click on any project below to navigate to its main page.</p>
 
+    <div class="filters-section">
+        <div class="category-filters">
+            <button class="category-btn active" data-category="other">Other</button>
+            <button class="category-btn active" data-category="finance">Finance</button>
+            <button class="category-btn active" data-category="education">Education</button>
+            <button class="category-btn active" data-category="games">Games</button>
+        </div>
+    </div>
+
     <div class="search-container">
         <div class="search-wrapper">
             <input type="text" id="searchInput" placeholder="Search projects... (e.g., 'game html' or 'chatbot')" class="search-box">
             <button id="clearSearch" class="clear-search" title="Clear search">×</button>
         </div>
-        <button id="shakeButton" class="shake-btn">🌋 Earthquake</button>
+        <button id="shakeButton" class="shake-btn">🌋</button>
     </div>
 
     <div class="project-grid">
-        <a href="planet-generator/index.html" class="project-card">
+        <a href="planet-generator/index.html" class="project-card" data-category="games">
             <h3>🌍 Planet Generator</h3>
             <p>Procedural planet generation tool.</p>
         </a>
 
-        <a href="image-editor.html" class="project-card">
+        <a href="image-editor.html" class="project-card" data-category="other">
             <h3>🎨 HTML Image Editor</h3>
             <p>A powerful image editor with drawing, cropping, and rescaling tools.</p>
         </a>
 
-        <a href="sprite-sheet-generator.html" class="project-card">
+        <a href="sprite-sheet-generator.html" class="project-card" data-category="education">
             <h3>🎮 Sprite Sheet Generator</h3>
             <p>Create sprite sheets from clipboard images with customizable grid and tile sizes.</p>
         </a>
 
-        <a href="colony-sim/index.html" class="project-card">
+        <a href="colony-sim/index.html" class="project-card" data-category="games">
             <h3>🐜 Colony Simulator</h3>
             <p>A colony simulation game.</p>
         </a>
 
-        <a href="car-simulator/index.html" class="project-card">
+        <a href="car-simulator/index.html" class="project-card" data-category="games">
             <h3>🚗 Car Simulator</h3>
             <p>A 3D car driving simulator with physics, procedural towns, and customizable controls.</p>
         </a>
 
-        <a href="gta-style-game/index.html" class="project-card">
+        <a href="gta-style-game/index.html" class="project-card" data-category="games">
             <h3>🚗 GTA Style Game</h3>
             <p>A GTA-style driving game.</p>
         </a>
 
-        <a href="lambdasafe-sales-page/index.html" class="project-card">
+        <a href="lambdasafe-sales-page/index.html" class="project-card" data-category="other">
             <h3>💼 LambdaSafe Sales Page</h3>
             <p>Sales page for LambdaSafe.</p>
         </a>
 
-        <a href="physics-sandbox/index.html" class="project-card">
+        <a href="physics-sandbox/index.html" class="project-card" data-category="games">
             <h3>⚛️ Physics Sandbox</h3>
             <p>Interactive physics simulation.</p>
         </a>
 
-        <a href="portrait-site/index.html" class="project-card">
+        <a href="portrait-site/index.html" class="project-card" data-category="other">
             <h3>🖼️ Portrait Site</h3>
             <p>A portrait website.</p>
         </a>
 
-        <a href="space-game/index.html" class="project-card">
+        <a href="space-game/index.html" class="project-card" data-category="games">
             <h3>🚀 Space Game</h3>
             <p>A space-themed game.</p>
         </a>
 
-        <a href="space-game-site/index.html" class="project-card">
+        <a href="space-game-site/index.html" class="project-card" data-category="other">
             <h3>🌌 Space Game Site</h3>
             <p>Website for the space game.</p>
         </a>
 
-        <a href="volume-raycaster/index.html" class="project-card">
+        <a href="volume-raycaster/index.html" class="project-card" data-category="games">
             <h3>🔬 Volume Raycaster</h3>
             <p>3D volume rendering with raycasting.</p>
         </a>
 
-        <a href="vector-visualization/index.html" class="project-card">
+        <a href="vector-visualization/index.html" class="project-card" data-category="education">
             <h3>📐 Vector Visualization</h3>
             <p>Interactive 2D and 3D vector operations visualization with dot and cross products.</p>
         </a>
 
-        <a href="alex-cv/index.html" class="project-card">
+        <a href="alex-cv/index.html" class="project-card" data-category="other">
             <h3>📄 Alexander Swan CV</h3>
             <p>Interactive CV showcasing software development expertise with 3D visualizations and animations.</p>
         </a>
 
-        <a href="virtual-pet-simulator/index.html" class="project-card">
+        <a href="virtual-pet-simulator/index.html" class="project-card" data-category="games">
             <h3>🐾 Virtual Pet Simulator</h3>
             <p>An interactive virtual pet game where you can care for and play with your digital companion.</p>
         </a>
 
-        <a href="retro-space-shooter/index.html" class="project-card">
+        <a href="retro-space-shooter/index.html" class="project-card" data-category="games">
             <h3>🚀 Retro Space Shooter</h3>
             <p>A classic retro-style space shooter game with pixel art graphics and arcade gameplay.</p>
         </a>
 
-        <a href="infinite-maze-explorer/index.html" class="project-card">
+        <a href="infinite-maze-explorer/index.html" class="project-card" data-category="games">
             <h3>🌀 Infinite Maze Explorer</h3>
             <p>Navigate through procedurally generated infinite mazes in this challenging exploration game.</p>
         </a>
 
-        <a href="chatbot-agent/standalone.html" class="project-card">
+        <a href="chatbot-agent/standalone.html" class="project-card" data-category="other">
             <h3>🤖 Chatbot Agent</h3>
             <p>An interactive chatbot application with llama2.c-stories15M running in-browser.</p>
         </a>
 
-        <a href="particle-fireworks/index.html" class="project-card">
+        <a href="particle-fireworks/index.html" class="project-card" data-category="games">
             <h3>🎆 Particle Fireworks</h3>
             <p>Interactive fireworks simulation with customizable colors, physics, and choreograph mode for creating sequences.</p>
         </a>
 
-        <a href="dungeon-crawler/index.html" class="project-card">
+        <a href="dungeon-crawler/index.html" class="project-card" data-category="games">
             <h3>🏰 Procedural Dungeon Crawler</h3>
             <p>Explore procedurally generated dungeons, fight monsters, collect gold, and level up in this classic RPG adventure.</p>
         </a>
 
-        <a href="hacker-simulator/index.html" class="project-card">
+        <a href="hacker-simulator/index.html" class="project-card" data-category="games">
             <h3>💻 Hacker Simulator</h3>
             <p>Experience a terminal-style hacker simulation with command-line interface, filesystem navigation, and cyber challenges.</p>
         </a>
 
-        <a href="modular-synth/index.html" class="project-card">
+        <a href="modular-synth/index.html" class="project-card" data-category="games">
             <h3>🎛️ Modular Synth</h3>
             <p>Build and play with a modular synthesizer using drag-and-drop modules, patch cables, and real-time audio synthesis.</p>
         </a>
 
-        <a href="expense-tracker/index.html" class="project-card">
+        <a href="expense-tracker/index.html" class="project-card" data-category="finance">
             <h3>💰 Expense Tracker</h3>
             <p>A comprehensive expense tracking tool for managing shared expenses, payments, and balances between people.</p>
         </a>
 
-        <a href="timetracker/index.html" class="project-card">
+        <a href="timetracker/index.html" class="project-card" data-category="finance">
             <h3>⏱️ Time Tracker</h3>
             <p>Freelancer time tracking tool for logging hours, managing projects, and generating reports.</p>
         </a>
 
-        <a href="rsvp-tool/index.html" class="project-card">
+        <a href="rsvp-tool/index.html" class="project-card" data-category="other">
             <h3>📅 RSVP Tool</h3>
             <p>Event management tool for creating events, sending invitations, and managing RSVPs.</p>
         </a>
 
-        <a href="multi-note-todo/index.html" class="project-card">
+        <a href="multi-note-todo/index.html" class="project-card" data-category="other">
             <h3>📝 Multi-Note Todo App</h3>
             <p>Organize your tasks with multiple notes, each containing their own todo lists with completion tracking.</p>
         </a>
 
-        <a href="goal-setter/index.html" class="project-card">
+        <a href="goal-setter/index.html" class="project-card" data-category="other">
             <h3>🎯 Goal Setter</h3>
             <p>Advanced hierarchical goal tracking with automatic parent completion, progress sliders, and nested goal management.</p>
         </a>
 
-        <a href="meal-planner/index.html" class="project-card">
+        <a href="meal-planner/index.html" class="project-card" data-category="other">
             <h3>🍽️ Meal Planner</h3>
             <p>Weekly meal planning app with drag-and-drop calendar and local storage for recipes.</p>
         </a>
 
-        <a href="matrix-transformations/index.html" class="project-card">
+        <a href="matrix-transformations/index.html" class="project-card" data-category="education">
             <h3>🔢 Matrix Transformations</h3>
             <p>Interactive visualization of 2D and 3D matrix transformations with real-time controls and canvas rendering.</p>
         </a>
 
-        <a href="workflow-chat/test.html" class="project-card">
+        <a href="workflow-chat/test.html" class="project-card" data-category="other">
             <h3>🔄 Workflow Planner Test</h3>
             <p>Test the workflow chat prototype with different scenarios for structured task completion.</p>
         </a>
 
-        <a href="virtual-aquarium/index.html" class="project-card">
+        <a href="virtual-aquarium/index.html" class="project-card" data-category="games">
             <h3>🐠 Virtual Aquarium</h3>
             <p>A virtual aquarium prototype with AI learning controls for fish behavior and ecosystem simulation.</p>
         </a>
 
-        <a href="human-authorship-verifier/index.html" class="project-card">
+        <a href="human-authorship-verifier/index.html" class="project-card" data-category="other">
             <h3>✍️ Human Authorship Verifier</h3>
             <p>Cryptographically verify human authorship with behavioral logging, digital signatures, and anonymous user fingerprints.</p>
         </a>
 
-        <a href="human-authorship-verifier/corporate.html" class="project-card">
+        <a href="human-authorship-verifier/corporate.html" class="project-card" data-category="other">
             <h3>🏢 HAV Corporate Site</h3>
             <p>Professional corporate website showcasing the Human Authorship Verifier with enterprise features, use cases, and business value proposition.</p>
         </a>
 
-        <a href="webgpu-feature-detector.html" class="project-card">
+        <a href="webgpu-feature-detector.html" class="project-card" data-category="education">
             <h3>🎮 WebGPU Feature Detector</h3>
             <p>Comprehensive WebGPU support detection tool that checks browser compatibility, available features, device limits, and provides live compatibility data from caniuse.com.</p>
         </a>
 
-        <a href="personal-expense-survival-calculator/index.html" class="project-card">
+        <a href="personal-expense-survival-calculator/index.html" class="project-card" data-category="finance">
             <h3>💰 Personal Expense Survival Calculator</h3>
             <p>Calculate how long your savings will last with inflation and investment risk. Features month-by-month analytics, risk scenarios, and comprehensive financial projections.</p>
         </a>
@@ -459,6 +512,7 @@
             const shakeButton = document.getElementById('shakeButton');
             const projectGrid = document.querySelector('.project-grid');
             const cards = document.querySelectorAll('.project-card');
+            const categoryButtons = document.querySelectorAll('.category-btn');
 
             // Add complexity badges to cards
             cards.forEach(card => {
@@ -490,6 +544,27 @@
                 }
             });
 
+            function filterCards() {
+                const query = searchInput.value.trim().toLowerCase();
+                const tokens = query.split(/\s+/).filter(token => token.length > 0);
+                const activeCategories = Array.from(categoryButtons).filter(btn => btn.classList.contains('active')).map(btn => btn.dataset.category);
+
+                cards.forEach(card => {
+                    const title = card.querySelector('h3').textContent.toLowerCase();
+                    const description = card.querySelector('p').textContent.toLowerCase();
+                    const combinedText = title + ' ' + description;
+                    const matches = tokens.every(token => combinedText.includes(token)) || tokens.length === 0;
+                    const category = card.dataset.category;
+                    const categoryVisible = activeCategories.includes(category);
+
+                    if (matches && categoryVisible) {
+                        card.classList.remove('hidden');
+                    } else {
+                        card.classList.add('hidden');
+                    }
+                });
+            }
+
             let isExploded = false;
             let canvas = null;
             let ctx = null;
@@ -511,30 +586,11 @@
                 searchInput.value = '';
                 searchInput.focus();
                 updateClearButton();
-
-                // Trigger search with empty value
-                const event = new Event('input', { bubbles: true });
-                searchInput.dispatchEvent(event);
+                filterCards();
             });
 
             searchInput.addEventListener('input', function() {
-                const query = this.value.trim().toLowerCase();
-                const tokens = query.split(/\s+/).filter(token => token.length > 0);
-
-                cards.forEach(card => {
-                    const title = card.querySelector('h3').textContent.toLowerCase();
-                    const description = card.querySelector('p').textContent.toLowerCase();
-                    const combinedText = title + ' ' + description;
-
-                    const matches = tokens.every(token => combinedText.includes(token));
-
-                    if (matches || tokens.length === 0) {
-                        card.classList.remove('hidden');
-                    } else {
-                        card.classList.add('hidden');
-                    }
-                });
-
+                filterCards();
                 // Update clear button visibility
                 updateClearButton();
             });
@@ -553,9 +609,18 @@
                 }
             });
 
+            categoryButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    btn.classList.toggle('active');
+                    filterCards();
+                });
+            });
+
+            filterCards();
+
             function explodeCards() {
                 isExploded = true;
-                shakeButton.textContent = '🔄 Reset Earthquake';
+                shakeButton.textContent = '🔄';
 
                 // Create canvas overlay
                 canvas = document.createElement('canvas');
@@ -675,7 +740,7 @@
 
             function resetCards() {
                 isExploded = false;
-                shakeButton.textContent = '🌋 Earthquake';
+                shakeButton.textContent = '🌋';
 
                 if (animationId) {
                     cancelAnimationFrame(animationId);
