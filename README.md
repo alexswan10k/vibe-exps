@@ -20,6 +20,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Infinite Maze Explorer**: An infinite maze exploration game
 - **LambdaSafe Sales Page**: Sales page for LambdaSafe
 - **Meal Planner**: A meal planning application
+- **Matrix Transformations**: Interactive visualization of 2D and 3D matrix transformations
 - **Modular Synth**: A modular synthesizer
 - **Multi Note Todo**: A multi-note todo list
 - **Particle Fireworks**: A particle fireworks simulation
