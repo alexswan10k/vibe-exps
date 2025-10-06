@@ -175,3 +175,165 @@ Multi-user drawing canvas with real-time synchronization and basic shape tools.
 - Color and brush customization
 - Save/load boards
 - User presence indicators
+
+## Educational Visualizations
+
+### Algorithm Visualizer
+Interactive demos of sorting algorithms (bubble sort, quicksort, merge sort) with step-by-step animations, time complexity comparisons, and user-controlled input arrays.
+- Step-by-step animations
+- Time complexity comparisons
+- User-controlled input arrays
+- Multiple algorithm options
+- Performance metrics display
+
+### Data Structures Explorer
+Visual representations of trees, graphs, hash tables, and linked lists with operations like insertion, deletion, and traversal animations.
+- Interactive data structure manipulation
+- Operation animations (insert, delete, search)
+- Multiple data structure types
+- Performance characteristics display
+- Custom data input
+
+### Recursion Tree Builder
+Shows how recursive functions unfold, with examples like factorial, Fibonacci, and binary search trees.
+- Function call tree visualization
+- Step-by-step execution
+- Multiple recursion examples
+- Call stack display
+- Performance analysis
+
+### Graph Theory Playground
+Interactive graphs with shortest path algorithms (Dijkstra, A*), spanning trees, and network flow visualizations.
+- Graph creation and editing
+- Algorithm visualization (Dijkstra, A*, Kruskal)
+- Interactive node/edge manipulation
+- Path highlighting
+- Complexity analysis
+
+### Quantum Mechanics Simulator
+Visualize wave functions, probability distributions, and particle behavior in potential wells.
+- Wave function plotting
+- Probability density visualization
+- Potential well configurations
+- Particle animation
+- Quantum state transitions
+
+### Thermodynamics Engine
+Interactive heat transfer simulations showing conduction, convection, and radiation with temperature gradients.
+- Heat transfer mode selection
+- Temperature gradient visualization
+- Material property controls
+- Real-time simulation
+- Energy flow diagrams
+
+### Ecosystem Dynamics
+Food web interactions with predator-prey relationships, population growth models, and environmental impact scenarios.
+- Species population tracking
+- Food web visualization
+- Environmental factor controls
+- Population growth curves
+- Extinction scenarios
+
+### Electromagnetic Field Visualizer
+Real-time visualization of electric and magnetic fields around charges and currents.
+- Charge placement and movement
+- Field line visualization
+- Magnetic field simulation
+- Current flow animation
+- Field strength indicators
+
+### DNA Replication Animation
+Step-by-step molecular visualization of DNA unwinding, base pairing, and enzyme actions.
+- Molecular structure display
+- Replication process animation
+- Enzyme interaction visualization
+- Base pairing mechanics
+- Error simulation
+
+### Neural Network Simulator
+Interactive neural networks showing forward/backward propagation, activation functions, and learning curves.
+- Network architecture builder
+- Forward/backward propagation animation
+- Activation function selection
+- Learning curve visualization
+- Weight/bias adjustment
+
+### Chemical Reaction Kinetics
+Rate equations, reaction mechanisms, and equilibrium constants with animated molecular collisions.
+- Reaction rate visualization
+- Molecular collision animation
+- Equilibrium constant calculation
+- Temperature/pressure effects
+- Catalyst simulation
+
+### Evolution Simulator
+Population genetics with mutation rates, natural selection pressures, and speciation events.
+- Population genetics modeling
+- Mutation rate controls
+- Natural selection simulation
+- Speciation visualization
+- Genetic diversity tracking
+
+### Economic Systems Model
+Supply/demand curves, market equilibrium, and macroeconomic indicators with interactive policy simulations.
+- Supply/demand curve plotting
+- Market equilibrium calculation
+- Policy simulation (taxes, subsidies)
+- Economic indicator tracking
+- Scenario comparison
+
+### Historical Timeline Generator
+Dynamic timelines with interconnected events, cause-effect relationships, and multiple perspective views.
+- Event placement and connection
+- Multiple timeline views
+- Cause-effect visualization
+- Perspective filtering
+- Interactive exploration
+
+### Voting System Demonstrator
+Visual explanations of different electoral systems (first-past-the-post, ranked choice, proportional representation).
+- Electoral system selection
+- Vote distribution visualization
+- Outcome comparison
+- Fairness metrics
+- Historical election examples
+
+### Cultural Diffusion Map
+Interactive maps showing the spread of ideas, technologies, and languages over time.
+- Geographic spread animation
+- Cultural element tracking
+- Time period controls
+- Influence network visualization
+- Historical data integration
+
+### Budget Allocation Tool
+Visual breakdown of personal finances with savings goals, expense tracking, and investment growth projections.
+- Expense category visualization
+- Savings goal tracking
+- Investment projection charts
+- Budget adjustment tools
+- Financial health metrics
+
+### Project Management Flow
+Gantt charts, dependency graphs, and resource allocation visualizations for complex projects.
+- Gantt chart creation
+- Dependency mapping
+- Resource allocation visualization
+- Critical path highlighting
+- Progress tracking
+
+### Language Learning Grammar Trees
+Syntax trees and morphological analysis for understanding sentence structure.
+- Sentence parsing visualization
+- Syntax tree generation
+- Morphological breakdown
+- Language selection
+- Interactive parsing
+
+### Music Theory Harmonizer
+Chord progressions, scales, and harmonic relationships with interactive audio generation.
+- Chord progression builder
+- Scale visualization
+- Harmonic analysis
+- Audio playback
+- Theory explanation
