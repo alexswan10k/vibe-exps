@@ -14,19 +14,24 @@ class TaskManager {
      * @param {string} taskType - Type of task to set
      */
     setTaskMode(taskType) {
-        this.game.currentTaskType = taskType;
-        this.game.buildMode = null;
-        this.game.canvas.style.cursor = 'crosshair';
-        this.game.uiManager.updateModeIndicator();
-        this.game.uiManager.updateButtonStates();
+        this.setMode(taskType, null);
     }
 
     /**
      * Set storage mode
      */
     setStorageMode() {
-        this.game.currentTaskType = 'storage';
-        this.game.buildMode = null;
+        this.setMode('storage', null);
+    }
+
+    /**
+     * Set current mode and update UI
+     * @param {string} taskType - Task type to set
+     * @param {string} buildMode - Build mode to set
+     */
+    setMode(taskType, buildMode) {
+        this.game.currentTaskType = taskType;
+        this.game.buildMode = buildMode;
         this.game.canvas.style.cursor = 'crosshair';
         this.game.uiManager.updateModeIndicator();
         this.game.uiManager.updateButtonStates();
@@ -38,56 +43,57 @@ class TaskManager {
     createTasksFromArea() {
         if (!this.game.areaSelection) return;
 
-        const startX = Math.min(this.game.areaSelection.start.x, this.game.areaSelection.end.x);
-        const endX = Math.max(this.game.areaSelection.start.x, this.game.areaSelection.end.x);
-        const startY = Math.min(this.game.areaSelection.start.y, this.game.areaSelection.end.y);
-        const endY = Math.max(this.game.areaSelection.start.y, this.game.areaSelection.end.y);
+        const bounds = this.getAreaBounds();
+        const taskType = this.game.currentTaskType;
 
-        if (this.game.currentTaskType === 'mine_stone') {
-            // For mining stone, look for stone terrain
-            for (let y = startY; y <= endY; y++) {
-                for (let x = startX; x <= endX; x++) {
-                    if (this.game.map[y][x] === 'stone') {
-                        this.game.taskQueue.push({
-                            x: x,
-                            y: y,
-                            type: this.game.currentTaskType
-                        });
-                    }
-                }
+        const taskCreators = {
+            mine_stone: (x, y) => this.game.map[y][x] === 'stone' ? { x, y, type: taskType } : null,
+            harvest_plant: (x, y) => {
+                const plant = this.game.plants.find(p => p.x === x && p.y === y);
+                return plant && plant.growth >= 50 ? { x, y, type: taskType, plant } : null;
+            },
+            chop: (x, y) => {
+                const resource = this.game.resources.find(r => r.x === x && r.y === y);
+                return resource && resource.type === 'tree' ? { x, y, type: taskType, resource } : null;
+            },
+            mine: (x, y) => {
+                const resource = this.game.resources.find(r => r.x === x && r.y === y);
+                return resource && resource.type === 'iron' ? { x, y, type: taskType, resource } : null;
             }
-        } else if (this.game.currentTaskType === 'harvest_plant') {
-            // For harvesting plants, look for mature plants
-            for (let y = startY; y <= endY; y++) {
-                for (let x = startX; x <= endX; x++) {
-                    const plant = this.game.plants.find(p => p.x === x && p.y === y);
-                    if (plant && plant.growth >= 50) {
-                        this.game.taskQueue.push({
-                            x: x,
-                            y: y,
-                            type: this.game.currentTaskType,
-                            plant: plant
-                        });
-                    }
-                }
-            }
-        } else {
-            // For chopping/mining, look for standing resources
-            for (let y = startY; y <= endY; y++) {
-                for (let x = startX; x <= endX; x++) {
-                    const resource = this.game.resources.find(r => r.x === x && r.y === y);
-                    if (resource) {
-                        if ((this.game.currentTaskType === 'chop' && resource.type === 'tree') ||
-                            (this.game.currentTaskType === 'mine' && resource.type === 'iron')) {
-                            this.game.taskQueue.push({
-                                x: x,
-                                y: y,
-                                type: this.game.currentTaskType,
-                                resource: resource
-                            });
-                        }
-                    }
-                }
+        };
+
+        const createTask = taskCreators[taskType];
+        if (createTask) {
+            this.iterateArea(bounds, (x, y) => {
+                const task = createTask(x, y);
+                if (task) this.game.taskQueue.push(task);
+            });
+        }
+    }
+
+    /**
+     * Get bounds of selected area
+     * @returns {Object} Bounds with startX, endX, startY, endY
+     */
+    getAreaBounds() {
+        const selection = this.game.areaSelection;
+        return {
+            startX: Math.min(selection.start.x, selection.end.x),
+            endX: Math.max(selection.start.x, selection.end.x),
+            startY: Math.min(selection.start.y, selection.end.y),
+            endY: Math.max(selection.start.y, selection.end.y)
+        };
+    }
+
+    /**
+     * Iterate over area with callback
+     * @param {Object} bounds - Area bounds
+     * @param {Function} callback - Function to call for each cell (x, y)
+     */
+    iterateArea(bounds, callback) {
+        for (let y = bounds.startY; y <= bounds.endY; y++) {
+            for (let x = bounds.startX; x <= bounds.endX; x++) {
+                callback(x, y);
             }
         }
     }
@@ -98,35 +104,60 @@ class TaskManager {
     buildInArea() {
         if (!this.game.areaSelection) return;
 
-        const startX = Math.min(this.game.areaSelection.start.x, this.game.areaSelection.end.x);
-        const endX = Math.max(this.game.areaSelection.start.x, this.game.areaSelection.end.x);
-        const startY = Math.min(this.game.areaSelection.start.y, this.game.areaSelection.end.y);
-        const endY = Math.max(this.game.areaSelection.start.y, this.game.areaSelection.end.y);
+        const bounds = this.getAreaBounds();
+        const buildMode = this.game.buildMode;
 
-        if (this.game.buildMode === 'wall') {
-            // Find a pawn with wood to build walls
-            const builderPawn = this.game.pawns.find(pawn => hasInventoryItem(pawn.inventory, 'wood', 1));
-            if (builderPawn) {
-                for (let y = startY; y <= endY; y++) {
-                    for (let x = startX; x <= endX; x++) {
-                        if (hasInventoryItem(builderPawn.inventory, 'wood', 1)) {
-                            this.game.buildings.push(new Building(x, y, 'wall'));
-                            removeFromInventory(builderPawn.inventory, 'wood', 1);
-                        }
-                    }
-                }
-                this.game.uiManager.updateUI();
-            }
-        } else if (this.game.buildMode === 'table') {
-            // Find a pawn with enough wood to build a table
-            const builderPawn = this.game.pawns.find(pawn => hasInventoryItem(pawn.inventory, 'wood', 5));
-            if (builderPawn) {
-                const center = getAreaCenter(this.game.areaSelection);
-                this.game.buildings.push(new Building(center.x, center.y, 'table'));
-                removeFromInventory(builderPawn.inventory, 'wood', 5);
-                this.game.uiManager.updateUI();
-            }
+        if (buildMode === 'wall') {
+            this.buildWalls(bounds);
+        } else if (buildMode === 'table') {
+            this.buildTable(bounds);
         }
+    }
+
+    /**
+     * Build walls in the specified area
+     * @param {Object} bounds - Area bounds
+     */
+    buildWalls(bounds) {
+        const builderPawn = this.findPawnWithResources('wood', 1);
+        if (!builderPawn) return;
+
+        let wallsBuilt = 0;
+        this.iterateArea(bounds, (x, y) => {
+            if (hasInventoryItem(builderPawn.inventory, 'wood', 1)) {
+                this.game.buildings.push(new Building(x, y, 'wall'));
+                removeFromInventory(builderPawn.inventory, 'wood', 1);
+                wallsBuilt++;
+            }
+        });
+
+        if (wallsBuilt > 0) {
+            this.game.uiManager.updateUI();
+        }
+    }
+
+    /**
+     * Build a table at the center of the area
+     * @param {Object} bounds - Area bounds
+     */
+    buildTable(bounds) {
+        const builderPawn = this.findPawnWithResources('wood', 5);
+        if (!builderPawn) return;
+
+        const center = getAreaCenter(this.game.areaSelection);
+        this.game.buildings.push(new Building(center.x, center.y, 'table'));
+        removeFromInventory(builderPawn.inventory, 'wood', 5);
+        this.game.uiManager.updateUI();
+    }
+
+    /**
+     * Find a pawn with sufficient resources
+     * @param {string} resourceType - Type of resource needed
+     * @param {number} amount - Amount required
+     * @returns {Pawn|null} Pawn with resources or null
+     */
+    findPawnWithResources(resourceType, amount) {
+        return this.game.pawns.find(pawn => hasInventoryItem(pawn.inventory, resourceType, amount));
     }
 
     /**
@@ -187,41 +218,53 @@ class TaskManager {
      * @returns {boolean} True if crafting was successful
      */
     craftItem(itemType) {
+        const recipe = this.getRecipe(itemType);
+        if (!recipe) return false;
+
+        const craftingPawn = this.findPawnWithRecipe(recipe);
+        if (!craftingPawn) return false;
+
+        this.consumeRecipeResources(craftingPawn, recipe);
+        addToInventory(craftingPawn.inventory, itemType, 1);
+        this.game.uiManager.updateUI();
+        return true;
+    }
+
+    /**
+     * Get crafting recipe for item type
+     * @param {string} itemType - Type of item
+     * @returns {Object|null} Recipe object or null
+     */
+    getRecipe(itemType) {
         const recipes = {
             food: { wood: 1 },
             tools: { iron: 2, wood: 1 }
         };
+        return recipes[itemType] || null;
+    }
 
-        const recipe = recipes[itemType];
-        if (!recipe) return false;
+    /**
+     * Find a pawn that has all resources for a recipe
+     * @param {Object} recipe - Recipe requirements
+     * @returns {Pawn|null} Pawn with resources or null
+     */
+    findPawnWithRecipe(recipe) {
+        return this.game.pawns.find(pawn =>
+            Object.entries(recipe).every(([resource, amount]) =>
+                hasInventoryItem(pawn.inventory, resource, amount)
+            )
+        );
+    }
 
-        // Find a pawn with enough resources to craft
-        let craftingPawn = null;
-        for (const pawn of this.game.pawns) {
-            let hasAllResources = true;
-            for (const [resource, amount] of Object.entries(recipe)) {
-                if (!hasInventoryItem(pawn.inventory, resource, amount)) {
-                    hasAllResources = false;
-                    break;
-                }
-            }
-            if (hasAllResources) {
-                craftingPawn = pawn;
-                break;
-            }
-        }
-
-        if (!craftingPawn) return false;
-
-        // Consume resources from pawn's inventory
-        for (const [resource, amount] of Object.entries(recipe)) {
-            removeFromInventory(craftingPawn.inventory, resource, amount);
-        }
-
-        // Add crafted item to pawn's inventory
-        addToInventory(craftingPawn.inventory, itemType, 1);
-        this.game.uiManager.updateUI();
-        return true;
+    /**
+     * Consume resources from pawn's inventory for recipe
+     * @param {Pawn} pawn - Pawn to consume from
+     * @param {Object} recipe - Recipe requirements
+     */
+    consumeRecipeResources(pawn, recipe) {
+        Object.entries(recipe).forEach(([resource, amount]) => {
+            removeFromInventory(pawn.inventory, resource, amount);
+        });
     }
 
     /**
