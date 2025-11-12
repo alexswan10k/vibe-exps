@@ -6,8 +6,20 @@ class Game {
      * @param {GameConfig} [config] - Optional game configuration
      */
     constructor(config = {}) {
+        console.log('Game constructor started');
+        
         this.canvas = document.getElementById('game-canvas');
+        if (!this.canvas) {
+            console.error('Canvas element not found!');
+            return;
+        }
+        
         this.ctx = this.canvas.getContext('2d');
+        if (!this.ctx) {
+            console.error('Canvas context not available!');
+            return;
+        }
+        
         this.tileSize = config.tileSize || 32;
         this.mapWidth = config.mapWidth || 50;
         this.mapHeight = config.mapHeight || 50;
@@ -59,19 +71,29 @@ class Game {
             }
         };
 
+        console.log('Starting game initialization...');
         this.init();
 
         // Initialize managers AFTER init so map exists
-        this.inputManager = new InputManager(this);
-        this.renderer = new Renderer(this);
-        this.uiManager = new UIManager(this);
-        this.taskManager = new TaskManager(this);
+        console.log('Initializing managers...');
+        try {
+            this.inputManager = new InputManager(this);
+            this.renderer = new Renderer(this);
+            this.uiManager = new UIManager(this);
+            this.taskManager = new TaskManager(this);
+            console.log('Managers initialized successfully');
+        } catch (error) {
+            console.error('Error initializing managers:', error);
+        }
 
         this.loadSpriteSheet();
         this.gameLoop();
+        
+        console.log('Game constructor completed');
     }
 
     loadSpriteSheet() {
+        console.log('Loading sprite sheet...');
         this.spriteSheet = new Image();
         this.spriteSheet.onload = () => {
             this.spriteSheetLoaded = true;
@@ -79,19 +101,45 @@ class Game {
         };
         this.spriteSheet.onerror = () => {
             console.error('Failed to load sprite sheet');
+            // Continue with fallback colors
         };
         this.spriteSheet.src = 'terrain.png';
     }
 
     init() {
+        console.log('Game init started');
+        
+        // Set canvas size
         this.canvas.width = window.innerWidth - 600;
         this.canvas.height = window.innerHeight;
+        console.log(`Canvas size: ${this.canvas.width}x${this.canvas.height}`);
+        
+        // Generate map and entities
+        console.log('Generating map...');
         this.generateMap();
+        console.log(`Map generated: ${this.mapWidth}x${this.mapHeight}`);
+        
+        console.log('Creating initial pawns...');
         this.createInitialPawns();
+        console.log(`Created ${this.pawns.length} pawns`);
+        
+        console.log('Generating resources...');
         this.generateResources();
+        console.log(`Generated ${this.resources.length} resources`);
+        
+        // Initialize UI
+        console.log('Initializing UI...');
+        try {
+            this.uiManager.updateUI();
+        } catch (error) {
+            console.error('Error updating UI:', error);
+        }
+        
+        console.log('Game init completed');
     }
 
     generateMap() {
+        console.log('Generating map data...');
         this.map = [];
         for (let y = 0; y < this.mapHeight; y++) {
             this.map[y] = [];
@@ -107,6 +155,7 @@ class Game {
                 }
             }
         }
+        
         // Generate plants on grass
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
@@ -117,6 +166,7 @@ class Game {
                 }
             }
         }
+        console.log(`Generated ${this.plants.length} plants`);
     }
 
     createInitialPawns() {
@@ -138,12 +188,6 @@ class Game {
             this.resources.push(new Resource(x, y, type));
         }
     }
-
-
-
-
-
-
 
     /**
      * Harvest resource at location
@@ -207,7 +251,7 @@ class Game {
         let nearestPawn = null;
         let minDistance = Infinity;
         for (const pawn of this.pawns) {
-            const distance = Math.sqrt((pawn.x - x) ** 2 + (pawn.y - y) ** 2);
+            const distance = calculateDistance(pawn.x, pawn.y, x, y);
             if (distance < minDistance) {
                 minDistance = distance;
                 nearestPawn = pawn;
@@ -241,22 +285,35 @@ class Game {
             plant.update();
         }
 
-        // Update tasks
+        // Clean up completed tasks
         this.tasks = this.tasks.filter(task => !task.completed);
+        
+        // Limit task queue size to prevent memory issues
+        if (this.taskQueue.length > 100) {
+            this.taskQueue = this.taskQueue.slice(-100);
+        }
     }
 
     /**
      * Render the game using the renderer
      */
     render() {
-        this.renderer.render();
+        try {
+            this.renderer.render();
+        } catch (error) {
+            console.error('Error rendering game:', error);
+        }
     }
 
     /**
      * Update UI using the UI manager
      */
     updateUI() {
-        this.uiManager.updateUI();
+        try {
+            this.uiManager.updateUI();
+        } catch (error) {
+            console.error('Error updating UI:', error);
+        }
     }
 
     /**
@@ -269,9 +326,15 @@ class Game {
     }
 
     gameLoop() {
-        this.update();
-        this.render();
-        this.updateUI();
-        requestAnimationFrame(() => this.gameLoop());
+        try {
+            this.update();
+            this.render();
+            this.updateUI();
+            requestAnimationFrame(() => this.gameLoop());
+        } catch (error) {
+            console.error('Error in game loop:', error);
+            // Try to continue the game loop even if there's an error
+            setTimeout(() => this.gameLoop(), 16); // ~60fps
+        }
     }
 }

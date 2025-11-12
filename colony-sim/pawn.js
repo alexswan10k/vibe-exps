@@ -18,6 +18,7 @@ class Pawn {
         this.inventory = []; // Array of {tag, quantity}
         this.maxWeight = 50; // Maximum weight a pawn can carry
         this.taskCooldown = 0; // Frames to wait before implicit hauling after task completion
+        this.lastTaskType = null; // Track last task type to prevent loops
     }
 
     /**
@@ -94,6 +95,7 @@ class Pawn {
      */
     assignTask(task) {
         this.task = task;
+        this.lastTaskType = task.type;
     }
 
     /**
@@ -176,20 +178,46 @@ class Pawn {
     }
 
     /**
-     * Perform hauling task
+     * Perform hauling task - FIXED to prevent infinite loops
      * @param {Game} game - Reference to the game instance
      */
     performHaulTask(game) {
-        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, true);
+        const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, false); // Don't add to inventory yet
+        
         if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
-            const { type, quantity } = pickupResult;
-            addToInventory(this.inventory, type, quantity);
-            // Drop the item at the pawn's current location since there's no centralized storage
-            game.dropResource(Math.floor(this.x), Math.floor(this.y), type, quantity);
-            removeFromInventory(this.inventory, type, quantity);
-            this.task.completed = true;
-            this.task = null;
-            this.taskCooldown = 60; // Prevent immediate implicit hauling
+            // Check if we're already carrying something
+            if (this.inventory.length === 0) {
+                // Pick up the resource
+                game.pickupDroppedResource(this.task.x, this.task.y, true); // Actually pick it up
+                addToInventory(this.inventory, pickupResult.type, pickupResult.quantity);
+                
+                // Find storage area and move there
+                if (game.storageArea) {
+                    const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
+                    const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
+                    const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
+                    const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
+
+                    // Pick a random spot in the storage area
+                    const dropX = storageStartX + Math.floor(Math.random() * (storageEndX - storageStartX + 1));
+                    const dropY = storageStartY + Math.floor(Math.random() * (storageEndY - storageStartY + 1));
+
+                    // Update task to move to storage location
+                    this.task.x = dropX;
+                    this.task.y = dropY;
+                    this.task.type = 'haul_to_storage';
+                } else {
+                    // No storage, just keep the item
+                    this.task.completed = true;
+                    this.task = null;
+                    this.taskCooldown = 60;
+                }
+            } else {
+                // Already carrying something, cancel this task
+                this.task.completed = true;
+                this.task = null;
+                this.taskCooldown = 60;
+            }
         } else {
             this.task.completed = true;
             this.task = null;
@@ -242,8 +270,6 @@ class Pawn {
             this.taskCooldown = 60; // Prevent immediate implicit hauling
         }
     }
-
-
 
     /**
      * Perform stone mining task
@@ -337,7 +363,16 @@ class Pawn {
         let minDistance = Infinity;
 
         for (const resource of game.droppedResources) {
-            if (this.canCarryItem(game, resource.type)) {
+            // Skip resources that are already in storage
+            const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
+            const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
+            const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
+            const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
+
+            const isInStorage = resource.x >= storageStartX && resource.x <= storageEndX &&
+                               resource.y >= storageStartY && resource.y <= storageEndY;
+
+            if (!isInStorage && this.canCarryItem(game, resource.type)) {
                 const distance = calculateDistance(this.x, this.y, resource.x, resource.y);
                 if (distance < minDistance) {
                     minDistance = distance;
@@ -347,25 +382,14 @@ class Pawn {
         }
 
         if (nearestResource) {
-            // Check if the resource is already in the storage area
-            const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
-            const storageEndX = Math.max(game.storageArea.start.x, game.storageArea.end.x);
-            const storageStartY = Math.min(game.storageArea.start.y, game.storageArea.end.y);
-            const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
-
-            const isInStorage = nearestResource.x >= storageStartX && nearestResource.x <= storageEndX &&
-                               nearestResource.y >= storageStartY && nearestResource.y <= storageEndY;
-
-            if (!isInStorage) {
-                // Create a hauling task to pick up the resource
-                return {
-                    x: nearestResource.x,
-                    y: nearestResource.y,
-                    type: 'haul_to_storage',
-                    resource: nearestResource,
-                    pickedUp: false
-                };
-            }
+            // Create a hauling task to pick up the resource
+            return {
+                x: nearestResource.x,
+                y: nearestResource.y,
+                type: 'haul_to_storage',
+                resource: nearestResource,
+                pickedUp: false
+            };
         }
 
         return null;

@@ -66,7 +66,16 @@ class TaskManager {
         if (createTask) {
             this.iterateArea(bounds, (x, y) => {
                 const task = createTask(x, y);
-                if (task) this.game.taskQueue.push(task);
+                if (task) {
+                    // Check if this task already exists in the queue
+                    const taskExists = this.game.taskQueue.some(existingTask => 
+                        existingTask.x === x && existingTask.y === y && existingTask.type === taskType
+                    );
+                    
+                    if (!taskExists) {
+                        this.game.taskQueue.push(task);
+                    }
+                }
             });
         }
     }
@@ -125,9 +134,13 @@ class TaskManager {
         let wallsBuilt = 0;
         this.iterateArea(bounds, (x, y) => {
             if (hasInventoryItem(builderPawn.inventory, 'wood', 1)) {
-                this.game.buildings.push(new Building(x, y, 'wall'));
-                removeFromInventory(builderPawn.inventory, 'wood', 1);
-                wallsBuilt++;
+                // Check if there's already a building at this location
+                const existingBuilding = this.game.buildings.find(b => b.x === x && b.y === y);
+                if (!existingBuilding) {
+                    this.game.buildings.push(new Building(x, y, 'wall'));
+                    removeFromInventory(builderPawn.inventory, 'wood', 1);
+                    wallsBuilt++;
+                }
             }
         });
 
@@ -145,9 +158,14 @@ class TaskManager {
         if (!builderPawn) return;
 
         const center = getAreaCenter(this.game.areaSelection);
-        this.game.buildings.push(new Building(center.x, center.y, 'table'));
-        removeFromInventory(builderPawn.inventory, 'wood', 5);
-        this.game.uiManager.updateUI();
+        
+        // Check if there's already a building at this location
+        const existingBuilding = this.game.buildings.find(b => b.x === center.x && b.y === center.y);
+        if (!existingBuilding) {
+            this.game.buildings.push(new Building(center.x, center.y, 'table'));
+            removeFromInventory(builderPawn.inventory, 'wood', 5);
+            this.game.uiManager.updateUI();
+        }
     }
 
     /**
@@ -188,8 +206,9 @@ class TaskManager {
         let minDistance = Infinity;
 
         for (const task of this.game.taskQueue) {
+            // Skip tasks that are too far for the pawn to handle
             const distance = calculateDistance(pawn.x, pawn.y, task.x, task.y);
-            if (distance < minDistance) {
+            if (distance < minDistance && distance < 20) { // Limit task distance to prevent pawns going too far
                 minDistance = distance;
                 nearestTask = task;
             }
@@ -305,7 +324,7 @@ class TaskManager {
      * @returns {string|null} Type of resource mined
      */
     mineStone(x, y) {
-        if (this.game.map[y][x] === 'stone') {
+        if (this.game.map && this.game.map[y] && this.game.map[y][x] === 'stone') {
             this.game.map[y][x] = 'dirt';
             return 'stone';
         }
@@ -320,6 +339,11 @@ class TaskManager {
      * @param {number} quantity - Quantity to drop
      */
     dropResource(x, y, type, quantity = 1) {
+        // Validate coordinates
+        if (!this.game.map || x < 0 || x >= this.game.mapWidth || y < 0 || y >= this.game.mapHeight) {
+            return;
+        }
+
         // Try to stack with existing resources at this location
         const existingStack = this.game.droppedResources.find(r => r.x === x && r.y === y && r.canStack(type, quantity));
 

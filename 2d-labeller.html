@@ -91,6 +91,34 @@ const App = () => {
     const [isAddingBox, setIsAddingBox] = React.useState(false);
     const [labelInput, setLabelInput] = React.useState('');
     const jsonFileRef = React.useRef(null);
+    const loadClassesFromStorage = () => {
+        try {
+            const stored = localStorage.getItem('imageLabellerClasses');
+            if (stored) {
+                return JSON.parse(stored);
+            }
+        } catch (e) {
+            console.warn('Failed to load classes from storage:', e);
+        }
+        return [{id: 0, name: 'object'}];
+    };
+
+    const saveClassesToStorage = (classes) => {
+        try {
+            localStorage.setItem('imageLabellerClasses', JSON.stringify(classes));
+        } catch (e) {
+            console.warn('Failed to save classes to storage:', e);
+        }
+    };
+
+    const [classes, setClasses] = React.useState(loadClassesFromStorage());
+    const [nextClassId, setNextClassId] = React.useState(() => {
+        const stored = loadClassesFromStorage();
+        return Math.max(...stored.map(c => c.id), 0) + 1;
+    });
+    const [classesCollapsed, setClassesCollapsed] = React.useState(true);
+    const [editingClassId, setEditingClassId] = React.useState(null);
+    const [editingClassName, setEditingClassName] = React.useState('');
 
     const validateImageFile = (file) => {
         const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'];
@@ -406,7 +434,15 @@ const App = () => {
 
     const handleMouseUp = () => {
         if (isDrawing && currentBox && currentBox.width > 0 && currentBox.height > 0) {
-            const label = prompt('Enter label for the box:', `box-${boundingBoxes.length + 1}`) || `box-${boundingBoxes.length + 1}`;
+            let label = classes[0].name; // Default to first class
+            if (classes.length > 1) {
+                // If multiple classes, prompt user to select
+                const classNames = classes.map(c => c.name);
+                const selectedIndex = prompt(`Select class for the new box:\n${classNames.map((name, i) => `${i}: ${name}`).join('\n')}`, '0');
+                if (selectedIndex && !isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < classNames.length) {
+                    label = classNames[selectedIndex];
+                }
+            }
             setBoundingBoxes([...boundingBoxes, {...currentBox, label}]);
             setSelectedBoxIndex(boundingBoxes.length);
             setIsAddingBox(false);
@@ -459,6 +495,10 @@ const App = () => {
             setLabelInput('');
         }
     }, [selectedBoxIndex, boundingBoxes]);
+
+    React.useEffect(() => {
+        saveClassesToStorage(classes);
+    }, [classes]);
 
     const generateJSON = () => {
         return boundingBoxes.map(box => ({
@@ -525,6 +565,191 @@ const App = () => {
         reader.readAsText(file);
     };
 
+    const addClass = () => {
+        const name = prompt('Enter class name:');
+        if (name && name.trim()) {
+            setClasses([...classes, {id: nextClassId, name: name.trim()}]);
+            setNextClassId(nextClassId + 1);
+        }
+    };
+
+    const deleteClass = (id) => {
+        if (classes.length <= 1) {
+            alert('Must have at least one class');
+            return;
+        }
+        if (!confirm('Are you sure you want to delete this class? All bounding boxes using this class will be reassigned to the first class.')) {
+            return;
+        }
+        setClasses(classes.filter(c => c.id !== id));
+        // Update bounding boxes that used this class
+        setBoundingBoxes(boundingBoxes.map(box => {
+            const classObj = classes.find(c => c.name === box.label);
+            if (classObj && classObj.id === id) {
+                return {...box, label: classes[0].name};
+            }
+            return box;
+        }));
+    };
+
+    const exportClasses = () => {
+        const data = JSON.stringify(classes, null, 2);
+        const blob = new Blob([data], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'classes.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const importClasses = (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (Array.isArray(data) && data.every(c => c.id !== undefined && c.name)) {
+                    setClasses(data);
+                    const maxId = Math.max(...data.map(c => c.id), 0);
+                    setNextClassId(maxId + 1);
+                } else {
+                    alert('Invalid classes file format');
+                }
+            } catch (e) {
+                alert('Failed to parse classes file: ' + e.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    const renameClass = (id, newName) => {
+        if (!newName || !newName.trim()) return;
+        const trimmedName = newName.trim();
+        if (classes.some(c => c.name === trimmedName && c.id !== id)) {
+            alert('Class name already exists');
+            return;
+        }
+        setClasses(classes.map(c => 
+            c.id === id ? {...c, name: trimmedName} : c
+        ));
+        // Update bounding boxes with the new name
+        setBoundingBoxes(boundingBoxes.map(box => 
+            box.label === classes.find(c => c.id === id).name ? {...box, label: trimmedName} : box
+        ));
+    };
+
+    const moveClass = (fromIndex, toIndex) => {
+        const newClasses = [...classes];
+        const [moved] = newClasses.splice(fromIndex, 1);
+        newClasses.splice(toIndex, 0, moved);
+        // Reassign IDs based on new order
+        const reorderedClasses = newClasses.map((c, index) => ({...c, id: index}));
+        setClasses(reorderedClasses);
+        // Update nextClassId to be one more than the highest ID
+        setNextClassId(reorderedClasses.length);
+    };
+
+    const startEditingClass = (id, currentName) => {
+        setEditingClassId(id);
+        setEditingClassName(currentName);
+    };
+
+    const saveEditingClass = () => {
+        if (editingClassId !== null) {
+            renameClass(editingClassId, editingClassName);
+            setEditingClassId(null);
+            setEditingClassName('');
+        }
+    };
+
+    const cancelEditingClass = () => {
+        setEditingClassId(null);
+        setEditingClassName('');
+    };
+
+    const getClassId = (label) => {
+        const classObj = classes.find(c => c.name === label);
+        return classObj ? classObj.id : 0;
+    };
+
+    const generateYOLO = () => {
+        return boundingBoxes.map(box => {
+            const classId = getClassId(box.label);
+            const x_center = (box.x + box.width / 2) / image.width;
+            const y_center = (box.y + box.height / 2) / image.height;
+            const width = box.width / image.width;
+            const height = box.height / image.height;
+            return `${classId} ${x_center.toFixed(6)} ${y_center.toFixed(6)} ${width.toFixed(6)} ${height.toFixed(6)}`;
+        }).join('\n');
+    };
+
+    const generateCOCO = () => {
+        const annotations = boundingBoxes.map((box, index) => ({
+            id: index + 1,
+            image_id: 1,
+            category_id: getClassId(box.label) + 1, // COCO uses 1-based indexing
+            bbox: [box.x, box.y, box.width, box.height],
+            area: box.width * box.height,
+            iscrowd: 0
+        }));
+
+        const categories = classes.map(c => ({
+            id: c.id + 1,
+            name: c.name,
+            supercategory: 'object'
+        }));
+
+        return {
+            images: [{
+                id: 1,
+                width: image.width,
+                height: image.height,
+                file_name: 'image.jpg' // Placeholder
+            }],
+            annotations: annotations,
+            categories: categories
+        };
+    };
+
+    const generateCSV = () => {
+        // For classification, assume one dominant class per image
+        const dominantClass = boundingBoxes.length > 0 ? boundingBoxes[0].label : classes[0].name;
+        return `image_path,class\nimage.jpg,${dominantClass}`;
+    };
+
+    const downloadYOLO = () => {
+        const data = generateYOLO();
+        const blob = new Blob([data], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'labels.txt';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const downloadCOCO = () => {
+        const data = generateCOCO();
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'annotations.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const downloadCSV = () => {
+        const data = generateCSV();
+        const blob = new Blob([data], {type: 'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'labels.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
     return React.createElement('div', {className: 'container'}, 
         React.createElement('div', {className: 'image-panel', onDrop: handleDrop, onDragOver: handleDragOver}, 
             image ? React.createElement('canvas', {
@@ -548,7 +773,62 @@ const App = () => {
                 })
             )
         ),
-        React.createElement('div', {className: 'label-panel'}, 
+        React.createElement('div', {className: 'label-panel'},
+            React.createElement('h2', {style: {cursor: 'pointer', userSelect: 'none'}, onClick: () => setClassesCollapsed(!classesCollapsed)}, 
+                `Classes ${classesCollapsed ? '▶' : '▼'} (${classes.length})`
+            ),
+            !classesCollapsed ? React.createElement('div', null,
+                React.createElement('button', {onClick: addClass}, 'Add Class'),
+                React.createElement('button', {onClick: exportClasses}, 'Export Classes'),
+                React.createElement('button', {onClick: () => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = (e) => { if (e.target.files.length > 0) importClasses(e.target.files[0]); };
+                    input.click();
+                }}, 'Import Classes'),
+                React.createElement('ul', {className: 'label-list'},
+                    classes.map((c, index) =>
+                        React.createElement('li', {
+                            className: 'label-item',
+                            key: c.id,
+                            style: {display: 'flex', alignItems: 'center', justifyContent: 'space-between'}
+                        }, 
+                            editingClassId === c.id ? 
+                                React.createElement('input', {
+                                    type: 'text',
+                                    value: editingClassName,
+                                    onChange: (e) => setEditingClassName(e.target.value),
+                                    onBlur: saveEditingClass,
+                                    onKeyDown: (e) => {
+                                        if (e.key === 'Enter') saveEditingClass();
+                                        if (e.key === 'Escape') cancelEditingClass();
+                                    },
+                                    autoFocus: true,
+                                    style: {flex: 1, marginRight: '5px'}
+                                }) :
+                                React.createElement('span', {
+                                    onDoubleClick: () => startEditingClass(c.id, c.name),
+                                    style: {flex: 1, cursor: 'pointer'}
+                                }, `${c.id}: ${c.name}`),
+                            React.createElement('div', null,
+                                index > 0 ? React.createElement('button', {
+                                    onClick: () => moveClass(index, index - 1),
+                                    style: {marginRight: '2px', fontSize: '10px', padding: '2px 4px'}
+                                }, '↑') : null,
+                                index < classes.length - 1 ? React.createElement('button', {
+                                    onClick: () => moveClass(index, index + 1),
+                                    style: {marginRight: '2px', fontSize: '10px', padding: '2px 4px'}
+                                }, '↓') : null,
+                                React.createElement('button', {
+                                    onClick: () => deleteClass(c.id),
+                                    style: {fontSize: '10px', padding: '2px 4px', backgroundColor: '#ff6b6b', color: 'white', border: 'none', borderRadius: '2px'}
+                                }, '×')
+                            )
+                        )
+                    )
+                )
+            ) : null,
             React.createElement('h2', null, 'Labels'),
             React.createElement('button', {onClick: () => {
                 if (isAddingBox) {
@@ -559,16 +839,15 @@ const App = () => {
                 }
             }}, isAddingBox ? 'Cancel Add' : 'Add Box'),
             selectedBoxIndex !== null ? React.createElement('div', null,
-                React.createElement('input', {
-                    type: 'text',
+                React.createElement('select', {
                     value: labelInput,
-                    onChange: (e) => setLabelInput(e.target.value),
-                    onBlur: () => {
+                    onChange: (e) => {
+                        setLabelInput(e.target.value);
                         const newBoxes = [...boundingBoxes];
-                        newBoxes[selectedBoxIndex].label = labelInput;
+                        newBoxes[selectedBoxIndex].label = e.target.value;
                         setBoundingBoxes(newBoxes);
                     }
-                }),
+                }, classes.map(c => React.createElement('option', {key: c.id, value: c.name}, c.name))),
                 React.createElement('button', {
                     onClick: () => {
                         setBoundingBoxes(boundingBoxes.filter((_, i) => i !== selectedBoxIndex));
@@ -606,7 +885,10 @@ const App = () => {
                 React.createElement('button', {onClick: () => jsonFileRef.current.click()}, 'Load JSON'),
                 boundingBoxes.length > 0 ? React.createElement('div', {style: {marginTop: '10px'}},
                     React.createElement('button', {onClick: copyToClipboard}, 'Copy JSON'),
-                    React.createElement('button', {onClick: downloadFile}, 'Download JSON')
+                    React.createElement('button', {onClick: downloadFile}, 'Download JSON'),
+                    React.createElement('button', {onClick: downloadYOLO}, 'Download YOLO'),
+                    React.createElement('button', {onClick: downloadCOCO}, 'Download COCO'),
+                    React.createElement('button', {onClick: downloadCSV}, 'Download CSV')
                 ) : null
             ) : null
         )
