@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Labelling Tool</title>
+    <style>
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f5f5f5;
+    color: #333;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.image-panel {
+    flex: 1;
+    background-color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid #ddd;
+}
+
+.image-panel h2 {
+    color: #999;
+}
+
+.label-panel {
+    width: 300px;
+    background-color: #fafafa;
+    padding: 20px;
+    box-sizing: border-box;
+    border-left: 1px solid #ddd;
+}
+
+.label-panel h2 {
+    margin-top: 0;
+    font-size: 18px;
+    color: #555;
+}
+
+.label-list {
+    list-style: none;
+    padding: 0;
+}
+
+.label-item {
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.label-item:hover {
+    background-color: #f0f0f0;
+}
+
+.label-item.selected {
+    background-color: #ddd;
+}
+    </style>
+    <!-- React from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/javascript">
+const App = () => {
+    const [image, setImage] = React.useState(null);
+    const [boundingBoxes, setBoundingBoxes] = React.useState([]);
+    const canvasRef = React.useRef(null);
+    const [isDrawing, setIsDrawing] = React.useState(false);
+    const [startPos, setStartPos] = React.useState({x: 0, y: 0});
+    const [currentBox, setCurrentBox] = React.useState(null);
+    const [dragging, setDragging] = React.useState(false);
+    const [resizing, setResizing] = React.useState(false);
+    const [resizeHandle, setResizeHandle] = React.useState(null);
+    const [selectedBoxIndex, setSelectedBoxIndex] = React.useState(null);
+    const [isAddingBox, setIsAddingBox] = React.useState(false);
+    const [labelInput, setLabelInput] = React.useState('');
+    const jsonFileRef = React.useRef(null);
+
+    const validateImageFile = (file) => {
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/bmp', 'image/webp'];
+        return validTypes.includes(file.type);
+    };
+
+    const loadImage = (file) => {
+        if (!validateImageFile(file)) {
+            alert('Please select a valid image file.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                setImage(img);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const drawImageOnCanvas = (img) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const maxWidth = canvas.width;
+        const maxHeight = canvas.height;
+        const imgAspect = img.width / img.height;
+        const canvasAspect = maxWidth / maxHeight;
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (imgAspect > canvasAspect) {
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / imgAspect;
+            offsetX = 0;
+            offsetY = (maxHeight - drawHeight) / 2;
+        } else {
+            drawHeight = maxHeight;
+            drawWidth = maxHeight * imgAspect;
+            offsetX = (maxWidth - drawWidth) / 2;
+            offsetY = 0;
+        }
+
+        ctx.clearRect(0, 0, maxWidth, maxHeight);
+        ctx.drawImage(img, offsetX, offsetY, drawWidth, drawHeight);
+        drawBoundingBoxes(ctx, offsetX, offsetY, drawWidth, drawHeight, img.width, img.height);
+    };
+
+    const drawBoundingBoxes = (ctx, offsetX, offsetY, drawWidth, drawHeight, imgWidth, imgHeight) => {
+        boundingBoxes.forEach((box, index) => {
+            const scaleX = drawWidth / imgWidth;
+            const scaleY = drawHeight / imgHeight;
+            const x = offsetX + box.x * scaleX;
+            const y = offsetY + box.y * scaleY;
+            const width = box.width * scaleX;
+            const height = box.height * scaleY;
+
+            ctx.strokeStyle = index === selectedBoxIndex ? '#ff0000' : '#00ff00';
+            ctx.lineWidth = index === selectedBoxIndex ? 3 : 2;
+            ctx.strokeRect(x, y, width, height);
+
+            if (index === selectedBoxIndex) {
+                // Draw resize handles
+                const handleSize = 6;
+                ctx.fillStyle = '#ff0000';
+                // Corners
+                ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(x + width - handleSize/2, y - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(x - handleSize/2, y + height - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(x + width - handleSize/2, y + height - handleSize/2, handleSize, handleSize);
+                // Midpoints
+                ctx.fillRect(x + width/2 - handleSize/2, y - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(x + width/2 - handleSize/2, y + height - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(x - handleSize/2, y + height/2 - handleSize/2, handleSize, handleSize);
+                ctx.fillRect(x + width - handleSize/2, y + height/2 - handleSize/2, handleSize, handleSize);
+            }
+
+            // Draw label
+            ctx.fillStyle = '#00ff00';
+            ctx.font = '12px Arial';
+            const labelWidth = ctx.measureText(box.label).width;
+            ctx.fillRect(x, y - 20, labelWidth + 4, 16);
+            ctx.fillStyle = '#000';
+            ctx.fillText(box.label, x + 2, y - 8);
+        });
+    };
+
+    const getMousePos = (canvas, e) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+        };
+    };
+
+    const getImageCoords = (canvasX, canvasY, offsetX, offsetY, drawWidth, drawHeight, imgWidth, imgHeight) => {
+        const scaleX = imgWidth / drawWidth;
+        const scaleY = imgHeight / drawHeight;
+        return {
+            x: (canvasX - offsetX) * scaleX,
+            y: (canvasY - offsetY) * scaleY
+        };
+    };
+
+    const handleMouseDown = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas || !image) return;
+        const mousePos = getMousePos(canvas, e);
+        const ctx = canvas.getContext('2d');
+        const maxWidth = canvas.width;
+        const maxHeight = canvas.height;
+        const imgAspect = image.width / image.height;
+        const canvasAspect = maxWidth / maxHeight;
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (imgAspect > canvasAspect) {
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / imgAspect;
+            offsetX = 0;
+            offsetY = (maxHeight - drawHeight) / 2;
+        } else {
+            drawHeight = maxHeight;
+            drawWidth = maxHeight * imgAspect;
+            offsetX = (maxWidth - drawWidth) / 2;
+            offsetY = 0;
+        }
+
+        const imgCoords = getImageCoords(mousePos.x, mousePos.y, offsetX, offsetY, drawWidth, drawHeight, image.width, image.height);
+
+        // Check if clicking on a resize handle
+        if (selectedBoxIndex !== null) {
+            const box = boundingBoxes[selectedBoxIndex];
+            const scaleX = drawWidth / image.width;
+            const scaleY = drawHeight / image.height;
+            const x = offsetX + box.x * scaleX;
+            const y = offsetY + box.y * scaleY;
+            const width = box.width * scaleX;
+            const height = box.height * scaleY;
+            const handleSize = 6;
+
+            if (Math.abs(mousePos.x - x) < handleSize && Math.abs(mousePos.y - y) < handleSize) {
+                setResizing(true);
+                setResizeHandle('nw');
+                return;
+            }
+            if (Math.abs(mousePos.x - (x + width)) < handleSize && Math.abs(mousePos.y - y) < handleSize) {
+                setResizing(true);
+                setResizeHandle('ne');
+                return;
+            }
+            if (Math.abs(mousePos.x - x) < handleSize && Math.abs(mousePos.y - (y + height)) < handleSize) {
+                setResizing(true);
+                setResizeHandle('sw');
+                return;
+            }
+            if (Math.abs(mousePos.x - (x + width)) < handleSize && Math.abs(mousePos.y - (y + height)) < handleSize) {
+                setResizing(true);
+                setResizeHandle('se');
+                return;
+            }
+            // Midpoints
+            if (Math.abs(mousePos.x - (x + width/2)) < handleSize && Math.abs(mousePos.y - y) < handleSize) {
+                setResizing(true);
+                setResizeHandle('n');
+                return;
+            }
+            if (Math.abs(mousePos.x - (x + width/2)) < handleSize && Math.abs(mousePos.y - (y + height)) < handleSize) {
+                setResizing(true);
+                setResizeHandle('s');
+                return;
+            }
+            if (Math.abs(mousePos.x - x) < handleSize && Math.abs(mousePos.y - (y + height/2)) < handleSize) {
+                setResizing(true);
+                setResizeHandle('w');
+                return;
+            }
+            if (Math.abs(mousePos.x - (x + width)) < handleSize && Math.abs(mousePos.y - (y + height/2)) < handleSize) {
+                setResizing(true);
+                setResizeHandle('e');
+                return;
+            }
+        }
+
+        // Check if clicking inside a box
+        for (let i = boundingBoxes.length - 1; i >= 0; i--) {
+            const box = boundingBoxes[i];
+            if (imgCoords.x >= box.x && imgCoords.x <= box.x + box.width &&
+                imgCoords.y >= box.y && imgCoords.y <= box.y + box.height) {
+                setSelectedBoxIndex(i);
+                setDragging(true);
+                setStartPos(imgCoords);
+                return;
+            }
+        }
+
+        // Start creating new box if adding
+        if (isAddingBox) {
+            setSelectedBoxIndex(null);
+            setIsDrawing(true);
+            setStartPos(imgCoords);
+            setCurrentBox({x: imgCoords.x, y: imgCoords.y, width: 0, height: 0, label: ''});
+        }
+    };
+
+    const handleMouseMove = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas || !image) return;
+        const mousePos = getMousePos(canvas, e);
+        const ctx = canvas.getContext('2d');
+        const maxWidth = canvas.width;
+        const maxHeight = canvas.height;
+        const imgAspect = image.width / image.height;
+        const canvasAspect = maxWidth / maxHeight;
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (imgAspect > canvasAspect) {
+            drawWidth = maxWidth;
+            drawHeight = maxWidth / imgAspect;
+            offsetX = 0;
+            offsetY = (maxHeight - drawHeight) / 2;
+        } else {
+            drawHeight = maxHeight;
+            drawWidth = maxHeight * imgAspect;
+            offsetX = (maxWidth - drawWidth) / 2;
+            offsetY = 0;
+        }
+
+        const imgCoords = getImageCoords(mousePos.x, mousePos.y, offsetX, offsetY, drawWidth, drawHeight, image.width, image.height);
+
+        if (resizing && selectedBoxIndex !== null) {
+            const box = boundingBoxes[selectedBoxIndex];
+            let newBox = {...box};
+
+            switch (resizeHandle) {
+                case 'nw':
+                    newBox.width = box.x + box.width - imgCoords.x;
+                    newBox.height = box.y + box.height - imgCoords.y;
+                    newBox.x = imgCoords.x;
+                    newBox.y = imgCoords.y;
+                    break;
+                case 'ne':
+                    newBox.width = imgCoords.x - box.x;
+                    newBox.height = box.y + box.height - imgCoords.y;
+                    newBox.y = imgCoords.y;
+                    break;
+                case 'sw':
+                    newBox.width = box.x + box.width - imgCoords.x;
+                    newBox.height = imgCoords.y - box.y;
+                    newBox.x = imgCoords.x;
+                    break;
+                case 'se':
+                    newBox.width = imgCoords.x - box.x;
+                    newBox.height = imgCoords.y - box.y;
+                    break;
+                case 'n':
+                    newBox.height = box.y + box.height - imgCoords.y;
+                    newBox.y = imgCoords.y;
+                    break;
+                case 's':
+                    newBox.height = imgCoords.y - box.y;
+                    break;
+                case 'w':
+                    newBox.width = box.x + box.width - imgCoords.x;
+                    newBox.x = imgCoords.x;
+                    break;
+                case 'e':
+                    newBox.width = imgCoords.x - box.x;
+                    break;
+            }
+
+            if (newBox.width > 0 && newBox.height > 0) {
+                const newBoxes = [...boundingBoxes];
+                newBoxes[selectedBoxIndex] = newBox;
+                setBoundingBoxes(newBoxes);
+            }
+        } else if (dragging && selectedBoxIndex !== null) {
+            const deltaX = imgCoords.x - startPos.x;
+            const deltaY = imgCoords.y - startPos.y;
+            const box = boundingBoxes[selectedBoxIndex];
+            const newBox = {
+                ...box,
+                x: box.x + deltaX,
+                y: box.y + deltaY
+            };
+            const newBoxes = [...boundingBoxes];
+            newBoxes[selectedBoxIndex] = newBox;
+            setBoundingBoxes(newBoxes);
+            setStartPos(imgCoords);
+        } else if (isDrawing && currentBox) {
+            const newBox = {
+                ...currentBox,
+                width: Math.abs(imgCoords.x - startPos.x),
+                height: Math.abs(imgCoords.y - startPos.y),
+                x: Math.min(imgCoords.x, startPos.x),
+                y: Math.min(imgCoords.y, startPos.y)
+            };
+            setCurrentBox(newBox);
+            // Redraw canvas with current box
+            drawImageOnCanvas(image);
+            // Draw current box being created
+            const scaleX = drawWidth / image.width;
+            const scaleY = drawHeight / image.height;
+            const x = offsetX + newBox.x * scaleX;
+            const y = offsetY + newBox.y * scaleY;
+            const width = newBox.width * scaleX;
+            const height = newBox.height * scaleY;
+            ctx.strokeStyle = '#0000ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, width, height);
+        }
+    };
+
+    const handleMouseUp = () => {
+        if (isDrawing && currentBox && currentBox.width > 0 && currentBox.height > 0) {
+            const label = prompt('Enter label for the box:', `box-${boundingBoxes.length + 1}`) || `box-${boundingBoxes.length + 1}`;
+            setBoundingBoxes([...boundingBoxes, {...currentBox, label}]);
+            setSelectedBoxIndex(boundingBoxes.length);
+            setIsAddingBox(false);
+        }
+        setIsDrawing(false);
+        setCurrentBox(null);
+        setDragging(false);
+        setResizing(false);
+        setResizeHandle(null);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            loadImage(files[0]);
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+    };
+
+    const handlePaste = (e) => {
+        const items = e.clipboardData.items;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const file = items[i].getAsFile();
+                loadImage(file);
+                break;
+            }
+        }
+    };
+
+    React.useEffect(() => {
+        document.addEventListener('paste', handlePaste);
+        return () => {
+            document.removeEventListener('paste', handlePaste);
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (image) drawImageOnCanvas(image);
+    }, [boundingBoxes, image, selectedBoxIndex]);
+
+    React.useEffect(() => {
+        if (selectedBoxIndex !== null) {
+            setLabelInput(boundingBoxes[selectedBoxIndex].label);
+        } else {
+            setLabelInput('');
+        }
+    }, [selectedBoxIndex, boundingBoxes]);
+
+    const generateJSON = () => {
+        return boundingBoxes.map(box => ({
+            label: box.label,
+            x1: box.x / image.width,
+            x2: (box.x + box.width) / image.width,
+            y1: box.y / image.height,
+            y2: (box.y + box.height) / image.height
+        }));
+    };
+
+    const copyToClipboard = () => {
+        const data = generateJSON();
+        navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => alert('Copied to clipboard!'));
+    };
+
+    const downloadFile = () => {
+        const data = generateJSON();
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'labels.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const pasteJSON = async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            const data = JSON.parse(text);
+            loadBoxes(data);
+        } catch (e) {
+            alert('Failed to paste JSON: ' + e.message);
+        }
+    };
+
+    const loadBoxes = (data) => {
+        if (!image) {
+            alert('Please load an image first.');
+            return;
+        }
+        const boxes = data.map(item => ({
+            x: item.x1 * image.width,
+            y: item.y1 * image.height,
+            width: (item.x2 - item.x1) * image.width,
+            height: (item.y2 - item.y1) * image.height,
+            label: item.label
+        }));
+        setBoundingBoxes(boxes);
+        setSelectedBoxIndex(null);
+    };
+
+    const loadJSONFile = (file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                loadBoxes(data);
+            } catch (e) {
+                alert('Invalid JSON file: ' + e.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    return React.createElement('div', {className: 'container'}, 
+        React.createElement('div', {className: 'image-panel', onDrop: handleDrop, onDragOver: handleDragOver}, 
+            image ? React.createElement('canvas', {
+                ref: canvasRef,
+                width: '800',
+                height: '600',
+                style: {border: '1px solid #ddd', cursor: isAddingBox ? 'crosshair' : 'default'},
+                onMouseDown: handleMouseDown,
+                onMouseMove: handleMouseMove,
+                onMouseUp: handleMouseUp
+            }) : React.createElement('div', null,
+                React.createElement('h2', null, 'Image Display Area - Drag and drop an image here or paste from clipboard'),
+                React.createElement('input', {
+                    type: 'file',
+                    accept: 'image/*',
+                    onChange: (e) => {
+                        if (e.target.files.length > 0) {
+                            loadImage(e.target.files[0]);
+                        }
+                    }
+                })
+            )
+        ),
+        React.createElement('div', {className: 'label-panel'}, 
+            React.createElement('h2', null, 'Labels'),
+            React.createElement('button', {onClick: () => {
+                if (isAddingBox) {
+                    setIsAddingBox(false);
+                } else {
+                    setSelectedBoxIndex(null);
+                    setIsAddingBox(true);
+                }
+            }}, isAddingBox ? 'Cancel Add' : 'Add Box'),
+            selectedBoxIndex !== null ? React.createElement('div', null,
+                React.createElement('input', {
+                    type: 'text',
+                    value: labelInput,
+                    onChange: (e) => setLabelInput(e.target.value),
+                    onBlur: () => {
+                        const newBoxes = [...boundingBoxes];
+                        newBoxes[selectedBoxIndex].label = labelInput;
+                        setBoundingBoxes(newBoxes);
+                    }
+                }),
+                React.createElement('button', {
+                    onClick: () => {
+                        setBoundingBoxes(boundingBoxes.filter((_, i) => i !== selectedBoxIndex));
+                        setSelectedBoxIndex(null);
+                        setLabelInput('');
+                    }
+                }, 'Delete')
+            ) : null,
+            React.createElement('ul', {className: 'label-list'},
+                boundingBoxes.map((box, index) =>
+                    React.createElement('li', {
+                        className: index === selectedBoxIndex ? 'label-item selected' : 'label-item',
+                        key: index,
+                        onClick: () => setSelectedBoxIndex(index)
+                    }, box.label)
+                )
+            ),
+            selectedBoxIndex !== null && image ? React.createElement('div', {style: {marginTop: '20px', fontSize: '12px', color: '#555'}}, (() => {
+                const box = boundingBoxes[selectedBoxIndex];
+                const x1 = (box.x / image.width).toFixed(3);
+                const x2 = ((box.x + box.width) / image.width).toFixed(3);
+                const y1 = (box.y / image.height).toFixed(3);
+                const y2 = ((box.y + box.height) / image.height).toFixed(3);
+                return `x1: ${x1}, x2: ${x2}, y1: ${y1}, y2: ${y2}`;
+            })()) : null,
+            image ? React.createElement('div', {style: {marginTop: '20px'}},
+                React.createElement('button', {onClick: pasteJSON}, 'Paste JSON'),
+                React.createElement('input', {
+                    type: 'file',
+                    accept: '.json',
+                    style: {display: 'none'},
+                    ref: jsonFileRef,
+                    onChange: (e) => { if (e.target.files.length > 0) loadJSONFile(e.target.files[0]); }
+                }),
+                React.createElement('button', {onClick: () => jsonFileRef.current.click()}, 'Load JSON'),
+                boundingBoxes.length > 0 ? React.createElement('div', {style: {marginTop: '10px'}},
+                    React.createElement('button', {onClick: copyToClipboard}, 'Copy JSON'),
+                    React.createElement('button', {onClick: downloadFile}, 'Download JSON')
+                ) : null
+            ) : null
+        )
+    );
+};
+
+ReactDOM.render(React.createElement(App), document.getElementById('root'));
+    </script>
+</body>
+</html>
