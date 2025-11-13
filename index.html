@@ -72,7 +72,7 @@
         .project-card:nth-child(18) { animation-delay: 1.8s; }
         .project-card:nth-child(19) { animation-delay: 1.9s; }
         .project-card:nth-child(20) { animation-delay: 2.0s; }
-        .project-card:nth-child(21) { animation-delay: 2.1s; }
+        /* don't bother with anything over 20 because it isn't visible and leads to weird artifacts anyway */
         .project-card:hover {
             transform: translateY(-8px) scale(1.02);
             box-shadow: 0 15px 30px rgba(0,0,0,0.2);
@@ -452,6 +452,11 @@
             <h3>💰 Personal Expense Survival Calculator</h3>
             <p>Calculate how long your savings will last with inflation and investment risk. Features month-by-month analytics, risk scenarios, and comprehensive financial projections.</p>
         </a>
+
+        <a href="city-builder/index.html" class="project-card" data-category="games">
+            <h3>🏙️ City Builder</h3>
+            <p>A 2D city management game where you place buildings, manage resources, and watch your city grow.</p>
+        </a>
     </div>
 
 
@@ -502,7 +507,8 @@
             "human-authorship-verifier": 5651,
             "human-authorship-verifier/corporate.html": 5651,
             "webgpu-feature-detector.html": 1060,
-            "personal-expense-survival-calculator": 3376
+            "personal-expense-survival-calculator": 3376,
+            "city-builder": 0
         };
 
         function getComplexityLevel(loc) {
