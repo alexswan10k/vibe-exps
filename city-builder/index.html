@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>City Builder Game</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-header">
+            <h1>City Builder</h1>
+        </div>
+        
+        <div id="game-content">
+            <div id="game-canvas-container">
+                <div id="pixi-canvas"></div>
+            </div>
+            
+            <div id="game-ui">
+                <div id="control-panel">
+                    <h2>Controls</h2>
+                    <div id="building-selection">
+                        <h3>Buildings</h3>
+                        <div class="building-buttons">
+                            <button class="building-btn" data-building="residential">Residential</button>
+                            <button class="building-btn" data-building="commercial">Commercial</button>
+                            <button class="building-btn" data-building="industrial">Industrial</button>
+                            <button class="building-btn" data-building="power">Power Plant</button>
+                            <button class="building-btn" data-building="water">Water Plant</button>
+                        </div>
+                    </div>
+                    
+                    <div id="game-controls">
+                        <h3>Game Controls</h3>
+                        <button id="pause-btn">Pause</button>
+                        <button id="speed-btn">Speed: 1x</button>
+                        <button id="save-btn">Save</button>
+                        <button id="load-btn">Load</button>
+                    </div>
+                </div>
+                
+                <div id="info-panel">
+                    <h2>City Information</h2>
+                    <div id="resource-display">
+                        <div class="resource-item">
+                            <span class="resource-label">Money:</span>
+                            <span id="money-value" class="resource-value">$10,000</span>
+                        </div>
+                        <div class="resource-item">
+                            <span class="resource-label">Population:</span>
+                            <span id="population-value" class="resource-value">0</span>
+                        </div>
+                        <div class="resource-item">
+                            <span class="resource-label">Power:</span>
+                            <span id="power-value" class="resource-value">0 / 0</span>
+                        </div>
+                        <div class="resource-item">
+                            <span class="resource-label">Water:</span>
+                            <span id="water-value" class="resource-value">0 / 0</span>
+                        </div>
+                        <div class="resource-item">
+                            <span class="resource-label">Happiness:</span>
+                            <span id="happiness-value" class="resource-value">50%</span>
+                        </div>
+                    </div>
+                    
+                    <div id="selected-building-info">
+                        <h3>Selected Building</h3>
+                        <div id="building-details">
+                            <p>No building selected</p>
+                        </div>
+                    </div>
+                    
+                    <div id="notifications">
+                        <h3>Notifications</h3>
+                        <div id="notification-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- External Libraries -->
+    <script>console.log('=== HTML SCRIPTS LOADING ===');</script>
+    <script src="https://unpkg.com/pixi.js@7.4.0/dist/pixi.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+    <!-- Game Modules -->
+    <script src="building-types.js"></script>
+    <script src="grid-system.js"></script>
+    <script src="resource-manager.js"></script>
+    <script src="input-manager.js"></script>
+    <script src="ui-manager.js"></script>
+    <script src="renderer.js"></script>
+    <script src="game.js"></script>
+    <script src="app.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
