@@ -34,6 +34,33 @@ function App() {
     const [selectingDay, setSelectingDay] = useState(null);
     const [aiPlanLoading, setAiPlanLoading] = useState(false);
 
+    // Scanner State
+    const [showScanner, setShowScanner] = useState(false);
+    const [scanCallback, setScanCallback] = useState(null);
+    const [scanErrorCallback, setScanErrorCallback] = useState(null);
+
+    const openScanner = (onSuccess, onError) => {
+        setScanCallback(() => onSuccess);
+        setScanErrorCallback(() => onError);
+        setShowScanner(true);
+    };
+
+    const handleGlobalScan = (barcode) => {
+        if (scanCallback) {
+            scanCallback(barcode);
+        }
+        setShowScanner(false);
+        setScanCallback(null);
+        setScanErrorCallback(null);
+    };
+
+    const closeScanner = () => {
+        setShowScanner(false);
+        setScanCallback(null);
+        if (scanErrorCallback) scanErrorCallback("Scanner closed");
+        setScanErrorCallback(null);
+    };
+
     // Helper function to get current recipe by ID
     const getRecipeById = (id) => {
         return recipes.find(recipe => recipe.id == id);
@@ -534,14 +561,17 @@ function App() {
                 recipes,
                 calendar,
                 ingredientsData,
-                updateIngredientsData
+                updateIngredientsData,
+                openScanner
             }),
             activeTab === 'shopping' && React.createElement(ShoppingList, {
                 shoppingList,
                 selectedShoppingItems,
                 toggleSelectShoppingItem,
                 transferSelectedToInventory,
-                updateShoppingItemCost
+                updateShoppingItemCost,
+                openScanner,
+                setShoppingList
             })
         ),
         ReactDOM.createPortal(
@@ -588,7 +618,11 @@ function App() {
                 openRouterApiKey,
                 setOpenRouterApiKey,
                 openRouterModel,
-                setOpenRouterModel
+                setOpenRouterModel,
+                // Scanner props
+                showScanner,
+                onScan: handleGlobalScan,
+                onCloseScanner: closeScanner
             }),
             document.body
         )

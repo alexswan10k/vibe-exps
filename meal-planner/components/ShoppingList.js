@@ -1,4 +1,4 @@
-function ShoppingList({ shoppingList, selectedShoppingItems, toggleSelectShoppingItem, transferSelectedToInventory, updateShoppingItemCost }) {
+function ShoppingList({ shoppingList, selectedShoppingItems, toggleSelectShoppingItem, transferSelectedToInventory, updateShoppingItemCost, openScanner, setShoppingList }) {
     const handleRowClick = (item, e) => {
         // Prevent toggling if clicking directly on the checkbox or cost input
         if (e.target.type !== 'checkbox' && e.target.type !== 'number') {
@@ -16,8 +16,54 @@ function ShoppingList({ shoppingList, selectedShoppingItems, toggleSelectShoppin
         }, 0);
     };
 
+    const handleScanClick = () => {
+        openScanner(async (barcode) => {
+            try {
+                const result = await window.OpenFoodFactsService.getProduct(barcode);
+                if (result.success) {
+                    const product = result.product;
+                    // Add to shopping list
+                    const newList = { ...shoppingList };
+                    const existing = newList[product.name];
+
+                    if (existing) {
+                        newList[product.name] = {
+                            ...existing,
+                            quantity: existing.quantity + 1
+                        };
+                    } else {
+                        newList[product.name] = {
+                            quantity: 1,
+                            unitCost: 0 // Default cost
+                        };
+                    }
+
+                    if (setShoppingList) {
+                        setShoppingList(newList);
+                        alert(`Added ${product.name} to shopping list`);
+                    } else {
+                        console.error("setShoppingList not available");
+                    }
+
+                } else {
+                    alert(`Scan failed: ${result.error}`);
+                }
+            } catch (error) {
+                alert('Error processing scan');
+                console.error(error);
+            }
+        }, (error) => {
+            console.error("Scan error:", error);
+        });
+    };
+
     return React.createElement('div', { className: 'shopping-list' },
         React.createElement('h2', null, 'Shopping List'),
+        React.createElement('button', {
+            onClick: handleScanClick,
+            className: 'scan-btn',
+            style: { marginBottom: '15px' }
+        }, '📷 Scan to Add'),
         React.createElement('div', { className: 'shopping-list-header' },
             React.createElement('span', null, `Total Cost: $${calculateTotalCost().toFixed(2)}`)
         ),
