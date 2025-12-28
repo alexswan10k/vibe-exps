@@ -16,7 +16,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Hacker Simulator**: A hacker simulation tool
 - **Human Authorship Verifier**: Cryptographic proof of human-authored text
 - **Image Editor**: An image editing tool
-- **Image Segmentation**: An image segmentation tool (experimental)
+- **Image Segmentation**: An image segmentation tool using RMBG-1.4
 - **Infinite Maze Explorer**: An infinite maze exploration game
 - **LambdaSafe Sales Page**: Sales page for LambdaSafe
 - **Meal Planner**: A meal planning application
