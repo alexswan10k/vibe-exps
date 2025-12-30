@@ -81,6 +81,7 @@ class Game {
             this.renderer = new Renderer(this);
             this.uiManager = new UIManager(this);
             this.taskManager = new TaskManager(this);
+            this.pathfinding = new Pathfinding(this);
             console.log('Managers initialized successfully');
         } catch (error) {
             console.error('Error initializing managers:', error);

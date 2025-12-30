@@ -19,6 +19,10 @@ class Pawn {
         this.maxWeight = 50; // Maximum weight a pawn can carry
         this.taskCooldown = 0; // Frames to wait before implicit hauling after task completion
         this.lastTaskType = null; // Track last task type to prevent loops
+        this.currentPath = null; // Current path being followed
+        this.pathIndex = 0; // Current index in the path
+        this.actionState = 'idle'; // idle, moving, chopping, mining, hauling
+        this.actionFrame = 0; // For animation
     }
 
     /**
@@ -28,6 +32,7 @@ class Pawn {
     update(game) {
         // Update cooldown
         this.taskCooldown = Math.max(0, this.taskCooldown - 1);
+        this.actionFrame++;
 
         // Decrease needs over time
         this.hunger = Math.max(0, this.hunger - 0.1);
@@ -41,6 +46,7 @@ class Pawn {
         } else if (this.task) {
             this.executeTask(game);
         } else {
+            this.actionState = 'idle';
             // Try to pick up the nearest available task from the queue
             if (game.taskQueue.length > 0) {
                 const nearestTask = game.getNearestAvailableTask(this);
@@ -96,6 +102,8 @@ class Pawn {
     assignTask(task) {
         this.task = task;
         this.lastTaskType = task.type;
+        this.currentPath = null;
+        this.pathIndex = 0;
     }
 
     /**
@@ -107,13 +115,51 @@ class Pawn {
         const dy = this.task.y - this.y;
         const distance = calculateDistance(this.x, this.y, this.task.x, this.task.y);
 
-        if (distance < 0.1) {
+        if (distance < 0.5) { // Increased threshold slightly for cleaner arrival
             // Arrived at destination
             this.performTaskAtLocation(game);
+            this.currentPath = null;
         } else {
-            // Move towards destination
-            this.x += (dx / distance) * this.speed;
-            this.y += (dy / distance) * this.speed;
+            this.actionState = 'moving';
+            // Pathfinding logic
+            if (!this.currentPath) {
+                // Generate path
+                const start = { x: this.x, y: this.y };
+                const end = { x: this.task.x, y: this.task.y };
+                this.currentPath = game.pathfinding.findPath(start, end);
+                this.pathIndex = 0;
+
+                if (!this.currentPath || this.currentPath.length === 0) {
+                    // Fallback to direct movement if no path found (e.g. adjacent or blocked)
+                    // Or maybe the destination is blocked.
+                    // Let's just try to move directly if pathfinding fails,
+                    // or maybe we should cancel the task?
+                    // For now, linear movement fallback.
+                    console.log(`Pawn ${this.name} could not find path to ${this.task.x},${this.task.y}`);
+                    this.currentPath = null;
+                }
+            }
+
+            if (this.currentPath && this.pathIndex < this.currentPath.length) {
+                const nextNode = this.currentPath[this.pathIndex];
+                const nodeDx = nextNode.x - this.x;
+                const nodeDy = nextNode.y - this.y;
+                const nodeDist = Math.sqrt(nodeDx*nodeDx + nodeDy*nodeDy);
+
+                if (nodeDist < 0.1) {
+                    this.pathIndex++;
+                } else {
+                    this.x += (nodeDx / nodeDist) * this.speed;
+                    this.y += (nodeDy / nodeDist) * this.speed;
+                }
+            } else {
+                // Direct movement fallback or final approach
+                const directDist = Math.sqrt(dx*dx + dy*dy);
+                if (directDist > 0) {
+                     this.x += (dx / directDist) * this.speed;
+                     this.y += (dy / directDist) * this.speed;
+                }
+            }
         }
     }
 
@@ -122,6 +168,24 @@ class Pawn {
      * @param {Game} game - Reference to the game instance
      */
     performTaskAtLocation(game) {
+        // Set action state based on task type
+        switch (this.task.type) {
+            case 'chop':
+                this.actionState = 'chopping';
+                break;
+            case 'mine':
+            case 'mine_stone':
+                this.actionState = 'mining';
+                break;
+            case 'haul':
+            case 'haul_to_storage':
+                this.actionState = 'hauling';
+                break;
+            case 'harvest_plant':
+                this.actionState = 'harvesting';
+                break;
+        }
+
         switch (this.task.type) {
             case 'chop':
             case 'mine':
@@ -143,6 +207,7 @@ class Pawn {
                 this.task.completed = true;
                 this.task = null;
                 this.taskCooldown = 60; // Prevent immediate implicit hauling
+                this.actionState = 'idle';
         }
     }
 

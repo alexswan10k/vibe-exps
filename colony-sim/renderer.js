@@ -201,7 +201,43 @@ class Renderer {
             const tileSizeZoomed = this.game.tileSize * this.game.zoom;
             this.game.ctx.fillStyle = '#f39c12';
             this.game.ctx.fillRect(screenX + 4 * this.game.zoom, screenY + 4 * this.game.zoom, tileSizeZoomed - 8 * this.game.zoom, tileSizeZoomed - 8 * this.game.zoom);
+
+            // Render action animation
+            if (pawn.actionState && pawn.actionState !== 'idle' && pawn.actionState !== 'moving') {
+                this.renderPawnAction(pawn, screenX, screenY, tileSizeZoomed);
+            }
         }
+    }
+
+    /**
+     * Render pawn action animation
+     */
+    renderPawnAction(pawn, x, y, size) {
+        const offset = Math.sin(pawn.actionFrame * 0.2) * (size * 0.3);
+        const centerX = x + size / 2;
+        const centerY = y + size / 2;
+
+        this.game.ctx.save();
+        this.game.ctx.translate(centerX, centerY);
+
+        let icon = '';
+        switch (pawn.actionState) {
+            case 'chopping': icon = '🪓'; break;
+            case 'mining': icon = '⛏'; break;
+            case 'hauling': icon = '📦'; break;
+            case 'harvesting': icon = '⚒'; break;
+        }
+
+        if (icon) {
+            // Swing animation
+            this.game.ctx.rotate(offset * 0.1);
+            this.game.ctx.font = `${size * 0.6}px Arial`;
+            this.game.ctx.textAlign = 'center';
+            this.game.ctx.textBaseline = 'middle';
+            this.game.ctx.fillText(icon, offset, -size * 0.4 + Math.abs(offset));
+        }
+
+        this.game.ctx.restore();
     }
 
     /**

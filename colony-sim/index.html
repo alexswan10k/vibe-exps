@@ -24,16 +24,16 @@ n<!DOCTYPE html>
                 </div>
                 <div id="commands">
                     <h3>Commands</h3>
-                    <button id="chop-trees">Chop Trees</button>
-                    <button id="mine-iron">Mine Iron</button>
-                    <button id="mine-stone">Mine Stone</button>
-                    <button id="harvest-plants">Harvest Plants</button>
-                    <button id="build-wall">Build Wall</button>
-                    <button id="build-table">Build Crafting Table</button>
-                    <button id="build-storage">Build Storage</button>
+                    <button id="chop-trees" title="Select an area with trees to chop wood">Chop Trees</button>
+                    <button id="mine-iron" title="Select an area with iron deposits to mine iron">Mine Iron</button>
+                    <button id="mine-stone" title="Select an area with stone terrain to mine stone">Mine Stone</button>
+                    <button id="harvest-plants" title="Select an area with mature plants to harvest food">Harvest Plants</button>
+                    <button id="build-wall" title="Build walls to protect your colony (Cost: 1 Wood)">Build Wall</button>
+                    <button id="build-table" title="Build a crafting table to make items (Cost: 5 Wood)">Build Crafting Table</button>
+                    <button id="build-storage" title="Mark an area for storing resources">Build Storage</button>
 
-                    <button id="craft-food">Craft Food</button>
-                    <button id="craft-tools">Craft Tools</button>
+                    <button id="craft-food" title="Craft food from wood (Cost: 1 Wood)">Craft Food</button>
+                    <button id="craft-tools" title="Craft tools from iron and wood (Cost: 2 Iron, 1 Wood)">Craft Tools</button>
                 </div>
             </div>
             <div id="right-column">
@@ -115,6 +115,7 @@ n<!DOCTYPE html>
     <script src="renderer.js"></script>
     <script src="ui-manager.js"></script>
     <script src="task-manager.js"></script>
+    <script src="pathfinding.js"></script>
     <script src="game.js"></script>
     <script src="main.js"></script>
 </body>

@@ -136,8 +136,9 @@ class UIManager {
             }
             const pawn = this.game.pawns[i];
             const currentWeight = pawn.getCurrentWeight(this.game);
+            let actionText = pawn.actionState !== 'idle' ? ` [${pawn.actionState}]` : '';
             const taskText = pawn.task ? ` - Task: ${pawn.task.type} (${pawn.task.x}, ${pawn.task.y})` : ' - Idle';
-            pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}, Weight: ${currentWeight}/${pawn.maxWeight}${taskText}`;
+            pawnItem.textContent = `${pawn.name} - Hunger: ${Math.round(pawn.hunger)}, Sleep: ${Math.round(pawn.sleep)}, Weight: ${currentWeight}/${pawn.maxWeight}${actionText}${taskText}`;
             pawnItem.dataset.pawnIndex = i;
         }
         for (let i = this.game.pawns.length; i < existingItems.length; i++) {
