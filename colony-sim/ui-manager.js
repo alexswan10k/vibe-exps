@@ -45,6 +45,14 @@ class UIManager {
                         modeText += 'Set Storage Area';
                         description = 'Click and drag to set the storage area for pawns';
                         break;
+                    case 'stockpile_zone':
+                        modeText += 'Stockpile Zone';
+                        description = 'Create a zone for storing items';
+                        break;
+                    case 'growing_zone':
+                        modeText += 'Growing Zone';
+                        description = 'Create a zone for growing plants';
+                        break;
                 }
             } else if (this.game.buildMode) {
                 switch (this.game.buildMode) {
@@ -52,9 +60,21 @@ class UIManager {
                         modeText += 'Build Wall';
                         description = 'Click and drag to select area for wall construction';
                         break;
+                    case 'door':
+                        modeText += 'Build Door';
+                        description = 'Click to place a door';
+                        break;
                     case 'table':
                         modeText += 'Build Crafting Table';
                         description = 'Click and drag to select area for crafting table';
+                        break;
+                    case 'bed':
+                        modeText += 'Build Bed';
+                        description = 'Click to place a bed';
+                        break;
+                    case 'chair':
+                        modeText += 'Build Chair';
+                        description = 'Click to place a chair';
                         break;
                 }
             }
@@ -101,11 +121,23 @@ class UIManager {
                 case 'wall':
                     document.getElementById('build-wall').classList.add('active');
                     break;
+                case 'door':
+                    document.getElementById('build-door').classList.add('active');
+                    break;
                 case 'table':
                     document.getElementById('build-table').classList.add('active');
                     break;
+                case 'bed':
+                    document.getElementById('build-bed').classList.add('active');
+                    break;
+                case 'chair':
+                    document.getElementById('build-chair').classList.add('active');
+                    break;
             }
         }
+
+        if (this.game.currentTaskType === 'stockpile_zone') document.getElementById('zone-stockpile').classList.add('active');
+        if (this.game.currentTaskType === 'growing_zone') document.getElementById('zone-growing').classList.add('active');
     }
 
     /**
@@ -362,5 +394,110 @@ class UIManager {
                 }
             });
         }
+    }
+
+    togglePriorityModal() {
+        let modal = document.getElementById('priority-modal');
+        if (!modal) {
+            this.createPriorityModal();
+            modal = document.getElementById('priority-modal');
+        }
+
+        if (modal.style.display === 'none') {
+            modal.style.display = 'block';
+            this.renderPriorityTable();
+        } else {
+            modal.style.display = 'none';
+        }
+    }
+
+    createPriorityModal() {
+        const modal = document.createElement('div');
+        modal.id = 'priority-modal';
+        modal.style.cssText = `
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2c3e50;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            z-index: 1000;
+            max-height: 80vh;
+            overflow-y: auto;
+            color: white;
+        `;
+
+        const header = document.createElement('div');
+        header.innerHTML = '<h3>Work Priorities <button id="close-priority-modal" style="float:right; cursor:pointer;">X</button></h3>';
+        modal.appendChild(header);
+
+        const content = document.createElement('div');
+        content.id = 'priority-content';
+        modal.appendChild(content);
+
+        document.body.appendChild(modal);
+
+        document.getElementById('close-priority-modal').addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+    }
+
+    renderPriorityTable() {
+        const content = document.getElementById('priority-content');
+        content.innerHTML = '';
+
+        const table = document.createElement('table');
+        table.style.cssText = 'width: 100%; border-collapse: collapse;';
+
+        // Header
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headerRow.innerHTML = '<th style="padding: 5px; text-align: left;">Pawn</th>';
+
+        // Get work types from first pawn (assuming all have same structure)
+        if (this.game.pawns.length > 0) {
+            const workTypes = Object.keys(this.game.pawns[0].workPriorities);
+            workTypes.forEach(type => {
+                headerRow.innerHTML += `<th style="padding: 5px; transform: rotate(-45deg); height: 80px; white-space: nowrap;">${type}</th>`;
+            });
+        }
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Body
+        const tbody = document.createElement('tbody');
+        this.game.pawns.forEach((pawn, pawnIndex) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td style="padding: 5px;">${pawn.name}</td>`;
+
+            Object.entries(pawn.workPriorities).forEach(([type, priority]) => {
+                const cell = document.createElement('td');
+                cell.style.padding = '5px';
+                cell.style.textAlign = 'center';
+
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = 0;
+                input.max = 4;
+                input.value = priority;
+                input.style.width = '30px';
+                input.addEventListener('change', (e) => {
+                    const val = parseInt(e.target.value);
+                    if (!isNaN(val) && val >= 0 && val <= 4) {
+                        pawn.workPriorities[type] = val;
+                    }
+                });
+
+                cell.appendChild(input);
+                row.appendChild(cell);
+            });
+            tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+
+        content.appendChild(table);
     }
 }

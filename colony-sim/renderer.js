@@ -21,7 +21,7 @@ class Renderer {
         this.renderBuildings();
         this.renderPawns();
         this.renderSelectionArea();
-        this.renderStorageArea();
+        this.renderZones();
     }
 
     /**
@@ -265,11 +265,50 @@ class Renderer {
     }
 
     /**
-     * Render storage area
+     * Render zones (Stockpile and Growing)
      */
-    renderStorageArea() {
-        if (this.game.storageArea) {
-            const startX = Math.min(this.game.storageArea.start.x, this.game.storageArea.end.x);
+    renderZones() {
+        if (!this.game.zones) return;
+
+        for (const zone of this.game.zones) {
+            const startX = Math.min(zone.start.x, zone.end.x);
+            const endX = Math.max(zone.start.x, zone.end.x);
+            const startY = Math.min(zone.start.y, zone.end.y);
+            const endY = Math.max(zone.start.y, zone.end.y);
+
+            const screenStartX = startX * this.game.tileSize * this.game.zoom - this.game.camera.x;
+            const screenStartY = startY * this.game.tileSize * this.game.zoom - this.game.camera.y;
+            const width = (endX - startX + 1) * this.game.tileSize * this.game.zoom;
+            const height = (endY - startY + 1) * this.game.tileSize * this.game.zoom;
+
+            if (zone.type === 'stockpile') {
+                this.game.ctx.strokeStyle = '#f4d03f';
+                this.game.ctx.lineWidth = 3;
+                this.game.ctx.strokeRect(screenStartX, screenStartY, width, height);
+                this.game.ctx.fillStyle = 'rgba(244, 208, 63, 0.1)';
+            } else if (zone.type === 'growing') {
+                this.game.ctx.strokeStyle = '#2ecc71';
+                this.game.ctx.lineWidth = 3;
+                this.game.ctx.strokeRect(screenStartX, screenStartY, width, height);
+                this.game.ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+            }
+
+            this.game.ctx.fillRect(screenStartX, screenStartY, width, height);
+
+            // Draw zone label if zoomed in enough
+            if (this.game.zoom > 0.8) {
+                this.game.ctx.fillStyle = 'white';
+                this.game.ctx.font = `${12 * this.game.zoom}px Arial`;
+                this.game.ctx.textAlign = 'center';
+                this.game.ctx.fillText(zone.type === 'stockpile' ? 'Stockpile' : 'Growing', screenStartX + width / 2, screenStartY + height / 2);
+            }
+        }
+
+        // Keep rendering the legacy storageArea for backward compatibility if it exists separately
+        // although in the main game logic the storageArea might be synced with zones.
+        // For now, if we have zones, we assume they cover it. If no zones, check storageArea
+        if (this.game.zones.length === 0 && this.game.storageArea) {
+             const startX = Math.min(this.game.storageArea.start.x, this.game.storageArea.end.x);
             const endX = Math.max(this.game.storageArea.start.x, this.game.storageArea.end.x);
             const startY = Math.min(this.game.storageArea.start.y, this.game.storageArea.end.y);
             const endY = Math.max(this.game.storageArea.start.y, this.game.storageArea.end.y);

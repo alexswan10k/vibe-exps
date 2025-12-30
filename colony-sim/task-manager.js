@@ -59,8 +59,15 @@ class TaskManager {
             mine: (x, y) => {
                 const resource = this.game.resources.find(r => r.x === x && r.y === y);
                 return resource && resource.type === 'iron' ? { x, y, type: taskType, resource } : null;
-            }
+            },
+            stockpile_zone: null, // Handled separately
+            growing_zone: null // Handled separately
         };
+
+        if (taskType === 'stockpile_zone' || taskType === 'growing_zone') {
+            this.createZone(bounds, taskType);
+            return;
+        }
 
         const createTask = taskCreators[taskType];
         if (createTask) {
@@ -68,10 +75,10 @@ class TaskManager {
                 const task = createTask(x, y);
                 if (task) {
                     // Check if this task already exists in the queue
-                    const taskExists = this.game.taskQueue.some(existingTask => 
+                    const taskExists = this.game.taskQueue.some(existingTask =>
                         existingTask.x === x && existingTask.y === y && existingTask.type === taskType
                     );
-                    
+
                     if (!taskExists) {
                         this.game.taskQueue.push(task);
                     }
@@ -158,7 +165,7 @@ class TaskManager {
         if (!builderPawn) return;
 
         const center = getAreaCenter(this.game.areaSelection);
-        
+
         // Check if there's already a building at this location
         const existingBuilding = this.game.buildings.find(b => b.x === center.x && b.y === center.y);
         if (!existingBuilding) {
@@ -386,5 +393,24 @@ class TaskManager {
             }
         }
         return null;
+    }
+    /**
+     * Create a zone from bounds
+     * @param {Object} bounds
+     * @param {string} type
+     */
+    createZone(bounds, type) {
+        const width = bounds.endX - bounds.startX + 1;
+        const height = bounds.endY - bounds.startY + 1;
+
+        if (type === 'stockpile_zone') {
+            this.game.zones.push(new StockpileZone(bounds.startX, bounds.startY, width, height));
+            // Update legacy storageArea for compatibility if needed, or just use zones
+            this.game.storageArea = { start: { x: bounds.startX, y: bounds.startY }, end: { x: bounds.endX, y: bounds.endY } };
+        } else if (type === 'growing_zone') {
+            this.game.zones.push(new GrowingZone(bounds.startX, bounds.startY, width, height));
+        }
+
+        this.game.uiManager.updateUI();
     }
 }

@@ -25,12 +25,34 @@ class Building {
     /**
      * @param {number} x - X coordinate
      * @param {number} y - Y coordinate
-     * @param {string} type - Type of building (wall, table, etc.)
+     * @param {string} type - Type of building (wall, table, bed, chair, door, etc.)
      */
     constructor(x, y, type) {
         this.x = x;
         this.y = y;
         this.type = type;
+        this.owner = null; // For beds/chairs
+    }
+}
+
+class Bed extends Building {
+    constructor(x, y) {
+        super(x, y, 'bed');
+        this.restEffectiveness = 1.0;
+    }
+}
+
+class Chair extends Building {
+    constructor(x, y) {
+        super(x, y, 'chair');
+        this.comfort = 0.5;
+    }
+}
+
+class Door extends Building {
+    constructor(x, y) {
+        super(x, y, 'door');
+        this.isOpen = false;
     }
 }
 
@@ -112,5 +134,37 @@ class Plant {
      */
     isMature() {
         return this.growth >= 50;
+    }
+}
+
+/**
+ * Represents a zone in the game world
+ */
+class Zone {
+    constructor(x, y, width, height, type) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.type = type;
+    }
+
+    contains(x, y) {
+        return x >= this.x && x < this.x + this.width &&
+            y >= this.y && y < this.y + this.height;
+    }
+}
+
+class StockpileZone extends Zone {
+    constructor(x, y, width, height) {
+        super(x, y, width, height, 'stockpile');
+        this.filter = ['wood', 'stone', 'iron', 'food', 'tools']; // Allowed items
+    }
+}
+
+class GrowingZone extends Zone {
+    constructor(x, y, width, height) {
+        super(x, y, width, height, 'growing');
+        this.plantType = 'plant'; // Type of plant to grow
     }
 }
