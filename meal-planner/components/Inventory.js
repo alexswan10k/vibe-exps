@@ -1,7 +1,8 @@
-function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsData, updateIngredientsData }) {
+function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsData, updateIngredientsData, openScanner }) {
     const [newItem, setNewItem] = useState('');
     const [newQuantity, setNewQuantity] = useState(1);
     const [expandedItems, setExpandedItems] = useState({});
+    const [scanLoading, setScanLoading] = useState(false);
 
     const getAllIngredients = () => {
         const ingredients = new Set();
@@ -60,23 +61,37 @@ function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsD
         updateInventory(item, 0);
     };
 
+    const handleScanClick = () => {
+        openScanner(async (barcode) => {
+            setScanLoading(true);
+            try {
+                const result = await window.OpenFoodFactsService.getProduct(barcode);
+                if (result.success) {
+                    const product = result.product;
+                    setNewItem(product.name);
+                    setNewQuantity(product.quantity || 1);
+                    alert(`Found: ${product.name}`);
+                } else {
+                    alert(`Scan failed: ${result.error}`);
+                }
+            } catch (error) {
+                alert('Error processing scan');
+                console.error(error);
+            } finally {
+                setScanLoading(false);
+            }
+        }, (error) => {
+            console.error("Scan error:", error);
+        });
+    };
+
     const defaultNutritional = {
         vitamins: {
-            vitaminA: false,
-            vitaminC: false,
-            vitaminD: false,
-            vitaminE: false,
-            vitaminK1: false,
-            vitaminK2: false,
-            vitaminB12: false,
-            folate: false
+            vitaminA: false, vitaminC: false, vitaminD: false, vitaminE: false,
+            vitaminK1: false, vitaminK2: false, vitaminB12: false, folate: false
         },
         minerals: {
-            calcium: false,
-            iron: false,
-            magnesium: false,
-            potassium: false,
-            zinc: false
+            calcium: false, iron: false, magnesium: false, potassium: false, zinc: false
         }
     };
 
@@ -125,21 +140,32 @@ function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsD
 
     return React.createElement('div', { className: 'inventory' },
         React.createElement('h2', null, 'Inventory'),
-        React.createElement('form', { onSubmit: handleAddItem },
-            React.createElement('input', {
-                type: 'text',
-                value: newItem,
-                onChange: (e) => setNewItem(e.target.value),
-                placeholder: 'Item name'
-            }),
-            React.createElement('input', {
-                type: 'number',
-                value: newQuantity,
-                onChange: (e) => setNewQuantity(parseFloat(e.target.value) || 0),
-                placeholder: 'Quantity'
-            }),
-            React.createElement('button', { type: 'submit' }, 'Add Item')
+
+        React.createElement('div', { className: 'add-item-container' },
+            React.createElement('button', {
+                type: 'button',
+                className: 'scan-btn',
+                onClick: handleScanClick,
+                disabled: scanLoading
+            }, scanLoading ? 'Scanning...' : '📷 Scan Item'),
+
+            React.createElement('form', { onSubmit: handleAddItem, className: 'add-item-form' },
+                React.createElement('input', {
+                    type: 'text',
+                    value: newItem,
+                    onChange: (e) => setNewItem(e.target.value),
+                    placeholder: 'Item name'
+                }),
+                React.createElement('input', {
+                    type: 'number',
+                    value: newQuantity,
+                    onChange: (e) => setNewQuantity(parseFloat(e.target.value) || 0),
+                    placeholder: 'Quantity'
+                }),
+                React.createElement('button', { type: 'submit' }, 'Add Item')
+            )
         ),
+
         React.createElement('ul', null,
             allItems.map(item => {
                 const quantity = inventory[item] || 0;
@@ -226,6 +252,7 @@ function Inventory({ inventory, updateInventory, recipes, calendar, ingredientsD
 
                 );
             })
-        )
+        ),
+
     );
 }

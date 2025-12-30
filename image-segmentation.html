@@ -112,7 +112,7 @@
 <body>
     <div class="container">
         <h1>Image Segmentation Prototype</h1>
-        <p>Using BiRefNet model for background removal and image segmentation</p>
+        <p>Using RMBG-1.4 model for background removal and image segmentation</p>
 
         <div class="toolbar">
             <div class="tool-group">
@@ -150,7 +150,7 @@
             <ul>
                 <li><strong>Load Image:</strong> Click "Load Image" to select an image file from your computer</li>
                 <li><strong>Paste Image:</strong> Click "Paste Image" or press Ctrl+V to paste an image from clipboard</li>
-                <li><strong>Run Segmentation:</strong> Click "Run Segmentation" to process the image with BiRefNet model</li>
+                <li><strong>Run Segmentation:</strong> Click "Run Segmentation" to process the image with RMBG-1.4 model</li>
                 <li><strong>Download Result:</strong> Save the segmentation mask as a PNG file</li>
             </ul>
             <p><strong>Note:</strong> The model runs entirely in your browser using Transformers.js. First run may take time to download the model.</p>
@@ -158,7 +158,11 @@
     </div>
 
     <script type="module">
-        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2/dist/transformers.min.js';
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.2/dist/transformers.min.js';
+
+        // Skip local model checks
+        env.allowLocalModels = false;
+        env.useBrowserCache = true;
 
         const loadImageBtn = document.getElementById('loadImageBtn');
         const fileInput = document.getElementById('fileInput');
@@ -179,8 +183,9 @@
         // Initialize the segmentation pipeline
         async function initSegmentationModel() {
             try {
-                statusDiv.innerHTML = 'Status: <span class="loading"></span> Loading segmentation model...';
-                segmentationPipeline = await pipeline('image-segmentation', 'Xenova/detr-resnet-50');
+                statusDiv.innerHTML = 'Status: <span class="loading"></span> Loading segmentation model (RMBG-1.4)...';
+                // Using briaai/RMBG-1.4 which is optimized for background removal
+                segmentationPipeline = await pipeline('image-segmentation', 'briaai/RMBG-1.4');
                 statusDiv.innerHTML = 'Status: Model loaded successfully!';
                 console.log('Segmentation model loaded');
             } catch (error) {
@@ -291,29 +296,11 @@
             statusDiv.innerHTML = 'Status: <span class="loading"></span> Running segmentation...';
 
             try {
-                // Resize image to fit model requirements (DETR works best with ~800x800)
-                const resizedCanvas = document.createElement('canvas');
-                const resizedCtx = resizedCanvas.getContext('2d');
-                const targetSize = 800;
-                resizedCanvas.width = targetSize;
-                resizedCanvas.height = targetSize;
+                // RMBG-1.4 works with the original image, no manual resizing usually needed
+                // But passing a canvas or URL is fine.
 
-                // Calculate scaling to fit within target size while maintaining aspect ratio
-                const scale = Math.min(targetSize / currentImage.width, targetSize / currentImage.height);
-                const scaledWidth = currentImage.width * scale;
-                const scaledHeight = currentImage.height * scale;
-                const offsetX = (targetSize - scaledWidth) / 2;
-                const offsetY = (targetSize - scaledHeight) / 2;
-
-                // Fill with black background
-                resizedCtx.fillStyle = 'black';
-                resizedCtx.fillRect(0, 0, targetSize, targetSize);
-
-                // Draw scaled image centered
-                resizedCtx.drawImage(currentImage, offsetX, offsetY, scaledWidth, scaledHeight);
-
-                // Pass the resized canvas to the pipeline
-                const result = await segmentationPipeline(resizedCanvas);
+                // Pass the currentImageUrl to the pipeline
+                const result = await segmentationPipeline(currentImageUrl);
 
                 // Display the segmentation mask
                 displaySegmentationMask(result);
@@ -328,34 +315,40 @@
         });
 
         // Display segmentation results
-        function displaySegmentationMask(result) {
-            if (!result || !result.length) return;
+        async function displaySegmentationMask(result) {
+            if (!result) return;
 
-            const maskData = result[0]; // Assuming first result contains the mask
+            // RMBG-1.4 returns a single mask object usually
+            // or an array of masks if configured otherwise, but typically single for bg removal
+
+            // Result is expected to be a RawImage object or similar which can be converted to canvas/blob
 
             // Clear mask canvas
             maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
 
-            // For BiRefNet, the output is typically a binary mask image
-            if (maskData.mask) {
-                // If mask is provided as a data URL or blob URL
-                const maskImg = new Image();
-                maskImg.onload = () => {
-                    maskCtx.drawImage(maskImg, 0, 0, maskCanvas.width, maskCanvas.height);
-                };
-                maskImg.src = maskData.mask;
-            } else if (maskData.data) {
-                // If mask data is provided as raw tensor data
-                const imageData = maskCtx.createImageData(maskCanvas.width, maskCanvas.height);
-                const data = maskData.data;
-                for (let i = 0; i < data.length; i++) {
-                    const value = data[i] > 0.5 ? 255 : 0; // Threshold for binary mask
-                    imageData.data[i * 4] = value;     // Red
-                    imageData.data[i * 4 + 1] = value; // Green
-                    imageData.data[i * 4 + 2] = value; // Blue
-                    imageData.data[i * 4 + 3] = 255;   // Alpha
+            // If result is an array (generic image segmentation)
+            let mask = result;
+            if (Array.isArray(result) && result.length > 0) {
+                 mask = result[0].mask || result[0];
+            } else if (result.mask) {
+                mask = result.mask;
+            }
+
+            // Convert RawImage/Tensor to canvas
+            if (mask) {
+                // If using latest transformers.js, mask might be a RawImage which has .toCanvas()
+                if (typeof mask.toCanvas === 'function') {
+                     const tempCanvas = mask.toCanvas();
+                     maskCtx.drawImage(tempCanvas, 0, 0, maskCanvas.width, maskCanvas.height);
+                } else {
+                    // Try to handle it if it's already a canvas or image
+                    try {
+                        maskCtx.drawImage(mask, 0, 0, maskCanvas.width, maskCanvas.height);
+                    } catch (e) {
+                        console.error("Could not draw mask directly", e);
+                        // Fallback logic if needed
+                    }
                 }
-                maskCtx.putImageData(imageData, 0, 0);
             }
         }
 

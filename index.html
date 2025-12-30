@@ -72,7 +72,7 @@
         .project-card:nth-child(18) { animation-delay: 1.8s; }
         .project-card:nth-child(19) { animation-delay: 1.9s; }
         .project-card:nth-child(20) { animation-delay: 2.0s; }
-        .project-card:nth-child(21) { animation-delay: 2.1s; }
+        /* don't bother with anything over 20 because it isn't visible and leads to weird artifacts anyway */
         .project-card:hover {
             transform: translateY(-8px) scale(1.02);
             box-shadow: 0 15px 30px rgba(0,0,0,0.2);
@@ -283,6 +283,11 @@
             <p>A powerful image editor with drawing, cropping, and rescaling tools.</p>
         </a>
 
+        <a href="image-segmentation.html" class="project-card" data-category="other">
+            <h3>🖼️ Image Segmentation</h3>
+            <p>Background removal and image segmentation using RMBG-1.4 model.</p>
+        </a>
+
         <a href="2d-labeller.html" class="project-card" data-category="education">
             <h3>🏷️ 2D Image Labeller</h3>
             <p>Interactive tool for creating and managing bounding boxes on images with export/import functionality.</p>
@@ -452,6 +457,11 @@
             <h3>💰 Personal Expense Survival Calculator</h3>
             <p>Calculate how long your savings will last with inflation and investment risk. Features month-by-month analytics, risk scenarios, and comprehensive financial projections.</p>
         </a>
+
+        <a href="city-builder/index.html" class="project-card" data-category="games">
+            <h3>🏙️ City Builder</h3>
+            <p>A 2D city management game where you place buildings, manage resources, and watch your city grow.</p>
+        </a>
     </div>
 
 
@@ -470,6 +480,7 @@
         const projectComplexities = {
             "planet-generator": 1175,
             "image-editor.html": 1032,
+            "image-segmentation.html": 250,
             "sprite-sheet-generator.html": 862,
             "colony-sim": 2700,
             "car-simulator": 866,
@@ -502,7 +513,8 @@
             "human-authorship-verifier": 5651,
             "human-authorship-verifier/corporate.html": 5651,
             "webgpu-feature-detector.html": 1060,
-            "personal-expense-survival-calculator": 3376
+            "personal-expense-survival-calculator": 3376,
+            "city-builder": 0
         };
 
         function getComplexityLevel(loc) {

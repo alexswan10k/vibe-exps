@@ -41,7 +41,10 @@ function ModalManager({
     openRouterApiKey,
     setOpenRouterApiKey,
     openRouterModel,
-    setOpenRouterModel
+    setOpenRouterModel,
+    showScanner,
+    onScan,
+    onCloseScanner
 }) {
     const handleImportRecipe = () => {
         if (pastedResult.trim()) {
@@ -162,6 +165,16 @@ function ModalManager({
             setOpenRouterApiKey,
             openRouterModel,
             setOpenRouterModel
-        })
+        }),
+
+        showScanner && React.createElement('div', { className: 'modal-overlay' },
+            React.createElement('div', { className: 'modal' },
+                React.createElement(BarcodeScanner, {
+                    onScanSuccess: onScan,
+                    onClose: onCloseScanner,
+                    onError: (err) => console.error(err)
+                })
+            )
+        )
     );
 }

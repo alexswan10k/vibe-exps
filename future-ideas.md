@@ -4,7 +4,7 @@ This file contains ideas for future prototypes to explore. Each idea includes a 
 
 ## Games & Simulations
 
-### City Builder
+### City Builder ✅
 A simple 2D city management game where players place buildings, manage resources, and watch population growth.
 - Building placement system
 - Resource management (food, water, electricity)

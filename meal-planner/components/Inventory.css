@@ -1,4 +1,40 @@
 /* Inventory Component Styles */
+.add-item-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.add-item-form {
+    display: flex;
+    gap: 10px;
+    flex: 1;
+}
+
+.scan-btn {
+    padding: 10px 15px;
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 42px;
+    /* Match inputs usually */
+}
+
+.scan-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
+}
+
 .inventory-item {
     display: flex;
     flex-direction: column;
@@ -12,13 +48,15 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
-.inventory-item:hover, .shopping-item:hover {
+.inventory-item:hover,
+.shopping-item:hover {
     background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
     transform: translateY(-2px);
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
-.inventory-item span, .shopping-item span {
+.inventory-item span,
+.shopping-item span {
     font-weight: 500;
     font-size: 1.1rem;
     color: #2c3e50;
@@ -262,8 +300,23 @@
 
 /* Mobile Styles */
 @media (max-width: 768px) {
+    .add-item-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .add-item-form {
+        flex-direction: column;
+    }
+
+    .scan-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
     /* Inventory and shopping items mobile styles */
-    .inventory-item, .shopping-item {
+    .inventory-item,
+    .shopping-item {
         padding: 8px 10px;
         flex-direction: column;
         align-items: flex-start;
