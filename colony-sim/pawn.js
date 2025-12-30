@@ -19,6 +19,27 @@ class Pawn {
         this.maxWeight = 50; // Maximum weight a pawn can carry
         this.taskCooldown = 0; // Frames to wait before implicit hauling after task completion
         this.lastTaskType = null; // Track last task type to prevent loops
+
+        // Job Priorities (Lower is higher priority, 0 = disabled)
+        this.workPriorities = {
+            doctor: 1,
+            bed_rest: 1,
+            warden: 3,
+            handle: 3,
+            cook: 3,
+            hunt: 3,
+            construct: 3,
+            grow: 3,
+            mine: 3,
+            plant_cut: 3,
+            smith: 3,
+            tailor: 3,
+            art: 3,
+            craft: 3,
+            haul: 3,
+            clean: 3,
+            research: 3
+        };
     }
 
     /**
@@ -37,37 +58,80 @@ class Pawn {
         if (this.hunger < 20 && hasInventoryItem(this.inventory, 'food', 1)) {
             this.eat(game);
         } else if (this.sleep < 20) {
-            this.sleepAction();
+            this.sleepAction(game);
         } else if (this.task) {
             this.executeTask(game);
         } else {
-            // Try to pick up the nearest available task from the queue
-            if (game.taskQueue.length > 0) {
-                const nearestTask = game.getNearestAvailableTask(this);
-                if (nearestTask) {
-                    // Remove the task from the queue
-                    const taskIndex = game.taskQueue.indexOf(nearestTask);
-                    if (taskIndex > -1) {
-                        game.taskQueue.splice(taskIndex, 1);
-                        this.assignTask(nearestTask);
-                    }
+            // Use Priority System to find task
+            const priorityTask = this.findPriorityTask(game);
+            if (priorityTask) {
+                // Remove the task from the queue if it was there
+                const taskIndex = game.taskQueue.indexOf(priorityTask);
+                if (taskIndex > -1) {
+                    game.taskQueue.splice(taskIndex, 1);
                 }
+                this.assignTask(priorityTask);
             } else {
-                // Check for implicit hauling tasks
-                const haulingTask = this.findImplicitHaulingTask(game);
-                if (haulingTask) {
-                    this.assignTask(haulingTask);
-                } else {
-                    // Idle behavior - wander randomly
-                    if (Math.random() < 0.01) {
-                        this.x += (Math.random() - 0.5) * 2;
-                        this.y += (Math.random() - 0.5) * 2;
-                        this.x = clamp(this.x, 0, game.mapWidth - 1);
-                        this.y = clamp(this.y, 0, game.mapHeight - 1);
-                    }
+                // Idle behavior - wander randomly
+                if (Math.random() < 0.01) {
+                    this.x += (Math.random() - 0.5) * 2;
+                    this.y += (Math.random() - 0.5) * 2;
+                    this.x = clamp(this.x, 0, game.mapWidth - 1);
+                    this.y = clamp(this.y, 0, game.mapHeight - 1);
                 }
             }
         }
+    }
+
+    /**
+     * Find the highest priority task available
+     * @param {Game} game 
+     * @returns {Task|null}
+     */
+    findPriorityTask(game) {
+        // Map work types to task types
+        const workTypeMap = {
+            construct: ['build'],
+            grow: ['harvest_plant'],
+            mine: ['mine', 'mine_stone'],
+            plant_cut: ['chop'],
+            craft: ['craft'],
+            haul: ['haul', 'haul_to_storage']
+        };
+
+        // Sort priorities (ascending, excluding 0)
+        const sortedPriorities = Object.entries(this.workPriorities)
+            .filter(([_, priority]) => priority > 0)
+            .sort((a, b) => a[1] - b[1]);
+
+        for (const [workType, _] of sortedPriorities) {
+            const taskTypes = workTypeMap[workType];
+            if (!taskTypes) continue;
+
+            // Find nearest task of these types
+            let nearestTask = null;
+            let minDistance = Infinity;
+
+            for (const task of game.taskQueue) {
+                if (taskTypes.includes(task.type)) {
+                    // Skip tasks that are too far for the pawn to handle
+                    const distance = calculateDistance(this.x, this.y, task.x, task.y);
+                    if (distance < minDistance && distance < 100) { // Increased range
+                        minDistance = distance;
+                        nearestTask = task;
+                    }
+                }
+            }
+
+            if (nearestTask) return nearestTask;
+        }
+
+        // Fallback to implicit hauling if enabled
+        if (this.workPriorities.haul > 0) {
+            return this.findImplicitHaulingTask(game);
+        }
+
+        return null;
     }
 
     /**
@@ -84,9 +148,30 @@ class Pawn {
     /**
      * Handle sleep recovery
      */
-    sleepAction() {
-        // Simple sleep recovery
-        this.sleep = Math.min(100, this.sleep + 0.5);
+    /**
+     * Handle sleep recovery
+     * @param {Game} game
+     */
+    sleepAction(game) {
+        // Find a bed
+        let bed = null;
+        if (game.buildings) {
+            bed = game.buildings.find(b => b.type === 'bed' && (!b.owner || b.owner === this.name));
+        }
+
+        if (bed) {
+            // Move to bed if not there
+            const distance = calculateDistance(this.x, this.y, bed.x, bed.y);
+            if (distance > 0.5) {
+                this.x += (bed.x - this.x) * 0.1;
+                this.y += (bed.y - this.y) * 0.1;
+            } else {
+                this.sleep = Math.min(100, this.sleep + 1.0); // Faster sleep in bed
+            }
+        } else {
+            // Sleep on ground
+            this.sleep = Math.min(100, this.sleep + 0.5);
+        }
     }
 
     /**
@@ -183,14 +268,14 @@ class Pawn {
      */
     performHaulTask(game) {
         const pickupResult = game.pickupDroppedResource(this.task.x, this.task.y, false); // Don't add to inventory yet
-        
+
         if (pickupResult && this.canCarryItem(game, pickupResult.type)) {
             // Check if we're already carrying something
             if (this.inventory.length === 0) {
                 // Pick up the resource
                 game.pickupDroppedResource(this.task.x, this.task.y, true); // Actually pick it up
                 addToInventory(this.inventory, pickupResult.type, pickupResult.quantity);
-                
+
                 // Find storage area and move there
                 if (game.storageArea) {
                     const storageStartX = Math.min(game.storageArea.start.x, game.storageArea.end.x);
@@ -370,7 +455,7 @@ class Pawn {
             const storageEndY = Math.max(game.storageArea.start.y, game.storageArea.end.y);
 
             const isInStorage = resource.x >= storageStartX && resource.x <= storageEndX &&
-                               resource.y >= storageStartY && resource.y <= storageEndY;
+                resource.y >= storageStartY && resource.y <= storageEndY;
 
             if (!isInStorage && this.canCarryItem(game, resource.type)) {
                 const distance = calculateDistance(this.x, this.y, resource.x, resource.y);

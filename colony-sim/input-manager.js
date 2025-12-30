@@ -39,9 +39,26 @@ class InputManager {
             this.game.taskManager.setTaskMode('harvest_plant');
         });
 
+        // Zone buttons
+        document.getElementById('zone-stockpile').addEventListener('click', () => {
+            this.game.taskManager.setTaskMode('stockpile_zone');
+        });
+
+        document.getElementById('zone-growing').addEventListener('click', () => {
+            this.game.taskManager.setTaskMode('growing_zone');
+        });
+
         // Build buttons
         document.getElementById('build-wall').addEventListener('click', () => {
             this.game.buildMode = 'wall';
+            this.game.currentTaskType = null;
+            this.game.canvas.style.cursor = 'crosshair';
+            this.game.uiManager.updateModeIndicator();
+            this.game.uiManager.updateButtonStates();
+        });
+
+        document.getElementById('build-door').addEventListener('click', () => {
+            this.game.buildMode = 'door';
             this.game.currentTaskType = null;
             this.game.canvas.style.cursor = 'crosshair';
             this.game.uiManager.updateModeIndicator();
@@ -56,8 +73,20 @@ class InputManager {
             this.game.uiManager.updateButtonStates();
         });
 
-        document.getElementById('build-storage').addEventListener('click', () => {
-            this.game.taskManager.setStorageMode();
+        document.getElementById('build-bed').addEventListener('click', () => {
+            this.game.buildMode = 'bed';
+            this.game.currentTaskType = null;
+            this.game.canvas.style.cursor = 'crosshair';
+            this.game.uiManager.updateModeIndicator();
+            this.game.uiManager.updateButtonStates();
+        });
+
+        document.getElementById('build-chair').addEventListener('click', () => {
+            this.game.buildMode = 'chair';
+            this.game.currentTaskType = null;
+            this.game.canvas.style.cursor = 'crosshair';
+            this.game.uiManager.updateModeIndicator();
+            this.game.uiManager.updateButtonStates();
         });
 
         // Craft buttons
@@ -67,6 +96,11 @@ class InputManager {
 
         document.getElementById('craft-tools').addEventListener('click', () => {
             this.game.taskManager.craftItem('tools');
+        });
+
+        // Management buttons
+        document.getElementById('toggle-priorities').addEventListener('click', () => {
+            this.game.uiManager.togglePriorityModal();
         });
     }
 

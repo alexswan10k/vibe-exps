@@ -7,19 +7,19 @@ class Game {
      */
     constructor(config = {}) {
         console.log('Game constructor started');
-        
+
         this.canvas = document.getElementById('game-canvas');
         if (!this.canvas) {
             console.error('Canvas element not found!');
             return;
         }
-        
+
         this.ctx = this.canvas.getContext('2d');
         if (!this.ctx) {
             console.error('Canvas context not available!');
             return;
         }
-        
+
         this.tileSize = config.tileSize || 32;
         this.mapWidth = config.mapWidth || 50;
         this.mapHeight = config.mapHeight || 50;
@@ -36,6 +36,7 @@ class Game {
         this.taskQueue = [];
         this.droppedResources = [];
         this.plants = [];
+        this.zones = [];
         this.storageArea = null;
         this.areaSelection = null;
         this.isSelectingArea = false;
@@ -82,13 +83,16 @@ class Game {
             this.uiManager = new UIManager(this);
             this.taskManager = new TaskManager(this);
             console.log('Managers initialized successfully');
+            
+            // Initialize UI after managers are ready
+            this.uiManager.updateUI();
         } catch (error) {
             console.error('Error initializing managers:', error);
         }
 
         this.loadSpriteSheet();
         this.gameLoop();
-        
+
         console.log('Game constructor completed');
     }
 
@@ -108,33 +112,25 @@ class Game {
 
     init() {
         console.log('Game init started');
-        
+
         // Set canvas size
         this.canvas.width = window.innerWidth - 600;
         this.canvas.height = window.innerHeight;
         console.log(`Canvas size: ${this.canvas.width}x${this.canvas.height}`);
-        
+
         // Generate map and entities
         console.log('Generating map...');
         this.generateMap();
         console.log(`Map generated: ${this.mapWidth}x${this.mapHeight}`);
-        
+
         console.log('Creating initial pawns...');
         this.createInitialPawns();
         console.log(`Created ${this.pawns.length} pawns`);
-        
+
         console.log('Generating resources...');
         this.generateResources();
         console.log(`Generated ${this.resources.length} resources`);
-        
-        // Initialize UI
-        console.log('Initializing UI...');
-        try {
-            this.uiManager.updateUI();
-        } catch (error) {
-            console.error('Error updating UI:', error);
-        }
-        
+
         console.log('Game init completed');
     }
 
@@ -155,7 +151,7 @@ class Game {
                 }
             }
         }
-        
+
         // Generate plants on grass
         for (let y = 0; y < this.mapHeight; y++) {
             for (let x = 0; x < this.mapWidth; x++) {
@@ -287,7 +283,7 @@ class Game {
 
         // Clean up completed tasks
         this.tasks = this.tasks.filter(task => !task.completed);
-        
+
         // Limit task queue size to prevent memory issues
         if (this.taskQueue.length > 100) {
             this.taskQueue = this.taskQueue.slice(-100);
