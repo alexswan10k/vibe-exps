@@ -1,0 +1,196 @@
+:root {
+    --bg-color: #2c3e50;
+    --ui-bg: rgba(0, 0, 0, 0.7);
+    --text-color: #ecf0f1;
+    --accent-color: #3498db;
+    --danger-color: #e74c3c;
+    --success-color: #2ecc71;
+    --warning-color: #f1c40f;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #1a1a1a;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+#game-container {
+    position: relative;
+    width: 1024px;
+    height: 768px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    background-color: #34495e;
+}
+
+canvas {
+    display: block;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Let clicks pass through to canvas */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+#top-bar {
+    background-color: var(--ui-bg);
+    padding: 10px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: auto;
+    border-bottom: 2px solid rgba(255,255,255,0.1);
+}
+
+.stat-box {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.label {
+    color: #bdc3c7;
+    margin-right: 5px;
+}
+
+#start-wave-btn {
+    background-color: var(--success-color);
+    border: none;
+    color: white;
+    padding: 8px 16px;
+    font-size: 1rem;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+#start-wave-btn:hover {
+    background-color: #27ae60;
+}
+
+#start-wave-btn:disabled {
+    background-color: #7f8c8d;
+    cursor: not-allowed;
+}
+
+#bottom-bar {
+    background-color: var(--ui-bg);
+    padding: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    pointer-events: auto;
+    border-top: 2px solid rgba(255,255,255,0.1);
+}
+
+.tower-selector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: rgba(255,255,255,0.1);
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+    width: 80px;
+}
+
+.tower-selector:hover {
+    background-color: rgba(255,255,255,0.2);
+}
+
+.tower-selector.selected {
+    border-color: var(--accent-color);
+    background-color: rgba(52, 152, 219, 0.2);
+}
+
+.tower-selector.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+.tower-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-bottom: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.basic-tower { background-color: #3498db; border: 2px solid #2980b9; }
+.rapid-tower { background-color: #e67e22; border: 2px solid #d35400; }
+.sniper-tower { background-color: #9b59b6; border: 2px solid #8e44ad; }
+.aoe-tower { background-color: #e74c3c; border: 2px solid #c0392b; }
+
+.tower-info {
+    text-align: center;
+}
+
+.tower-info .name {
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.tower-info .cost {
+    font-size: 0.8rem;
+    color: var(--warning-color);
+}
+
+#game-over-modal {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+    z-index: 100;
+}
+
+#game-over-modal.hidden {
+    display: none;
+}
+
+#game-over-modal h2 {
+    font-size: 3rem;
+    color: var(--danger-color);
+    margin-bottom: 20px;
+}
+
+#game-over-modal p {
+    font-size: 1.5rem;
+    margin-bottom: 30px;
+}
+
+#restart-btn {
+    background-color: var(--accent-color);
+    border: none;
+    color: white;
+    padding: 12px 24px;
+    font-size: 1.2rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#restart-btn:hover {
+    background-color: #2980b9;
+}

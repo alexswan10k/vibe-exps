@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower Defense</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+
+        <div id="ui-layer">
+            <div id="top-bar">
+                <div class="stat-box">
+                    <span class="label">Lives:</span>
+                    <span id="lives-display">20</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Money:</span>
+                    <span id="money-display">$100</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Wave:</span>
+                    <span id="wave-display">1</span>
+                </div>
+                <button id="start-wave-btn">Start Wave</button>
+            </div>
+
+            <div id="bottom-bar">
+                <div class="tower-selector selected" data-type="basic" data-cost="50">
+                    <div class="tower-icon basic-tower"></div>
+                    <div class="tower-info">
+                        <div class="name">Basic</div>
+                        <div class="cost">$50</div>
+                    </div>
+                </div>
+                <div class="tower-selector" data-type="rapid" data-cost="120">
+                    <div class="tower-icon rapid-tower"></div>
+                    <div class="tower-info">
+                        <div class="name">Rapid</div>
+                        <div class="cost">$120</div>
+                    </div>
+                </div>
+                <div class="tower-selector" data-type="sniper" data-cost="200">
+                    <div class="tower-icon sniper-tower"></div>
+                    <div class="tower-info">
+                        <div class="name">Sniper</div>
+                        <div class="cost">$200</div>
+                    </div>
+                </div>
+                 <div class="tower-selector" data-type="aoe" data-cost="300">
+                    <div class="tower-icon aoe-tower"></div>
+                    <div class="tower-info">
+                        <div class="name">Cannon</div>
+                        <div class="cost">$300</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="game-over-modal" class="hidden">
+            <h2>Game Over</h2>
+            <p>You survived <span id="final-wave">0</span> waves.</p>
+            <button id="restart-btn">Try Again</button>
+        </div>
+    </div>
+
+    <script src="constants.js"></script>
+    <script src="utils.js"></script>
+    <script src="map.js"></script>
+    <script src="entities.js"></script>
+    <script src="renderer.js"></script>
+    <script src="ui-manager.js"></script>
+    <script src="game.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
