@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM Viewer Experiment</title>
+    <!-- Dependencies -->
+    <script src="https://unpkg.com/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://unpkg.com/dicom-parser@1.8.13/dist/dicomParser.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-core@2.6.1/dist/cornerstone.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-math@0.1.9/dist/cornerstoneMath.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-wado-image-loader@3.3.2/dist/cornerstoneWADOImageLoader.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-tools@4.22.1/dist/cornerstoneTools.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            margin-bottom: 20px;
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+        }
+        .tool-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        button {
+            padding: 8px 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.active {
+            background-color: #004494;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .viewer-container {
+            width: 100%;
+            height: 600px;
+            background-color: black;
+            position: relative;
+            border: 1px solid #ccc;
+        }
+        #dicomImage {
+            width: 100%;
+            height: 100%;
+        }
+        .status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+        .instructions {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        }
+        .instructions h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        .instructions ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>DICOM Viewer</h1>
+            <p>View DICOM files entirely in your browser using Cornerstone.js</p>
+        </div>
+
+        <div class="toolbar">
+            <div class="tool-group">
+                <button id="selectFileBtn">Open DICOM File</button>
+                <input type="file" id="fileInput" accept=".dcm, application/dicom" style="display: none;">
+            </div>
+            <div class="tool-group">
+                <button id="panBtn" class="tool-btn" data-tool="Pan">Pan</button>
+                <button id="zoomBtn" class="tool-btn" data-tool="Zoom">Zoom</button>
+                <button id="wwwcBtn" class="tool-btn active" data-tool="Wwwc">Levels</button>
+                <button id="invertBtn">Invert</button>
+                <button id="resetBtn">Reset</button>
+            </div>
+        </div>
+
+        <div class="viewer-container" oncontextmenu="return false;">
+            <div id="dicomImage"></div>
+        </div>
+
+        <div id="status" class="status">Ready to load file...</div>
+
+        <div class="instructions">
+            <h4>Instructions:</h4>
+            <ul>
+                <li><strong>Open DICOM File:</strong> Click to select a local .dcm file.</li>
+                <li><strong>Pan:</strong> Left-click and drag to move the image.</li>
+                <li><strong>Zoom:</strong> Left-click and drag (or use mouse wheel) to zoom.</li>
+                <li><strong>Levels:</strong> Left-click and drag to adjust window width/center (contrast/brightness).</li>
+                <li><strong>Invert:</strong> Click to invert the image colors.</li>
+                <li><strong>Reset:</strong> Click to reset the viewport.</li>
+            </ul>
+            <p><small>Note: Middle mouse button pans, Right mouse button zooms by default.</small></p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration and Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            initCornerstone();
+            setupEventListeners();
+        });
+
+        async function initCornerstone() {
+            // External dependencies
+            cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+            cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+            cornerstoneTools.external.cornerstone = cornerstone;
+            cornerstoneTools.external.Hammer = Hammer;
+            cornerstoneTools.external.cornerstoneMath = cornerstoneMath;
+
+            // Initialize tools
+            cornerstoneTools.init();
+
+            // Handle Cross-Origin Web Worker issue by creating a Blob URL
+            const workerUrl = 'https://unpkg.com/cornerstone-wado-image-loader@3.3.2/dist/cornerstoneWADOImageLoaderWebWorker.min.js';
+            let blobUrl = workerUrl;
+
+            try {
+                const response = await fetch(workerUrl);
+                const scriptContent = await response.text();
+                const blob = new Blob([scriptContent], { type: 'application/javascript' });
+                blobUrl = URL.createObjectURL(blob);
+            } catch (e) {
+                console.warn('Failed to fetch worker script for Blob creation, falling back to CDN URL (may fail due to CORS):', e);
+            }
+
+            // Configure WADO Image Loader
+            cornerstoneWADOImageLoader.webWorkerManager.initialize({
+                maxWebWorkers: navigator.hardwareConcurrency || 1,
+                startWebWorkersOnDemand: true,
+                webWorkerPath: blobUrl,
+                taskConfiguration: {
+                    'decodeTask': {
+                        codecsPath: 'https://unpkg.com/cornerstone-wado-image-loader@3.3.2/dist/cornerstoneWADOImageLoaderCodecs.min.js'
+                    }
+                }
+            });
+
+            // Enable the element
+            const element = document.getElementById('dicomImage');
+            cornerstone.enable(element);
+
+            // Add tools
+            const WwwcTool = cornerstoneTools.WwwcTool;
+            const PanTool = cornerstoneTools.PanTool;
+            const ZoomTool = cornerstoneTools.ZoomTool;
+            const ZoomMouseWheelTool = cornerstoneTools.ZoomMouseWheelTool;
+
+            cornerstoneTools.addTool(WwwcTool);
+            cornerstoneTools.addTool(PanTool);
+            cornerstoneTools.addTool(ZoomTool);
+            cornerstoneTools.addTool(ZoomMouseWheelTool);
+
+            // Set default tool state
+            cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
+            cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 4 }); // Middle
+            cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 2 }); // Right
+            cornerstoneTools.setToolActive('ZoomMouseWheel', { });
+        }
+
+        function setupEventListeners() {
+            const element = document.getElementById('dicomImage');
+            const fileInput = document.getElementById('fileInput');
+            const selectFileBtn = document.getElementById('selectFileBtn');
+            const statusDiv = document.getElementById('status');
+
+            // File selection
+            selectFileBtn.addEventListener('click', () => fileInput.click());
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                statusDiv.innerText = `Loading ${file.name}...`;
+
+                const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
+                loadAndDisplayImage(imageId);
+            });
+
+            // Tools switching
+            const toolBtns = document.querySelectorAll('.tool-btn');
+            toolBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const toolName = e.target.dataset.tool;
+
+                    // Deactivate other tools for left click
+                    toolBtns.forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+
+                    // Set active tool for left button
+                    cornerstoneTools.setToolActive(toolName, { mouseButtonMask: 1 });
+
+                    // Ensure others are passive or whatever strategy we want
+                    // For simplicity, we just set the requested one to active on left click.
+                    // The others (middle/right) stay as configured in init.
+                    // But we should probably set previous active left-click tool to 'passive' or 'enabled'
+                    // actually cornerstoneTools handles this transition if we just call setToolActive.
+                    // However, we need to make sure the OTHER tools are not active on mask 1.
+
+                    // Simple approach: list all primary tools
+                    const primaryTools = ['Wwwc', 'Pan', 'Zoom'];
+                    primaryTools.forEach(t => {
+                        if (t !== toolName) {
+                            cornerstoneTools.setToolEnabled(t); // disables interaction but keeps it available
+                        }
+                    });
+                    cornerstoneTools.setToolActive(toolName, { mouseButtonMask: 1 });
+                });
+            });
+
+            // Invert
+            document.getElementById('invertBtn').addEventListener('click', () => {
+                const viewport = cornerstone.getViewport(element);
+                if (viewport) {
+                    viewport.invert = !viewport.invert;
+                    cornerstone.setViewport(element, viewport);
+                }
+            });
+
+            // Reset
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                cornerstone.reset(element);
+            });
+        }
+
+        function loadAndDisplayImage(imageId) {
+            const element = document.getElementById('dicomImage');
+
+            cornerstone.loadImage(imageId).then(image => {
+                cornerstone.displayImage(element, image);
+                document.getElementById('status').innerText = 'Image loaded.';
+
+                // Enable tools again just in case (optional)
+            }).catch(err => {
+                console.error(err);
+                document.getElementById('status').innerText = 'Error loading image.';
+            });
+        }
+    </script>
+</body>
+</html>
