@@ -32,7 +32,7 @@ Digital card game with deck building, turn-based combat, and simple AI opponents
 - Simple AI opponent logic
 - Card rarity and upgrade systems
 
-### Tower Defense
+### Tower Defense ✅
 Classic strategy game where players build defensive structures to stop waves of enemies.
 - Pathfinding for enemies
 - Multiple tower types with upgrades
@@ -385,3 +385,29 @@ Interactive renderer for exploring the Mandelbrot and Julia sets with deep zoom 
 - Color palette customization
 - Coordinate bookmarking
 - High-resolution image export
+
+## AI & Machine Learning
+
+### Simple Neural Network Visualizer
+Interactive visualization of basic neural networks running entirely in the browser without external dependencies.
+- Custom network architecture builder (input, hidden, output layers)
+- Forward propagation visualization with animated data flow
+- Backpropagation demonstration with weight updates
+- Simple training on basic datasets (XOR, sine wave)
+- Real-time loss and accuracy charts
+
+### Genetic Algorithm Playground
+Browser-based genetic algorithm solver for optimization problems using only vanilla JavaScript.
+- Population visualization with fitness scores
+- Selection, crossover, and mutation animations
+- Classic problems (traveling salesman, function optimization)
+- Interactive parameter controls (mutation rate, population size)
+- Solution evolution tracking over generations
+
+### Decision Tree Builder
+Interactive decision tree construction and visualization for machine learning education.
+- Manual tree building with drag-and-drop nodes
+- Automatic tree generation from sample datasets
+- Information gain and Gini impurity calculations
+- Visual prediction pathway highlighting
+- Dataset splitting and entropy visualization
