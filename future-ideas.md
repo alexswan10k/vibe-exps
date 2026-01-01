@@ -32,7 +32,31 @@ Digital card game with deck building, turn-based combat, and simple AI opponents
 - Simple AI opponent logic
 - Card rarity and upgrade systems
 
+### Tower Defense
+Classic strategy game where players build defensive structures to stop waves of enemies.
+- Pathfinding for enemies
+- Multiple tower types with upgrades
+- Wave management system
+- Resource economy
+- Diverse enemy types
+
+### Neural Cellular Automata
+Interactive simulation of self-organizing textures that can "heal" themselves when damaged, based on machine learning models.
+- "Growing" emojis or textures from single pixels
+- Interactive damage tools (erase parts of the image)
+- Real-time regeneration/healing
+- WebGL/WebGPU acceleration
+- Customizable rule sets
+
 ## Utilities & Tools
+
+### Markdown Slide Generator
+Instantly convert Markdown text files into beautiful, interactive browser-based presentations.
+- Live preview editor
+- Code syntax highlighting
+- Customizable themes and transitions
+- Export to HTML/PDF
+- Presenter mode with timer
 
 ### Habit Tracker
 Visual dashboard for tracking daily habits with streaks, statistics, and motivational elements.
@@ -59,6 +83,14 @@ Spaced repetition system with progress tracking and customizable decks.
 - Multiple choice and typing modes
 
 ## Creative & Experimental
+
+### WebAssembly Video Processor
+High-performance real-time video manipulation tool running entirely in the browser using WebAssembly and ffmpeg.wasm.
+- Real-time filters (edge detection, blur, color grading)
+- Frame-by-frame analysis
+- Client-side encoding/transcoding
+- Webcam input support
+- Performance benchmarking vs JS
 
 ### Music Visualizer
 Real-time audio visualization that responds to microphone input or uploaded music files.
@@ -91,6 +123,14 @@ Interactive diagram creator for brainstorming ideas with drag-and-drop functiona
 - Node styling options
 - Export to image/PDF
 - Collaboration features (future)
+
+### Beat Maker
+Browser-based step sequencer for creating and sharing drum loops and simple melodies.
+- 16-step sequencer interface
+- Multiple instrument kits (drums, synth, bass)
+- BPM control and playback
+- Pattern saving and exporting
+- Visual feedback for active steps
 
 ## Agentic Apps
 
@@ -337,3 +377,11 @@ Chord progressions, scales, and harmonic relationships with interactive audio ge
 - Harmonic analysis
 - Audio playback
 - Theory explanation
+
+### Fractal Explorer
+Interactive renderer for exploring the Mandelbrot and Julia sets with deep zoom capabilities.
+- Real-time rendering using WebGL/shaders
+- Deep zoom functionality
+- Color palette customization
+- Coordinate bookmarking
+- High-resolution image export
