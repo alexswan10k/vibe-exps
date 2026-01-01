@@ -1,0 +1,28 @@
+# Project Rules for AI Assistants
+
+## Core Constraints
+
+1.  **Standalone Execution**:
+    *   ALL prototypes must run directly by opening `index.html` in a browser.
+    *   **NO** `http-server`, build steps, bundlers, or Node.js runtime dependencies for the frontend.
+
+2.  **No Modules**:
+    *   **FORBIDDEN**: `import`, `export`, `require`, `<script type="module">`.
+    *   **REQUIRED**: Use standard `<script src="file.js">` tags. Code shares the global scope.
+
+3.  **Classic Component Syntax**:
+    *   Use Vanilla JS classes (`class Game {}`) or functions.
+    *   **Reference**: See `tower-defense/` for the required file structure and class usage.
+    *   **No JSX**.
+
+4.  **Coding Style**:
+    *   Prefer **Functional Reactive** patterns.
+    *   Avoid mutable state where possible.
+
+## File Structure Example
+(Based on `tower-defense`)
+- `index.html` (loads css and scripts)
+- `styles.css`
+- `game.js` (Core logic)
+- `ui-manager.js` (UI handling class)
+- `utils.js` (Helper functions)

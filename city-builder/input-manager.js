@@ -29,9 +29,19 @@ class InputManager {
             isDragging: false,
             dragStartX: 0,
             dragStartY: 0,
+            dragStartScreenX: 0, // Add explicit initialization
+            dragStartScreenY: 0,
+            initialCameraX: 0,
+            initialCameraY: 0,
+            initialZoom: 1,
             isPlacingBuilding: false,
+            isDeleting: false,
             placementValid: false,
-            hoveredBuilding: null
+            hoveredBuilding: null,
+            lastPlacedX: -1,
+            lastPlacedY: -1,
+            lastDeletedX: -1,
+            lastDeletedY: -1
         };
         
         // Event listeners
@@ -64,6 +74,7 @@ class InputManager {
         this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
         this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
         this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
+        this.canvas.addEventListener('wheel', this.handleWheel.bind(this), { passive: false });
         this.canvas.addEventListener('click', this.handleClick.bind(this));
         this.canvas.addEventListener('contextmenu', this.handleRightClick.bind(this));
         
@@ -75,36 +86,76 @@ class InputManager {
         // Keyboard events
         document.addEventListener('keydown', this.handleKeyDown.bind(this));
         document.addEventListener('keyup', this.handleKeyUp.bind(this));
-        
-        // Building selection buttons
-        const buildingButtons = document.querySelectorAll('.building-btn');
-        buildingButtons.forEach(button => {
-            button.addEventListener('click', this.handleBuildingSelect.bind(this));
-        });
-        
-        // Game control buttons
-        document.getElementById('pause-btn').addEventListener('click', this.handlePause.bind(this));
-        document.getElementById('speed-btn').addEventListener('click', this.handleSpeedChange.bind(this));
-        document.getElementById('save-btn').addEventListener('click', this.handleSave.bind(this));
-        document.getElementById('load-btn').addEventListener('click', this.handleLoad.bind(this));
     }
     
+    // Handle mouse wheel
+    handleWheel(event) {
+        event.preventDefault();
+        if (!this.game.renderer || !this.game.renderer.state) return;
+
+        const zoomSpeed = 0.1;
+        const delta = event.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+        const newZoom = (this.game.renderer.state.camera.zoom || 1) + delta;
+        this.game.setCameraZoom(newZoom);
+    }
+
     // Handle mouse down
     handleMouseDown(event) {
         this.updateMousePosition(event);
         this.mouse.isDown = true;
         this.mouse.button = event.button;
         
-        // Check if clicking on a building
-        const building = this.getBuildingAtPosition(this.mouse.worldX, this.mouse.worldY);
-        if (building) {
-            this.uiState.isDragging = true;
-            this.uiState.dragStartX = this.mouse.worldX;
-            this.uiState.dragStartY = this.mouse.worldY;
-            this.game.selectBuilding(building);
-        } else if (this.selectedBuildingType) {
+        // Right click (button 2) always pans
+        if (event.button === 2) {
+            this.startDragging();
+            return;
+        }
+
+        // Left click
+        // If we are in "Delete Mode"
+        if (this.selectedBuildingType === 'delete') {
+            this.uiState.isDeleting = true;
+            this.deleteBuildingAt(this.mouse.worldX, this.mouse.worldY);
+            this.uiState.lastDeletedX = this.mouse.gridX;
+            this.uiState.lastDeletedY = this.mouse.gridY;
+        }
+        // If we are in "Placement Mode" (a building type is selected)
+        else if (this.selectedBuildingType) {
             this.uiState.isPlacingBuilding = true;
             this.updatePlacementValidity();
+
+            // Place immediately on mouse down for responsiveness
+            if (this.uiState.placementValid) {
+                this.placeBuilding();
+                this.uiState.lastPlacedX = this.mouse.gridX;
+                this.uiState.lastPlacedY = this.mouse.gridY;
+            }
+        } else {
+            // Default Mode: Select or Pan
+            const building = this.getBuildingAtPosition(this.mouse.worldX, this.mouse.worldY);
+            if (building) {
+                this.game.selectBuilding(building);
+            }
+            else {
+                // If clicked on empty space, deselect and start panning
+                this.game.deselectBuilding();
+                this.startDragging();
+            }
+        }
+    }
+
+    // Start dragging operation
+    startDragging() {
+        this.uiState.isDragging = true;
+        this.uiState.dragStartScreenX = this.mouse.x;
+        this.uiState.dragStartScreenY = this.mouse.y;
+
+        // Store initial camera position to calculate relative movement
+        // We need to access the renderer's camera state
+        if (this.game.renderer) {
+            this.uiState.initialCameraX = this.game.renderer.state.camera.x;
+            this.uiState.initialCameraY = this.game.renderer.state.camera.y;
+            this.uiState.initialZoom = this.game.renderer.state.camera.zoom;
         }
     }
     
@@ -115,19 +166,48 @@ class InputManager {
         // Update hovered building
         this.uiState.hoveredBuilding = this.getBuildingAtPosition(this.mouse.worldX, this.mouse.worldY);
         
+        // Handle deletion mode
+        if (this.uiState.isDeleting && this.mouse.isDown) {
+            if (this.uiState.lastDeletedX !== this.mouse.gridX ||
+                this.uiState.lastDeletedY !== this.mouse.gridY) {
+                this.deleteBuildingAt(this.mouse.worldX, this.mouse.worldY);
+                this.uiState.lastDeletedX = this.mouse.gridX;
+                this.uiState.lastDeletedY = this.mouse.gridY;
+            }
+        }
+
         // Update placement validity if placing a building
         if (this.uiState.isPlacingBuilding) {
             this.updatePlacementValidity();
+
+            // Handle Drag-to-Place
+            if (this.mouse.isDown) {
+                // Only place if we are on a new tile to avoid spamming
+                if (this.uiState.lastPlacedX !== this.mouse.gridX ||
+                    this.uiState.lastPlacedY !== this.mouse.gridY) {
+
+                    if (this.uiState.placementValid) {
+                        this.placeBuilding();
+                        this.uiState.lastPlacedX = this.mouse.gridX;
+                        this.uiState.lastPlacedY = this.mouse.gridY;
+                    }
+                }
+            }
         }
         
-        // Handle dragging
-        if (this.uiState.isDragging) {
-            // Calculate drag distance
-            const dx = this.mouse.worldX - this.uiState.dragStartX;
-            const dy = this.mouse.worldY - this.uiState.dragStartY;
+        // Handle dragging (Camera Panning)
+        if (this.uiState.isDragging && this.game.renderer) {
+            // Calculate screen delta
+            const screenDx = this.mouse.x - this.uiState.dragStartScreenX;
+            const screenDy = this.mouse.y - this.uiState.dragStartScreenY;
+
+            // Convert to world delta (divide by zoom)
+            // We subtract from initial position because dragging mouse RIGHT should move camera LEFT (to pull world RIGHT)
+            const zoom = this.uiState.initialZoom || 1;
+            const newCamX = this.uiState.initialCameraX - (screenDx / zoom);
+            const newCamY = this.uiState.initialCameraY - (screenDy / zoom);
             
-            // Notify game of camera movement
-            this.game.moveCamera(dx, dy);
+            this.game.setCameraPosition(newCamX, newCamY);
         }
     }
     
@@ -135,11 +215,13 @@ class InputManager {
     handleMouseUp(event) {
         this.mouse.isDown = false;
         this.uiState.isDragging = false;
+        this.uiState.isDeleting = false;
         
-        // Place building if mouse was released while placing
-        if (this.uiState.isPlacingBuilding && this.uiState.placementValid) {
-            this.placeBuilding();
-        }
+        // Reset last placed/deleted positions so next click always works
+        this.uiState.lastPlacedX = -1;
+        this.uiState.lastPlacedY = -1;
+        this.uiState.lastDeletedX = -1;
+        this.uiState.lastDeletedY = -1;
         
         this.uiState.isPlacingBuilding = false;
     }
@@ -149,7 +231,16 @@ class InputManager {
         this.mouse.isDown = false;
         this.uiState.isDragging = false;
         this.uiState.isPlacingBuilding = false;
+        this.uiState.isDeleting = false;
         this.uiState.hoveredBuilding = null;
+    }
+
+    // Delete building at world position
+    deleteBuildingAt(worldX, worldY) {
+        const building = this.getBuildingAtPosition(worldX, worldY);
+        if (building) {
+            this.game.removeBuilding(building);
+        }
     }
     
     // Handle mouse click
@@ -317,6 +408,11 @@ class InputManager {
             return;
         }
         
+        if (this.selectedBuildingType === 'delete') {
+            this.uiState.placementValid = true;
+            return;
+        }
+
         const buildingType = this.game.buildingTypes[this.selectedBuildingType];
         if (!buildingType) {
             this.uiState.placementValid = false;

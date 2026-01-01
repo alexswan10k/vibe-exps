@@ -50,14 +50,32 @@ class Renderer {
             console.log('Creating Pixi Application...');
 
             // Create Pixi.js application
-            this.app = new PIXI.Application({
-                width: width,
-                height: height,
-                backgroundColor: 0x87CEEB, // Sky blue
-                antialias: true,
-                resolution: window.devicePixelRatio || 1,
-                autoDensity: true
-            });
+            try {
+                this.app = new PIXI.Application({
+                    width: width,
+                    height: height,
+                    backgroundColor: 0x87CEEB, // Sky blue
+                    antialias: true,
+                    resolution: window.devicePixelRatio || 1,
+                    autoDensity: true
+                });
+            } catch (e) {
+                console.warn('WebGL auto-detect failed, falling back to Canvas renderer', e);
+                try {
+                    this.app = new PIXI.Application({
+                        width: width,
+                        height: height,
+                        backgroundColor: 0x87CEEB,
+                        antialias: true,
+                        resolution: window.devicePixelRatio || 1,
+                        autoDensity: true,
+                        forceCanvas: true
+                    });
+                } catch (e2) {
+                    console.error('Fatal error: Could not initialize PixiJS renderer', e2);
+                    return;
+                }
+            }
 
             console.log('Pixi.js app created:', this.app);
             console.log('Canvas view:', this.app.view);
@@ -72,23 +90,21 @@ class Renderer {
             // Create containers
             this.gridContainer = new PIXI.Container();
             this.buildingContainer = new PIXI.Container();
+            this.carContainer = new PIXI.Container();
             this.uiContainer = new PIXI.Container();
 
             // Add containers to stage
             this.stage.addChild(this.gridContainer);
             this.stage.addChild(this.buildingContainer);
+            this.stage.addChild(this.carContainer);
             this.stage.addChild(this.uiContainer);
-
-            // Create a simple test rectangle to verify rendering
-            const testGraphics = new PIXI.Graphics();
-            testGraphics.beginFill(0xff0000);
-            testGraphics.drawRect(100, 100, 100, 100);
-            testGraphics.endFill();
-            this.stage.addChild(testGraphics);
-            console.log('Added test rectangle to stage');
 
             // Create grid graphics
             this.createGrid();
+
+            // Create car graphics
+            this.carGraphics = new PIXI.Graphics();
+            this.carContainer.addChild(this.carGraphics);
 
             // Create preview graphics
             this.previewGraphics = new PIXI.Graphics();
@@ -172,6 +188,33 @@ class Renderer {
             this.updateBuildingGraphics(building);
         }
     }
+
+    // Render cars
+    renderCars() {
+        if (!this.game.trafficManager) return;
+
+        const cars = this.game.trafficManager.cars;
+        this.carGraphics.clear();
+
+        const cellSize = this.state.gridSize;
+        const carSize = cellSize * 0.5; // Increased size
+        const offset = (cellSize - carSize) / 2;
+
+        for (const car of cars) {
+            const screenX = car.x * cellSize + offset;
+            const screenY = car.y * cellSize + offset;
+
+            // Draw car body
+            this.carGraphics.beginFill(car.color);
+            this.carGraphics.drawRoundedRect(screenX, screenY, carSize, carSize, 3);
+            this.carGraphics.endFill();
+
+            // Draw windshield/roof
+            this.carGraphics.beginFill(0x222222);
+            this.carGraphics.drawRect(screenX + 3, screenY + 3, carSize - 6, carSize - 6);
+            this.carGraphics.endFill();
+        }
+    }
     
     // Update building graphics
     updateBuildingGraphics(building) {
@@ -189,6 +232,12 @@ class Renderer {
         const worldX = x * cellSize;
         const worldY = y * cellSize;
         
+        // Handle custom rendering for roads
+        if (type.id === 'road') {
+            this.renderRoad(graphics, building, worldX, worldY, width, height);
+            return;
+        }
+
         // Draw building base
         graphics.beginFill(type.color);
         graphics.drawRect(worldX, worldY, width, height);
@@ -239,26 +288,97 @@ class Renderer {
         text.position.set(worldX + width / 2, worldY + height / 2);
         graphics.addChild(text);
     }
+
+    // Render road with orthogonal connections
+    renderRoad(graphics, building, worldX, worldY, width, height) {
+        const { x, y } = building;
+        const cellSize = this.state.gridSize;
+        const roadWidth = width * 0.4; // Width of the road line
+        const centerOffset = (width - roadWidth) / 2;
+
+        // Draw center hub
+        graphics.beginFill(0x555555);
+        graphics.drawRect(worldX + centerOffset, worldY + centerOffset, roadWidth, roadWidth);
+
+        // Check neighbors
+        const neighbors = {
+            top: this.game.grid.getBuildingAt(x, y - 1),
+            bottom: this.game.grid.getBuildingAt(x, y + 1),
+            left: this.game.grid.getBuildingAt(x - 1, y),
+            right: this.game.grid.getBuildingAt(x + 1, y)
+        };
+
+        // Draw connections
+        if (neighbors.top && neighbors.top.type.id === 'road') {
+            graphics.drawRect(worldX + centerOffset, worldY, roadWidth, centerOffset);
+        }
+        if (neighbors.bottom && neighbors.bottom.type.id === 'road') {
+            graphics.drawRect(worldX + centerOffset, worldY + centerOffset + roadWidth, roadWidth, centerOffset);
+        }
+        if (neighbors.left && neighbors.left.type.id === 'road') {
+            graphics.drawRect(worldX, worldY + centerOffset, centerOffset, roadWidth);
+        }
+        if (neighbors.right && neighbors.right.type.id === 'road') {
+            graphics.drawRect(worldX + centerOffset + roadWidth, worldY + centerOffset, centerOffset, roadWidth);
+        }
+
+        graphics.endFill();
+
+        // Draw road markings (yellow lines) if connected
+        graphics.lineStyle(1, 0xFFD700, 0.8); // Yellow
+
+        // Helper for center lines
+        const midX = worldX + width / 2;
+        const midY = worldY + height / 2;
+
+        if (neighbors.top && neighbors.top.type.id === 'road') {
+            graphics.moveTo(midX, worldY);
+            graphics.lineTo(midX, midY);
+        }
+        if (neighbors.bottom && neighbors.bottom.type.id === 'road') {
+            graphics.moveTo(midX, midY);
+            graphics.lineTo(midX, worldY + height);
+        }
+        if (neighbors.left && neighbors.left.type.id === 'road') {
+            graphics.moveTo(worldX, midY);
+            graphics.lineTo(midX, midY);
+        }
+        if (neighbors.right && neighbors.right.type.id === 'road') {
+            graphics.moveTo(midX, midY);
+            graphics.lineTo(worldX + width, midY);
+        }
+    }
     
     // Render building preview
     renderPreview() {
         const inputManager = this.game.inputManager;
         const selectedType = inputManager.getSelectedBuildingType();
         
-        if (!selectedType || !inputManager.isPlacingBuilding()) {
+        if (!selectedType) {
             this.previewGraphics.clear();
             return;
         }
         
-        const buildingType = this.game.buildingTypes[selectedType];
         const mousePos = inputManager.getMousePosition();
         const gridPos = this.game.grid.worldToGrid(mousePos.world.x, mousePos.world.y);
+        const cellSize = this.state.gridSize;
         
         // Clear preview
         this.previewGraphics.clear();
+
+        if (selectedType === 'delete') {
+            const previewX = gridPos.x * cellSize;
+            const previewY = gridPos.y * cellSize;
+            this.previewGraphics.lineStyle(2, 0xe74c3c, 0.8);
+            this.previewGraphics.beginFill(0xe74c3c, 0.3);
+            this.previewGraphics.drawRect(previewX, previewY, cellSize, cellSize);
+            this.previewGraphics.endFill();
+            return;
+        }
+
+        const buildingType = this.game.buildingTypes[selectedType];
         
         // Calculate preview position
-        const cellSize = this.state.gridSize;
         const previewX = gridPos.x * cellSize;
         const previewY = gridPos.y * cellSize;
         const previewWidth = buildingType.size.width * cellSize;
@@ -340,9 +460,14 @@ class Renderer {
     
     // Render loop
     render() {
+        if (!this.app || !this.app.stage) return;
+
         // Render buildings
         this.renderBuildings();
         
+        // Render cars
+        this.renderCars();
+
         // Render preview
         this.renderPreview();
         

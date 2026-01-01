@@ -289,4 +289,62 @@ class CityGrid {
     clearDirtyCells() {
         this.dirtyCells.clear();
     }
+
+    // Serialize grid data
+    serialize() {
+        const serializedBuildings = [];
+        const uniqueBuildings = this.getAllBuildings();
+
+        for (const building of uniqueBuildings) {
+            serializedBuildings.push({
+                typeId: building.type.id,
+                x: building.x,
+                y: building.y,
+                population: building.population,
+                jobs: building.jobs,
+                id: building.id
+            });
+        }
+
+        return {
+            width: this.width,
+            height: this.height,
+            cellSize: this.cellSize,
+            buildings: serializedBuildings
+        };
+    }
+
+    // Deserialize grid data
+    deserialize(data) {
+        // Clear current grid
+        this.clear();
+
+        // Restore dimensions if needed
+        if (data.width !== this.width || data.height !== this.height) {
+            this.resize(data.width, data.height);
+        }
+
+        // Restore buildings
+        if (data.buildings && Array.isArray(data.buildings)) {
+            for (const bData of data.buildings) {
+                try {
+                    // Create building using the global factory function
+                    const building = window.createBuilding(bData.typeId, bData.x, bData.y);
+
+                    // Restore stats
+                    building.population = bData.population;
+                    building.jobs = bData.jobs;
+                    building.id = bData.id;
+
+                    // Place on grid
+                    window.placeBuilding(building, this);
+
+                    // Restore building count manually since setBuildingAt increments it
+                    // but we might want to ensure it matches
+                } catch (e) {
+                    console.error('Failed to restore building:', e);
+                }
+            }
+        }
+    }
 }

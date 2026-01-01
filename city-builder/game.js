@@ -18,6 +18,7 @@ class Game {
         this.resourceManager = null;
         this.inputManager = null;
         this.uiManager = null;
+        this.trafficManager = null;
         this.renderer = null;
         
         // Game configuration
@@ -25,9 +26,12 @@ class Game {
             gridWidth: 50,
             gridHeight: 50,
             cellSize: 32,
-            initialMoney: 10000,
+            initialMoney: 50000,
             updateInterval: 1000 // Update resources every second
         };
+
+        // Assign global building types to instance
+        this.buildingTypes = window.BUILDING_TYPES;
         
         // Initialize game
         this.init();
@@ -47,8 +51,14 @@ class Game {
         // Create UI manager
         this.uiManager = new UIManager(this);
 
+        // Create traffic manager
+        this.trafficManager = new TrafficManager(this);
+
         // Create renderer
         this.renderer = new Renderer(this);
+
+        // Show welcome message
+        this.showNotification('Welcome! Select a building to start. Right-click to pan.', 'info');
 
         // Set up game loop
         this.lastUpdateTime = Date.now();
@@ -100,6 +110,11 @@ class Game {
         
         // Check for resource shortages
         this.checkResourceShortages();
+
+        // Update traffic
+        if (this.trafficManager) {
+            this.trafficManager.update(deltaTime);
+        }
     }
     
     // Update population
@@ -169,11 +184,6 @@ class Game {
         if (this.renderer) {
             this.renderer.render();
         }
-        
-        // Update UI
-        if (this.uiManager) {
-            this.uiManager.render();
-        }
     }
     
     // Place building
@@ -207,11 +217,18 @@ class Game {
     
     // Remove building
     removeBuilding(building) {
+        // Calculate refund (50% of cost)
+        const refund = Math.floor(building.type.cost * 0.5);
+        if (refund > 0) {
+            this.resourceManager.addMoney(refund);
+        }
+
         // Remove from grid
         removeBuilding(building, this.grid);
         
         // Show notification
-        this.showNotification(`Removed ${building.type.name}`, 'info');
+        const refundMsg = refund > 0 ? ` (Refunded $${refund.toLocaleString()})` : '';
+        this.showNotification(`Removed ${building.type.name}${refundMsg}`, 'info');
         
         // Deselect building if it was selected
         if (this.state.selectedBuilding === building) {

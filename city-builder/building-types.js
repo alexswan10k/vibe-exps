@@ -39,15 +39,15 @@ const RESIDENTIAL = new BuildingType(
     'residential',
     'Residential',
     '#3498db',
-    1000,
-    50,
+    500,
+    10,
     10,
     5,
     0,
     0,
     100,
     0,
-    200,
+    100,
     5,
     { width: 1, height: 1 }
 );
@@ -56,15 +56,15 @@ const COMMERCIAL = new BuildingType(
     'commercial',
     'Commercial',
     '#2ecc71',
-    1500,
-    75,
+    800,
+    15,
     15,
     8,
     0,
     0,
     0,
     50,
-    300,
+    150,
     0,
     { width: 1, height: 1 }
 );
@@ -73,15 +73,15 @@ const INDUSTRIAL = new BuildingType(
     'industrial',
     'Industrial',
     '#e67e22',
-    2000,
-    100,
+    1000,
+    20,
     25,
     12,
     0,
     0,
     0,
     100,
-    400,
+    200,
     -10,
     { width: 1, height: 1 }
 );
@@ -90,15 +90,15 @@ const POWER_PLANT = new BuildingType(
     'power',
     'Power Plant',
     '#f1c40f',
-    5000,
-    200,
+    2000,
+    50,
     5,
     10,
     500,
     0,
     0,
     20,
-    100,
+    50,
     -5,
     { width: 2, height: 2 }
 );
@@ -107,17 +107,34 @@ const WATER_PLANT = new BuildingType(
     'water',
     'Water Plant',
     '#3498db',
-    4000,
-    150,
+    1500,
+    40,
     10,
     5,
     0,
     400,
     0,
     15,
-    80,
+    40,
     -3,
     { width: 2, height: 2 }
+);
+
+const ROAD = new BuildingType(
+    'road',
+    'Road',
+    '#95a5a6', // Gray
+    10,
+    0.1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    { width: 1, height: 1 }
 );
 
 // All building types
@@ -126,7 +143,8 @@ const BUILDING_TYPES = {
     commercial: COMMERCIAL,
     industrial: INDUSTRIAL,
     power: POWER_PLANT,
-    water: WATER_PLANT
+    water: WATER_PLANT,
+    road: ROAD
 };
 
 // Building class instances
@@ -185,10 +203,15 @@ function canPlaceBuilding(buildingType, grid, x, y) {
         return false;
     }
 
-    // Check if all cells are empty
+    // Check if all cells are empty or contain a road if we are placing a road
     for (let dx = 0; dx < buildingType.size.width; dx++) {
         for (let dy = 0; dy < buildingType.size.height; dy++) {
-            if (grid.getBuildingAt(x + dx, y + dy)) {
+            const existingBuilding = grid.getBuildingAt(x + dx, y + dy);
+            if (existingBuilding) {
+                // Allow replacing a road with a road
+                if (buildingType.id === 'road' && existingBuilding.type.id === 'road') {
+                    continue;
+                }
                 return false;
             }
         }
@@ -230,6 +253,7 @@ window.COMMERCIAL = COMMERCIAL;
 window.INDUSTRIAL = INDUSTRIAL;
 window.POWER_PLANT = POWER_PLANT;
 window.WATER_PLANT = WATER_PLANT;
+window.ROAD = ROAD;
 window.BUILDING_TYPES = BUILDING_TYPES;
 window.Building = Building;
 window.createBuilding = createBuilding;
