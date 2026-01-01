@@ -5,7 +5,7 @@ class ResourceManager {
     constructor() {
         // Initial resources
         this.resources = {
-            money: 10000,
+            money: 50000,
             power: { available: 0, consumption: 0, production: 0 },
             water: { available: 0, consumption: 0, production: 0 },
             population: 0,
@@ -96,7 +96,19 @@ class ResourceManager {
             stats.totalWaterConsumption += building.type.waterConsumption;
             stats.totalPopulation += building.population;
             stats.totalJobs += building.jobs;
-            stats.totalTaxRevenue += building.type.taxRevenue;
+            
+            // Calculate tax revenue based on occupancy
+            let occupancyRate = 1;
+            if (building.type.populationCapacity > 0) {
+                occupancyRate = building.population / building.type.populationCapacity;
+            } else if (building.type.jobCapacity > 0) {
+                occupancyRate = building.jobs / building.type.jobCapacity;
+            } else {
+                // For utility buildings, no occupancy tax scaling (flat rate if any)
+                occupancyRate = 1;
+            }
+            
+            stats.totalTaxRevenue += building.type.taxRevenue * occupancyRate;
             stats.totalMaintenanceCost += building.type.maintenance;
             stats.totalHappinessImpact += building.type.happinessImpact;
             stats.buildingCount++;
@@ -240,7 +252,7 @@ class ResourceManager {
     // Reset resources
     reset() {
         this.resources = {
-            money: 10000,
+            money: 50000,
             power: { available: 0, consumption: 0, production: 0 },
             water: { available: 0, consumption: 0, production: 0 },
             population: 0,

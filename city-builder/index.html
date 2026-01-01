@@ -23,6 +23,8 @@
                     <div id="building-selection">
                         <h3>Buildings</h3>
                         <div class="building-buttons">
+                            <button class="building-btn delete-btn" data-building="delete">Delete</button>
+                            <button class="building-btn" data-building="road">Road</button>
                             <button class="building-btn" data-building="residential">Residential</button>
                             <button class="building-btn" data-building="commercial">Commercial</button>
                             <button class="building-btn" data-building="industrial">Industrial</button>
@@ -84,8 +86,6 @@
     <!-- External Libraries -->
     <script>console.log('=== HTML SCRIPTS LOADING ===');</script>
     <script src="https://unpkg.com/pixi.js@7.4.0/dist/pixi.min.js"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
     <!-- Game Modules -->
     <script src="building-types.js"></script>
@@ -94,8 +94,8 @@
     <script src="input-manager.js"></script>
     <script src="ui-manager.js"></script>
     <script src="renderer.js"></script>
+    <script src="traffic-manager.js"></script>
     <script src="game.js"></script>
-    <script src="app.js"></script>
     <script src="main.js"></script>
 </body>
 </html>

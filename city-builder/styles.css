@@ -109,6 +109,14 @@ body {
     background-color: #2980b9;
 }
 
+.building-btn.delete-btn {
+    background-color: #e67e22;
+}
+
+.building-btn.delete-btn:hover {
+    background-color: #d35400;
+}
+
 .building-btn.active {
     background-color: #e74c3c;
 }
