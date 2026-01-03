@@ -266,10 +266,10 @@
 
     <div class="search-container">
         <div class="search-wrapper">
-            <input type="text" id="searchInput" placeholder="Search projects... (e.g., 'game html' or 'chatbot')" class="search-box">
-            <button id="clearSearch" class="clear-search" title="Clear search">×</button>
+            <input type="text" id="searchInput" placeholder="Search projects... (e.g., 'game html' or 'chatbot')" class="search-box" aria-label="Search projects">
+            <button id="clearSearch" class="clear-search" title="Clear search" aria-label="Clear search">×</button>
         </div>
-        <button id="shakeButton" class="shake-btn">🌋</button>
+        <button id="shakeButton" class="shake-btn" aria-label="Explode cards">🌋</button>
     </div>
 
     <div class="project-grid">
@@ -646,7 +646,8 @@
 
             categoryButtons.forEach(btn => {
                 btn.addEventListener('click', () => {
-                    btn.classList.toggle('active');
+                    const isActive = btn.classList.toggle('active');
+                    btn.setAttribute('aria-pressed', isActive);
                     filterCards();
                 });
             });
