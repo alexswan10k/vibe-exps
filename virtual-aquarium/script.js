@@ -86,6 +86,27 @@ let roundWinner = null;
 let initialPreyCount = 0;
 let initialPredatorCount = 0;
 
+// === PHASE 3: Curriculum Learning ===
+let difficultyLevel = 1;         // 1-10 scale
+let preyWinStreak = 0;           // Consecutive prey wins
+let predatorWinStreak = 0;       // Consecutive predator wins
+
+// Difficulty affects predator capabilities
+function getPredatorSpeedMultiplier() {
+    return 0.5 + (difficultyLevel * 0.05); // 0.55 at level 1, 1.0 at level 10
+}
+
+function getPredatorDetectionRange() {
+    return 100 + (difficultyLevel * 10); // 110 at level 1, 200 at level 10
+}
+
+// === PHASE 4: Genetic Evolution ===
+let generation = 1;
+let topPreySurvivors = [];      // Top 3 prey brains from last round
+let topPredatorSurvivors = [];  // Top 3 predator brains from last round
+let topPreyFitness = 0;
+let topPredatorFitness = 0;
+
 // Simple Neural Network for fish behavior
 class NeuralNetwork {
     constructor(inputSize, hiddenSize, outputSize) {
@@ -115,11 +136,20 @@ class NeuralNetwork {
     }
 
     sigmoid(x) {
-        return 1 / (1 + Math.exp(-x));
+        return 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, x))));
     }
 
     sigmoidDerivative(x) {
         return x * (1 - x);
+    }
+
+    // Tanh activation - centered around 0, faster learning
+    tanh(x) {
+        return Math.tanh(x);
+    }
+
+    tanhDerivative(x) {
+        return 1 - x * x;
     }
 
     matrixMultiply(a, b) {
@@ -178,9 +208,9 @@ class NeuralNetwork {
         let hidden = this.matrixMultiply(this.weightsIH, inputMatrix);
         hidden = this.matrixAdd(hidden, this.biasH);
 
-        // Apply activation
+        // Apply tanh activation for hidden layer (centered, faster learning)
         for (let i = 0; i < hidden.length; i++) {
-            hidden[i][0] = this.sigmoid(hidden[i][0]);
+            hidden[i][0] = this.tanh(hidden[i][0]);
         }
 
         // Output layer
@@ -215,6 +245,14 @@ class NeuralNetwork {
         const weightsHOT = this.matrixTranspose(this.weightsHO);
         const hiddenErrors = this.matrixMultiply(weightsHOT, outputErrors);
 
+        // Clip errors to prevent exploding gradients
+        for (let i = 0; i < outputErrors.length; i++) {
+            outputErrors[i][0] = Math.max(-1, Math.min(1, outputErrors[i][0]));
+        }
+        for (let i = 0; i < hiddenErrors.length; i++) {
+            hiddenErrors[i][0] = Math.max(-1, Math.min(1, hiddenErrors[i][0]));
+        }
+
         // Calculate mean squared error for tracking
         let totalError = 0;
         for (let i = 0; i < outputErrors.length; i++) {
@@ -233,15 +271,15 @@ class NeuralNetwork {
             this.biasO[i][0] += this.learningRate * outputErrors[i][0] * this.sigmoidDerivative(outputs[i]);
         }
 
-        // Update hidden weights and biases
+        // Update hidden weights and biases (using tanh derivative)
         for (let i = 0; i < this.weightsIH.length; i++) {
             for (let j = 0; j < this.weightsIH[0].length; j++) {
-                this.weightsIH[i][j] += this.learningRate * hiddenErrors[i][0] * this.sigmoidDerivative(hiddens[i]) * inputs[j];
+                this.weightsIH[i][j] += this.learningRate * hiddenErrors[i][0] * this.tanhDerivative(hiddens[i]) * inputs[j];
             }
         }
 
         for (let i = 0; i < this.biasH.length; i++) {
-            this.biasH[i][0] += this.learningRate * hiddenErrors[i][0] * this.sigmoidDerivative(hiddens[i]);
+            this.biasH[i][0] += this.learningRate * hiddenErrors[i][0] * this.tanhDerivative(hiddens[i]);
         }
 
         return mse; // Return the error for tracking
@@ -272,6 +310,30 @@ class NeuralNetwork {
         mutateMatrix(this.weightsHO);
         mutateMatrix(this.biasH);
         mutateMatrix(this.biasO);
+    }
+
+    // === PHASE 4: Genetic Crossover ===
+    crossover(partner) {
+        const child = new NeuralNetwork(this.inputSize, this.hiddenSize, this.outputSize);
+
+        // Crossover helper - randomly pick from either parent
+        const crossoverMatrix = (m1, m2) => {
+            const result = [];
+            for (let i = 0; i < m1.length; i++) {
+                result[i] = [];
+                for (let j = 0; j < m1[0].length; j++) {
+                    result[i][j] = Math.random() < 0.5 ? m1[i][j] : m2[i][j];
+                }
+            }
+            return result;
+        };
+
+        child.weightsIH = crossoverMatrix(this.weightsIH, partner.weightsIH);
+        child.weightsHO = crossoverMatrix(this.weightsHO, partner.weightsHO);
+        child.biasH = crossoverMatrix(this.biasH, partner.biasH);
+        child.biasO = crossoverMatrix(this.biasO, partner.biasO);
+
+        return child;
     }
 
     // Save neural network to localStorage
@@ -597,18 +659,46 @@ class Angelfish extends Fish {
 }
 
 class SmartFish extends Fish {
-    constructor(x, y, team = null) {
+    constructor(x, y, team = null, parentBrain = null) {
         super(x, y);
 
-        // Try to load neural network from localStorage, fallback to new network
-        const storageKey = team ? `aquarium-${team}-brain` : 'aquarium-brain';
-        this.brain = NeuralNetwork.load(storageKey) || new NeuralNetwork(15, 10, 4);
+        // === PHASE 4: Team-specific input sizes ===
+        // Prey: 22 base + 4 schooling = 26 inputs
+        // Predator: 22 base + 3 pack hunting = 25 inputs
+        const inputSize = team === 'prey' ? 26 : (team === 'predator' ? 25 : 22);
+        const storageKey = team ? `aquarium-${team}-brain-v2` : 'aquarium-brain';
+
+        if (parentBrain) {
+            // Inherit from parent with mutation
+            this.brain = parentBrain.copy();
+            this.brain.mutate(0.05); // 5% mutation rate
+        } else {
+            // Try to load from localStorage
+            const savedBrain = NeuralNetwork.load(storageKey);
+            if (savedBrain && savedBrain.inputSize === inputSize) {
+                this.brain = savedBrain;
+            } else {
+                this.brain = new NeuralNetwork(inputSize, 12, 4);
+            }
+        }
 
         this.fitness = 0;
         this.lifetime = 0;
         this.lastDecision = [0, 0, 0, 0];
         this.decisionCooldown = 0;
         this.team = team; // 'prey', 'predator', or null
+
+        // === PHASE 4: Generation tracking ===
+        this.generation = generation;
+        this.parentFitness = 0;
+
+        // Velocity tracking for prediction
+        this.prevX = x;
+        this.prevY = y;
+
+        // Reflex system - immediate danger response
+        this.reflexDistance = 60; // Distance at which reflex kicks in
+        this.inReflexMode = false;
 
         // Error tracking for visualization
         this.errorHistory = [];
@@ -617,6 +707,16 @@ class SmartFish extends Fish {
         // Auto-save timer
         this.lastSaveTime = Date.now();
         this.saveInterval = 30000; // Save every 30 seconds
+
+        // === PHASE 3: Experience Replay Buffer ===
+        this.experienceBuffer = [];     // Stores recent experiences
+        this.maxExperiences = 50;       // Keep last 50 state-action pairs
+        this.experienceReplayCounter = 0;
+        this.experienceReplayInterval = 120; // Replay every 2 seconds (120 frames)
+
+        // === PHASE 3: Short-term Memory ===
+        this.previousHidden = new Array(12).fill(0.5); // Previous hidden layer state
+        this.hiddenActivations = new Array(12).fill(0.5);
     }
 
     update() {
@@ -625,7 +725,7 @@ class SmartFish extends Fish {
 
         // Auto-save neural network periodically
         if (Date.now() - this.lastSaveTime > this.saveInterval) {
-            const storageKey = this.team ? `aquarium-${this.team}-brain` : 'aquarium-brain';
+            const storageKey = this.team ? `aquarium-${this.team}-brain-v2` : 'aquarium-brain';
             this.brain.save(storageKey);
             this.lastSaveTime = Date.now();
         }
@@ -649,6 +749,9 @@ class SmartFish extends Fish {
             if (this.decisionCooldown <= 0) {
                 this.makeDecision();
                 this.decisionCooldown = 10; // Make decisions every 10 frames
+
+                // === PHASE 3: Record experience ===
+                this.recordExperience();
             }
 
             // Apply movement based on neural network output
@@ -678,9 +781,72 @@ class SmartFish extends Fish {
         if (this.team === 'prey') {
             this.fleeFromPredators();
         }
+
+        // === PHASE 3: Experience Replay ===
+        this.experienceReplayCounter++;
+        if (this.experienceReplayCounter >= this.experienceReplayInterval) {
+            this.experienceReplayCounter = 0;
+            this.replayExperiences();
+        }
+    }
+
+    // === PHASE 3: Record current state-action pair ===
+    recordExperience() {
+        const experience = {
+            state: this.getSensoryInputs(),
+            action: [...this.lastDecision],
+            timestamp: this.lifetime,
+            position: { x: this.x, y: this.y }
+        };
+
+        this.experienceBuffer.push(experience);
+
+        // Keep buffer size limited
+        if (this.experienceBuffer.length > this.maxExperiences) {
+            this.experienceBuffer.shift();
+        }
+    }
+
+    // === PHASE 3: Learn from past experiences ===
+    replayExperiences() {
+        if (this.experienceBuffer.length < 10) return; // Need enough experiences
+
+        // Mark old experiences as "survived" if fish is still alive
+        const currentTime = this.lifetime;
+        const survivalThreshold = 180; // 3 seconds (at 60fps)
+
+        for (const exp of this.experienceBuffer) {
+            const timeSince = currentTime - exp.timestamp;
+            if (timeSince > survivalThreshold && !exp.evaluated) {
+                exp.evaluated = true;
+                exp.survived = true;
+
+                // Positive reinforcement for actions that led to survival
+                if (this.team === 'prey') {
+                    // Prey: surviving is good, reinforce the action
+                    const reinforcedAction = exp.action.map(v => Math.min(1, v * 1.1));
+                    this.brain.learningRate = learningRates.preySurvival * 0.5;
+                    this.brain.train(exp.state, reinforcedAction);
+                }
+            }
+        }
+
+        // Sample and train from random past experiences
+        const sampleSize = Math.min(5, this.experienceBuffer.length);
+        for (let i = 0; i < sampleSize; i++) {
+            const idx = Math.floor(Math.random() * this.experienceBuffer.length);
+            const exp = this.experienceBuffer[idx];
+
+            if (exp.survived) {
+                // Reinforce successful experiences more
+                this.brain.learningRate = learningRates.preySurvival * 0.3;
+                this.brain.train(exp.state, exp.action);
+            }
+        }
     }
 
     huntPrey() {
+        // First check for catches
         for (let i = fish.length - 1; i >= 0; i--) {
             const prey = fish[i];
             // Skip teammates, self, and non-fish
@@ -695,16 +861,67 @@ class SmartFish extends Fish {
                 this.starvationTime = 0;
                 this.lastAte = Date.now();
 
-                // Reward predator for successful hunt - reinforce current outputs
-                const reinforcedOutputs = this.lastDecision.map(v => Math.min(1, v + 0.1));
-                this.brain.learningRate = learningRates.predatorHunting;
-                const error = this.brain.train(this.getSensoryInputs(), reinforcedOutputs);
+                // Strong positive reinforcement for catching prey
+                // Reinforce the decisions that led to this catch
+                const successOutputs = [
+                    this.lastDecision[0],     // Keep current turn (it worked!)
+                    0.9,                       // High speed was good
+                    0.2,                       // Don't eat plants when hunting
+                    0.8                        // Lunge is effective
+                ];
+                this.brain.learningRate = learningRates.predatorHunting * 2; // Double learning rate for success
+                const error = this.brain.train(this.getSensoryInputs(), successOutputs);
                 this.errorHistory.push(error);
                 if (this.errorHistory.length > this.maxErrorHistory) this.errorHistory.shift();
 
                 addToTrainingLog('Predator caught prey!');
-                break;
+                return; // Exit after catching
             }
+        }
+
+        // If no catch, train toward nearest prey
+        let nearestPrey = null;
+        let nearestDist = Infinity;
+
+        for (const other of fish) {
+            if (other === this) continue;
+            if (other.team === 'prey' || (other instanceof Fish && !(other instanceof SmartFish) && !(other instanceof PredatorFish))) {
+                const dist = Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestPrey = other;
+                }
+            }
+        }
+
+        if (nearestPrey && nearestDist < 200) {
+            // Calculate ideal chase direction (toward prey)
+            const chaseAngle = Math.atan2(nearestPrey.y - this.y, nearestPrey.x - this.x);
+            const currentAngle = Math.atan2(this.dy, this.dx);
+
+            // Calculate target turn rate to achieve chase angle
+            let turnDelta = chaseAngle - currentAngle;
+            // Normalize to -PI to PI
+            while (turnDelta > Math.PI) turnDelta -= Math.PI * 2;
+            while (turnDelta < -Math.PI) turnDelta += Math.PI * 2;
+            const targetTurnRate = Math.max(0, Math.min(1, turnDelta / (Math.PI * 0.5) * 0.5 + 0.5));
+
+            // Opportunity: closer prey = stronger training signal
+            const opportunity = 1 - (nearestDist / 200);
+
+            // Target outputs: [turnRate, speed, eat, special]
+            const targetOutputs = [
+                targetTurnRate,           // Turn toward prey
+                0.8 + opportunity * 0.2,  // Higher speed when closer
+                0.1,                       // Don't eat plants
+                nearestDist < 60 ? 0.9 : 0.2 // Lunge when close
+            ];
+
+            // Train with opportunity-scaled learning rate
+            this.brain.learningRate = learningRates.predatorHunting * (0.5 + opportunity);
+            const error = this.brain.train(this.getSensoryInputs(), targetOutputs);
+            this.errorHistory.push(error);
+            if (this.errorHistory.length > this.maxErrorHistory) this.errorHistory.shift();
         }
     }
 
@@ -723,44 +940,89 @@ class SmartFish extends Fish {
             }
         }
 
-        if (nearestPredator && nearestDist < 150) {
-            // Punish current stay-still/slow behavior if too close to predator
-            // Or rather, reinforce a "flee" direction in a more sophisticated way
-            // For now, let's just train with a punishment if caught or very close
-            if (nearestDist < 50) {
-                const punishment = this.lastDecision.map(v => Math.max(0, v - 0.1));
-                this.brain.learningRate = learningRates.negativeReward;
-                this.brain.train(this.getSensoryInputs(), punishment);
+        if (nearestPredator) {
+            // Trigger reflex mode when very close
+            if (nearestDist < this.reflexDistance) {
+                this.inReflexMode = true;
+            }
+
+            // Train with directional rewards when predator is in range
+            if (nearestDist < 150) {
+                // Calculate ideal flee direction (away from predator)
+                const fleeAngle = Math.atan2(this.y - nearestPredator.y, this.x - nearestPredator.x);
+                const currentAngle = Math.atan2(this.dy, this.dx);
+
+                // How well are we fleeing? (1 = perfect flee direction, 0 = toward predator)
+                const angleDiff = Math.abs(fleeAngle - currentAngle);
+                const normalizedDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff) / Math.PI;
+                const fleeQuality = 1 - normalizedDiff; // Higher is better
+
+                // Calculate target turn rate to achieve flee angle
+                // turnRate 0.5 = no turn, 0 = turn left, 1 = turn right
+                let turnDelta = fleeAngle - currentAngle;
+                // Normalize to -PI to PI
+                while (turnDelta > Math.PI) turnDelta -= Math.PI * 2;
+                while (turnDelta < -Math.PI) turnDelta += Math.PI * 2;
+                const targetTurnRate = Math.max(0, Math.min(1, turnDelta / (Math.PI * 0.5) * 0.5 + 0.5));
+
+                // Urgency: closer predator = stronger training signal
+                const urgency = 1 - (nearestDist / 150);
+
+                // Target outputs: [turnRate, speed, eat, special]
+                // - Turn toward flee direction
+                // - High speed to escape
+                // - Don't eat (waste of time)
+                // - Use dash (special) if very close
+                const targetOutputs = [
+                    targetTurnRate,           // Turn toward flee direction
+                    0.9,                       // Max speed
+                    0.1,                       // Don't eat
+                    nearestDist < 80 ? 0.9 : 0.3 // Dash when close
+                ];
+
+                // Train with urgency-scaled learning rate
+                this.brain.learningRate = learningRates.negativeReward * (1 + urgency);
+                const error = this.brain.train(this.getSensoryInputs(), targetOutputs);
+                this.errorHistory.push(error);
+                if (this.errorHistory.length > this.maxErrorHistory) this.errorHistory.shift();
+
+                // Reward if we're fleeing well, punish if not
+                if (fleeQuality < 0.5 && nearestDist < 80) {
+                    addToTrainingLog('Prey learning to flee (bad angle)');
+                }
             }
         }
     }
 
     makeDecision() {
-        // Gather sensory inputs
+        // === PHASE 3: Save previous hidden state for memory ===
+        this.previousHidden = [...(this.hiddenActivations || new Array(12).fill(0.5))];
+
+        // Gather sensory inputs (now includes memory from previous hidden state)
         const inputs = this.getSensoryInputs();
 
         // Get neural network output
         const result = this.brain.predict(inputs);
         this.lastDecision = result.output;
 
-        // Store hidden layer for visualization
+        // Store hidden layer for visualization and next iteration's memory
         this.hiddenActivations = result.hidden;
     }
 
     getSensoryInputs() {
         // Find nearest plant
         let nearestPlant = null;
-        let nearestDistance = Infinity;
+        let nearestPlantDistance = Infinity;
 
         for (const plant of plants) {
             const distance = Math.sqrt((this.x - plant.x) ** 2 + (this.y - plant.y) ** 2);
-            if (distance < nearestDistance) {
-                nearestDistance = distance;
+            if (distance < nearestPlantDistance) {
+                nearestPlantDistance = distance;
                 nearestPlant = plant;
             }
         }
 
-        // Find nearest predator and prey
+        // Find nearest predator and prey with velocity tracking
         let nearestPredator = null;
         let nearestPredatorDistance = Infinity;
         let nearestPrey = null;
@@ -783,75 +1045,314 @@ class SmartFish extends Fish {
             }
         }
 
-        // Count nearby fish (within 100px) - teammates and enemies for social behavior
-        let nearbyFishCount = 0;
-        let nearbyTeammates = 0; // Same team fish (social cohesion)
-        let nearbyEnemies = 0;   // Opposite team fish (threat/opportunity awareness)
+        // Count nearby fish (within 100px)
+        let nearbyTeammates = 0;
+        let nearbyEnemies = 0;
 
         for (const otherFish of fish) {
             if (otherFish === this) continue;
 
             const distance = Math.sqrt((this.x - otherFish.x) ** 2 + (this.y - otherFish.y) ** 2);
-            if (distance < 100) {
-                nearbyFishCount++;
-
-                if (otherFish instanceof SmartFish) {
-                    if (otherFish.team === this.team) {
-                        nearbyTeammates++; // Allies nearby
-                    } else {
-                        nearbyEnemies++;   // Rivals nearby
-                    }
+            if (distance < 100 && otherFish instanceof SmartFish) {
+                if (otherFish.team === this.team) {
+                    nearbyTeammates++;
+                } else {
+                    nearbyEnemies++;
                 }
             }
         }
 
-        // Distance to boundaries
+        // Distance to boundaries (normalized urgency - closer = higher value)
         const distToLeft = this.x;
         const distToRight = canvas.width - this.x;
         const distToTop = this.y;
         const distToBottom = canvas.height - this.y;
         const minBoundaryDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+        const boundaryUrgency = 1 - Math.min(minBoundaryDist / 50, 1); // Higher when close to wall
 
-        // Current movement direction (normalized angle)
-        const currentAngle = Math.atan2(this.dy, this.dx) / (Math.PI * 2) + 0.5; // 0-1 range
+        // Calculate velocity of threats (is predator approaching?)
+        let predatorApproaching = 0.5; // Neutral
+        if (nearestPredator) {
+            const predVelX = nearestPredator.dx || 0;
+            const predVelY = nearestPredator.dy || 0;
 
-        // Time since last ate (normalized) - urgency indicator
-        const timeSinceAte = (Date.now() - this.lastAte) / 10000; // Normalize to reasonable scale
+            // Vector from predator to us
+            const toPrey_x = this.x - nearestPredator.x;
+            const toPrey_y = this.y - nearestPredator.y;
 
-        // Sensory inputs (normalized to 0-1)
+            // Dot product shows if predator is moving toward us
+            const dot = predVelX * toPrey_x + predVelY * toPrey_y;
+            const predSpeed = Math.sqrt(predVelX * predVelX + predVelY * predVelY);
+            const dist = Math.sqrt(toPrey_x * toPrey_x + toPrey_y * toPrey_y);
+
+            if (predSpeed > 0.1 && dist > 0) {
+                // Normalized: -1 = fleeing, 0 = perpendicular, 1 = approaching
+                predatorApproaching = (dot / (predSpeed * dist) + 1) / 2; // Map to 0-1
+            }
+        }
+
+        // Calculate if prey is escaping (for predators)
+        let preyEscaping = 0.5; // Neutral
+        if (nearestPrey) {
+            const preyVelX = nearestPrey.dx || 0;
+            const preyVelY = nearestPrey.dy || 0;
+
+            // Vector from us to prey
+            const toPrey_x = nearestPrey.x - this.x;
+            const toPrey_y = nearestPrey.y - this.y;
+
+            // Dot product shows if prey is moving away
+            const dot = preyVelX * toPrey_x + preyVelY * toPrey_y;
+            const preySpeed = Math.sqrt(preyVelX * preyVelX + preyVelY * preyVelY);
+            const dist = Math.sqrt(toPrey_x * toPrey_x + toPrey_y * toPrey_y);
+
+            if (preySpeed > 0.1 && dist > 0) {
+                // 1 = escaping directly away, 0 = coming toward us
+                preyEscaping = (dot / (preySpeed * dist) + 1) / 2;
+            }
+        }
+
+        // Current movement direction
+        const currentAngle = Math.atan2(this.dy, this.dx) / (Math.PI * 2) + 0.5;
+
+        // Our own speed (normalized)
+        const ourSpeed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
+        const normalizedSpeed = Math.min(ourSpeed / 3, 1);
+
+        // === PHASE 3: Get memory from previous hidden state ===
+        const memory = this.previousHidden || new Array(12).fill(0.5);
+        // Normalize tanh outputs (-1 to 1) to (0 to 1)
+        const memoryInputs = memory.slice(0, 4).map(v => (v + 1) / 2);
+
+        // === PHASE 4: Calculate social behavior inputs ===
+        let nearestAllyDx = 0, nearestAllyDy = 0;
+        let allyCount = 0;
+        let avgAllyVx = 0, avgAllyVy = 0;
+        let allyPredatorDx = 0, allyPredatorDy = 0;
+        let allyPredatorCount = 0;
+        let preyBeingChasedByAlly = 0;
+
+        const schoolingRadius = 80;  // For prey
+        const packRadius = 100;      // For predators
+
+        for (const otherFish of fish) {
+            if (otherFish === this || !(otherFish instanceof SmartFish)) continue;
+
+            const dx = otherFish.x - this.x;
+            const dy = otherFish.y - this.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            // Schooling data for prey
+            if (this.team === 'prey' && otherFish.team === 'prey' && dist < schoolingRadius) {
+                allyCount++;
+                avgAllyVx += otherFish.dx || 0;
+                avgAllyVy += otherFish.dy || 0;
+
+                // Track nearest ally
+                if (allyCount === 1 || dist < Math.sqrt(nearestAllyDx * nearestAllyDx + nearestAllyDy * nearestAllyDy)) {
+                    nearestAllyDx = dx;
+                    nearestAllyDy = dy;
+                }
+            }
+
+            // Pack hunting data for predators
+            if (this.team === 'predator' && otherFish.team === 'predator' && dist < packRadius) {
+                allyPredatorCount++;
+
+                // Track nearest ally predator
+                if (allyPredatorCount === 1 || dist < Math.sqrt(allyPredatorDx * allyPredatorDx + allyPredatorDy * allyPredatorDy)) {
+                    allyPredatorDx = dx;
+                    allyPredatorDy = dy;
+                }
+            }
+        }
+
+        // Normalize schooling vectors
+        if (allyCount > 0) {
+            avgAllyVx /= allyCount;
+            avgAllyVy /= allyCount;
+        }
+        const allyDist = Math.sqrt(nearestAllyDx * nearestAllyDx + nearestAllyDy * nearestAllyDy);
+        if (allyDist > 0) {
+            nearestAllyDx /= allyDist;
+            nearestAllyDy /= allyDist;
+        }
+        const avgAllySpeed = Math.sqrt(avgAllyVx * avgAllyVx + avgAllyVy * avgAllyVy);
+        if (avgAllySpeed > 0) {
+            avgAllyVx /= Math.max(avgAllySpeed, 1);
+            avgAllyVy /= Math.max(avgAllySpeed, 1);
+        }
+
+        // Normalize pack hunting vectors
+        const allyPredDist = Math.sqrt(allyPredatorDx * allyPredatorDx + allyPredatorDy * allyPredatorDy);
+        if (allyPredDist > 0) {
+            allyPredatorDx /= allyPredDist;
+            allyPredatorDy /= allyPredDist;
+        }
+
+        // Check if any ally predator is chasing the same prey we're targeting
+        if (this.team === 'predator' && nearestPrey) {
+            for (const otherFish of fish) {
+                if (otherFish === this || otherFish.team !== 'predator') continue;
+                const distToOurPrey = Math.sqrt(
+                    (otherFish.x - nearestPrey.x) ** 2 +
+                    (otherFish.y - nearestPrey.y) ** 2
+                );
+                if (distToOurPrey < 150) {
+                    preyBeingChasedByAlly = 1;
+                    break;
+                }
+            }
+        }
+
+        // Base sensory inputs (22 total: 18 sensory + 4 memory)
         const inputs = [
-            this.hunger / this.maxHunger, // 0: Hunger level (primary drive)
-            this.energy / this.maxEnergy, // 1: Energy level (reproduction readiness)
-            nearestPlant ? Math.min(nearestDistance / 200, 1) : 1, // 2: Distance to nearest plant (food proximity)
-            nearestPlant ? (nearestPlant.x - this.x) / canvas.width + 0.5 : 0.5, // 3: Relative X position of plant
-            nearestPlant ? (nearestPlant.y - this.y) / canvas.height + 0.5 : 0.5, // 4: Relative Y position of plant
+            // Basic needs (0-1)
+            this.hunger / this.maxHunger,                                           // 0: Hunger urgency
+            this.energy / this.maxEnergy,                                           // 1: Energy level
 
-            // Social and environmental awareness
-            nearestPredator ? Math.min(nearestPredatorDistance / 300, 1) : 1, // 5: Distance to nearest predator (threat level)
-            nearestPrey ? Math.min(nearestPreyDistance / 300, 1) : 1, // 6: Distance to nearest prey (hunting opportunity)
-            nearestPredator ? (Math.atan2(nearestPredator.y - this.y, nearestPredator.x - this.x) / (Math.PI * 2) + 0.5) : 0.5, // 7: Direction to predator
-            nearestPrey ? (Math.atan2(nearestPrey.y - this.y, nearestPrey.x - this.x) / (Math.PI * 2) + 0.5) : 0.5, // 8: Direction to prey
-            Math.min(nearbyFishCount / 10, 1), // 9: Number of nearby fish (crowding awareness)
-            Math.min(minBoundaryDist / 50, 1), // 10: Distance to nearest boundary (wall avoidance)
-            currentAngle, // 11: Current movement direction (momentum)
-            Math.min(timeSinceAte, 1), // 12: Time since last ate (feeding urgency)
-            Math.min(nearbyTeammates / 5, 1), // 13: Nearby teammates (social cohesion)
-            Math.min(nearbyEnemies / 5, 1) // 14: Nearby enemies (threat/opportunity awareness)
+            // Plant/food awareness (2-3)
+            nearestPlant ? 1 - Math.min(nearestPlantDistance / 200, 1) : 0,         // 2: Food proximity (higher = closer)
+            nearestPlant ? (Math.atan2(nearestPlant.y - this.y, nearestPlant.x - this.x) / Math.PI + 1) / 2 : 0.5, // 3: Direction to food
+
+            // Predator awareness (4-6) - CRITICAL for prey
+            nearestPredator ? 1 - Math.min(nearestPredatorDistance / 200, 1) : 0,   // 4: Predator proximity (higher = danger!)
+            nearestPredator ? (Math.atan2(nearestPredator.y - this.y, nearestPredator.x - this.x) / Math.PI + 1) / 2 : 0.5, // 5: Direction to predator
+            predatorApproaching,                                                     // 6: Is predator approaching? (1 = yes)
+
+            // Prey awareness (7-9) - CRITICAL for predators
+            nearestPrey ? 1 - Math.min(nearestPreyDistance / 200, 1) : 0,           // 7: Prey proximity (higher = opportunity!)
+            nearestPrey ? (Math.atan2(nearestPrey.y - this.y, nearestPrey.x - this.x) / Math.PI + 1) / 2 : 0.5, // 8: Direction to prey
+            preyEscaping,                                                            // 9: Is prey escaping? (1 = yes)
+
+            // Social awareness (10-11)
+            Math.min(nearbyTeammates / 5, 1),                                        // 10: Nearby allies
+            Math.min(nearbyEnemies / 5, 1),                                          // 11: Nearby threats/targets
+
+            // Spatial awareness (12-14)
+            boundaryUrgency,                                                         // 12: Wall proximity (higher = danger)
+            Math.max(0, Math.min(1, (distToLeft - distToRight) / canvas.width + 0.5)), // 13: Left-right bias
+            Math.max(0, Math.min(1, (distToTop - distToBottom) / canvas.height + 0.5)), // 14: Top-bottom bias
+
+            // Self-state (15-17)
+            currentAngle,                                                            // 15: Current heading
+            normalizedSpeed,                                                         // 16: Current speed
+            this.team === 'predator' ? 1 : 0,                                        // 17: Am I a predator? (role awareness)
+
+            // === PHASE 3: Memory inputs (18-21) ===
+            memoryInputs[0],                                                         // 18: Memory 1 (recent hidden state)
+            memoryInputs[1],                                                         // 19: Memory 2
+            memoryInputs[2],                                                         // 20: Memory 3
+            memoryInputs[3]                                                          // 21: Memory 4
         ];
+
+        // === PHASE 4: Add team-specific social inputs ===
+        if (this.team === 'prey') {
+            // Schooling inputs for prey (22-25)
+            inputs.push(
+                (nearestAllyDx + 1) / 2,                  // 22: Nearest ally direction X (normalized 0-1)
+                (nearestAllyDy + 1) / 2,                  // 23: Nearest ally direction Y (normalized 0-1)
+                Math.min(allyCount / 5, 1),               // 24: Ally count within schooling radius
+                (avgAllyVx + 1) / 2                       // 25: Average ally velocity X (normalized 0-1)
+            );
+        } else if (this.team === 'predator') {
+            // Pack hunting inputs for predators (22-24)
+            inputs.push(
+                (allyPredatorDx + 1) / 2,                 // 22: Nearest ally predator direction X
+                (allyPredatorDy + 1) / 2,                 // 23: Nearest ally predator direction Y
+                preyBeingChasedByAlly                     // 24: Is our target being chased by ally? (0 or 1)
+            );
+        }
 
         return inputs;
     }
 
     applyDecision() {
-        const [moveX, moveY, eat, reproduce] = this.lastDecision;
+        const [turnRate, speedControl, eat, special] = this.lastDecision;
+
+        // REFLEX SYSTEM: Immediate danger response bypasses neural network
+        if (this.team === 'prey' && this.inReflexMode) {
+            // Find nearest predator for reflex direction
+            let nearestPredator = null;
+            let nearestDist = Infinity;
+            for (const other of fish) {
+                if (other.team === 'predator' || other instanceof PredatorFish) {
+                    const dist = Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearestPredator = other;
+                    }
+                }
+            }
+
+            if (nearestPredator && nearestDist < this.reflexDistance) {
+                // Flee directly away from predator at max speed
+                const fleeAngle = Math.atan2(this.y - nearestPredator.y, this.x - nearestPredator.x);
+                this.dx = Math.cos(fleeAngle) * 2.5;
+                this.dy = Math.sin(fleeAngle) * 2.5;
+
+                // Apply position with boundary checking
+                this.applyMovement();
+                return; // Skip neural network decision
+            } else {
+                this.inReflexMode = false; // Exit reflex mode when safe
+            }
+        }
 
         // Convert neural network outputs to actions
-        const speed = 1 + moveX * 1.5; // Reduced max speed from 3 to 2.5
-        const angle = (moveY - 0.5) * Math.PI * 2; // Angle from -π to π
+        // turnRate: 0-1 maps to turning left (-1) to right (+1) relative to current heading
+        // speedControl: 0-1 maps to speed 0.5 to 2.5
 
-        this.dx = Math.cos(angle) * speed;
-        this.dy = Math.sin(angle) * speed;
+        const currentAngle = Math.atan2(this.dy, this.dx);
+        const turnAmount = (turnRate - 0.5) * Math.PI * 0.5; // Max turn: 45 degrees per decision
+        const newAngle = currentAngle + turnAmount;
+        let speed = 0.5 + speedControl * 2.0;
 
+        // === PHASE 3: Curriculum Learning - Apply speed handicap to predators ===
+        if (this.team === 'predator') {
+            speed *= getPredatorSpeedMultiplier(); // Slower at low difficulty
+        }
+
+        this.dx = Math.cos(newAngle) * speed;
+        this.dy = Math.sin(newAngle) * speed;
+
+        this.applyMovement();
+
+        // Eating decision (if output > 0.5, try to eat)
+        if (eat > 0.5) {
+            this.eatPlants();
+        }
+
+        // Special action: For prey = dash away, for predator = lunge
+        if (special > 0.7 && this.energy > 20) {
+            if (this.team === 'prey') {
+                // Quick dash in current direction
+                this.dx *= 1.5;
+                this.dy *= 1.5;
+            } else if (this.team === 'predator') {
+                // Lunge toward nearest prey
+                let nearestPrey = null;
+                let nearestDist = Infinity;
+                for (const other of fish) {
+                    if (other.team === 'prey') {
+                        const dist = Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2);
+                        if (dist < nearestDist) {
+                            nearestDist = dist;
+                            nearestPrey = other;
+                        }
+                    }
+                }
+                if (nearestPrey && nearestDist < 100) {
+                    const lungeAngle = Math.atan2(nearestPrey.y - this.y, nearestPrey.x - this.x);
+                    this.dx = Math.cos(lungeAngle) * 3;
+                    this.dy = Math.sin(lungeAngle) * 3;
+                }
+            }
+            this.energy -= 5; // Special moves cost energy
+        }
+    }
+
+    applyMovement() {
         // Calculate new position
         const newX = this.x + this.dx;
         const newY = this.y + this.dy;
@@ -875,16 +1376,6 @@ class SmartFish extends Fish {
             this.dy *= -1;
         } else {
             this.y = newY;
-        }
-
-        // Eating decision (if output > 0.5, try to eat)
-        if (eat > 0.5) {
-            this.eatPlants();
-        }
-
-        // Reproduction decision (if output > 0.7 and enough energy)
-        if (reproduce > 0.7 && this.energy >= this.maxEnergy * 0.8) {
-            this.reproduce();
         }
     }
 
@@ -932,27 +1423,30 @@ class SmartFish extends Fish {
 
     drawNeuralNetwork() {
         const startX = this.x + 30;
-        const startY = this.y - 40;
+        const startY = this.y - 50;
         const nodeRadius = 3;
         const inputs = this.getSensoryInputs();
 
-        // Draw input layer (15 nodes, arranged in columns)
-        for (let i = 0; i < 15; i++) {
-            const col = Math.floor(i / 8);
-            const row = i % 8;
+        // Draw input layer (18 nodes, arranged in columns)
+        for (let i = 0; i < 18; i++) {
+            const col = Math.floor(i / 9);
+            const row = i % 9;
             const x = startX + col * 8;
-            const y = startY + row * 6;
-            ctx.fillStyle = `rgb(${Math.floor(inputs[i] * 255)}, 100, 100)`;
+            const y = startY + row * 5;
+            const val = inputs[i] || 0;
+            ctx.fillStyle = `rgb(${Math.floor(val * 255)}, 100, 100)`;
             ctx.beginPath();
             ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Draw hidden layer (10 nodes)
-        for (let i = 0; i < 10; i++) {
+        // Draw hidden layer (12 nodes)
+        const hiddenActivations = this.hiddenActivations || new Array(12).fill(0.5);
+        for (let i = 0; i < 12; i++) {
             const x = startX + 35;
-            const y = startY + i * 5;
-            ctx.fillStyle = `rgb(100, ${Math.floor(this.hiddenActivations[i] * 255)}, 100)`;
+            const y = startY + i * 4;
+            const val = (hiddenActivations[i] + 1) / 2; // tanh outputs -1 to 1, normalize to 0-1
+            ctx.fillStyle = `rgb(100, ${Math.floor(val * 255)}, 100)`;
             ctx.beginPath();
             ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
             ctx.fill();
@@ -961,7 +1455,7 @@ class SmartFish extends Fish {
         // Draw output layer (4 nodes)
         for (let i = 0; i < 4; i++) {
             const x = startX + 60;
-            const y = startY + 10 + i * 8;
+            const y = startY + 10 + i * 10;
             ctx.fillStyle = `rgb(100, 100, ${Math.floor(this.lastDecision[i] * 255)})`;
             ctx.beginPath();
             ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
@@ -973,29 +1467,29 @@ class SmartFish extends Fish {
         ctx.lineWidth = 1;
 
         // Input to hidden connections (sample only)
-        for (let i = 0; i < 15; i++) {
-            const inputCol = Math.floor(i / 8);
-            const inputRow = i % 8;
+        for (let i = 0; i < 18; i++) {
+            const inputCol = Math.floor(i / 9);
+            const inputRow = i % 9;
             const inputX = startX + inputCol * 8;
-            const inputY = startY + inputRow * 6;
+            const inputY = startY + inputRow * 5;
 
-            for (let j = 0; j < 10; j++) {
-                if (Math.random() < 0.15) { // Only draw some connections for clarity
+            for (let j = 0; j < 12; j++) {
+                if (Math.random() < 0.1) { // Only draw some connections for clarity
                     ctx.beginPath();
                     ctx.moveTo(inputX, inputY);
-                    ctx.lineTo(startX + 35, startY + j * 5);
+                    ctx.lineTo(startX + 35, startY + j * 4);
                     ctx.stroke();
                 }
             }
         }
 
         // Hidden to output connections
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 12; i++) {
             for (let j = 0; j < 4; j++) {
-                if (Math.random() < 0.4) {
+                if (Math.random() < 0.3) {
                     ctx.beginPath();
-                    ctx.moveTo(startX + 35, startY + i * 5);
-                    ctx.lineTo(startX + 60, startY + 10 + j * 8);
+                    ctx.moveTo(startX + 35, startY + i * 4);
+                    ctx.lineTo(startX + 60, startY + 10 + j * 10);
                     ctx.stroke();
                 }
             }
@@ -1513,6 +2007,57 @@ function endRound() {
     console.log(`Winner: ${roundWinner}`);
     console.log(`Score - Predators: ${predatorScore}, Prey: ${preyScore}`);
 
+    // === PHASE 4: Collect top survivors for breeding ===
+    const preyFish = fish.filter(f => f.team === 'prey');
+    const predatorFish = fish.filter(f => f.team === 'predator');
+
+    // Sort by fitness and keep top 3 brains
+    preyFish.sort((a, b) => b.fitness - a.fitness);
+    predatorFish.sort((a, b) => b.fitness - a.fitness);
+
+    topPreySurvivors = preyFish.slice(0, 3).map(f => ({
+        brain: f.brain.copy(),
+        fitness: f.fitness
+    }));
+    topPredatorSurvivors = predatorFish.slice(0, 3).map(f => ({
+        brain: f.brain.copy(),
+        fitness: f.fitness
+    }));
+
+    // Track top fitness
+    if (topPreySurvivors.length > 0) {
+        topPreyFitness = Math.max(topPreyFitness, topPreySurvivors[0].fitness);
+    }
+    if (topPredatorSurvivors.length > 0) {
+        topPredatorFitness = Math.max(topPredatorFitness, topPredatorSurvivors[0].fitness);
+    }
+
+    addToTrainingLog(`🧬 Top Prey Fitness: ${topPreySurvivors[0]?.fitness.toFixed(0) || 0}`);
+    addToTrainingLog(`🧬 Top Predator Fitness: ${topPredatorSurvivors[0]?.fitness.toFixed(0) || 0}`);
+
+    // === PHASE 3: Curriculum Learning - Adjust difficulty based on win streaks ===
+    if (roundWinner === 'prey') {
+        preyWinStreak++;
+        predatorWinStreak = 0;
+
+        if (preyWinStreak >= 3 && difficultyLevel < 10) {
+            difficultyLevel++;
+            preyWinStreak = 0;
+            addToTrainingLog(`📈 Difficulty increased to ${difficultyLevel}!`);
+            console.log(`📈 Difficulty increased to ${difficultyLevel}`);
+        }
+    } else if (roundWinner === 'predators') {
+        predatorWinStreak++;
+        preyWinStreak = 0;
+
+        if (predatorWinStreak >= 3 && difficultyLevel > 1) {
+            difficultyLevel--;
+            predatorWinStreak = 0;
+            addToTrainingLog(`📉 Difficulty decreased to ${difficultyLevel}`);
+            console.log(`📉 Difficulty decreased to ${difficultyLevel}`);
+        }
+    }
+
     // Start next round after a delay
     setTimeout(() => {
         startNextRound();
@@ -1525,50 +2070,67 @@ function startNextRound() {
     roundActive = true;
     roundWinner = null;
 
-    // Create new generation with evolved neural networks
-    const oldPrey = fish.filter(f => f.team === 'prey');
-    const oldPredators = fish.filter(f => f.team === 'predator');
+    // === PHASE 4: Increment generation ===
+    generation++;
+    addToTrainingLog(`🧬 Generation ${generation} begins!`);
 
     fish = [];
 
-    // Create new prey from survivors
+    // === PHASE 4: Create new prey using crossover breeding ===
     for (let i = 0; i < 5; i++) {
-        let parent;
-        if (oldPrey.length > 0 && Math.random() < 0.7) {
-            parent = oldPrey[Math.floor(Math.random() * oldPrey.length)];
-        }
-
         const prey = new SmartFish(
             Math.random() * canvas.width * 0.4,
             Math.random() * canvas.height,
-            'prey' // Pass team as parameter
+            'prey'
         );
 
-        if (parent) {
+        // Breed from top survivors using crossover
+        if (topPreySurvivors.length >= 2 && Math.random() < 0.8) {
+            // Select two parents (fitness-weighted)
+            const parent1 = topPreySurvivors[Math.floor(Math.random() * Math.min(3, topPreySurvivors.length))];
+            const parent2 = topPreySurvivors[Math.floor(Math.random() * Math.min(3, topPreySurvivors.length))];
+
+            prey.brain = parent1.brain.crossover(parent2.brain);
+            prey.brain.mutate(0.05);
+            prey.parentFitness = (parent1.fitness + parent2.fitness) / 2;
+
+            console.log(`🧬 Prey bred from parents with fitness ${parent1.fitness.toFixed(0)} & ${parent2.fitness.toFixed(0)}`);
+        } else if (topPreySurvivors.length >= 1 && Math.random() < 0.5) {
+            // Single parent + mutation
+            const parent = topPreySurvivors[0];
             prey.brain = parent.brain.copy();
-            prey.brain.mutate(0.05); // Small mutation for prey
+            prey.brain.mutate(0.1);
+            prey.parentFitness = parent.fitness;
         }
+        // Otherwise keeps fresh random brain
 
         fish.push(prey);
     }
 
-    // Create new predators from survivors
+    // === PHASE 4: Create new predators using crossover breeding ===
     for (let i = 0; i < 3; i++) {
-        let parent;
-        if (oldPredators.length > 0 && Math.random() < 0.7) {
-            parent = oldPredators[Math.floor(Math.random() * oldPredators.length)];
-        }
-
         const predator = new SmartFish(
-            canvas.width * 0.7 + Math.random() * canvas.width * 0.25, // Safer right side position
-            Math.random() * (canvas.height - 50) + 25, // Keep away from top/bottom edges
-            'predator' // Pass team as parameter
+            canvas.width * 0.7 + Math.random() * canvas.width * 0.25,
+            Math.random() * (canvas.height - 50) + 25,
+            'predator'
         );
         predator.size = 25;
 
-        if (parent) {
+        // Breed from top survivors using crossover
+        if (topPredatorSurvivors.length >= 2 && Math.random() < 0.8) {
+            const parent1 = topPredatorSurvivors[Math.floor(Math.random() * Math.min(3, topPredatorSurvivors.length))];
+            const parent2 = topPredatorSurvivors[Math.floor(Math.random() * Math.min(3, topPredatorSurvivors.length))];
+
+            predator.brain = parent1.brain.crossover(parent2.brain);
+            predator.brain.mutate(0.05);
+            predator.parentFitness = (parent1.fitness + parent2.fitness) / 2;
+
+            console.log(`🧬 Predator bred from parents with fitness ${parent1.fitness.toFixed(0)} & ${parent2.fitness.toFixed(0)}`);
+        } else if (topPredatorSurvivors.length >= 1 && Math.random() < 0.5) {
+            const parent = topPredatorSurvivors[0];
             predator.brain = parent.brain.copy();
-            predator.brain.mutate(0.05); // Small mutation for predators
+            predator.brain.mutate(0.1);
+            predator.parentFitness = parent.fitness;
         }
 
         fish.push(predator);
@@ -1578,7 +2140,7 @@ function startNextRound() {
     initialPredatorCount = fish.filter(f => f.team === 'predator').length;
 
     addToTrainingLog(`Starting Round ${currentRound + 1} - Prey: ${initialPreyCount}, Predators: ${initialPredatorCount}`);
-    console.log(`Starting Round ${currentRound + 1}`);
+    console.log(`Starting Round ${currentRound + 1} (Gen ${generation})`);
     console.log(`Prey: ${initialPreyCount}, Predators: ${initialPredatorCount}`);
 }
 
@@ -1605,6 +2167,23 @@ function drawAdversarialUI() {
     ctx.fillText(`Prey Left: ${currentPreyCount}/${initialPreyCount}`, 10, 150);
     ctx.fillStyle = 'red';
     ctx.fillText(`Predators Left: ${currentPredatorCount}/${initialPredatorCount}`, 10, 180);
+
+    // === PHASE 3: Show difficulty level ===
+    ctx.fillStyle = 'yellow';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(`Difficulty: ${difficultyLevel}/10`, 10, 210);
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fillText(`Speed: ${(getPredatorSpeedMultiplier() * 100).toFixed(0)}%`, 10, 225);
+
+    // === PHASE 4: Show generation and fitness ===
+    ctx.fillStyle = 'cyan';
+    ctx.font = 'bold 16px Arial';
+    ctx.fillText(`Generation: ${generation}`, 10, 250);
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'rgba(150, 200, 255, 0.8)';
+    ctx.fillText(`Top Prey: ${topPreyFitness.toFixed(0)}`, 10, 265);
+    ctx.fillText(`Top Pred: ${topPredatorFitness.toFixed(0)}`, 10, 280);
 
     // Draw round status
     if (roundWinner) {
@@ -1672,9 +2251,11 @@ function drawBrainPanel(fish, x, y, title, color) {
 
     const inputs = fish.getSensoryInputs();
     const inputLabels = [
-        '🍽️ Hunger', '⚡ Energy', '🌱 Plant Dist', '📍 Plant X', '📍 Plant Y',
-        '🦈 Pred Dist', '🐟 Prey Dist', '🧭 Pred Dir', '🧭 Prey Dir', '👥 Nearby Fish',
-        '🏗️ Boundary', '🌀 Move Dir', '⏰ Time Ate', '🤝 Teammates', '⚔️ Enemies'
+        '🍽️ Hunger', '⚡ Energy', '🌱 Food Near', '🧭 Food Dir',
+        '🦈 Pred Near', '🧭 Pred Dir', '⚠️ Pred Approach',
+        '🐟 Prey Near', '🧭 Prey Dir', '🏃 Prey Escape',
+        '🤝 Allies', '⚔️ Enemies', '🏗️ Wall Danger',
+        '↔️ L/R Bias', '↕️ U/D Bias', '🌀 Heading', '💨 Speed', '🔴 Is Pred'
     ];
 
     for (let i = 0; i < inputs.length; i++) {
