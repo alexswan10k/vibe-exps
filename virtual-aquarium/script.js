@@ -5,7 +5,7 @@ let fish = [];
 let bubbles = [];
 let plants = [];
 let showNeuralNetwork = false;
-let showDebugWeights = true; // Enable debug window by default
+let showDebugWeights = false; // Hidden by default as requested
 let trainingMode = 'adversarial'; // Always adversarial for automatic gameplay
 let trainingData = [];
 let currentTrainingExample = null;
@@ -602,7 +602,7 @@ class SmartFish extends Fish {
 
         // Try to load neural network from localStorage, fallback to new network
         const storageKey = team ? `aquarium-${team}-brain` : 'aquarium-brain';
-        this.brain = NeuralNetwork.load(storageKey) || new NeuralNetwork(14, 10, 4);
+        this.brain = NeuralNetwork.load(storageKey) || new NeuralNetwork(15, 10, 4);
 
         this.fitness = 0;
         this.lifetime = 0;
@@ -668,6 +668,71 @@ class SmartFish extends Fish {
 
         // Update fitness
         this.fitness = this.lifetime + this.energy - this.hunger;
+
+        // Hunt if predator
+        if (this.team === 'predator') {
+            this.huntPrey();
+        }
+
+        // Flee if prey
+        if (this.team === 'prey') {
+            this.fleeFromPredators();
+        }
+    }
+
+    huntPrey() {
+        for (let i = fish.length - 1; i >= 0; i--) {
+            const prey = fish[i];
+            // Skip teammates, self, and non-fish
+            if (prey === this || (prey instanceof SmartFish && prey.team === 'predator') || prey instanceof PredatorFish) continue;
+
+            const distance = Math.sqrt((this.x - prey.x) ** 2 + (this.y - prey.y) ** 2);
+            if (distance < this.size + prey.size) {
+                // Eat the prey
+                fish.splice(i, 1);
+                this.hunger = Math.max(0, this.hunger - 50);
+                this.energy = Math.min(this.maxEnergy, this.energy + 40);
+                this.starvationTime = 0;
+                this.lastAte = Date.now();
+
+                // Reward predator for successful hunt - reinforce current outputs
+                const reinforcedOutputs = this.lastDecision.map(v => Math.min(1, v + 0.1));
+                this.brain.learningRate = learningRates.predatorHunting;
+                const error = this.brain.train(this.getSensoryInputs(), reinforcedOutputs);
+                this.errorHistory.push(error);
+                if (this.errorHistory.length > this.maxErrorHistory) this.errorHistory.shift();
+
+                addToTrainingLog('Predator caught prey!');
+                break;
+            }
+        }
+    }
+
+    fleeFromPredators() {
+        let nearestPredator = null;
+        let nearestDist = Infinity;
+
+        for (const other of fish) {
+            if (other === this) continue;
+            if (other.team === 'predator' || other instanceof PredatorFish) {
+                const dist = Math.sqrt((this.x - other.x) ** 2 + (this.y - other.y) ** 2);
+                if (dist < nearestDist) {
+                    nearestDist = dist;
+                    nearestPredator = other;
+                }
+            }
+        }
+
+        if (nearestPredator && nearestDist < 150) {
+            // Punish current stay-still/slow behavior if too close to predator
+            // Or rather, reinforce a "flee" direction in a more sophisticated way
+            // For now, let's just train with a punishment if caught or very close
+            if (nearestDist < 50) {
+                const punishment = this.lastDecision.map(v => Math.max(0, v - 0.1));
+                this.brain.learningRate = learningRates.negativeReward;
+                this.brain.train(this.getSensoryInputs(), punishment);
+            }
+        }
     }
 
     makeDecision() {
@@ -871,10 +936,10 @@ class SmartFish extends Fish {
         const nodeRadius = 3;
         const inputs = this.getSensoryInputs();
 
-        // Draw input layer (14 nodes, arranged in two columns)
-        for (let i = 0; i < 14; i++) {
-            const col = i < 7 ? 0 : 1;
-            const row = i < 7 ? i : i - 7;
+        // Draw input layer (15 nodes, arranged in columns)
+        for (let i = 0; i < 15; i++) {
+            const col = Math.floor(i / 8);
+            const row = i % 8;
             const x = startX + col * 8;
             const y = startY + row * 6;
             ctx.fillStyle = `rgb(${Math.floor(inputs[i] * 255)}, 100, 100)`;
@@ -908,9 +973,9 @@ class SmartFish extends Fish {
         ctx.lineWidth = 1;
 
         // Input to hidden connections (sample only)
-        for (let i = 0; i < 14; i++) {
-            const inputCol = i < 7 ? 0 : 1;
-            const inputRow = i < 7 ? i : i - 7;
+        for (let i = 0; i < 15; i++) {
+            const inputCol = Math.floor(i / 8);
+            const inputRow = i % 8;
             const inputX = startX + inputCol * 8;
             const inputY = startY + inputRow * 6;
 
@@ -1289,7 +1354,7 @@ function giveReward() {
     smartFish.forEach(fish => {
         if (fish.lastDecision) {
             // Reinforce the current decision
-            const reward = [0.8, 0.8, 0.8, 0.8]; // Positive reinforcement
+            const reward = fish.lastDecision.map(v => Math.min(1, v + 0.15));
             fish.brain.learningRate = learningRates.positiveReward;
             const error = fish.brain.train(fish.getSensoryInputs(), reward);
             fish.errorHistory.push(error);
@@ -1307,7 +1372,7 @@ function givePunishment() {
     smartFish.forEach(fish => {
         if (fish.lastDecision) {
             // Punish the current decision
-            const punishment = [0.2, 0.2, 0.2, 0.2]; // Negative reinforcement
+            const punishment = fish.lastDecision.map(v => Math.max(0, v - 0.15));
             fish.brain.learningRate = learningRates.negativeReward;
             const error = fish.brain.train(fish.getSensoryInputs(), punishment);
             fish.errorHistory.push(error);
@@ -1419,7 +1484,7 @@ function trainAdversarialFish(currentPreyCount, currentPredatorCount) {
         prey.brain.learningRate = learningRates.preySurvival;
         const error = prey.brain.train(prey.getSensoryInputs(), reward);
         prey.errorHistory.push(error);
-        if (prey.errorHistory.length > prey.CamaxErrorHistory) {
+        if (prey.errorHistory.length > prey.maxErrorHistory) {
             prey.errorHistory.shift();
         }
         addToTrainingLog('adversarial prey survival');
@@ -1607,7 +1672,7 @@ function drawBrainPanel(fish, x, y, title, color) {
 
     const inputs = fish.getSensoryInputs();
     const inputLabels = [
-        '🍽️ Hunger', '⚡ Energy', '🌱 Plant Dist', '📍 Plant X', '📍 Plant Y', '🎲 Noise',
+        '🍽️ Hunger', '⚡ Energy', '🌱 Plant Dist', '📍 Plant X', '📍 Plant Y',
         '🦈 Pred Dist', '🐟 Prey Dist', '🧭 Pred Dir', '🧭 Prey Dir', '👥 Nearby Fish',
         '🏗️ Boundary', '🌀 Move Dir', '⏰ Time Ate', '🤝 Teammates', '⚔️ Enemies'
     ];
@@ -1894,38 +1959,68 @@ function animate() {
     requestAnimationFrame(animate);
 }
 
-// Remove old event listeners - now fully automatic
+// Floating Toolbar System
+const toolbar = document.createElement('div');
+toolbar.id = 'floating-toolbar';
+document.body.appendChild(toolbar);
 
-// Add simple neural network toggle button
-const controlsDiv = document.querySelector('.controls');
-const neuralButton = document.createElement('button');
-neuralButton.textContent = 'Toggle Neural Network';
-neuralButton.addEventListener('click', () => {
+function createToolbarButton(label, icon, key, onClick, isActive = false) {
+    const btn = document.createElement('button');
+    btn.className = `toolbar-btn ${isActive ? 'active' : ''}`;
+    btn.innerHTML = `<span>${icon}</span> ${label} <span class="key-hint">${key}</span>`;
+    btn.addEventListener('click', () => {
+        onClick();
+        updateToolbarVisuals();
+    });
+    toolbar.appendChild(btn);
+    return btn;
+}
+
+function updateToolbarVisuals() {
+    controlsBtn.classList.toggle('active', !document.querySelector('.controls').classList.contains('hidden'));
+    neuralBtn.classList.toggle('active', showNeuralNetwork);
+    statsBtn.classList.toggle('active', showDebugWeights);
+}
+
+function toggleUI() {
+    const controls = document.querySelector('.controls');
+    const controlsContainer = document.querySelector('.controls-container');
+    const h1 = document.querySelector('h1');
+
+    controls.classList.toggle('hidden');
+    controlsContainer.classList.toggle('hidden');
+    if (h1) h1.classList.toggle('hidden');
+}
+
+const controlsBtn = createToolbarButton('Controls', '⌨️', 'H', toggleUI, true);
+const neuralBtn = createToolbarButton('Neural', '🧠', 'N', () => {
     showNeuralNetwork = !showNeuralNetwork;
-    neuralButton.textContent = showNeuralNetwork ? 'Hide Neural Network' : 'Show Neural Network';
-});
-controlsDiv.appendChild(neuralButton);
-
-// Add debug weights button
-const debugButton = document.createElement('button');
-debugButton.textContent = 'Debug Weights';
-debugButton.addEventListener('click', () => {
+    addToTrainingLog(`Neural network overlay ${showNeuralNetwork ? 'shown' : 'hidden'}`);
+}, showNeuralNetwork);
+const statsBtn = createToolbarButton('Stats', '📊', 'D', () => {
     showDebugWeights = !showDebugWeights;
-    debugButton.textContent = showDebugWeights ? 'Hide Debug' : 'Debug Weights';
+    addToTrainingLog(`Debug weights overlay ${showDebugWeights ? 'shown' : 'hidden'}`);
+}, showDebugWeights);
+createToolbarButton('Reset', '🔄', 'R', () => {
+    if (confirm('Delete all saved data and reset everything?')) resetEverything();
 });
-controlsDiv.appendChild(debugButton);
 
-// Add reset button
-const resetButton = document.createElement('button');
-resetButton.textContent = '🔄 Reset Everything';
-resetButton.style.backgroundColor = '#ff4444';
-resetButton.style.color = 'white';
-resetButton.addEventListener('click', () => {
-    if (confirm('This will delete all saved neural networks and reset the simulation. Are you sure?')) {
-        resetEverything();
+// Keyboard shortcut for UI toggle and debug overlays
+window.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if (key === 'h') {
+        toggleUI();
+    } else if (key === 'n') {
+        showNeuralNetwork = !showNeuralNetwork;
+        addToTrainingLog(`Neural network overlay ${showNeuralNetwork ? 'shown' : 'hidden'}`);
+    } else if (key === 'd') {
+        showDebugWeights = !showDebugWeights;
+        addToTrainingLog(`Debug weights overlay ${showDebugWeights ? 'shown' : 'hidden'}`);
+    } else if (key === 'r') {
+        if (confirm('Delete all saved data and reset everything?')) resetEverything();
     }
+    updateToolbarVisuals();
 });
-controlsDiv.appendChild(resetButton);
 
 // Reset everything function
 function resetEverything() {
@@ -2029,6 +2124,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearLogButton = document.getElementById('clear-log');
     if (clearLogButton) {
         clearLogButton.addEventListener('click', clearTrainingLog);
+    }
+
+    // Add Fish button
+    const addFishButton = document.getElementById('add-fish');
+    if (addFishButton) {
+        addFishButton.addEventListener('click', () => {
+            const team = Math.random() > 0.7 ? 'predator' : 'prey';
+            const newFish = new SmartFish(
+                Math.random() * canvas.width,
+                Math.random() * canvas.height,
+                team
+            );
+            if (team === 'predator') newFish.size = 25;
+            fish.push(newFish);
+            addToTrainingLog(`Added manual ${team} fish`);
+        });
+    }
+
+    // Add Bubble button
+    const addBubbleButton = document.getElementById('add-bubble');
+    if (addBubbleButton) {
+        addBubbleButton.addEventListener('click', () => {
+            bubbles.push(new Bubble(Math.random() * canvas.width, canvas.height));
+            addToTrainingLog('Added manual bubble');
+        });
     }
 });
 
