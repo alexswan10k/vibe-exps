@@ -4,6 +4,9 @@ const ctx = canvas.getContext('2d');
 let fish = [];
 let bubbles = [];
 let plants = [];
+let rocks = [];
+let currents = [];
+let hidingSpots = [];
 let showNeuralNetwork = false;
 let showDebugWeights = false; // Hidden by default as requested
 let trainingMode = 'adversarial'; // Always adversarial for automatic gameplay
@@ -99,6 +102,48 @@ function getPredatorSpeedMultiplier() {
 function getPredatorDetectionRange() {
     return 100 + (difficultyLevel * 10); // 110 at level 1, 200 at level 10
 }
+
+// === PHASE 5: Ecosystem Balance State ===
+let ecosystemHealth = 100;
+let plantDensity = 0;
+let foodScarcity = 0;
+let season = 'spring';
+let seasonTimer = 0;
+const SEASON_DURATION = 3600; // 60 seconds at 60fps
+
+function initEnvironment() {
+    rocks = [];
+    currents = [];
+    hidingSpots = [];
+
+    // Add some rocks
+    for (let i = 0; i < 4; i++) {
+        rocks.push(new Rock(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            Math.random() * 40 + 30
+        ));
+    }
+
+    // Add some currents
+    currents.push(new Current(200, 100, 400, 100, 0.5, 0)); // Flow right
+    currents.push(new Current(600, 500, 400, 100, -0.5, 0)); // Flow left
+
+    // Add some hiding spots (seaweed patches/caves)
+    for (let i = 0; i < 3; i++) {
+        hidingSpots.push(new HidingSpot(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            60
+        ));
+    }
+}
+
+// === PHASE 5: Enhanced Analytics Tracking ===
+let generationHistory = [];    // { gen, preyFitness, predatorFitness, survivors }
+let populationHistory = [];    // { time, preyCount, predatorCount, plantCount }
+let roundStats = [];           // { round, duration, winner, catchCount }
+let showAnalytics = false;
 
 // === PHASE 4: Genetic Evolution ===
 let generation = 1;
@@ -662,11 +707,12 @@ class SmartFish extends Fish {
     constructor(x, y, team = null, parentBrain = null) {
         super(x, y);
 
-        // === PHASE 4: Team-specific input sizes ===
-        // Prey: 22 base + 4 schooling = 26 inputs
-        // Predator: 22 base + 3 pack hunting = 25 inputs
-        const inputSize = team === 'prey' ? 26 : (team === 'predator' ? 25 : 22);
-        const storageKey = team ? `aquarium-${team}-brain-v2` : 'aquarium-brain';
+        // === PHASE 5: Updated input sizes ===
+        // Base: 22 inputs
+        // Social: Prey +4, Predator +3
+        // Environment: +3 (Obstacle proximity, Obstacle direction, In hiding spot)
+        const inputSize = team === 'prey' ? 29 : (team === 'predator' ? 28 : 25);
+        const storageKey = team ? `aquarium-${team}-brain-v3` : 'aquarium-brain-v3';
 
         if (parentBrain) {
             // Inherit from parent with mutation
@@ -725,7 +771,7 @@ class SmartFish extends Fish {
 
         // Auto-save neural network periodically
         if (Date.now() - this.lastSaveTime > this.saveInterval) {
-            const storageKey = this.team ? `aquarium-${this.team}-brain-v2` : 'aquarium-brain';
+            const storageKey = this.team ? `aquarium-${this.team}-brain-v3` : 'aquarium-brain-v3';
             this.brain.save(storageKey);
             this.lastSaveTime = Date.now();
         }
@@ -760,6 +806,36 @@ class SmartFish extends Fish {
 
         if (this.x < 0 || this.x > canvas.width) this.dx *= -1;
         if (this.y < 0 || this.y > canvas.height) this.dy *= -1;
+
+        // === PHASE 5: Environmental physics ===
+
+        // 1. Rock collisions
+        for (const rock of rocks) {
+            const dx = this.x - rock.x;
+            const dy = this.y - rock.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < rock.radius + this.size) {
+                // Bounce off rock
+                const angle = Math.atan2(dy, dx);
+                this.x = rock.x + Math.cos(angle) * (rock.radius + this.size + 1);
+                this.y = rock.y + Math.sin(angle) * (rock.radius + this.size + 1);
+
+                // Reflect velocity
+                const normalX = dx / dist;
+                const normalY = dy / dist;
+                const dot = this.dx * normalX + this.dy * normalY;
+                this.dx = (this.dx - 2 * dot * normalX) * 0.5;
+                this.dy = (this.dy - 2 * dot * normalY) * 0.5;
+            }
+        }
+
+        // 2. Current forces
+        for (const current of currents) {
+            if (current.contains(this.x, this.y)) {
+                this.dx += current.forceX * 0.05;
+                this.dy += current.forceY * 0.05;
+            }
+        }
 
         // Try to eat nearby plants
         this.eatPlants();
@@ -851,6 +927,16 @@ class SmartFish extends Fish {
             const prey = fish[i];
             // Skip teammates, self, and non-fish
             if (prey === this || (prey instanceof SmartFish && prey.team === 'predator') || prey instanceof PredatorFish) continue;
+
+            // === PHASE 5: Predators can't catch prey in hiding spots ===
+            let isHidden = false;
+            for (const spot of hidingSpots) {
+                if (spot.contains(prey.x, prey.y)) {
+                    isHidden = true;
+                    break;
+                }
+            }
+            if (isHidden) continue;
 
             const distance = Math.sqrt((this.x - prey.x) ** 2 + (this.y - prey.y) ** 2);
             if (distance < this.size + prey.size) {
@@ -1039,8 +1125,18 @@ class SmartFish extends Fish {
                     nearestPredator = otherFish;
                 }
                 if (otherFish.team === 'prey' && distance < nearestPreyDistance) {
-                    nearestPreyDistance = distance;
-                    nearestPrey = otherFish;
+                    // === PHASE 5: Predators can't see prey in hiding spots ===
+                    let preyHidden = false;
+                    for (const spot of hidingSpots) {
+                        if (spot.contains(otherFish.x, otherFish.y)) {
+                            preyHidden = true;
+                            break;
+                        }
+                    }
+                    if (!preyHidden) {
+                        nearestPreyDistance = distance;
+                        nearestPrey = otherFish;
+                    }
                 }
             }
         }
@@ -1205,7 +1301,27 @@ class SmartFish extends Fish {
             }
         }
 
-        // Base sensory inputs (22 total: 18 sensory + 4 memory)
+        // === PHASE 5: Obstacle awareness ===
+        let nearestObstacle = null;
+        let nearestObstacleDist = Infinity;
+        for (const rock of rocks) {
+            const dist = Math.sqrt((this.x - rock.x) ** 2 + (this.y - rock.y) ** 2) - rock.radius;
+            if (dist < nearestObstacleDist) {
+                nearestObstacleDist = dist;
+                nearestObstacle = rock;
+            }
+        }
+
+        // Hiding spot check
+        let inHidingSpot = 0;
+        for (const spot of hidingSpots) {
+            if (spot.contains(this.x, this.y)) {
+                inHidingSpot = 1;
+                break;
+            }
+        }
+
+        // Base sensory inputs (25 total for Phase 5: 18 base + 4 memory + 3 env)
         const inputs = [
             // Basic needs (0-1)
             this.hunger / this.maxHunger,                                           // 0: Hunger urgency
@@ -1216,6 +1332,7 @@ class SmartFish extends Fish {
             nearestPlant ? (Math.atan2(nearestPlant.y - this.y, nearestPlant.x - this.x) / Math.PI + 1) / 2 : 0.5, // 3: Direction to food
 
             // Predator awareness (4-6) - CRITICAL for prey
+            // Modified for hiding: predators can't see prey in hiding spots
             nearestPredator ? 1 - Math.min(nearestPredatorDistance / 200, 1) : 0,   // 4: Predator proximity (higher = danger!)
             nearestPredator ? (Math.atan2(nearestPredator.y - this.y, nearestPredator.x - this.x) / Math.PI + 1) / 2 : 0.5, // 5: Direction to predator
             predatorApproaching,                                                     // 6: Is predator approaching? (1 = yes)
@@ -1243,24 +1360,29 @@ class SmartFish extends Fish {
             memoryInputs[0],                                                         // 18: Memory 1 (recent hidden state)
             memoryInputs[1],                                                         // 19: Memory 2
             memoryInputs[2],                                                         // 20: Memory 3
-            memoryInputs[3]                                                          // 21: Memory 4
+            memoryInputs[3],                                                         // 21: Memory 4
+
+            // === PHASE 5: Environmental inputs (22-24) ===
+            nearestObstacle ? 1 - Math.min(nearestObstacleDist / 100, 1) : 0,        // 22: Obstacle proximity
+            nearestObstacle ? (Math.atan2(nearestObstacle.y - this.y, nearestObstacle.x - this.x) / Math.PI + 1) / 2 : 0.5, // 23: Obstacle direction
+            inHidingSpot                                                             // 24: In hiding spot
         ];
 
         // === PHASE 4: Add team-specific social inputs ===
         if (this.team === 'prey') {
-            // Schooling inputs for prey (22-25)
+            // Schooling inputs for prey (25-28)
             inputs.push(
-                (nearestAllyDx + 1) / 2,                  // 22: Nearest ally direction X (normalized 0-1)
-                (nearestAllyDy + 1) / 2,                  // 23: Nearest ally direction Y (normalized 0-1)
-                Math.min(allyCount / 5, 1),               // 24: Ally count within schooling radius
-                (avgAllyVx + 1) / 2                       // 25: Average ally velocity X (normalized 0-1)
+                (nearestAllyDx + 1) / 2,                  // 25: Nearest ally direction X
+                (nearestAllyDy + 1) / 2,                  // 26: Nearest ally direction Y
+                Math.min(allyCount / 5, 1),               // 27: Ally count
+                (avgAllyVx + 1) / 2                       // 28: Average ally velocity X
             );
         } else if (this.team === 'predator') {
-            // Pack hunting inputs for predators (22-24)
+            // Pack hunting inputs for predators (25-27)
             inputs.push(
-                (allyPredatorDx + 1) / 2,                 // 22: Nearest ally predator direction X
-                (allyPredatorDy + 1) / 2,                 // 23: Nearest ally predator direction Y
-                preyBeingChasedByAlly                     // 24: Is our target being chased by ally? (0 or 1)
+                (allyPredatorDx + 1) / 2,                 // 25: Nearest ally predator direction X
+                (allyPredatorDy + 1) / 2,                 // 26: Nearest ally predator direction Y
+                preyBeingChasedByAlly                     // 27: Is our target being chased by ally?
             );
         }
 
@@ -1715,6 +1837,122 @@ class Bubble {
     }
 }
 
+// === PHASE 5: Environmental Classes ===
+
+class Rock {
+    constructor(x, y, radius) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+        this.color = '#555';
+        // Give it some jagged edges for visual interest
+        this.points = [];
+        const detail = 8;
+        for (let i = 0; i < detail; i++) {
+            const angle = (i / detail) * Math.PI * 2;
+            const r = radius * (0.8 + Math.random() * 0.4);
+            this.points.push({
+                x: Math.cos(angle) * r,
+                y: Math.sin(angle) * r
+            });
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.moveTo(this.points[0].x, this.points[0].y);
+        for (let i = 1; i < this.points.length; i++) {
+            ctx.lineTo(this.points[i].x, this.points[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Add a highlight
+        ctx.strokeStyle = '#777';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+class Current {
+    constructor(x, y, width, height, forceX, forceY) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.forceX = forceX;
+        this.forceY = forceY;
+        this.particles = [];
+        for (let i = 0; i < 10; i++) {
+            this.particles.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                life: Math.random()
+            });
+        }
+    }
+
+    update() {
+        this.particles.forEach(p => {
+            p.x += this.forceX * 5;
+            p.y += this.forceY * 5;
+            p.life -= 0.01;
+            if (p.x < 0) p.x = this.width;
+            if (p.x > this.width) p.x = 0;
+            if (p.y < 0) p.y = this.height;
+            if (p.y > this.height) p.y = 0;
+            if (p.life <= 0) p.life = 1;
+        });
+    }
+
+    draw() {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(100, 200, 255, 0.2)';
+        ctx.lineWidth = 1;
+        this.particles.forEach(p => {
+            ctx.beginPath();
+            ctx.moveTo(this.x + p.x, this.y + p.y);
+            ctx.lineTo(this.x + p.x + this.forceX * 10, this.y + p.y + this.forceY * 10);
+            ctx.stroke();
+        });
+        ctx.restore();
+    }
+
+    contains(x, y) {
+        return x >= this.x && x <= this.x + this.width &&
+            y >= this.y && y <= this.y + this.height;
+    }
+}
+
+class HidingSpot {
+    constructor(x, y, radius) {
+        this.x = x;
+        this.y = y;
+        this.radius = radius;
+    }
+
+    draw() {
+        ctx.save();
+        const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius);
+        gradient.addColorStop(0, 'rgba(0, 50, 0, 0.6)');
+        gradient.addColorStop(1, 'rgba(0, 50, 0, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    contains(x, y) {
+        const dist = Math.sqrt((x - this.x) ** 2 + (y - this.y) ** 2);
+        return dist < this.radius;
+    }
+}
+
 let gameTime = 0;
 
 // Training functions
@@ -2035,6 +2273,16 @@ function endRound() {
     addToTrainingLog(`🧬 Top Prey Fitness: ${topPreySurvivors[0]?.fitness.toFixed(0) || 0}`);
     addToTrainingLog(`🧬 Top Predator Fitness: ${topPredatorSurvivors[0]?.fitness.toFixed(0) || 0}`);
 
+    // === PHASE 5: Track generation history ===
+    generationHistory.push({
+        gen: generation,
+        preyFitness: topPreySurvivors[0]?.fitness || 0,
+        predatorFitness: topPredatorSurvivors[0]?.fitness || 0,
+        preySurvivors: preyFish.length,
+        predatorSurvivors: predatorFish.length
+    });
+    if (generationHistory.length > 20) generationHistory.shift();
+
     // === PHASE 3: Curriculum Learning - Adjust difficulty based on win streaks ===
     if (roundWinner === 'prey') {
         preyWinStreak++;
@@ -2200,6 +2448,121 @@ function drawAdversarialUI() {
     ctx.fillRect(10, canvas.height - 30, (canvas.width - 20) * timeRatio, 20);
 }
 
+// === PHASE 5: Enhanced Analytics Dashboard ===
+
+function updateAnalyticsUI() {
+    if (!showAnalytics) return;
+
+    // Update stats text
+    const genElem = document.getElementById('stat-gen');
+    if (genElem) genElem.textContent = generation;
+
+    const ecoElem = document.getElementById('stat-ecosystem');
+    if (ecoElem) ecoElem.textContent = `${Math.round(ecosystemHealth)}%`;
+
+    const scarcityElem = document.getElementById('stat-scarcity');
+    if (scarcityElem) scarcityElem.textContent = `${Math.round(foodScarcity)}%`;
+
+    // Draw graphs
+    drawFitnessGraph();
+    drawPopulationGraph();
+}
+
+function drawFitnessGraph() {
+    const canvas = document.getElementById('fitness-graph');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const padding = 20;
+
+    if (generationHistory.length < 2) {
+        ctx.fillStyle = '#888';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Waiting for next generation...', w / 2, h / 2);
+        return;
+    }
+
+    // Find max fitness for scaling
+    const maxFit = Math.max(...generationHistory.map(d => Math.max(d.preyFitness, d.predatorFitness))) || 100;
+
+    const getX = (i) => padding + (i / (generationHistory.length - 1)) * (w - padding * 2);
+    const getY = (val) => h - padding - (val / maxFit) * (h - padding * 2);
+
+    // Draw prey fitness (blue)
+    ctx.strokeStyle = '#4682b4';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    generationHistory.forEach((d, i) => {
+        if (i === 0) ctx.moveTo(getX(i), getY(d.preyFitness));
+        else ctx.lineTo(getX(i), getY(d.preyFitness));
+    });
+    ctx.stroke();
+
+    // Draw predator fitness (red)
+    ctx.strokeStyle = '#f44336';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    generationHistory.forEach((d, i) => {
+        if (i === 0) ctx.moveTo(getX(i), getY(d.predatorFitness));
+        else ctx.lineTo(getX(i), getY(d.predatorFitness));
+    });
+    ctx.stroke();
+}
+
+function drawPopulationGraph() {
+    const canvas = document.getElementById('population-graph');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const padding = 20;
+
+    if (populationHistory.length < 2) {
+        ctx.fillStyle = '#888';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Collecting population data...', w / 2, h / 2);
+        return;
+    }
+
+    const maxPop = 20; // Scale to 20 units
+
+    const getX = (i) => padding + (i / (populationHistory.length - 1)) * (w - padding * 2);
+    const getY = (val) => h - padding - (val / maxPop) * (h - padding * 2);
+
+    // Draw area for prey
+    ctx.fillStyle = 'rgba(70, 130, 180, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(getX(0), getY(0));
+    populationHistory.forEach((d, i) => ctx.lineTo(getX(i), getY(d.preyCount)));
+    ctx.lineTo(getX(populationHistory.length - 1), getY(0));
+    ctx.fill();
+
+    // Draw area for predators
+    ctx.fillStyle = 'rgba(244, 67, 54, 0.3)';
+    ctx.beginPath();
+    ctx.moveTo(getX(0), getY(0));
+    populationHistory.forEach((d, i) => ctx.lineTo(getX(i), getY(d.predatorCount)));
+    ctx.lineTo(getX(populationHistory.length - 1), getY(0));
+    ctx.fill();
+
+    // Draw line for plants
+    ctx.strokeStyle = '#4caf50';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    populationHistory.forEach((d, i) => {
+        if (i === 0) ctx.moveTo(getX(i), getY(d.plantCount));
+        else ctx.lineTo(getX(i), getY(d.plantCount));
+    });
+    ctx.stroke();
+}
+
 function drawDebugWeights() {
     const smartFish = fish.filter(f => f instanceof SmartFish);
     if (smartFish.length === 0) return;
@@ -2255,8 +2618,16 @@ function drawBrainPanel(fish, x, y, title, color) {
         '🦈 Pred Near', '🧭 Pred Dir', '⚠️ Pred Approach',
         '🐟 Prey Near', '🧭 Prey Dir', '🏃 Prey Escape',
         '🤝 Allies', '⚔️ Enemies', '🏗️ Wall Danger',
-        '↔️ L/R Bias', '↕️ U/D Bias', '🌀 Heading', '💨 Speed', '🔴 Is Pred'
+        '↔️ L/R Bias', '↕️ U/D Bias', '🌀 Heading', '💨 Speed', '🔴 Is Pred',
+        '🧠 Mem 1', '🧠 Mem 2', '🧠 Mem 3', '🧠 Mem 4',
+        '🛑 Obst Near', '🧭 Obst Dir', '🙈 Hidden'
     ];
+
+    if (fish.team === 'prey') {
+        inputLabels.push('🤝 Ally X', '🤝 Ally Y', '👥 Ally Count', '💨 Ally Vel');
+    } else if (fish.team === 'predator') {
+        inputLabels.push('🤝 Ally X', '🤝 Ally Y', '🏹 Chasing');
+    }
 
     for (let i = 0; i < inputs.length; i++) {
         const value = inputs[i];
@@ -2499,9 +2870,57 @@ function drawWeightMatrices(fish, x, y) {
     }
 }
 
+function updateEcosystem() {
+    seasonTimer++;
+    if (seasonTimer >= SEASON_DURATION) {
+        seasonTimer = 0;
+        const seasons = ['spring', 'summer', 'fall', 'winter'];
+        const currentIdx = seasons.indexOf(season);
+        season = seasons[(currentIdx + 1) % seasons.length];
+        addToTrainingLog(`🌿 Season changed to ${season}`);
+    }
+
+    // Plants regrowth logic based on season
+    let regrowthRate = 300; // base (spring)
+    if (season === 'summer') regrowthRate = 200; // faster
+    if (season === 'fall') regrowthRate = 500;   // slower
+    if (season === 'winter') regrowthRate = 1200; // very slow
+
+    if (gameTime % regrowthRate === 0 && plants.length < 20) {
+        plants.push(new Plant(Math.random() * canvas.width, canvas.height - Math.random() * 100 - 50));
+    }
+
+    // Update ecosystem metrics
+    plantDensity = (plants.length / 20) * 100;
+    foodScarcity = 100 - plantDensity;
+
+    // === PHASE 5: Track population history every 5 seconds ===
+    if (gameTime % 300 === 0) {
+        populationHistory.push({
+            time: gameTime,
+            preyCount: fish.filter(f => f.team === 'prey').length,
+            predatorCount: fish.filter(f => f.team === 'predator').length,
+            plantCount: plants.length
+        });
+        if (populationHistory.length > 50) populationHistory.shift();
+    }
+}
+
 function animate() {
     gameTime++;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Update ecosystem
+    updateEcosystem();
+
+    // Draw hiding spots (background layer)
+    hidingSpots.forEach(s => s.draw());
+
+    // Update and draw currents
+    currents.forEach(c => {
+        c.update();
+        c.draw();
+    });
 
     // Update adversarial rounds if active
     if (trainingMode === 'adversarial') {
@@ -2514,10 +2933,8 @@ function animate() {
         p.draw();
     });
 
-    // Spawn new plants occasionally
-    if (gameTime % 300 === 0 && plants.length < 15) { // Every 5 seconds, max 15 plants
-        plants.push(new Plant(Math.random() * canvas.width, canvas.height - Math.random() * 100 - 50));
-    }
+    // Draw rocks
+    rocks.forEach(r => r.draw());
 
     fish.forEach(f => {
         f.update();
@@ -2531,6 +2948,9 @@ function animate() {
 
     // Draw adversarial UI if active
     drawAdversarialUI();
+
+    // Draw analytics dashboard if active
+    updateAnalyticsUI();
 
     // Draw debug weights if enabled
     if (showDebugWeights) {
@@ -2561,6 +2981,7 @@ function updateToolbarVisuals() {
     controlsBtn.classList.toggle('active', !document.querySelector('.controls').classList.contains('hidden'));
     neuralBtn.classList.toggle('active', showNeuralNetwork);
     statsBtn.classList.toggle('active', showDebugWeights);
+    analyticsBtn.classList.toggle('active', showAnalytics);
 }
 
 function toggleUI() {
@@ -2582,6 +3003,15 @@ const statsBtn = createToolbarButton('Stats', '📊', 'D', () => {
     showDebugWeights = !showDebugWeights;
     addToTrainingLog(`Debug weights overlay ${showDebugWeights ? 'shown' : 'hidden'}`);
 }, showDebugWeights);
+const analyticsBtn = createToolbarButton('Analytics', '📈', 'A', () => {
+    showAnalytics = !showAnalytics;
+    const dash = document.getElementById('analytics-dashboard');
+    dash.classList.toggle('hidden');
+    if (showAnalytics) {
+        dash.scrollIntoView({ behavior: 'smooth' });
+    }
+    addToTrainingLog(`Analytics dashboard ${showAnalytics ? 'shown' : 'hidden'}`);
+}, showAnalytics);
 createToolbarButton('Reset', '🔄', 'R', () => {
     if (confirm('Delete all saved data and reset everything?')) resetEverything();
 });
@@ -2597,6 +3027,14 @@ window.addEventListener('keydown', (e) => {
     } else if (key === 'd') {
         showDebugWeights = !showDebugWeights;
         addToTrainingLog(`Debug weights overlay ${showDebugWeights ? 'shown' : 'hidden'}`);
+    } else if (key === 'a') {
+        showAnalytics = !showAnalytics;
+        const dash = document.getElementById('analytics-dashboard');
+        dash.classList.toggle('hidden');
+        if (showAnalytics) {
+            dash.scrollIntoView({ behavior: 'smooth' });
+        }
+        addToTrainingLog(`Analytics dashboard ${showAnalytics ? 'shown' : 'hidden'}`);
     } else if (key === 'r') {
         if (confirm('Delete all saved data and reset everything?')) resetEverything();
     }
@@ -2647,6 +3085,7 @@ function resetEverything() {
 
     addToTrainingLog('🔄 Everything reset - starting fresh!');
     console.log('✅ Reset complete - starting fresh simulation');
+    initEnvironment();
 }
 
 // Initialize plants
@@ -2738,4 +3177,5 @@ setTimeout(() => {
     startAdversarialTraining();
 }, 1000); // Start after 1 second
 
+initEnvironment();
 animate();

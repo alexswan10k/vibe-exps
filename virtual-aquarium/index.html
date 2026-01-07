@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Virtual Aquarium Prototype</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div class="aquarium-container">
         <h1>Virtual Aquarium</h1>
@@ -25,12 +27,14 @@
                 </div>
 
                 <div class="slider-group">
-                    <label for="positive-reward-rate">Positive Reinforcement: <span id="positive-rate-value">0.10</span></label>
+                    <label for="positive-reward-rate">Positive Reinforcement: <span
+                            id="positive-rate-value">0.10</span></label>
                     <input type="range" id="positive-reward-rate" min="0" max="1" step="0.01" value="0.10">
                 </div>
 
                 <div class="slider-group">
-                    <label for="negative-reward-rate">Negative Reinforcement: <span id="negative-rate-value">0.10</span></label>
+                    <label for="negative-reward-rate">Negative Reinforcement: <span
+                            id="negative-rate-value">0.10</span></label>
                     <input type="range" id="negative-reward-rate" min="0" max="1" step="0.01" value="0.10">
                 </div>
 
@@ -40,8 +44,35 @@
                 </div>
 
                 <div class="slider-group">
-                    <label for="predator-hunting-rate">Predator Hunting: <span id="predator-rate-value">0.02</span></label>
+                    <label for="predator-hunting-rate">Predator Hunting: <span
+                            id="predator-rate-value">0.02</span></label>
                     <input type="range" id="predator-hunting-rate" min="0" max="1" step="0.01" value="0.02">
+                </div>
+            </div>
+
+            <div class="analytics-panel hidden" id="analytics-dashboard">
+                <h3>Analytics Dashboard</h3>
+                <div class="graph-container">
+                    <canvas id="fitness-graph" width="360" height="150"></canvas>
+                    <div class="graph-label">Fitness over Generations</div>
+                </div>
+                <div class="graph-container">
+                    <canvas id="population-graph" width="360" height="150"></canvas>
+                    <div class="graph-label">Population Balance</div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-gen">1</div>
+                        <div class="stat-label">Generation</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-ecosystem">100%</div>
+                        <div class="stat-label">Eco-Health</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stat-scarcity">0%</div>
+                        <div class="stat-label">Scarcity</div>
+                    </div>
                 </div>
             </div>
 
@@ -56,4 +87,5 @@
     </div>
     <script src="script.js"></script>
 </body>
+
 </html>

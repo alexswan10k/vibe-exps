@@ -122,6 +122,7 @@ body {
     background: #ddd;
     outline: none;
     -webkit-appearance: none;
+    appearance: none;
 }
 
 .slider-group input[type="range"]::-webkit-slider-thumb {
@@ -222,4 +223,69 @@ button:hover {
     font-size: 11px;
     font-family: monospace;
     margin-left: auto;
+}
+
+/* Analytics Dashboard */
+.analytics-panel {
+    padding: 20px;
+    background-color: rgba(15, 23, 42, 0.95);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    min-width: 380px;
+    flex: 1;
+    max-width: 450px;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    border: 1px solid rgba(135, 206, 235, 0.2);
+    margin: 20px auto;
+}
+
+.analytics-panel h3 {
+    margin-top: 0;
+    color: #00d2ff;
+    font-size: 18px;
+    text-align: left;
+}
+
+.graph-container {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.graph-label {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-top: 5px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+}
+
+.stat-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 18px;
+    font-weight: bold;
+    color: #00d2ff;
+}
+
+.stat-label {
+    font-size: 10px;
+    color: #888;
+    text-transform: uppercase;
 }
