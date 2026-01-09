@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DICOM / DICOS Tag Explorer</title>
+    <script src="https://unpkg.com/dicom-parser@1.8.13/dist/dicomParser.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --accent: #2563eb;
+            --border: #e2e8f0;
+            --hover: #f1f5f9;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        header {
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #2563eb, #1e40af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p {
+            color: var(--text-secondary);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+        }
+
+        .file-upload label {
+            display: inline-flex;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: var(--accent);
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .file-upload label:hover {
+            background-color: #1d4ed8;
+        }
+
+        .file-upload input[type="file"] {
+            display: none;
+        }
+
+        .search-box {
+            flex-grow: 1;
+            max-width: 400px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 15px;
+            padding-left: 35px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-box input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+            pointer-events: none;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        thead {
+            background-color: var(--bg-color);
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: var(--hover);
+        }
+
+        .tag-code {
+            font-family: 'Monaco', 'Consolas', monospace;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>DICOM / DICOS Tag Explorer</h1>
+            <p>Upload a .dcm or .dicos file to inspect its tags and values.</p>
+        </header>
+
+        <div class="controls">
+            <div class="file-upload">
+                <label for="dicomFile">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Choose File
+                </label>
+                <input type="file" id="dicomFile" accept=".dcm, .dcs, .dicos, application/dicom">
+            </div>
+
+            <div class="search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="searchInput" placeholder="Search tags, VR, or values..." disabled>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="tagsTable">
+                <thead>
+                    <tr>
+                        <th>Tag</th>
+                        <th>VR</th>
+                        <th>Length</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody id="tagsBody">
+                    <tr>
+                        <td colspan="4" class="empty-state">No file loaded. Please upload a DICOM file.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('dicomFile');
+            const searchInput = document.getElementById('searchInput');
+            const tagsBody = document.getElementById('tagsBody');
+
+            let allTags = [];
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (fileEvent) => {
+                    try {
+                        const arrayBuffer = fileEvent.target.result;
+                        const byteArray = new Uint8Array(arrayBuffer);
+                        const dataSet = dicomParser.parseDicom(byteArray);
+
+                        // Extract tags
+                        allTags = extractTags(dataSet, byteArray);
+                        renderTags(allTags);
+
+                        searchInput.disabled = false;
+                        searchInput.value = '';
+                        searchInput.focus();
+                    } catch (err) {
+                        console.error(err);
+                        tagsBody.innerHTML = `<tr><td colspan="4" class="empty-state" style="color: #ef4444;">Error parsing DICOM file: ${err.message}</td></tr>`;
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+
+            searchInput.addEventListener('input', (e) => {
+                const query = e.target.value.toLowerCase();
+                const filteredTags = allTags.filter(tag => {
+                    return tag.tag.toLowerCase().includes(query) ||
+                        tag.vr.toLowerCase().includes(query) ||
+                        String(tag.value).toLowerCase().includes(query);
+                });
+                renderTags(filteredTags);
+            });
+
+            function extractTags(dataSet, byteArray) {
+                const tags = [];
+                for (let key in dataSet.elements) {
+                    const element = dataSet.elements[key];
+
+                    let group = '????';
+                    let elem = '????';
+
+                    if (key.startsWith('x')) {
+                        group = key.substring(1, 5);
+                        elem = key.substring(5, 9);
+                    } else {
+                        if (key.length === 8) {
+                            group = key.substring(0, 4);
+                            elem = key.substring(4, 8);
+                        }
+                    }
+
+                    const tag = `(${group.toUpperCase()},${elem.toUpperCase()})`;
+                    const length = element.length;
+                    const vr = element.vr || '??';
+
+                    let value = '';
+
+                    // Simple value extraction based on VR
+                    // Note: This is a basic implementation. A full dictionary would be better for names.
+                    try {
+                        if (['AE', 'AS', 'CS', 'DA', 'DS', 'DT', 'IS', 'LO', 'LT', 'PN', 'SH', 'ST', 'TM', 'UI', 'UT'].includes(vr)) {
+                            value = dataSet.string(key);
+                        } else if (['SS', 'US', 'SL', 'UL', 'FL', 'FD'].includes(vr)) {
+                            // Handle numeric types - simplified
+                            // Often we can just grab numeric, but if it is an array it's harder
+                            // dicomParser has specific methods, let's try generic
+                            if (element.vm === '1') {
+                                if (vr === 'US' || vr === 'SS') value = dataSet.int16(key, 0); // Warning: US is uint16, SS is int16. 
+                                // Actually dataSet.uint16, etc.
+                                if (vr === 'US') value = dataSet.uint16(key);
+                                if (vr === 'SS') value = dataSet.int16(key);
+                                if (vr === 'UL') value = dataSet.uint32(key);
+                                if (vr === 'SL') value = dataSet.int32(key);
+                                if (vr === 'FL') value = dataSet.float(key);
+                                if (vr === 'FD') value = dataSet.double(key);
+                            } else {
+                                value = `[Array of ${vr}]`;
+                            }
+                        } else if (vr === 'OB' || vr === 'OW' || vr === 'UN') {
+                            value = `[Binary Data ${length} bytes]`;
+                        } else {
+                            // Fallback for others or if parsing fails
+                            // Try to read as string if it looks like text, else hex
+                            if (length < 50) {
+                                // HACK: just try string
+                                const str = dataSet.string(key);
+                                if (str && /^[ -~]+$/.test(str)) {
+                                    value = str;
+                                } else {
+                                    value = `[${vr}]`;
+                                }
+                            } else {
+                                value = `[${vr}]`;
+                            }
+                        }
+                    } catch (e) {
+                        value = `[Error extracting]`;
+                    }
+
+                    // Clean up nulls
+                    if (value === undefined || value === null) value = '';
+                    // Clean up non-printable
+                    value = String(value).replace(/[^\x20-\x7E]/g, '');
+
+                    tags.push({
+                        tag: tag,
+                        vr: vr,
+                        length: length,
+                        value: value
+                    });
+                }
+
+                // Sort by tag
+                return tags.sort((a, b) => a.tag.localeCompare(b.tag));
+            }
+
+            function renderTags(tags) {
+                if (tags.length === 0) {
+                    tagsBody.innerHTML = `<tr><td colspan="4" class="empty-state">No tags found matching your search.</td></tr>`;
+                    return;
+                }
+
+                tagsBody.innerHTML = tags.map(t => `
+                    <tr>
+                        <td class="tag-code">${t.tag}</td>
+                        <td>${t.vr}</td>
+                        <td>${t.length}</td>
+                        <td style="word-break: break-all;">${t.value || '<i style="color:#aaa">empty</i>'}</td>
+                    </tr>
+                `).join('');
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DICOM Viewer Experiment</title>
+    <title>DICOM / DICOS Viewer Experiment</title>
     <!-- Dependencies -->
     <script src="https://unpkg.com/hammerjs@2.0.8/hammer.min.js"></script>
     <script src="https://unpkg.com/dicom-parser@1.8.13/dist/dicomParser.min.js"></script>
@@ -20,17 +21,20 @@
             background-color: #f0f0f0;
             color: #333;
         }
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
+
         .header {
             margin-bottom: 20px;
         }
+
         .toolbar {
             display: flex;
             flex-wrap: wrap;
@@ -40,11 +44,13 @@
             background-color: #f8f8f8;
             border-radius: 4px;
         }
+
         .tool-group {
             display: flex;
             align-items: center;
             gap: 5px;
         }
+
         button {
             padding: 8px 16px;
             border: 1px solid #ccc;
@@ -54,17 +60,21 @@
             cursor: pointer;
             font-size: 14px;
         }
+
         button:hover {
             background-color: #0056b3;
         }
+
         button.active {
             background-color: #004494;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
         }
+
         button:disabled {
             background-color: #ccc;
             cursor: not-allowed;
         }
+
         .viewer-container {
             width: 100%;
             height: 600px;
@@ -72,34 +82,41 @@
             position: relative;
             border: 1px solid #ccc;
         }
+
         #dicomImage {
             width: 100%;
             height: 100%;
         }
+
         .status {
             margin-top: 10px;
             font-size: 14px;
             color: #666;
         }
+
         .instructions {
             margin-top: 20px;
             padding: 15px;
             background-color: #e9ecef;
             border-radius: 4px;
         }
+
         .instructions h4 {
             margin-top: 0;
             margin-bottom: 10px;
         }
+
         .instructions ul {
             margin: 0;
             padding-left: 20px;
         }
+
         .file-input-wrapper {
             position: relative;
             overflow: hidden;
             display: inline-block;
         }
+
         .file-input-wrapper input[type=file] {
             font-size: 100px;
             position: absolute;
@@ -109,17 +126,18 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
-            <h1>DICOM Viewer</h1>
-            <p>View DICOM files entirely in your browser using Cornerstone.js</p>
+            <h1>DICOM / DICOS Viewer</h1>
+            <p>View DICOM or DICOS files entirely in your browser using Cornerstone.js</p>
         </div>
 
         <div class="toolbar">
             <div class="tool-group">
                 <button id="selectFileBtn">Open DICOM File</button>
-                <input type="file" id="fileInput" accept=".dcm, application/dicom" style="display: none;">
+                <input type="file" id="fileInput" accept=".dcm, .dcs, .dicos, application/dicom" style="display: none;">
             </div>
             <div class="tool-group">
                 <button id="panBtn" class="tool-btn" data-tool="Pan">Pan</button>
@@ -139,10 +157,11 @@
         <div class="instructions">
             <h4>Instructions:</h4>
             <ul>
-                <li><strong>Open DICOM File:</strong> Click to select a local .dcm file.</li>
+                <li><strong>Open DICOM File:</strong> Click to select a local .dcm or .dicos file.</li>
                 <li><strong>Pan:</strong> Left-click and drag to move the image.</li>
                 <li><strong>Zoom:</strong> Left-click and drag (or use mouse wheel) to zoom.</li>
-                <li><strong>Levels:</strong> Left-click and drag to adjust window width/center (contrast/brightness).</li>
+                <li><strong>Levels:</strong> Left-click and drag to adjust window width/center (contrast/brightness).
+                </li>
                 <li><strong>Invert:</strong> Click to invert the image colors.</li>
                 <li><strong>Reset:</strong> Click to reset the viewport.</li>
             </ul>
@@ -212,7 +231,7 @@
             cornerstoneTools.setToolActive('Wwwc', { mouseButtonMask: 1 });
             cornerstoneTools.setToolActive('Pan', { mouseButtonMask: 4 }); // Middle
             cornerstoneTools.setToolActive('Zoom', { mouseButtonMask: 2 }); // Right
-            cornerstoneTools.setToolActive('ZoomMouseWheel', { });
+            cornerstoneTools.setToolActive('ZoomMouseWheel', {});
         }
 
         function setupEventListeners() {
@@ -295,4 +314,5 @@
         }
     </script>
 </body>
+
 </html>
