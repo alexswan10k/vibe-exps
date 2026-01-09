@@ -196,14 +196,14 @@ document.addEventListener("DOMContentLoaded", function() {
                 table.className = "cheat-table";
 
                 const thead = document.createElement("thead");
-                thead.innerHTML = \`
+                thead.innerHTML = `
                     <tr>
                         <th class="col-concept">Concept</th>
                         <th class="col-katex">KaTeX (Rendered / Input)</th>
                         <th class="col-meaning">Meaning</th>
                         <th class="col-fsharp">F# Equivalent</th>
                     </tr>
-                \`;
+                `;
                 table.appendChild(thead);
 
                 const tbody = document.createElement("tbody");
@@ -211,17 +211,17 @@ document.addEventListener("DOMContentLoaded", function() {
                     const row = document.createElement("tr");
 
                     // KaTeX Cell: Rendered + Input code
-                    const katexCellContent = \`
-                        <div class="math-render">$$ \${item.katex} $$</div>
-                        <code class="language-latex">\${item.katex}</code>
-                    \`;
+                    const katexCellContent = `
+                        <div class="math-render">$$ ${item.katex} $$</div>
+                        <code class="language-latex">${item.katex}</code>
+                    `;
 
-                    row.innerHTML = \`
-                        <td>\${item.concept}</td>
-                        <td>\${katexCellContent}</td>
-                        <td>\${item.meaning}</td>
-                        <td><pre><code class="language-fsharp">\${item.fsharp}</code></pre></td>
-                    \`;
+                    row.innerHTML = `
+                        <td>${item.concept}</td>
+                        <td>${katexCellContent}</td>
+                        <td>${item.meaning}</td>
+                        <td><pre><code class="language-fsharp">${item.fsharp}</code></pre></td>
+                    `;
                     tbody.appendChild(row);
                 });
                 table.appendChild(tbody);
