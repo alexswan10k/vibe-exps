@@ -1,167 +1,317 @@
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function () {
 
-    // Data Source: Based on the chat log provided
+    // Data Source: Expanded with comprehensive Math <-> F# mappings
     const cheatSheetData = [
         {
-            category: "Operators & Relations",
+            category: "Logic & Sets",
             items: [
                 {
-                    concept: "Fraction",
-                    katex: "\\frac{a}{b}",
-                    meaning: "Divide a by b",
-                    fsharp: "let a,b = 7.0,2.0\nlet q = a / b"
+                    concept: "Negation",
+                    katex: "\\neg P",
+                    meaning: "Not P",
+                    fsharp: "not p"
                 },
                 {
-                    concept: "Power",
-                    katex: "x^n",
-                    meaning: "x to the power n",
-                    fsharp: "let x,n = 3,4\nlet xn = pown x n"
+                    concept: "Conjunction (And)",
+                    katex: "P \\land Q",
+                    meaning: "Both P and Q true",
+                    fsharp: "p && q"
                 },
                 {
-                    concept: "Roots",
-                    katex: "\\sqrt{x}, \\sqrt[n]{x}",
-                    meaning: "Square/nth root",
-                    fsharp: "let r = sqrt 9.0\nlet nthRoot n x = x ** (1.0 / float n)"
+                    concept: "Disjunction (Or)",
+                    katex: "P \\lor Q",
+                    meaning: "At least one true",
+                    fsharp: "p || q"
                 },
                 {
-                    concept: "Plus/Minus",
-                    katex: "a \\pm b",
-                    meaning: "Both a+b and a-b",
-                    fsharp: "let a,b = 10.0,3.0\nlet both = [a + b; a - b]"
-                },
-                {
-                    concept: "Approx Equal",
-                    katex: "\\approx",
-                    meaning: "Approximately equal",
-                    fsharp: "let close eps a b = abs (a-b) <= eps"
-                },
-                {
-                    concept: "Not Equal",
-                    katex: "\\ne",
-                    meaning: "Inequality",
-                    fsharp: "let different = (3 <> 4)"
-                },
-                {
-                    concept: "Inequalities",
-                    katex: "\\le, \\ge, <, >",
-                    meaning: "Order comparisons",
-                    fsharp: "let ok1 = 3 <= 5\nlet ok2 = 7 > 2"
-                }
-            ]
-        },
-        {
-            category: "Big Operators",
-            items: [
-                {
-                    concept: "Summation",
-                    katex: "\\sum_{i=1}^n i",
-                    meaning: "Add a sequence",
-                    fsharp: "let n = 100\nlet s = [1..n] |> List.sum"
-                },
-                {
-                    concept: "Product",
-                    katex: "\\prod_{i=1}^n i",
-                    meaning: "Multiply a sequence",
-                    fsharp: "let n = 6\nlet p = [1..n] |> List.fold (*) 1"
-                },
-                {
-                    concept: "Definite Integral",
-                    katex: "\\int_a^b f(x)\\,dx",
-                    meaning: "Area under curve (numeric)",
-                    fsharp: "let trapz f a b steps =\n  let h = (b-a)/float steps\n  let xs = [0..steps] |> List.map (fun i -> a + h*float i)\n  let ys = xs |> List.map f\n  h * (0.5*List.head ys + (ys |> List.tail |> List.take (steps-1) |> List.sum) + 0.5*List.last ys)"
-                }
-            ]
-        },
-        {
-            category: "Sets & Logic",
-            items: [
-                {
-                    concept: "Membership",
-                    katex: "x \\in A",
-                    meaning: "x is in set A",
-                    fsharp: "let A = set [1;2;3]\nlet inside = Set.contains 2 A"
-                },
-                {
-                    concept: "Subset",
-                    katex: "A \\subseteq B",
-                    meaning: "A is a subset of B",
-                    fsharp: "let isSubset A B = Set.isSubset A B"
-                },
-                {
-                    concept: "For All",
-                    katex: "\\forall x \\in A, P(x)",
-                    meaning: "Predicate holds for all",
-                    fsharp: "let allP A P = A |> Seq.forall P"
-                },
-                {
-                    concept: "Exists",
-                    katex: "\\exists x \\in A, P(x)",
-                    meaning: "At least one satisfies",
-                    fsharp: "let existsP A P = A |> Seq.exists P"
+                    concept: "Exclusive Or",
+                    katex: "P \\oplus Q",
+                    meaning: "Exactly one true",
+                    fsharp: "(p <> q)"
                 },
                 {
                     concept: "Implication",
                     katex: "P \\implies Q",
                     meaning: "If P then Q",
-                    fsharp: "let implies p q = (not p) || q"
+                    fsharp: "if p then q else true\n// or: (not p) || q"
                 },
                 {
                     concept: "Equivalence",
                     katex: "P \\iff Q",
-                    meaning: "Same truth value",
-                    fsharp: "let iff p q = (p && q) || ((not p) && (not q))"
+                    meaning: "P and Q are same",
+                    fsharp: "p = q"
+                },
+                {
+                    concept: "For All",
+                    katex: "\\forall x \\in S, P(x)",
+                    meaning: "True for every x in S",
+                    fsharp: "S |> Seq.forall (fun x -> P x)"
+                },
+                {
+                    concept: "Exists",
+                    katex: "\\exists x \\in S, P(x)",
+                    meaning: "True for some x in S",
+                    fsharp: "S |> Seq.exists (fun x -> P x)"
+                },
+                {
+                    concept: "Membership",
+                    katex: "x \\in S",
+                    meaning: "x is in set S",
+                    fsharp: "Set.contains x S"
+                },
+                {
+                    concept: "Union",
+                    katex: "A \\cup B",
+                    meaning: "In A or B",
+                    fsharp: "Set.union A B"
+                },
+                {
+                    concept: "Intersection",
+                    katex: "A \\cap B",
+                    meaning: "In both A and B",
+                    fsharp: "Set.intersect A B"
+                },
+                {
+                    concept: "Difference",
+                    katex: "A \\setminus B",
+                    meaning: "In A but not B",
+                    fsharp: "Set.difference A B"
+                },
+                {
+                    concept: "Subset",
+                    katex: "A \\subseteq B",
+                    meaning: "A is contained in B",
+                    fsharp: "Set.isSubset A B"
+                },
+                {
+                    concept: "Empty Set",
+                    katex: "\\emptyset",
+                    meaning: "Set with no elements",
+                    fsharp: "Set.empty"
                 }
             ]
         },
         {
-            category: "Layout & Delimiters",
+            category: "Arithmetic & Algebra",
             items: [
                 {
-                    concept: "Auto-sized Parens",
-                    katex: "\\left( \\frac{a}{b} \\right)",
-                    meaning: "Brackets grow to fit",
-                    fsharp: "let a,b = 1.0,3.0\nlet value = a / b"
+                    concept: "Power",
+                    katex: "x^n",
+                    meaning: "x to the nth power",
+                    fsharp: "pown x n      // integer n\nx ** y        // float y"
                 },
                 {
-                    concept: "Cases / Piecewise",
-                    katex: "\\begin{cases} -1 & x < 0 \\\\ 1 & x > 0 \\end{cases}",
-                    meaning: "Conditional definition",
-                    fsharp: "let sign x = if x < 0 then -1 elif x > 0 then 1 else 0"
+                    concept: "Roots",
+                    katex: "\\sqrt[n]{x}",
+                    meaning: "nth root of x",
+                    fsharp: "sqrt x        // square root\nx ** (1.0/n)  // nth root"
                 },
                 {
-                    concept: "Matrix",
-                    katex: "\\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}",
-                    meaning: "2D grid of values",
-                    fsharp: "let m = array2D [ [1.0;2.0]; [3.0;4.0] ]\nlet a = m[0,0]"
+                    concept: "Logarithm",
+                    katex: "\\log_b x",
+                    meaning: "Log base b",
+                    fsharp: "log x         // natural log (ln)\nlog10 x       // base 10\nMath.Log(x,b) // base b"
                 },
                 {
-                    concept: "Aligned",
-                    katex: "\\begin{aligned} a &= 3 \\\\ b &= a+1 \\end{aligned}",
-                    meaning: "Multi-line alignment",
-                    fsharp: "let a = 3\nlet s1 = a + 1\nlet s2 = s1 * 2"
+                    concept: "Absolute Value",
+                    katex: "|x|",
+                    meaning: "Distance from zero",
+                    fsharp: "abs x"
+                },
+                {
+                    concept: "Ceilling & Floor",
+                    katex: "\\lceil x \\rceil, \\lfloor x \\rfloor",
+                    meaning: "Round up/down",
+                    fsharp: "ceil x, floor x"
+                },
+                {
+                    concept: "Modulo",
+                    katex: "a \\equiv b \\pmod n",
+                    meaning: "Remainder",
+                    fsharp: "a % n"
+                },
+                {
+                    concept: "Infinity",
+                    katex: "\\infty",
+                    meaning: "Infinity",
+                    fsharp: "infinity      // or Double.PositiveInfinity\n-infinity"
+                },
+                {
+                    concept: "Constants",
+                    katex: "\\pi, e",
+                    meaning: "Pi, Euler's number",
+                    fsharp: "Math.PI\nMath.E"
+                },
+                {
+                    concept: "Complex Numbers",
+                    katex: "z = a + bi",
+                    meaning: "Complex number",
+                    fsharp: "input System.Numerics\nlet z = Complex(a, b)"
+                },
+                {
+                    concept: "Complex Magnitude",
+                    katex: "|z|",
+                    meaning: "Modulus",
+                    fsharp: "z.Magnitude"
                 }
             ]
         },
         {
-            category: "Symbols",
+            category: "Sequences & Statistics",
             items: [
                 {
-                    concept: "Greek Letter",
-                    katex: "\\lambda, \\Omega",
-                    meaning: "Symbol names",
-                    fsharp: "let lambda = 0.125 // Domain specific meaning"
+                    concept: "Summation",
+                    katex: "\\sum_{i=1}^n x_i",
+                    meaning: "Sum of elements",
+                    fsharp: "List.sum xs\nxs |> Seq.sum"
                 },
                 {
-                    concept: "Vector",
-                    katex: "\\vec{v}",
-                    meaning: "Vector notation",
-                    fsharp: "type Vec2 = { x: float; y: float }\nlet v = { x=1.0; y=2.0 }"
+                    concept: "Product",
+                    katex: "\\prod_{i=1}^n x_i",
+                    meaning: "Product of elements",
+                    fsharp: "xs |> List.fold (*) 1"
                 },
                 {
-                    concept: "Reals",
-                    katex: "\\mathbb{R}",
-                    meaning: "Set of real numbers",
-                    fsharp: "let x : float = 1.23"
+                    concept: "Mean",
+                    katex: "\\bar{x} = \\frac{1}{n}\\sum x_i",
+                    meaning: "Average",
+                    fsharp: "List.average xs"
+                },
+                {
+                    concept: "Max / Min",
+                    katex: "\\max(S), \\min(S)",
+                    meaning: "Maximum / Minimum",
+                    fsharp: "List.max xs\nList.min xs"
+                }
+            ]
+        },
+        {
+            category: "Linear Algebra",
+            items: [
+                {
+                    concept: "Vector Construction",
+                    katex: "\\vec{v} = \\begin{bmatrix} v_1 \\\\ v_2 \\\\ v_3 \\end{bmatrix}",
+                    meaning: "Column vector",
+                    fsharp: "let v = vector [1.0; 2.0; 3.0] // MathNet\n// or simply List/Array"
+                },
+                {
+                    concept: "Dot Product",
+                    katex: "\\vec{a} \\cdot \\vec{b}",
+                    meaning: "Scalar product",
+                    fsharp: "let dot a b = List.map2 (*) a b |> List.sum"
+                },
+                {
+                    concept: "Cross Product",
+                    katex: "\\vec{a} \\times \\vec{b}",
+                    meaning: "Vector product (3D)",
+                    fsharp: "// Custom 3D cross product\nlet cross (a1,a2,a3) (b1,b2,b3) = \n  (a2*b3 - a3*b2, a3*b1 - a1*b3, a1*b2 - a2*b1)"
+                },
+                {
+                    concept: "Norm (Length)",
+                    katex: "\\|\\vec{v}\\|",
+                    meaning: "Euclidean length",
+                    fsharp: "let norm v = v |> List.map (fun x -> x*x) |> List.sum |> sqrt"
+                },
+                {
+                    concept: "Matrix Construction",
+                    katex: "A = \\begin{bmatrix} a & b \\\\ c & d \\end{bmatrix}",
+                    meaning: "Matrix",
+                    fsharp: "let A = array2D [[a; b]; [c; d]]"
+                },
+                {
+                    concept: "Transpose",
+                    katex: "A^T",
+                    meaning: "Swap rows/cols",
+                    fsharp: "// MathNet:\nA.Transpose()\n// Vanilla:\nlet transpose m n A = Array2D.init n m (fun i j -> A[j,i])"
+                },
+                {
+                    concept: "Matrix Multiplication",
+                    katex: "AB",
+                    meaning: "Matrix product",
+                    fsharp: "// MathNet:\nA * B\n// Vanilla is verbose (triple loop)"
+                },
+                {
+                    concept: "Identity Matrix",
+                    katex: "I_n",
+                    meaning: "Diagonal 1s",
+                    fsharp: "Array2D.init n n (fun i j -> if i=j then 1.0 else 0.0)"
+                },
+                {
+                    concept: "Eigenvalues",
+                    katex: "Av = \\lambda v",
+                    meaning: "Eigenvalue equation",
+                    fsharp: "// Requires MathNet.Numerics\nlet evd = A.Evd()\nlet lambda = evd.EigenValues"
+                }
+
+            ]
+        },
+        {
+            category: "Calculus",
+            items: [
+                {
+                    concept: "Function Definition",
+                    katex: "f(x) = x^2 + 1",
+                    meaning: "Maps x to value",
+                    fsharp: "let f x = x**2.0 + 1.0"
+                },
+                {
+                    concept: "Limit",
+                    katex: "\\lim_{x \\to a} f(x)",
+                    meaning: "Value as x approaches a",
+                    fsharp: "// Analytical, involves symbolics usually.\n// Numeric approx:\nlet limit f a h = f(a + h)"
+                },
+                {
+                    concept: "Derivative",
+                    katex: "\\frac{df}{dx} \\approx \\frac{f(x+h)-f(x)}{h}",
+                    meaning: "Rate of change",
+                    fsharp: "let diff f x h = (f(x+h) - f(x)) / h"
+                },
+                {
+                    concept: "Partial Derivative",
+                    katex: "\\frac{\\partial f}{\\partial x}",
+                    meaning: "Slope along x",
+                    fsharp: "let partialX f (x,y) h = (f(x+h,y) - f(x,y)) / h"
+                },
+                {
+                    concept: "Gradient",
+                    katex: "\\nabla f",
+                    meaning: "Vector of partials",
+                    fsharp: "let grad f (x,y) h = (partialX f (x,y) h, partialY f (x,y) h)"
+                },
+                {
+                    concept: "Composition",
+                    katex: "(g \\circ f)(x) = g(f(x))",
+                    meaning: "Apply f then g",
+                    fsharp: "let h = f >> g  // or g << f"
+                }
+            ]
+        },
+        {
+            category: "Functions",
+            items: [
+                {
+                    concept: "Piecewise",
+                    katex: "\\begin{cases} 0 & x < 0 \\\\ 1 & x \\ge 0 \\end{cases}",
+                    meaning: "Conditional values",
+                    fsharp: "let step x = \n  if x < 0.0 then 0.0 \n  else 1.0"
+                },
+                {
+                    concept: "Inverse Function",
+                    katex: "f^{-1}(y) = x",
+                    meaning: "Reverse mapping",
+                    fsharp: "// No generic operator.\n// Must implement specific inverse."
+                },
+                {
+                    concept: "Map",
+                    katex: "\\{ f(x) : x \\in S \\}",
+                    meaning: "Apply to all",
+                    fsharp: "S |> List.map f"
+                },
+                {
+                    concept: "Filter",
+                    katex: "\\{ x \\in S : P(x) \\}",
+                    meaning: "Select satisfying P",
+                    fsharp: "S |> List.filter P"
                 }
             ]
         }
@@ -179,7 +329,7 @@ document.addEventListener("DOMContentLoaded", function() {
             // Filter items
             const visibleItems = section.items.filter(item =>
                 item.concept.toLowerCase().includes(lowerFilter) ||
-                item.katex.toLowerCase().includes(lowerFilter) ||
+                // item.katex.toLowerCase().includes(lowerFilter) || // Don't search raw katex if hidden? Optional.
                 item.meaning.toLowerCase().includes(lowerFilter) ||
                 item.fsharp.toLowerCase().includes(lowerFilter)
             );
@@ -199,7 +349,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 thead.innerHTML = `
                     <tr>
                         <th class="col-concept">Concept</th>
-                        <th class="col-katex">KaTeX (Rendered / Input)</th>
+                        <th class="col-math">Symbol</th>
                         <th class="col-meaning">Meaning</th>
                         <th class="col-fsharp">F# Equivalent</th>
                     </tr>
@@ -210,17 +360,16 @@ document.addEventListener("DOMContentLoaded", function() {
                 visibleItems.forEach(item => {
                     const row = document.createElement("tr");
 
-                    // KaTeX Cell: Rendered + Input code
+                    // KaTeX Cell: ONLY Rendered
                     const katexCellContent = `
                         <div class="math-render">$$ ${item.katex} $$</div>
-                        <code class="language-latex">${item.katex}</code>
                     `;
 
                     row.innerHTML = `
-                        <td>${item.concept}</td>
-                        <td>${katexCellContent}</td>
-                        <td>${item.meaning}</td>
-                        <td><pre><code class="language-fsharp">${item.fsharp}</code></pre></td>
+                        <td class="cell-concept">${item.concept}</td>
+                        <td class="cell-math">${katexCellContent}</td>
+                        <td class="cell-meaning">${item.meaning}</td>
+                        <td class="cell-fsharp"><pre><code class="language-fsharp">${item.fsharp}</code></pre></td>
                     `;
                     tbody.appendChild(row);
                 });
@@ -233,12 +382,10 @@ document.addEventListener("DOMContentLoaded", function() {
         if (window.renderMathInElement) {
             renderMathInElement(document.body, {
                 delimiters: [
-                    {left: '$$', right: '$$', display: true},
-                    {left: '$', right: '$', display: false},
-                    {left: '\\\\(', right: '\\\\)', display: false},
-                    {left: '\\\\[', right: '\\\\]', display: true}
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
                 ],
-                throwOnError : false
+                throwOnError: false
             });
         }
 
@@ -266,5 +413,7 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 
     // Handle KaTeX loading race condition
-    window.addEventListener('load', () => renderTables());
+    if (document.readyState === 'loading') {
+        window.addEventListener('load', () => renderTables());
+    }
 });

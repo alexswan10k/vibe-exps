@@ -109,7 +109,7 @@ main {
 }
 
 .col-concept { width: 15%; font-weight: 500; }
-.col-katex { width: 25%; font-family: monospace; color: var(--accent-color); }
+.col-math { width: 25%; font-size: 1.1em; color: var(--text-color); }
 .col-meaning { width: 25%; }
 .col-fsharp { width: 35%; }
 
