@@ -346,30 +346,38 @@ function explode(x, y) {
 // --- Device Gravity Control ---
 
 let isUsingDeviceGravity = false;
+let lastMotionTimestamp = 0;
 
 function toggleDeviceGravity() {
     const checkbox = document.getElementById('use-device-gravity');
     isUsingDeviceGravity = checkbox.checked;
 
     if (isUsingDeviceGravity) {
+        if (!window.isSecureContext) {
+            alert('Device gravity requires a secure context (HTTPS). It may not work on this connection.');
+        }
+
         // Request permission if needed (iOS 13+)
         if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
             DeviceMotionEvent.requestPermission()
                 .then(response => {
                     if (response === 'granted') {
-                        window.addEventListener('devicemotion', handleDeviceMotion);
-                        disableGravitySliders(true);
+                        startDeviceMotion();
                     } else {
                         alert('Permission to use accelerometer was denied.');
                         checkbox.checked = false;
                         isUsingDeviceGravity = false;
                     }
                 })
-                .catch(console.error);
+                .catch(error => {
+                    console.error(error);
+                    alert('Error requesting accelerometer permission: ' + error.message);
+                    checkbox.checked = false;
+                    isUsingDeviceGravity = false;
+                });
         } else {
             // Non-iOS 13+ devices or other browsers
-            window.addEventListener('devicemotion', handleDeviceMotion);
-            disableGravitySliders(true);
+            startDeviceMotion();
         }
     } else {
         window.removeEventListener('devicemotion', handleDeviceMotion);
@@ -377,6 +385,19 @@ function toggleDeviceGravity() {
         // Reset gravity to slider values
         updateGravity();
     }
+}
+
+function startDeviceMotion() {
+    window.addEventListener('devicemotion', handleDeviceMotion);
+    disableGravitySliders(true);
+
+    // Check if we are receiving data
+    lastMotionTimestamp = Date.now();
+    setTimeout(() => {
+        if (isUsingDeviceGravity && (Date.now() - lastMotionTimestamp > 1500)) {
+            alert('No accelerometer data received. Ensure your device has an accelerometer and you are using HTTPS. If you are on Android, you may need to enable "Motion sensors" in site settings.');
+        }
+    }, 2000);
 }
 
 function disableGravitySliders(disabled) {
@@ -388,6 +409,8 @@ function disableGravitySliders(disabled) {
 
 function handleDeviceMotion(event) {
     if (!isUsingDeviceGravity) return;
+
+    lastMotionTimestamp = Date.now();
 
     // x, y, z are in m/s^2.
     // accelerationIncludingGravity includes gravity.
@@ -418,11 +441,11 @@ function handleDeviceMotion(event) {
         gravityX = rawX;
         gravityY = rawY;
     } else if (angle === 90) { // Landscape Left (Home button right)
-        gravityX = rawY;
-        gravityY = -rawX;
-    } else if (angle === -90 || angle === 270) { // Landscape Right (Home button left)
         gravityX = -rawY;
         gravityY = rawX;
+    } else if (angle === -90 || angle === 270) { // Landscape Right (Home button left)
+        gravityX = rawY;
+        gravityY = -rawX;
     } else if (angle === 180) { // Upside Down
         gravityX = -rawX;
         gravityY = -rawY;
