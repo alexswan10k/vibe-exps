@@ -85,6 +85,53 @@ function addCircle() {
     Matter.World.add(world, circle);
 }
 
+// Function to add a triangle
+function addTriangle() {
+    const size = Math.random() * 30 + 20;
+    const x = Math.random() * (canvas.width - size * 2) + size;
+    const y = 50;
+    const triangle = Matter.Bodies.polygon(x, y, 3, size, {
+        render: {
+            fillStyle: `hsl(${Math.random() * 360}, 70%, 60%)`
+        }
+    });
+    Matter.World.add(world, triangle);
+}
+
+// Function to add a hexagon
+function addHexagon() {
+    const size = Math.random() * 30 + 20;
+    const x = Math.random() * (canvas.width - size * 2) + size;
+    const y = 50;
+    const hexagon = Matter.Bodies.polygon(x, y, 6, size, {
+        render: {
+            fillStyle: `hsl(${Math.random() * 360}, 70%, 60%)`
+        }
+    });
+    Matter.World.add(world, hexagon);
+}
+
+// Function to add a stack of boxes
+function addStack() {
+    const boxSize = 30;
+    const startX = Math.random() * (canvas.width - 200) + 100;
+    const startY = 100;
+
+    // Create a pyramid stack
+    for (let row = 0; row < 6; row++) {
+        for (let col = 0; col <= row; col++) {
+            const x = startX + (col * boxSize) - (row * boxSize / 2);
+            const y = startY + (row * boxSize);
+            const box = Matter.Bodies.rectangle(x, y, boxSize, boxSize, {
+                render: {
+                    fillStyle: `hsl(${Math.random() * 360}, 70%, 60%)`
+                }
+            });
+            Matter.World.add(world, box);
+        }
+    }
+}
+
 // Function to add water particles
 function addWater() {
     const particleCount = 75; // Increased number of water particles for more fluid effect
@@ -119,6 +166,25 @@ function clearAll() {
     });
 }
 
+// Update Gravity from inputs
+function updateGravity() {
+    const gx = parseFloat(document.getElementById('grav-x').value);
+    const gy = parseFloat(document.getElementById('grav-y').value);
+
+    document.getElementById('val-grav-x').innerText = gx.toFixed(1);
+    document.getElementById('val-grav-y').innerText = gy.toFixed(1);
+
+    engine.world.gravity.x = gx;
+    engine.world.gravity.y = gy;
+}
+
+// Update Time Scale from inputs
+function updateTimeScale() {
+    const ts = parseFloat(document.getElementById('time-scale').value);
+    document.getElementById('val-time').innerText = ts.toFixed(1);
+    engine.timing.timeScale = ts;
+}
+
 // Add some initial objects
 for (let i = 0; i < 5; i++) {
     addSquare();
@@ -144,6 +210,9 @@ function handleMouseDown(event) {
 
     if (event.button === 0) { // Left button for wind
         startWind();
+    } else if (event.button === 1) { // Middle button for explosion
+        event.preventDefault(); // Prevent scroll
+        explode(currentMousePos.x, currentMousePos.y);
     } else if (event.button === 2) { // Right button for vacuum
         startVacuum();
     }
@@ -247,4 +316,29 @@ function applyVacuum(mouseX, mouseY) {
             Matter.Body.applyForce(body, body.position, { x: forceX, y: forceY });
         }
     });
+}
+
+// Apply explosion force
+function explode(x, y) {
+    const bodies = Matter.Composite.allBodies(world).filter(body => !body.isStatic);
+    const explosionForce = 0.5; // Strong force
+    const maxDistance = 200;
+
+    bodies.forEach(body => {
+        const dx = body.position.x - x;
+        const dy = body.position.y - y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < maxDistance && distance > 0) {
+            const forceMagnitude = explosionForce * (1 - distance / maxDistance);
+            Matter.Body.applyForce(body, body.position, {
+                x: (dx / distance) * forceMagnitude,
+                y: (dy / distance) * forceMagnitude
+            });
+        }
+    });
+
+    // Visual effect for explosion (simple ripple or flash could be added here if we had a custom render loop,
+    // but Matter.Render handles clearing the canvas. We could briefly draw something.)
+    // For now, the physics effect is the main feedback.
 }
