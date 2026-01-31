@@ -418,11 +418,11 @@ function handleDeviceMotion(event) {
         gravityX = rawX;
         gravityY = rawY;
     } else if (angle === 90) { // Landscape Left (Home button right)
-        gravityX = rawY;
-        gravityY = -rawX;
-    } else if (angle === -90 || angle === 270) { // Landscape Right (Home button left)
         gravityX = -rawY;
         gravityY = rawX;
+    } else if (angle === -90 || angle === 270) { // Landscape Right (Home button left)
+        gravityX = rawY;
+        gravityY = -rawX;
     } else if (angle === 180) { // Upside Down
         gravityX = -rawX;
         gravityY = -rawY;
