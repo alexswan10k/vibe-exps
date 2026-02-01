@@ -75,7 +75,7 @@ function addSquare() {
 // Function to add a circle
 function addCircle() {
     const radius = Math.random() * 20 + 10;
-    const x = Math.random() * (canvas.width - radius * 2) + radius;
+    const x = Math.random() * (canvas.width - size * 2) + radius;
     const y = 50;
     const circle = Matter.Bodies.circle(x, y, radius, {
         render: {
@@ -83,6 +83,53 @@ function addCircle() {
         }
     });
     Matter.World.add(world, circle);
+}
+
+// Function to add a triangle
+function addTriangle() {
+    const size = Math.random() * 30 + 20;
+    const x = Math.random() * (canvas.width - size * 2) + size;
+    const y = 50;
+    const triangle = Matter.Bodies.polygon(x, y, 3, size, {
+        render: {
+            fillStyle: `hsl(${Math.random() * 360}, 70%, 60%)`
+        }
+    });
+    Matter.World.add(world, triangle);
+}
+
+// Function to add a hexagon
+function addHexagon() {
+    const size = Math.random() * 30 + 20;
+    const x = Math.random() * (canvas.width - size * 2) + size;
+    const y = 50;
+    const hexagon = Matter.Bodies.polygon(x, y, 6, size, {
+        render: {
+            fillStyle: `hsl(${Math.random() * 360}, 70%, 60%)`
+        }
+    });
+    Matter.World.add(world, hexagon);
+}
+
+// Function to add a stack of boxes
+function addStack() {
+    const boxSize = 30;
+    const startX = Math.random() * (canvas.width - 200) + 100;
+    const startY = 100;
+
+    // Create a pyramid stack
+    for (let row = 0; row < 6; row++) {
+        for (let col = 0; col <= row; col++) {
+            const x = startX + (col * boxSize) - (row * boxSize / 2);
+            const y = startY + (row * boxSize);
+            const box = Matter.Bodies.rectangle(x, y, boxSize, boxSize, {
+                render: {
+                    fillStyle: `hsl(${Math.random() * 360}, 70%, 60%)`
+                }
+            });
+            Matter.World.add(world, box);
+        }
+    }
 }
 
 // Function to add water particles
@@ -119,6 +166,25 @@ function clearAll() {
     });
 }
 
+// Update Gravity from inputs
+function updateGravity() {
+    const gx = parseFloat(document.getElementById('grav-x').value);
+    const gy = parseFloat(document.getElementById('grav-y').value);
+
+    document.getElementById('val-grav-x').innerText = gx.toFixed(1);
+    document.getElementById('val-grav-y').innerText = gy.toFixed(1);
+
+    engine.world.gravity.x = gx;
+    engine.world.gravity.y = gy;
+}
+
+// Update Time Scale from inputs
+function updateTimeScale() {
+    const ts = parseFloat(document.getElementById('time-scale').value);
+    document.getElementById('val-time').innerText = ts.toFixed(1);
+    engine.timing.timeScale = ts;
+}
+
 // Add some initial objects
 for (let i = 0; i < 5; i++) {
     addSquare();
@@ -144,6 +210,9 @@ function handleMouseDown(event) {
 
     if (event.button === 0) { // Left button for wind
         startWind();
+    } else if (event.button === 1) { // Middle button for explosion
+        event.preventDefault(); // Prevent scroll
+        explode(currentMousePos.x, currentMousePos.y);
     } else if (event.button === 2) { // Right button for vacuum
         startVacuum();
     }
@@ -247,4 +316,155 @@ function applyVacuum(mouseX, mouseY) {
             Matter.Body.applyForce(body, body.position, { x: forceX, y: forceY });
         }
     });
+}
+
+// Apply explosion force
+function explode(x, y) {
+    const bodies = Matter.Composite.allBodies(world).filter(body => !body.isStatic);
+    const explosionForce = 0.5; // Strong force
+    const maxDistance = 200;
+
+    bodies.forEach(body => {
+        const dx = body.position.x - x;
+        const dy = body.position.y - y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < maxDistance && distance > 0) {
+            const forceMagnitude = explosionForce * (1 - distance / maxDistance);
+            Matter.Body.applyForce(body, body.position, {
+                x: (dx / distance) * forceMagnitude,
+                y: (dy / distance) * forceMagnitude
+            });
+        }
+    });
+
+    // Visual effect for explosion (simple ripple or flash could be added here if we had a custom render loop,
+    // but Matter.Render handles clearing the canvas. We could briefly draw something.)
+    // For now, the physics effect is the main feedback.
+}
+
+// --- Device Gravity Control ---
+
+let isUsingDeviceGravity = false;
+let lastMotionTimestamp = 0;
+
+function toggleDeviceGravity() {
+    const checkbox = document.getElementById('use-device-gravity');
+    isUsingDeviceGravity = checkbox.checked;
+
+    if (isUsingDeviceGravity) {
+        if (!window.isSecureContext) {
+            alert('Device gravity requires a secure context (HTTPS). It may not work on this connection.');
+        }
+
+        // Request permission if needed (iOS 13+)
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission()
+                .then(response => {
+                    if (response === 'granted') {
+                        startDeviceMotion();
+                    } else {
+                        alert('Permission to use accelerometer was denied.');
+                        checkbox.checked = false;
+                        isUsingDeviceGravity = false;
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    alert('Error requesting accelerometer permission: ' + error.message);
+                    checkbox.checked = false;
+                    isUsingDeviceGravity = false;
+                });
+        } else {
+            // Non-iOS 13+ devices or other browsers
+            startDeviceMotion();
+        }
+    } else {
+        window.removeEventListener('devicemotion', handleDeviceMotion);
+        disableGravitySliders(false);
+        // Reset gravity to slider values
+        updateGravity();
+    }
+}
+
+function startDeviceMotion() {
+    window.addEventListener('devicemotion', handleDeviceMotion);
+    disableGravitySliders(true);
+
+    // Check if we are receiving data
+    lastMotionTimestamp = Date.now();
+    setTimeout(() => {
+        if (isUsingDeviceGravity && (Date.now() - lastMotionTimestamp > 1500)) {
+            alert('No accelerometer data received. Ensure your device has an accelerometer and you are using HTTPS. If you are on Android, you may need to enable "Motion sensors" in site settings.');
+        }
+    }, 2000);
+}
+
+function disableGravitySliders(disabled) {
+    document.getElementById('grav-x').disabled = disabled;
+    document.getElementById('grav-y').disabled = disabled;
+    document.getElementById('grav-x').parentElement.style.opacity = disabled ? '0.5' : '1';
+    document.getElementById('grav-y').parentElement.style.opacity = disabled ? '0.5' : '1';
+}
+
+function handleDeviceMotion(event) {
+    if (!isUsingDeviceGravity) return;
+
+    lastMotionTimestamp = Date.now();
+
+    // x, y, z are in m/s^2.
+    // accelerationIncludingGravity includes gravity.
+    // If device is flat on table: z ~ 9.8.
+    // If device is upright (portrait): y ~ 9.8 or -9.8 depending on implementation, but typically +9.8 (up).
+
+    const ax = event.accelerationIncludingGravity.x || 0;
+    const ay = event.accelerationIncludingGravity.y || 0;
+
+    // Matter.js Gravity: 1 is standard.
+    // Earth Gravity is ~9.8 m/s^2.
+    // We map 9.8 -> 1.
+
+    let rawX = -ax / 9.8;
+    let rawY = ay / 9.8;
+
+    let gravityX, gravityY;
+
+    // Handle orientation
+    let angle = 0;
+    if (window.screen && window.screen.orientation && window.screen.orientation.angle !== undefined) {
+        angle = window.screen.orientation.angle;
+    } else if (window.orientation !== undefined) {
+        angle = window.orientation;
+    }
+
+    if (angle === 0) { // Portrait
+        gravityX = rawX;
+        gravityY = rawY;
+    } else if (angle === 90) { // Landscape Left (Home button right)
+        gravityX = -rawY;
+        gravityY = rawX;
+    } else if (angle === -90 || angle === 270) { // Landscape Right (Home button left)
+        gravityX = rawY;
+        gravityY = -rawX;
+    } else if (angle === 180) { // Upside Down
+        gravityX = -rawX;
+        gravityY = -rawY;
+    } else {
+        gravityX = rawX;
+        gravityY = rawY;
+    }
+
+    // Clamp values to -2 to 2 to prevent extreme physics issues
+    gravityX = Math.max(-2, Math.min(2, gravityX));
+    gravityY = Math.max(-2, Math.min(2, gravityY));
+
+    // Update engine
+    engine.world.gravity.x = gravityX;
+    engine.world.gravity.y = gravityY;
+
+    // Update visual sliders
+    document.getElementById('grav-x').value = gravityX;
+    document.getElementById('grav-y').value = gravityY;
+    document.getElementById('val-grav-x').innerText = gravityX.toFixed(1);
+    document.getElementById('val-grav-y').innerText = gravityY.toFixed(1);
 }
