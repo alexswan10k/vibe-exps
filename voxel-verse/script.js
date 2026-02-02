@@ -178,6 +178,102 @@ const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
 // Materials (One per type)
 const materials = COLOR_PALETTE.map(c => new THREE.MeshLambertMaterial({ color: c }));
 
+// --- Mob Logic ---
+const MOB_TYPES = {
+    PIG: { color: 0xFFC0CB, scale: 0.8, speed: 1.5, height: 0.8 },
+    CHICKEN: { color: 0xFFFFFF, scale: 0.5, speed: 2.0, height: 0.5 },
+    COW: { color: 0x8B4513, scale: 0.9, speed: 1.0, height: 0.9 }
+};
+
+class Mob {
+    constructor(x, y, z, typeKey) {
+        this.type = MOB_TYPES[typeKey];
+        this.position = new THREE.Vector3(x, y, z);
+        this.velocity = new THREE.Vector3();
+        this.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+        this.moveTimer = 0;
+        this.isMoving = false;
+        
+        // Mesh
+        const geometry = new THREE.BoxGeometry(this.type.scale, this.type.scale, this.type.scale);
+        const material = new THREE.MeshLambertMaterial({ color: this.type.color });
+        this.mesh = new THREE.Mesh(geometry, material);
+        this.mesh.position.copy(this.position);
+        this.mesh.castShadow = true;
+        this.mesh.receiveShadow = true;
+        scene.add(this.mesh);
+    }
+
+    update(delta) {
+        // AI Logic
+        this.moveTimer -= delta;
+        if (this.moveTimer <= 0) {
+            this.moveTimer = Math.random() * 3 + 1;
+            this.isMoving = Math.random() > 0.4;
+            if (this.isMoving) {
+                this.direction.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+            }
+        }
+
+        // Apply Gravity
+        this.velocity.y -= GRAVITY * delta;
+
+        // Move
+        if (this.isMoving) {
+            this.velocity.x = this.direction.x * this.type.speed;
+            this.velocity.z = this.direction.z * this.type.speed;
+            this.mesh.lookAt(this.position.x + this.velocity.x, this.position.y, this.position.z + this.velocity.z);
+        } else {
+            this.velocity.x = 0;
+            this.velocity.z = 0;
+        }
+
+        // Physics/Collision
+        const subDelta = delta; 
+        
+        // X Movement
+        this.position.x += this.velocity.x * subDelta;
+        if (checkEntityCollision(this.position, this.type.scale/2, this.type.height, false)) {
+             this.position.x -= this.velocity.x * subDelta;
+             // Try to jump if blocked
+             if (this.velocity.y === 0) this.velocity.y = JUMP_SPEED * 0.6;
+        }
+
+        // Z Movement
+        this.position.z += this.velocity.z * subDelta;
+        if (checkEntityCollision(this.position, this.type.scale/2, this.type.height, false)) {
+             this.position.z -= this.velocity.z * subDelta;
+             if (this.velocity.y === 0) this.velocity.y = JUMP_SPEED * 0.6;
+        }
+
+        // Y Movement
+        this.position.y += this.velocity.y * subDelta;
+        if (checkEntityCollision(this.position, this.type.scale/2, this.type.height, true)) {
+            if (this.velocity.y < 0) { // Hit floor
+                // Push out logic could be better but this works for simple AI
+                this.position.y -= this.velocity.y * subDelta;
+                this.velocity.y = 0;
+            } else { // Hit ceiling
+                this.position.y -= this.velocity.y * subDelta;
+                this.velocity.y = 0;
+            }
+        }
+        
+        // Despawn/Limit logic
+        if (this.position.y < -30) {
+            this.velocity.y = 0;
+        }
+
+        this.mesh.position.copy(this.position);
+    }
+
+    dispose() {
+        if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+        this.mesh.geometry.dispose();
+        this.mesh.material.dispose();
+    }
+}
+
 // --- Chunk Class ---
 class Chunk {
     constructor(cx, cz) {
@@ -186,6 +282,7 @@ class Chunk {
         this.blocks = new Map(); // "x,y,z" (relative) -> type
         this.instancedMeshes = []; // Array of InstancedMesh
         this.dirty = false;
+        this.activeMobs = [];
         
         this.generate();
         this.build();
@@ -232,20 +329,32 @@ class Chunk {
                     }
                 }
 
-                // Trees (Simple) - Only on Grass
+                // Vegetation & Mobs
                 const surfaceBlock = this.blocks.get(`${x},${h},${z}`);
-                if (surfaceBlock === BLOCK_TYPES.GRASS && Math.random() > 0.98) {
-                    const treeHeight = 3 + Math.floor(Math.random() * 2);
-                    // Trunk
-                    for (let i = 1; i <= treeHeight; i++) {
-                        this.blocks.set(`${x},${h+i},${z}`, BLOCK_TYPES.WOOD);
+                if (surfaceBlock === BLOCK_TYPES.GRASS) {
+                    // Trees
+                    if (Math.random() > 0.98) {
+                        const treeHeight = 3 + Math.floor(Math.random() * 2);
+                        // Trunk
+                        for (let i = 1; i <= treeHeight; i++) {
+                            this.blocks.set(`${x},${h+i},${z}`, BLOCK_TYPES.WOOD);
+                        }
+                        // Leaves (Simple top)
+                        this.blocks.set(`${x},${h+treeHeight+1},${z}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x+1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x-1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x},${h+treeHeight},${z+1}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x},${h+treeHeight},${z-1}`, BLOCK_TYPES.LEAVES);
                     }
-                    // Leaves (Simple top)
-                    this.blocks.set(`${x},${h+treeHeight+1},${z}`, BLOCK_TYPES.LEAVES);
-                    this.blocks.set(`${x+1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
-                    this.blocks.set(`${x-1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
-                    this.blocks.set(`${x},${h+treeHeight},${z+1}`, BLOCK_TYPES.LEAVES);
-                    this.blocks.set(`${x},${h+treeHeight},${z-1}`, BLOCK_TYPES.LEAVES);
+                    
+                    // Mobs
+                    if (Math.random() > 0.99) {
+                        const r = Math.random();
+                        const typeKey = r > 0.6 ? 'PIG' : (r > 0.3 ? 'CHICKEN' : 'COW');
+                        // Spawn mob slightly above ground
+                        const mob = new Mob(wx + 0.5, h + 2, wz + 0.5, typeKey);
+                        this.activeMobs.push(mob);
+                    }
                 }
             }
         }
@@ -308,6 +417,8 @@ class Chunk {
     dispose() {
         this.disposeMeshes();
         this.blocks.clear();
+        this.activeMobs.forEach(mob => mob.dispose());
+        this.activeMobs = [];
     }
 
     getBlock(rx, y, rz) {
@@ -325,6 +436,10 @@ class Chunk {
 
     rebuild() {
         this.build();
+    }
+
+    update(delta) {
+        this.activeMobs.forEach(mob => mob.update(delta));
     }
 }
 
@@ -446,11 +561,12 @@ function setBlockGlobal(x, y, z, type) {
     }
 }
 
-function checkPlayerCollision(pos, checkLegs = true) {
-    const r = PLAYER_RADIUS; 
-    const h = PLAYER_HEIGHT;
+// Generalized Collision Detection
+function checkEntityCollision(pos, radius, height, checkLegs = true) {
+    const r = radius; 
+    const h = height;
     
-    // Player AABB Bounds
+    // AABB Bounds
     const minX = pos.x - r;
     const maxX = pos.x + r;
     const minZ = pos.z - r;
@@ -481,6 +597,11 @@ function checkPlayerCollision(pos, checkLegs = true) {
     return false;
 }
 
+// Wrapper for Player (preserves old API somewhat, or we can just update usage)
+function checkPlayerCollision(pos, checkLegs = true) {
+    return checkEntityCollision(pos, PLAYER_RADIUS, PLAYER_HEIGHT, checkLegs);
+}
+
 let lastChunkUpdate = 0;
 let canJump = false;
 
@@ -495,6 +616,11 @@ function animate() {
     if (time - lastChunkUpdate > 200) {
         updateChunks();
         lastChunkUpdate = time;
+    }
+
+    // Mob Updates
+    for (const chunk of chunks.values()) {
+        chunk.update(delta);
     }
 
     if (isLocked) {
