@@ -76,7 +76,7 @@
         }
     </style>
 </head>
-<body>
+<body onmousemove="handleGlobalMouseMove(event)" onmouseup="handleGlobalMouseUp(event)">
     <div class="controls">
         <div class="control-group">
             <h3>Spawn Objects</h3>
@@ -84,6 +84,7 @@
             <button onclick="addCircle()">Circle</button>
             <button onclick="addTriangle()">Triangle</button>
             <button onclick="addHexagon()">Hexagon</button>
+            <button onmousedown="startCrawlerDrag(event)">Crawler</button>
             <button onclick="addStack()" class="full-width">Stack of Boxes</button>
             <button onclick="addWater()" class="full-width">Water</button>
         </div>

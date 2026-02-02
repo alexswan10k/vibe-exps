@@ -111,6 +111,169 @@ function addHexagon() {
     Matter.World.add(world, hexagon);
 }
 
+// Crawler Logic
+const crawlers = new Set();
+const CRAWLER_SPEED = 0.002;
+const CRAWLER_JUMP_CHANCE = 0.01;
+
+function addCrawler(spawnX, spawnY) {
+    const x = spawnX !== undefined ? spawnX : Math.random() * (canvas.width - 100) + 50;
+    const y = spawnY !== undefined ? spawnY : 50;
+    
+    // Create a simple capsule shape for the crawler
+    const width = 40;
+    const height = 20;
+    
+    // We use a Chamfered rectangle to look like a bug
+    const crawler = Matter.Bodies.rectangle(x, y, width, height, {
+        chamfer: { radius: 10 },
+        density: 0.002, // Lower density to be more fragile
+        friction: 0.5, // Good grip
+        restitution: 0.2, // Not too bouncy
+        label: 'crawler',
+        render: {
+            fillStyle: '#76FF03' // Bright green
+        }
+    });
+    
+    // Initial random direction (-1 or 1)
+    crawler.crawlerDir = Math.random() > 0.5 ? 1 : -1;
+    crawler.isDead = false;
+    crawler.spawnTime = Date.now();
+    
+    crawlers.add(crawler);
+    Matter.World.add(world, crawler);
+    return crawler;
+}
+
+function killCrawler(crawler) {
+    if (crawler.isDead) return;
+    crawler.isDead = true;
+    crawler.render.fillStyle = '#444444'; // Dark Grey (Dead goo)
+    
+    // Splat effect: Flatten and widen
+    Matter.Body.scale(crawler, 1.4, 0.4);
+    
+    crawlers.delete(crawler);
+}
+
+// Drag to Spawn Logic
+let dragCrawlerStart = null;
+let draggingGhost = null;
+let isDraggingCrawler = false;
+
+function startCrawlerDrag(event) {
+    dragCrawlerStart = { x: event.clientX, y: event.clientY, time: Date.now() };
+    isDraggingCrawler = false; // Waiting for move to confirm drag
+}
+
+function handleGlobalMouseMove(event) {
+    if (!dragCrawlerStart) return;
+
+    const dx = event.clientX - dragCrawlerStart.x;
+    const dy = event.clientY - dragCrawlerStart.y;
+    
+    // If moved more than 5px, start dragging
+    if (!isDraggingCrawler && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+        isDraggingCrawler = true;
+        // Create a visual ghost (using a static body that doesn't collide)
+        draggingGhost = Matter.Bodies.rectangle(event.clientX, event.clientY, 40, 20, {
+            chamfer: { radius: 10 },
+            isStatic: true,
+            isSensor: true, // Don't collide
+            render: { fillStyle: 'rgba(118, 255, 3, 0.5)' }
+        });
+        Matter.World.add(world, draggingGhost);
+    }
+
+    if (isDraggingCrawler && draggingGhost) {
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        Matter.Body.setPosition(draggingGhost, { x, y });
+    }
+}
+
+function handleGlobalMouseUp(event) {
+    if (!dragCrawlerStart) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+
+    if (isDraggingCrawler) {
+        // Drag finished - spawn at location if inside canvas
+        if (x >= 0 && x <= canvas.width && y >= 0 && y <= canvas.height) {
+            addCrawler(x, y);
+        }
+        // Remove ghost
+        if (draggingGhost) {
+            Matter.World.remove(world, draggingGhost);
+            draggingGhost = null;
+        }
+    } else {
+        // Was just a click (or very short drag) - Random spawn
+        addCrawler();
+    }
+
+    dragCrawlerStart = null;
+    isDraggingCrawler = false;
+}
+
+Matter.Events.on(engine, 'beforeUpdate', function(event) {
+    crawlers.forEach(crawler => {
+        if (crawler.isDead) return;
+
+        // Simple movement: Apply force in facing direction
+        const force = { x: CRAWLER_SPEED * crawler.crawlerDir, y: 0 };
+        
+        // Randomly change direction
+        if (Math.random() < 0.02) {
+            crawler.crawlerDir *= -1;
+        }
+        
+        // Jump occasionally
+        if (Math.random() < CRAWLER_JUMP_CHANCE) {
+             Matter.Body.applyForce(crawler, crawler.position, { x: 0, y: -0.015 });
+        } else {
+             Matter.Body.applyForce(crawler, crawler.position, force);
+        }
+    });
+});
+
+Matter.Events.on(engine, 'collisionStart', function(event) {
+    const pairs = event.pairs;
+    const now = Date.now();
+    
+    for (let i = 0; i < pairs.length; i++) {
+        const pair = pairs[i];
+        const bodyA = pair.bodyA;
+        const bodyB = pair.bodyB;
+        
+        // Check invulnerability (1 second grace period)
+        if (bodyA.label === 'crawler' && bodyA.spawnTime && now - bodyA.spawnTime < 1000) continue;
+        if (bodyB.label === 'crawler' && bodyB.spawnTime && now - bodyB.spawnTime < 1000) continue;
+
+        // Estimate impact speed
+        const velocityA = bodyA.velocity;
+        const velocityB = bodyB.velocity;
+        const relativeVelocity = Matter.Vector.sub(velocityA, velocityB);
+        const speed = Matter.Vector.magnitude(relativeVelocity);
+        
+        // Death Logic
+        // 1. High Speed Impact (Explosions, very fast objects)
+        if (speed > 15 && (!bodyA.isStatic && !bodyB.isStatic)) {
+             if (bodyA.label === 'crawler') killCrawler(bodyA);
+             if (bodyB.label === 'crawler') killCrawler(bodyB);
+        }
+        // 2. Heavy Crush (Hit by something much heavier)
+        else if (speed > 5) {
+             if (bodyA.label === 'crawler' && !bodyB.isStatic && bodyB.mass > bodyA.mass * 2) killCrawler(bodyA);
+             if (bodyB.label === 'crawler' && !bodyA.isStatic && bodyA.mass > bodyB.mass * 2) killCrawler(bodyB);
+        }
+    }
+});
+
 // Function to add a stack of boxes
 function addStack() {
     const boxSize = 30;
@@ -158,6 +321,7 @@ function addWater() {
 
 // Function to clear all bodies
 function clearAll() {
+    crawlers.clear();
     const bodies = Matter.Composite.allBodies(world);
     bodies.forEach(body => {
         if (!body.isStatic) {
