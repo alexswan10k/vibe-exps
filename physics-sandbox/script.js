@@ -75,7 +75,7 @@ function addSquare() {
 // Function to add a circle
 function addCircle() {
     const radius = Math.random() * 20 + 10;
-    const x = Math.random() * (canvas.width - size * 2) + radius;
+    const x = Math.random() * (canvas.width - radius * 2) + radius;
     const y = 50;
     const circle = Matter.Bodies.circle(x, y, radius, {
         render: {
@@ -195,6 +195,8 @@ for (let i = 0; i < 5; i++) {
 let windInterval = null;
 let vacuumInterval = null;
 let currentMousePos = { x: 0, y: 0 };
+let isUsingDeviceGravity = false;
+let lastMotionTimestamp = 0;
 
 // Event listeners for wind and vacuum
 canvas.addEventListener('mousedown', handleMouseDown);
@@ -344,9 +346,6 @@ function explode(x, y) {
 }
 
 // --- Device Gravity Control ---
-
-let isUsingDeviceGravity = false;
-let lastMotionTimestamp = 0;
 
 function toggleDeviceGravity() {
     const checkbox = document.getElementById('use-device-gravity');
