@@ -134,11 +134,24 @@ const BLOCK_TYPES = {
     STONE: 2,
     WATER: 3,
     SAND: 4,
-    WOOD: 1 // Reusing dirt color for prototype wood
+    WOOD: 5,
+    LEAVES: 6,
+    SNOW: 7,
+    BEDROCK: 8
 };
 
-const COLOR_PALETTE = [0x55ff55, 0x8b4513, 0x808080, 0x5555ff, 0xffff55];
-// 0: Grass, 1: Dirt, 2: Stone, 3: Water, 4: Sand
+const COLOR_PALETTE = [
+    0x55ff55, // Grass
+    0x8b4513, // Dirt
+    0x808080, // Stone
+    0x5555ff, // Water
+    0xffff55, // Sand
+    0x654321, // Wood
+    0x228b22, // Leaves
+    0xffffff, // Snow
+    0x222222  // Bedrock
+];
+// 0: Grass, 1: Dirt, 2: Stone, 3: Water, 4: Sand, 5: Wood, 6: Leaves, 7: Snow, 8: Bedrock
 
 let camera, scene, renderer, controls, raycaster;
 const moveState = { forward: false, backward: false, left: false, right: false };
@@ -180,6 +193,7 @@ class Chunk {
 
     generate() {
         const scale = 0.03;
+        const SEA_LEVEL = 4;
         
         for (let x = 0; x < CHUNK_SIZE; x++) {
             for (let z = 0; z < CHUNK_SIZE; z++) {
@@ -191,21 +205,47 @@ class Chunk {
                 const h = Math.floor((n + 1) * 0.5 * CHUNK_HEIGHT_SCALE); // 0 to 20 height
                 
                 // Fill Column
-                for (let y = -5; y <= h; y++) {
-                    let type = BLOCK_TYPES.STONE;
-                    if (y === h) type = BLOCK_TYPES.GRASS;
-                    else if (y > h - 3) type = BLOCK_TYPES.DIRT;
-                    
-                    if (y < -3) type = BLOCK_TYPES.STONE; // Bedrockish
-                    
-                    this.blocks.set(`${x},${y},${z}`, type);
+                for (let y = -5; y <= Math.max(h, SEA_LEVEL); y++) {
+                    let type = null;
+
+                    if (y === -5) {
+                        type = BLOCK_TYPES.BEDROCK;
+                    } else if (y <= h) {
+                        // Solid Ground
+                        if (y === h) {
+                            // Top Block
+                            if (y < SEA_LEVEL + 2) type = BLOCK_TYPES.SAND; // Beach
+                            else if (y > 15) type = BLOCK_TYPES.SNOW; // Peaks
+                            else type = BLOCK_TYPES.GRASS;
+                        } else if (y > h - 4) {
+                            type = BLOCK_TYPES.DIRT;
+                        } else {
+                            type = BLOCK_TYPES.STONE;
+                        }
+                    } else if (y <= SEA_LEVEL) {
+                        // Water
+                        type = BLOCK_TYPES.WATER;
+                    }
+
+                    if (type !== null) {
+                        this.blocks.set(`${x},${y},${z}`, type);
+                    }
                 }
 
-                // Trees (Simple)
-                if (Math.random() > 0.99 && h > 0) {
-                    this.blocks.set(`${x},${h+1},${z}`, BLOCK_TYPES.DIRT); // Trunk
-                    this.blocks.set(`${x},${h+2},${z}`, BLOCK_TYPES.DIRT);
-                    this.blocks.set(`${x},${h+3},${z}`, BLOCK_TYPES.GRASS); // Leaves
+                // Trees (Simple) - Only on Grass
+                const surfaceBlock = this.blocks.get(`${x},${h},${z}`);
+                if (surfaceBlock === BLOCK_TYPES.GRASS && Math.random() > 0.98) {
+                    const treeHeight = 3 + Math.floor(Math.random() * 2);
+                    // Trunk
+                    for (let i = 1; i <= treeHeight; i++) {
+                        this.blocks.set(`${x},${h+i},${z}`, BLOCK_TYPES.WOOD);
+                    }
+                    // Leaves (Simple top)
+                    this.blocks.set(`${x},${h+treeHeight+1},${z}`, BLOCK_TYPES.LEAVES);
+                    this.blocks.set(`${x+1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
+                    this.blocks.set(`${x-1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
+                    this.blocks.set(`${x},${h+treeHeight},${z+1}`, BLOCK_TYPES.LEAVES);
+                    this.blocks.set(`${x},${h+treeHeight},${z-1}`, BLOCK_TYPES.LEAVES);
                 }
             }
         }
@@ -216,7 +256,7 @@ class Chunk {
         this.disposeMeshes();
 
         // Sort blocks by type to create instanced meshes
-        const blocksByType = [[], [], [], [], []];
+        const blocksByType = Array.from({ length: COLOR_PALETTE.length }, () => []);
         
         for (const [key, type] of this.blocks) {
             if (blocksByType[type] !== undefined) {
@@ -580,6 +620,10 @@ function onKeyDown(event) {
         case 'Digit3': activeBlockIndex = 2; updateUI(); break;
         case 'Digit4': activeBlockIndex = 3; updateUI(); break;
         case 'Digit5': activeBlockIndex = 4; updateUI(); break;
+        case 'Digit6': activeBlockIndex = 5; updateUI(); break;
+        case 'Digit7': activeBlockIndex = 6; updateUI(); break;
+        case 'Digit8': activeBlockIndex = 7; updateUI(); break;
+        case 'Digit9': activeBlockIndex = 8; updateUI(); break;
     }
 }
 function onKeyUp(event) {
