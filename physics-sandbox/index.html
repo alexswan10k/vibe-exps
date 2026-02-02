@@ -43,23 +43,41 @@
             font-size: 16px;
             color: #ddd;
         }
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 5px;
+        }
         button {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            padding: 8px 12px;
-            margin: 3px;
-            border-radius: 5px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05));
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 10px 4px;
+            border-radius: 8px;
             color: white;
             cursor: pointer;
-            transition: background 0.3s;
-            width: calc(50% - 10px);
-            font-size: 12px;
+            transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+            width: 100%;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(4px);
         }
         button:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.1));
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15), 0 0 10px rgba(255, 255, 255, 0.1);
+        }
+        button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         button.full-width {
-            width: 100%;
+            grid-column: span 2;
         }
         .slider-container {
             margin-bottom: 8px;
@@ -67,11 +85,24 @@
         .slider-container label {
             display: flex;
             justify-content: space-between;
-            font-size: 12px;
+            font-size: 11px;
             margin-bottom: 3px;
+            color: #ddd;
         }
         input[type="range"] {
             width: 100%;
+            cursor: pointer;
+            height: 4px;
+            border-radius: 2px;
+            appearance: none;
+            background: rgba(255,255,255,0.2);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: white;
             cursor: pointer;
         }
     </style>
@@ -80,13 +111,15 @@
     <div class="controls">
         <div class="control-group">
             <h3>Spawn Objects</h3>
-            <button onclick="addSquare()">Square</button>
-            <button onclick="addCircle()">Circle</button>
-            <button onclick="addTriangle()">Triangle</button>
-            <button onclick="addHexagon()">Hexagon</button>
-            <button onmousedown="startCrawlerDrag(event)">Crawler</button>
-            <button onclick="addStack()" class="full-width">Stack of Boxes</button>
-            <button onclick="addWater()" class="full-width">Water</button>
+            <div class="button-grid">
+                <button onclick="addSquare()">Square</button>
+                <button onclick="addCircle()">Circle</button>
+                <button onclick="addTriangle()">Triangle</button>
+                <button onclick="addHexagon()">Hexagon</button>
+                <button onmousedown="startCrawlerDrag(event)">Crawler</button>
+                <button onclick="addStack()" class="full-width">Stack of Boxes</button>
+                <button onclick="addWater()" class="full-width">Water</button>
+            </div>
         </div>
 
         <div class="control-group">
