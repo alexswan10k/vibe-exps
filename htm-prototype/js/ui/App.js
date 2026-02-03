@@ -14,8 +14,13 @@ console.log('Loading App.js');
     function App() {
         const [step, setStep] = useState(0);
         const [isPlaying, setIsPlaying] = useState(false);
-        const [inputString, setInputString] = useState("ABC\nABC\nABC");
+        const [inputString, setInputString] = useState(
+            "Once upon a time, there was a sophisticated AI. " +
+            "The AI loved to learn. The AI loved to predict. " +
+            "It saw patterns everywhere. It saw the future."
+        );
         const [currentChar, setCurrentChar] = useState("");
+        const [currentSDR, setCurrentSDR] = useState(null);
         const [prediction, setPrediction] = useState(null);
 
         // Refs for HTM objects to persist across renders
@@ -47,6 +52,7 @@ console.log('Loading App.js');
 
             // Encode
             const sdr = encoderRef.current.encode(char);
+            setCurrentSDR(sdr);
 
             // Run Region
             regionRef.current.compute(sdr);
@@ -116,7 +122,16 @@ console.log('Loading App.js');
                 )
             ),
 
-            h(window.RegionView, { region: regionRef.current })
+            // Vis Row
+            h('div', { className: 'flex gap-4' },
+                h('div', { className: 'flex flex-col gap-4 w-1/4' },
+                    h(window.Legend),
+                    currentSDR && h(window.InputView, { sdr: currentSDR, char: currentChar })
+                ),
+                h('div', { className: 'flex-1' },
+                    h(window.RegionView, { region: regionRef.current })
+                )
+            )
         );
     }
 

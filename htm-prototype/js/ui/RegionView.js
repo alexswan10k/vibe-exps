@@ -56,8 +56,13 @@ console.log('Loading RegionView.js');
     function RegionView({ region }) {
         if (!region) return null;
 
-        return h('div', { className: 'card' },
-            h('h2', { className: 'text-xl mb-4' }, 'Region Activity'),
+        return h('div', { className: 'card relative' },
+            h('div', { className: 'flex justify-between items-center mb-4' },
+                h('h2', { className: 'text-xl' }, 'Region Activity'),
+                h('div', { className: 'text-xs text-slate-400' },
+                    'Hover over cells for details'
+                )
+            ),
             h('div', {
                 className: 'region-grid',
                 style: {
