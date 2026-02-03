@@ -11,11 +11,11 @@ function Controls({ onStep, onReset, isPlaying, setIsPlaying, inputString, setIn
         // Input
         h('div', { className: 'flex flex-col gap-2' },
             h('label', null, 'Input Sequence:'),
-            h('input', {
-                type: 'text',
+            h('textarea', {
                 value: inputString,
                 onChange: (e) => setInputString(e.target.value),
-                className: 'p-2 bg-slate-800 border rounded text-white'
+                className: 'p-2 bg-slate-800 border rounded text-white h-24 font-mono',
+                placeholder: "Type your sequence to learn..."
             })
         ),
 

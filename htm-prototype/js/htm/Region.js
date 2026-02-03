@@ -68,6 +68,28 @@ class Region {
         // 3. Temporal Pooling (Activate Cells, Learning, Prediction)
         this.temporalPooler.performTemporalPooling();
     }
+
+    /**
+     * Get indices of columns that are predicted to be active in the NEXT timestep.
+     * A column is predicted if it has at least one predictive cell.
+     */
+    getPredictedColumnIndices() {
+        const indices = [];
+        for (const col of this.columns) {
+            // Check if any cell is predictive
+            let isPredicted = false;
+            for (const cell of col.cells) {
+                if (cell.isPredictive) {
+                    isPredicted = true;
+                    break;
+                }
+            }
+            if (isPredicted) {
+                indices.push(col.index);
+            }
+        }
+        return indices;
+    }
 }
 
 // Global Export

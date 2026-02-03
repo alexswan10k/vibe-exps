@@ -20,6 +20,47 @@ class Encoder {
     }
 
     /**
+     * Decode a set of active bits (indices or boolean array) back to the most likely character.
+     * @param {Array<number>} activeIndices - Array of active column indices.
+     * @returns {Object} { char, confidence }
+     */
+    decode(activeIndices) {
+        let bestChar = '?';
+        let maxOverlap = -1;
+        let bestConfidence = 0.0;
+
+        // Convert input indices to Set for O(1) lookup
+        const activeSet = new Set(activeIndices);
+
+        for (const [char, sdr] of Object.entries(this.charMap)) {
+            // Calculate overlap
+            let overlap = 0;
+            let totalBits = 0;
+
+            for (let i = 0; i < sdr.length; i++) {
+                if (sdr[i]) {
+                    totalBits++;
+                    if (activeSet.has(i)) {
+                        overlap++;
+                    }
+                }
+            }
+
+            if (totalBits === 0) continue;
+
+            if (overlap > maxOverlap) {
+                maxOverlap = overlap;
+                bestChar = char;
+                bestConfidence = overlap / totalBits;
+            }
+        }
+
+        if (maxOverlap === 0) return { char: '', confidence: 0 };
+
+        return { char: bestChar, confidence: bestConfidence, overlap: maxOverlap };
+    }
+
+    /**
      * Generate a consistent random SDR for a token.
      */
     _generateRandomSDR(seedToken) {

@@ -14,8 +14,9 @@ console.log('Loading App.js');
     function App() {
         const [step, setStep] = useState(0);
         const [isPlaying, setIsPlaying] = useState(false);
-        const [inputString, setInputString] = useState("ABCABC");
+        const [inputString, setInputString] = useState("ABC\nABC\nABC");
         const [currentChar, setCurrentChar] = useState("");
+        const [prediction, setPrediction] = useState(null);
 
         // Refs for HTM objects to persist across renders
         const regionRef = useRef(null);
@@ -40,14 +41,20 @@ console.log('Loading App.js');
             if (!regionRef.current || !inputString) return;
 
             // Get current character
+            if (inputString.length === 0) return;
             const char = inputString[inputIdx.current % inputString.length];
-            setCurrentChar(char);
+            setCurrentChar(char === '\n' ? '↵' : char);
 
             // Encode
             const sdr = encoderRef.current.encode(char);
 
             // Run Region
             regionRef.current.compute(sdr);
+
+            // Decode Prediction for *NEXT* step
+            const predictedIndices = regionRef.current.getPredictedColumnIndices();
+            const decoded = encoderRef.current.decode(predictedIndices);
+            setPrediction(decoded);
 
             // Advance
             inputIdx.current++;
@@ -89,12 +96,24 @@ console.log('Loading App.js');
                 setInputString
             }),
 
-            h('div', { className: 'card' },
+            h('div', { className: 'card flex flex-col items-center' },
                 h('h2', { className: 'text-xl' }, 'Current Input'),
                 h('div', { className: 'text-4xl text-center font-mono my-4 text-yellow-400' },
                     currentChar || "-"
                 ),
-                h('div', { className: 'text-sm text-gray-400 text-center' }, `Step: ${step}`)
+                h('div', { className: 'text-sm text-gray-400 text-center' }, `Step: ${step}`),
+
+                h('hr', { className: 'w-full border-slate-700 my-4' }),
+
+                h('h2', { className: 'text-xl' }, 'Next Prediction'),
+                h('div', { className: 'flex flex-col items-center mt-2' },
+                    h('div', { className: 'text-4xl font-mono text-green-400' },
+                        prediction && prediction.char ? (prediction.char === '\n' ? '↵' : prediction.char) : "?"
+                    ),
+                    h('div', { className: 'text-sm text-gray-400' },
+                        prediction ? `Confidence: ${(prediction.confidence * 100).toFixed(1)}%` : "Waiting..."
+                    )
+                )
             ),
 
             h(window.RegionView, { region: regionRef.current })
