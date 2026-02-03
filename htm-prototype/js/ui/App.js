@@ -22,6 +22,13 @@ console.log('Loading App.js');
         const [currentChar, setCurrentChar] = useState("");
         const [currentSDR, setCurrentSDR] = useState(null);
         const [prediction, setPrediction] = useState(null);
+        const [selectedCell, setSelectedCell] = useState(null);
+
+        // Expose selection handler globally for RegionView to call
+        // (A bit hacky but avoids passing props through everything for now)
+        useEffect(() => {
+            window.onCellClick = (cell) => setSelectedCell(cell);
+        }, []);
 
         // Refs for HTM objects to persist across renders
         const regionRef = useRef(null);
@@ -131,7 +138,12 @@ console.log('Loading App.js');
                 h('div', { className: 'flex-1' },
                     h(window.RegionView, { region: regionRef.current })
                 )
-            )
+            ),
+
+            selectedCell && h(window.CellDetailPanel, {
+                cell: selectedCell,
+                onClose: () => setSelectedCell(null)
+            })
         );
     }
 

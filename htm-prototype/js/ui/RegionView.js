@@ -33,7 +33,11 @@ console.log('Loading RegionView.js');
 
         return h('div', {
             className: classes.join(' '),
-            title: `Cell ${cell.index}: ${classes.join(', ')}`
+            title: `Cell ${cell.index}: ${classes.join(', ')}`,
+            onClick: (e) => {
+                e.stopPropagation(); // Prevent column click if we had one
+                if (window.onCellClick) window.onCellClick(cell);
+            }
         });
     }
 
