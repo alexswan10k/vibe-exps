@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTM Prototype</title>
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- React Dependencies -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+
+<body>
+    <div id="root"></div>
+    <div id="error-overlay"
+        style="display:none; position:fixed; top:0; left:0; right:0; padding:20px; background:red; color:white; z-index:9999; font-family:monospace; white-space:pre-wrap;">
+    </div>
+
+    <script>
+        window.addEventListener('error', function (e) {
+            const overlay = document.getElementById('error-overlay');
+            overlay.style.display = 'block';
+            overlay.textContent += 'Error: ' + e.message + '\nat ' + e.filename + ':' + e.lineno + '\n\n';
+            console.error(e);
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+            const overlay = document.getElementById('error-overlay');
+            overlay.style.display = 'block';
+            overlay.textContent += 'Promise Rejection: ' + e.reason + '\n\n';
+            console.error(e);
+        });
+    </script>
+
+    <!-- Core HTM Logic (Order Matters: Dependencies First) -->
+    <!-- Base classes -->
+    <script src="js/htm/Synapse.js"></script>
+    <script src="js/htm/Segment.js"></script>
+    <script src="js/htm/Cell.js"></script>
+    <script src="js/htm/Column.js"></script>
+
+    <!-- Pooling Logic -->
+    <script src="js/htm/SpatialPooler.js"></script>
+    <script src="js/htm/TemporalPooler.js"></script>
+
+    <!-- Region Wrapper -->
+    <script src="js/htm/Region.js"></script>
+
+    <!-- Input Logic -->
+    <script src="js/input/Encoder.js"></script>
+
+    <!-- UI Components (Dependencies First) -->
+    <script src="js/ui/Controls.js"></script>
+    <script src="js/ui/RegionView.js"></script>
+    <script src="js/ui/App.js"></script>
+
+    <!-- Initialization -->
+    <script>
+        try {
+            if (typeof React === 'undefined') throw new Error("React is not loaded");
+            if (typeof App === 'undefined') throw new Error("App component is not defined. Check App.js");
+
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(React.createElement(App));
+        } catch (e) {
+            console.error("Initialization Error:", e);
+            const overlay = document.getElementById('error-overlay');
+            overlay.style.display = 'block';
+            overlay.textContent += 'Init Error: ' + e.message + '\n';
+        }
+    </script>
+</body>
+
+</html>
