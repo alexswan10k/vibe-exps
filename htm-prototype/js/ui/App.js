@@ -25,7 +25,6 @@ console.log('Loading App.js');
         const [selectedCell, setSelectedCell] = useState(null);
 
         // Expose selection handler globally for RegionView to call
-        // (A bit hacky but avoids passing props through everything for now)
         useEffect(() => {
             window.onCellClick = (cell) => setSelectedCell(cell);
         }, []);
@@ -69,6 +68,14 @@ console.log('Loading App.js');
             const decoded = encoderRef.current.decode(predictedIndices);
             setPrediction(decoded);
 
+            // Update selected cell if it exists (to refresh data in panel)
+            if (selectedCell) {
+                // Find the updated cell object in the current region state
+                const updatedCol = regionRef.current.columns[selectedCell.column.index];
+                const updatedCell = updatedCol.cells[selectedCell.index];
+                setSelectedCell(updatedCell);
+            }
+
             // Advance
             inputIdx.current++;
             setStep(s => s + 1);
@@ -78,72 +85,89 @@ console.log('Loading App.js');
         useEffect(() => {
             let interval;
             if (isPlaying) {
-                interval = setInterval(performStep, 200);
+                interval = setInterval(performStep, 150);
             }
             return () => clearInterval(interval);
-        }, [isPlaying, inputString]);
+        }, [isPlaying, inputString, selectedCell]); // Re-bind when selection changes to ensure update loop
 
         const handleReset = () => {
             inputIdx.current = 0;
             setStep(0);
-            // Re-init region?
             const region = new Region(16, 8);
             region.initialize(64);
             regionRef.current = region;
             setCurrentChar("");
+            setSelectedCell(null);
         };
 
         // Ensure sub-components are defined
         if (!window.Controls) return h('div', null, 'Error: Controls not defined');
         if (!window.RegionView) return h('div', null, 'Error: RegionView not defined');
 
-        return h('div', { className: 'flex flex-col gap-4' },
-            h('h1', { className: 'text-2xl font-bold' }, 'HTM Prototype (Vanilla React)'),
-
-            h(window.Controls, {
-                onStep: performStep,
-                onReset: handleReset,
-                isPlaying,
-                setIsPlaying,
-                inputString,
-                setInputString
-            }),
-
-            h('div', { className: 'card flex flex-col items-center' },
-                h('h2', { className: 'text-xl' }, 'Current Input'),
-                h('div', { className: 'text-4xl text-center font-mono my-4 text-yellow-400' },
-                    currentChar || "-"
+        return h('div', { className: 'container' },
+            h('header', { className: 'flex justify-between items-center' },
+                h('div', null,
+                    h('h1', { className: 'text-2xl font-bold m-0' }, 'HTM Prototype'),
+                    h('div', { className: 'text-sm text-slate-400' }, `Step: ${step}`)
                 ),
-                h('div', { className: 'text-sm text-gray-400 text-center' }, `Step: ${step}`),
+                h(window.Controls, {
+                    onStep: performStep,
+                    onReset: handleReset,
+                    isPlaying,
+                    setIsPlaying,
+                    inputString,
+                    setInputString
+                })
+            ),
 
-                h('hr', { className: 'w-full border-slate-700 my-4' }),
-
-                h('h2', { className: 'text-xl' }, 'Next Prediction'),
-                h('div', { className: 'flex flex-col items-center mt-2' },
-                    h('div', { className: 'text-4xl font-mono text-green-400' },
-                        prediction && prediction.char ? (prediction.char === '\n' ? '↵' : prediction.char) : "?"
+            h('main', { className: 'main-layout' },
+                // Left Column: visualization and input stats
+                h('div', { className: 'flex flex-col gap-6' },
+                    // Top stats row
+                    h('div', { className: 'flex gap-6' },
+                        h('div', { className: 'card flex-1 flex flex-col items-center glass' },
+                            h('h2', { className: 'text-xs uppercase tracking-wider text-slate-400 mb-2' }, 'Current Input'),
+                            h('div', { className: 'text-5xl font-mono text-yellow-400' },
+                                currentChar || "-"
+                            )
+                        ),
+                        h('div', { className: 'card flex-1 flex flex-col items-center glass' },
+                            h('h2', { className: 'text-xs uppercase tracking-wider text-slate-400 mb-2' }, 'Next Prediction'),
+                            h('div', { className: 'text-5xl font-mono text-green-400' },
+                                prediction && prediction.char ? (prediction.char === '\n' ? '↵' : prediction.char) : "?"
+                            ),
+                            h('div', { className: 'text-xs text-slate-400 mt-1' },
+                                prediction ? `${(prediction.confidence * 100).toFixed(0)}% confidence` : "..."
+                            )
+                        )
                     ),
-                    h('div', { className: 'text-sm text-gray-400' },
-                        prediction ? `Confidence: ${(prediction.confidence * 100).toFixed(1)}%` : "Waiting..."
+
+                    // Visualization
+                    h(window.RegionView, {
+                        region: regionRef.current,
+                        selectedCell: selectedCell
+                    }),
+
+                    h('div', { className: 'flex gap-6' },
+                        h('div', { className: 'w-64' }, h(window.Legend)),
+                        currentSDR && h('div', { className: 'flex-1' },
+                            h(window.InputView, { sdr: currentSDR, char: currentChar })
+                        )
                     )
-                )
-            ),
-
-            // Vis Row
-            h('div', { className: 'flex gap-4' },
-                h('div', { className: 'flex flex-col gap-4 w-1/4' },
-                    h(window.Legend),
-                    currentSDR && h(window.InputView, { sdr: currentSDR, char: currentChar })
                 ),
-                h('div', { className: 'flex-1' },
-                    h(window.RegionView, { region: regionRef.current })
-                )
-            ),
 
-            selectedCell && h(window.CellDetailPanel, {
-                cell: selectedCell,
-                onClose: () => setSelectedCell(null)
-            })
+                // Right Column: Detail Panel
+                h('aside', { className: 'sidebar' },
+                    selectedCell ?
+                        h(window.CellDetailPanel, {
+                            cell: selectedCell,
+                            onClose: () => setSelectedCell(null)
+                        }) :
+                        h('div', { className: 'card glass h-full flex items-center justify-center text-slate-500 italic text-center' },
+                            'Click a cell to inspect its synapses and state'
+                        )
+                )
+            )
         );
     }
 

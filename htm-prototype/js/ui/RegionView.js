@@ -11,7 +11,7 @@ console.log('Loading RegionView.js');
 
     const { createElement: h } = React;
 
-    function CellView({ cell }) {
+    function CellView({ cell, isSelected }) {
         // Determine class based on state
         let classes = ['cell'];
         if (cell.isActive) classes.push('active');
@@ -24,47 +24,58 @@ console.log('Loading RegionView.js');
 
         // Check active but not predicted (Unexpected)
         if (cell.isActive && !cell.wasPredictive) {
-            // Did ANY cell in this column predict?
             const columnPredicted = cell.column.cells.some(c => c.wasPredictive);
             if (!columnPredicted) {
                 classes.push('unexpected');
             }
         }
 
+        if (isSelected) classes.push('selected');
+
         return h('div', {
             className: classes.join(' '),
-            title: `Cell ${cell.index}: ${classes.join(', ')}`,
+            title: `Cell ${cell.index}\nCol: ${cell.column.index}\n${classes.join(', ')}`,
+            style: isSelected ? { ring: '2px solid white', transform: 'scale(1.1)', zIndex: 10 } : {},
             onClick: (e) => {
-                e.stopPropagation(); // Prevent column click if we had one
+                e.stopPropagation();
                 if (window.onCellClick) window.onCellClick(cell);
             }
         });
     }
 
-    function ColumnView({ column }) {
-        // Column overall state
+    function ColumnView({ column, selectedCell }) {
         const isActive = column.isActive;
+        const isFocused = selectedCell && selectedCell.column.index === column.index;
 
         return h('div', {
-            className: `column flex-col items-center justify-center p-2 ${isActive ? 'active' : ''}`
+            className: `column flex-col items-center justify-center ${isActive ? 'active-col' : ''} ${isFocused ? 'focused' : ''}`,
+            onClick: () => {
+                // Focus first cell in column if not already looking at this column
+                if (!isFocused && window.onCellClick) {
+                    window.onCellClick(column.cells[0]);
+                }
+            }
         },
-            // We render cells inside the column
             h('div', { className: 'cell-grid' },
                 column.cells.map((cell, idx) =>
-                    h(CellView, { key: idx, cell: cell })
+                    h(CellView, {
+                        key: idx,
+                        cell: cell,
+                        isSelected: selectedCell && selectedCell.column.index === column.index && selectedCell.index === idx
+                    })
                 )
             )
         );
     }
 
-    function RegionView({ region }) {
+    function RegionView({ region, selectedCell }) {
         if (!region) return null;
 
-        return h('div', { className: 'card relative' },
+        return h('div', { className: 'card glass relative p-6' },
             h('div', { className: 'flex justify-between items-center mb-4' },
-                h('h2', { className: 'text-xl' }, 'Region Activity'),
-                h('div', { className: 'text-xs text-slate-400' },
-                    'Hover over cells for details'
+                h('h2', { className: 'text-sm font-bold uppercase tracking-widest text-slate-400' }, 'Network Activity'),
+                h('div', { className: 'text-[10px] text-slate-500 uppercase' },
+                    'Click cells to inspect architecture'
                 )
             ),
             h('div', {
@@ -74,7 +85,11 @@ console.log('Loading RegionView.js');
                 }
             },
                 region.columns.map((col, idx) =>
-                    h(ColumnView, { key: idx, column: col })
+                    h(ColumnView, {
+                        key: idx,
+                        column: col,
+                        selectedCell: selectedCell
+                    })
                 )
             )
         );
