@@ -538,7 +538,12 @@
             }
 
             async init() {
-                if (this.initialized) return;
+                if (this.initialized) {
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        await this.ctx.resume();
+                    }
+                    return;
+                }
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 this.ctx = new AudioContext();
                 this.initialized = true;
@@ -851,14 +856,14 @@
             disconnectAll() {
                 if(!this.ctx) return;
                 this.nodes.forEach(n => {
-                    if (n.core && n.core.disconnect) n.core.disconnect();
+                    // Do NOT disconnect n.core if it's different from n.main (internal wiring)
+                    // Only disconnect the nodes that connect to OTHER modules
+                    
+                    // If core IS main (like VCF/VCA), it gets disconnected by main check below.
+                    // If core connects to main (Osc/LFO), we MUST keep core->main connection.
+                    
                     if (n.main && n.main.disconnect) n.main.disconnect();
                     if (n.outputs) Object.values(n.outputs).forEach(o => o.disconnect());
-                    // Reconnect internal structure
-                    // (Simplified: we assume full rebuild on patch change or simple disconnect)
-                    // Better: this.nodes is a persistent map. 
-                    // We need to only disconnect cables. 
-                    // This prototype rebuilds connections every time safely.
                 });
             }
         }
