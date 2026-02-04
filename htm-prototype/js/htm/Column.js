@@ -47,9 +47,10 @@ class Column {
      * Connects this column to a random set of input bits.
      * @param {number} inputSize - Total size of input vector.
      * @param {Object} inputValues - The actual input array object (or wrapper).
+     * @param {Object} prevInputValues - The previous input array object.
      * @param {number} potentialPct - Percentage of inputs to connect to.
      */
-    connectToInput(inputSize, inputValues, potentialPct = 0.5) {
+    connectToInput(inputSize, inputValues, prevInputValues, potentialPct = 0.5) {
         this.proximalSynapses = [];
         for (let i = 0; i < inputSize; i++) {
             if (Math.random() < potentialPct) {
@@ -63,7 +64,7 @@ class Column {
                 // Let's create a lightweight proxy object for the synapse source.
                 const inputSource = {
                     get isActive() { return inputValues[i]; },
-                    get wasActive() { return false; } // Input usually doesn't have history in this simple model
+                    get wasActive() { return prevInputValues && prevInputValues[i]; }
                 };
 
                 // Note: Proximal synapses don't belong to a segment in the same way distal ones do in this simplified view,

@@ -106,6 +106,27 @@ class TemporalPooler {
                 }
             }
         }
+
+        // Phase 3: Punish Incorrect Predictions
+        // If a segment was active FROM PREV (predicted this timestep), but the cell did NOT become active,
+        // then the prediction was wrong. We should slightly weaken those synapses.
+        for (const col of columns) {
+            if (!col.isActive) {
+                // If column is not active, any cell that predicted it should be punished
+                for (const cell of col.cells) {
+                    if (cell.wasPredictive) {
+                        // Find the segment that caused the prediction
+                        // Optimization: cell.getBestMatchingSegment(true) might return the one
+                        // But strictly we should check which one WAS active.
+                        for (const seg of cell.segments) {
+                            if (seg.isActiveFromPrev) {
+                                seg.adapt(false); // Negative reinforcement
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**

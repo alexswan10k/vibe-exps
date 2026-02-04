@@ -41,9 +41,10 @@ class Region {
 
         // Fill inputData with false initially
         this.inputData = new Array(inputSize).fill(false);
+        this.prevInputData = new Array(inputSize).fill(false);
 
         for (const col of this.columns) {
-            col.connectToInput(inputSize, this.inputData);
+            col.connectToInput(inputSize, this.inputData, this.prevInputData);
         }
     }
 
@@ -52,6 +53,12 @@ class Region {
      * @param {Array<boolean>} input - Binary input vector.
      */
     compute(input) {
+        // 0. Update Input History
+        // Copy current inputData to prevInputData before overwriting it
+        for (let i = 0; i < this.inputData.length; i++) {
+            this.prevInputData[i] = this.inputData[i];
+        }
+
         // Update local input data so connected synapses see the new values
         for (let i = 0; i < input.length; i++) {
             this.inputData[i] = input[i];
