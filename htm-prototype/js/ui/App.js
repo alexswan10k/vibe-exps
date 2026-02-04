@@ -23,11 +23,22 @@ console.log('Loading App.js');
         const [currentSDR, setCurrentSDR] = useState(null);
         const [prediction, setPrediction] = useState(null);
         const [selectedCell, setSelectedCell] = useState(null);
+        const [hoveredColIdx, setHoveredColIdx] = useState(null);
+        const [hoveredCellPos, setHoveredCellPos] = useState(null); // {col: x, cell: y}
 
-        // Expose selection handler globally for RegionView to call
+        const [showAllConnections, setShowAllConnections] = useState(false);
+
+        // Expose selection/hover handlers globally
         useEffect(() => {
             window.onCellClick = (cell) => setSelectedCell(cell);
+            window.onCellHover = (cell) => setHoveredCellPos(cell ? { col: cell.column.index, cell: cell.index } : null);
+            window.onColumnHover = (idx) => setHoveredColIdx(idx);
+
+            // For hovering input bits
+            window.onInputBitHover = (idx) => setHoveredInputBit(idx);
         }, []);
+
+        const [hoveredInputBit, setHoveredInputBit] = useState(null);
 
         // Refs for HTM objects to persist across renders
         const regionRef = useRef(null);
@@ -104,7 +115,7 @@ console.log('Loading App.js');
         if (!window.Controls) return h('div', null, 'Error: Controls not defined');
         if (!window.RegionView) return h('div', null, 'Error: RegionView not defined');
 
-        return h('div', { className: 'container' },
+        return [
             h('header', { className: 'flex justify-between items-center' },
                 h('div', null,
                     h('h1', { className: 'text-2xl font-bold m-0' }, 'HTM Prototype'),
@@ -117,58 +128,89 @@ console.log('Loading App.js');
                     setIsPlaying,
                     inputString,
                     setInputString
-                })
+                }),
+                h('button', {
+                    className: `btn ${showAllConnections ? '' : 'btn-secondary'} ml-2`,
+                    onClick: () => setShowAllConnections(!showAllConnections),
+                    title: 'Toggle all connection lines'
+                }, showAllConnections ? 'Hide Lines' : 'Show All Lines')
             ),
 
             h('main', { className: 'main-layout' },
-                // Left Column: visualization and input stats
-                h('div', { className: 'flex flex-col gap-6' },
-                    // Top stats row
-                    h('div', { className: 'flex gap-6' },
-                        h('div', { className: 'card flex-1 flex flex-col items-center glass' },
-                            h('h2', { className: 'text-xs uppercase tracking-wider text-slate-400 mb-2' }, 'Current Input'),
-                            h('div', { className: 'text-5xl font-mono text-yellow-400' },
-                                currentChar || "-"
-                            )
-                        ),
-                        h('div', { className: 'card flex-1 flex flex-col items-center glass' },
-                            h('h2', { className: 'text-xs uppercase tracking-wider text-slate-400 mb-2' }, 'Next Prediction'),
-                            h('div', { className: 'text-5xl font-mono text-green-400' },
+                // Zone 1: Dashboard Row (Top)
+                h('div', { className: 'dashboard-row' },
+                    h('div', { className: 'card glass flex items-center justify-center min-w-[100px]' },
+                        h('div', { className: 'text-center' },
+                            h('h2', { className: 'text-[9px] uppercase tracking-wider text-slate-500 mb-1' }, 'Input'),
+                            h('div', { className: 'text-3xl font-mono text-yellow-500' }, currentChar || "-")
+                        )
+                    ),
+                    h('div', { className: 'card glass flex items-center justify-center min-w-[140px]', 'data-prediction-card': true },
+                        h('div', { className: 'text-center' },
+                            h('h2', { className: 'text-[9px] uppercase tracking-wider text-slate-500 mb-1' }, 'Prediction'),
+                            h('div', { className: 'text-3xl font-mono text-green-500' },
                                 prediction && prediction.char ? (prediction.char === '\n' ? '↵' : prediction.char) : "?"
-                            ),
-                            h('div', { className: 'text-xs text-slate-400 mt-1' },
-                                prediction ? `${(prediction.confidence * 100).toFixed(0)}% confidence` : "..."
                             )
                         )
                     ),
+                    h('div', { className: 'flex-1' },
+                        h(window.InputView, {
+                            sdr: currentSDR || new Array(64).fill(false),
+                            char: currentChar || " ",
+                            highlightedBits: (function () {
+                                const colIdx = hoveredColIdx !== null ? hoveredColIdx : (selectedCell ? selectedCell.column.index : null);
+                                if (colIdx !== null && regionRef.current) {
+                                    const col = regionRef.current.columns[colIdx];
+                                    return col.proximalSynapses.filter(s => s.isConnected).map(s => s.inputSource.index);
+                                }
+                                return [];
+                            })()
+                        })
+                    )
+                ),
 
-                    // Visualization
-                    h(window.RegionView, {
-                        region: regionRef.current,
-                        selectedCell: selectedCell
-                    }),
+                // Zone 2 & 3: Content Row (Middle/Bottom)
+                h('div', { className: 'content-row' },
+                    // Visualizer
+                    h('div', { className: 'visualizer-zone' },
+                        h(window.RegionView, {
+                            region: regionRef.current,
+                            selectedCell,
+                            hoveredColIdx,
+                            hoveredCellPos,
+                            hoveredInputBit
+                        })
+                    ),
 
-                    h('div', { className: 'flex gap-6' },
-                        h('div', { className: 'w-64' }, h(window.Legend)),
-                        currentSDR && h('div', { className: 'flex-1' },
-                            h(window.InputView, { sdr: currentSDR, char: currentChar })
+                    // Sidebar
+                    h('aside', { className: 'sidebar-zone' },
+                        h('div', { className: 'card glass p-0 overflow-hidden shrink-0' },
+                            h(window.Legend)
+                        ),
+                        h('div', { className: 'flex-1 min-h-0 sidebar-scroll' },
+                            selectedCell ?
+                                h(window.CellDetailPanel, {
+                                    cell: selectedCell,
+                                    onClose: () => setSelectedCell(null)
+                                }) :
+                                h('div', { className: 'card glass h-full flex items-center justify-center text-slate-500 italic text-center p-6' },
+                                    'Select a cell to inspect connections'
+                                )
                         )
                     )
                 ),
 
-                // Right Column: Detail Panel
-                h('aside', { className: 'sidebar' },
-                    selectedCell ?
-                        h(window.CellDetailPanel, {
-                            cell: selectedCell,
-                            onClose: () => setSelectedCell(null)
-                        }) :
-                        h('div', { className: 'card glass h-full flex items-center justify-center text-slate-500 italic text-center' },
-                            'Click a cell to inspect its synapses and state'
-                        )
-                )
+                // SVG Overlay
+                h(window.ConnectionLines, {
+                    region: regionRef.current,
+                    selectedCell,
+                    hoveredColIdx,
+                    hoveredCellPos,
+                    hoveredInputBit,
+                    showAll: showAllConnections
+                })
             )
-        );
+        ];
     }
 
     // Global Export

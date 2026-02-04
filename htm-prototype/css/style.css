@@ -30,44 +30,84 @@ body {
     color: hsl(var(--text-main));
     margin: 0;
     padding: 0;
-    min-height: 100vh;
-    overflow-x: hidden;
+    height: 100vh;
+    overflow: hidden;
 }
 
 #root {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100vh;
+    padding: 16px;
+    box-sizing: border-box;
+    gap: 16px;
+}
+
+header {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Layout Classes */
+.main-layout {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    max-height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Zone 1: Dashboard Row (Top) */
+.dashboard-row {
+    flex-shrink: 0;
+    display: flex;
+    gap: 12px;
+    height: 110px;
+}
+
+/* Zone 2 & 3: Middle Content Row */
+.content-row {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+}
+
+.visualizer-zone {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.sidebar-zone {
+    width: 320px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+}
+
+.sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
 }
 
 /* Glassmorphism utility */
 .glass {
-    background: hsla(var(--bg-card) / 0.7);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: hsla(222, 47%, 15%, 0.75);
+    backdrop-filter: blur(16px);
     border: 1px solid hsla(var(--border-color) / 0.5);
-    border-radius: var(--border-radius);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-}
-
-/* Layout Classes */
-.container {
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 24px;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.main-layout {
-    display: grid;
-    grid-template-columns: 1fr var(--panel-width);
-    gap: 24px;
-    flex: 1;
-}
-
-header {
-    margin-bottom: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* Utilities */
@@ -79,6 +119,10 @@ header {
     flex-direction: column;
 }
 
+.flex-1 {
+    flex: 1;
+}
+
 .items-center {
     align-items: center;
 }
@@ -87,8 +131,24 @@ header {
     justify-content: space-between;
 }
 
+.gap-2 {
+    gap: 0.5rem;
+}
+
 .gap-4 {
     gap: 1rem;
+}
+
+.gap-6 {
+    gap: 1.5rem;
+}
+
+.p-2 {
+    padding: 0.5rem;
+}
+
+.p-4 {
+    padding: 1rem;
 }
 
 .p-6 {
@@ -100,7 +160,7 @@ header {
     background-color: hsl(var(--bg-card));
     border: 1px solid hsl(var(--border-color));
     border-radius: var(--border-radius);
-    padding: 1.5rem;
+    padding: 1rem;
 }
 
 .btn {
@@ -136,20 +196,32 @@ header {
     border: 1px solid hsl(var(--border-color));
 }
 
-/* Visualization Grid */
+.overflow-hidden {
+    overflow: hidden;
+}
+
+.h-full {
+    height: 100%;
+}
+
 .region-grid {
     display: grid;
-    gap: 4px;
-    padding: 8px;
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
+    grid-template-columns: repeat(128, 1fr);
+    gap: 2px;
+    padding: 4px;
+    background-color: rgba(0, 0, 0, 0.4);
+    border-radius: 4px;
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .column {
     background-color: hsla(222, 47%, 20%, 0.5);
     border: 1px solid transparent;
-    border-radius: 4px;
-    padding: 4px;
+    border-radius: 2px;
+    padding: 2px;
     transition: all 0.2s;
     cursor: pointer;
 }
@@ -173,13 +245,13 @@ header {
 .cell-grid {
     display: flex;
     flex-direction: column;
-    gap: 3px;
+    gap: 2px;
 }
 
 .cell {
     width: 100%;
-    aspect-ratio: 4 / 1;
-    min-height: 8px;
+    aspect-ratio: 5 / 1;
+    min-height: 4px;
     background-color: hsla(215, 25%, 35%, 0.5);
     border-radius: 1px;
     transition: background-color 0.15s ease-out;
@@ -197,18 +269,26 @@ header {
     background-color: hsl(var(--color-correct));
 }
 
-.cell.unexpected {
-    background-color: hsl(var(--color-error));
+.bit {
+    width: 100%;
+    height: 100%;
+    min-width: 4px;
+    min-height: 4px;
 }
 
 /* Detail Sidebar */
-.sidebar {
-    position: sticky;
-    top: 24px;
-    height: calc(100vh - 48px);
+.sidebar-detail {
+    flex: 1;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
+}
+
+.sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: hsla(var(--border-color) / 0.5);
+    border-radius: 2px;
 }
 
 .synapse-pip {

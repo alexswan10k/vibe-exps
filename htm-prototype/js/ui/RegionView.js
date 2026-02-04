@@ -11,7 +11,7 @@ console.log('Loading RegionView.js');
 
     const { createElement: h } = React;
 
-    function CellView({ cell, isSelected }) {
+    function CellView({ cell, isSelected, isRelated, isFocusCol, colIdx }) {
         // Determine class based on state
         let classes = ['cell'];
         if (cell.isActive) classes.push('active');
@@ -32,10 +32,23 @@ console.log('Loading RegionView.js');
 
         if (isSelected) classes.push('selected');
 
+        let style = {};
+        if (isSelected) {
+            style = { ring: '2px solid white', transform: 'scale(1.15)', zIndex: 10, position: 'relative' };
+        } else if (isRelated) {
+            style = { ring: '1px dashed #22d3ee', background: 'rgba(34, 211, 238, 0.4)', zIndex: 5, position: 'relative' };
+        } else if (isFocusCol) {
+            style = { border: '1px solid rgba(255,255,255,0.1)' };
+        }
+
         return h('div', {
             className: classes.join(' '),
+            'data-col-idx': colIdx,
+            'data-cell-idx': cell.index,
             title: `Cell ${cell.index}\nCol: ${cell.column.index}\n${classes.join(', ')}`,
-            style: isSelected ? { ring: '2px solid white', transform: 'scale(1.1)', zIndex: 10 } : {},
+            style: style,
+            onMouseEnter: () => window.onCellHover && window.onCellHover(cell),
+            onMouseLeave: () => window.onCellHover && window.onCellHover(null),
             onClick: (e) => {
                 e.stopPropagation();
                 if (window.onCellClick) window.onCellClick(cell);
@@ -43,43 +56,76 @@ console.log('Loading RegionView.js');
         });
     }
 
-    function ColumnView({ column, selectedCell }) {
+    function ColumnView({ column, selectedCell, hoveredColIdx, hoveredInputBit, isRelated }) {
         const isActive = column.isActive;
-        const isFocused = selectedCell && selectedCell.column.index === column.index;
+        const isSelected = selectedCell && selectedCell.column.index === column.index;
+        const isHovered = hoveredColIdx === column.index;
+
+        const isConnectedToInput = hoveredInputBit !== null && column.proximalSynapses.some(
+            syn => syn.isConnected && syn.inputSource.index === hoveredInputBit
+        );
+
+        const focusClass = (isSelected || isHovered || isConnectedToInput) ? 'focused' : '';
 
         return h('div', {
-            className: `column flex-col items-center justify-center ${isActive ? 'active-col' : ''} ${isFocused ? 'focused' : ''}`,
+            className: `column flex-col items-center justify-center ${isActive ? 'active-col' : ''} ${focusClass}`,
+            'data-col-idx': column.index,
+            style: isConnectedToInput ? { borderColor: 'hsl(180, 70%, 50%)', background: 'rgba(6, 182, 212, 0.1)' } : {},
+            onMouseEnter: () => window.onColumnHover && window.onColumnHover(column.index),
+            onMouseLeave: () => window.onColumnHover && window.onColumnHover(null),
             onClick: () => {
-                // Focus first cell in column if not already looking at this column
-                if (!isFocused && window.onCellClick) {
+                if (!isSelected && window.onCellClick) {
                     window.onCellClick(column.cells[0]);
                 }
             }
         },
             h('div', { className: 'cell-grid' },
-                column.cells.map((cell, idx) =>
-                    h(CellView, {
+                column.cells.map((cell, idx) => {
+                    const cellIsSelected = isSelected && selectedCell.index === idx;
+                    const cellIsRelated = isRelated && isRelated.includes(cell);
+                    return h(CellView, {
                         key: idx,
+                        colIdx: column.index,
                         cell: cell,
-                        isSelected: selectedCell && selectedCell.column.index === column.index && selectedCell.index === idx
-                    })
-                )
+                        isSelected: cellIsSelected,
+                        isRelated: cellIsRelated,
+                        isFocusCol: isSelected || isHovered
+                    });
+                })
             )
         );
     }
 
-    function RegionView({ region, selectedCell }) {
+    function RegionView({ region, selectedCell, hoveredColIdx, hoveredCellPos, hoveredInputBit }) {
         if (!region) return null;
 
-        return h('div', { className: 'card glass relative p-6' },
-            h('div', { className: 'flex justify-between items-center mb-4' },
-                h('h2', { className: 'text-sm font-bold uppercase tracking-widest text-slate-400' }, 'Network Activity'),
-                h('div', { className: 'text-[10px] text-slate-500 uppercase' },
-                    'Click cells to inspect architecture'
+        // Determine "Related Cells" for distal connections
+        const relatedCells = (function () {
+            const focus = hoveredCellPos || (selectedCell ? { col: selectedCell.column.index, cell: selectedCell.index } : null);
+            if (focus && region) {
+                const cell = region.columns[focus.col].cells[focus.cell];
+                const sources = [];
+                cell.segments.forEach(seg => {
+                    seg.synapses.forEach(syn => {
+                        if (syn.isConnected && syn.inputSource instanceof Cell) {
+                            sources.push(syn.inputSource);
+                        }
+                    });
+                });
+                return sources;
+            }
+            return [];
+        })();
+
+        return h('div', { className: 'card glass relative p-4 h-full flex flex-col' },
+            h('div', { className: 'flex justify-between items-center mb-2' },
+                h('h2', { className: 'text-[10px] font-bold uppercase tracking-widest text-slate-500' }, 'Network Activity'),
+                h('div', { className: 'text-[9px] text-slate-600 uppercase' },
+                    hoveredInputBit !== null ? `Bit ${hoveredInputBit}` : 'Hover cells for connections'
                 )
             ),
             h('div', {
-                className: 'region-grid',
+                className: 'region-grid flex-1',
                 style: {
                     gridTemplateColumns: `repeat(${region.width}, 1fr)`
                 }
@@ -88,7 +134,10 @@ console.log('Loading RegionView.js');
                     h(ColumnView, {
                         key: idx,
                         column: col,
-                        selectedCell: selectedCell
+                        selectedCell: selectedCell,
+                        hoveredColIdx: hoveredColIdx,
+                        hoveredInputBit: hoveredInputBit,
+                        isRelated: relatedCells
                     })
                 )
             )

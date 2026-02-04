@@ -4,22 +4,29 @@
 (function () {
     const { createElement: h } = React;
 
-    function InputView({ sdr, char }) {
+    function InputView({ sdr, char, highlightedBits = [] }) {
         if (!sdr) return null;
 
-        return h('div', { className: 'card' },
-            h('h3', { className: 'text-lg font-semibold mb-3' }, `Input SDR: ${char === '\n' ? '↵' : char}`),
+        return h('div', { className: 'card glass h-full flex flex-col p-2' },
+            h('h3', { className: 'text-[9px] font-bold uppercase tracking-widest text-slate-500 mb-1' }, `Input SDR: ${char === '\n' ? '↵' : char}`),
             h('div', {
-                className: 'grid gap-1',
-                style: { gridTemplateColumns: 'repeat(8, 1fr)' }
+                className: 'grid gap-0.5 flex-1',
+                style: {
+                    gridTemplateColumns: 'repeat(16, 1fr)',
+                    minHeight: '60px'
+                }
             },
-                sdr.map((isActive, idx) =>
-                    h('div', {
+                Array.from({ length: 64 }).map((_, idx) => {
+                    const isActive = sdr && sdr[idx];
+                    const isHighlighted = highlightedBits.includes(idx);
+                    return h('div', {
                         key: idx,
-                        className: `w-3 h-3 rounded-sm ${isActive ? 'bg-blue-500' : 'bg-slate-700'}`,
-                        title: `Bit ${idx}`
-                    })
-                )
+                        'data-bit-idx': idx,
+                        className: `bit w-full h-full aspect-square rounded-[1px] transition-all duration-300 border border-white/5 ${isActive ? 'bg-blue-500 shadow-[0_1px_4px_rgba(59,130,246,0.5)]' : 'bg-slate-800'} ${isHighlighted ? 'ring-1 ring-cyan-400 scale-110 z-20' : ''}`,
+                        onMouseEnter: () => window.onInputBitHover && window.onInputBitHover(idx),
+                        onMouseLeave: () => window.onInputBitHover && window.onInputBitHover(null)
+                    });
+                })
             )
         );
     }
