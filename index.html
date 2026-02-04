@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,32 +15,36 @@
             min-height: 100vh;
             color: #fff;
         }
+
         h1 {
             color: #fff;
             text-align: center;
             font-size: 2.5em;
             margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
             animation: fadeIn 1s ease-in;
         }
+
         p {
             text-align: center;
             font-size: 1.2em;
             margin-bottom: 40px;
             opacity: 0.9;
         }
+
         .project-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 25px;
             margin-top: 30px;
         }
+
         .project-card {
             background: rgba(255, 255, 255, 0.95);
             border: 2px solid rgba(255, 107, 107, 0.3);
             border-radius: 12px;
             padding: 25px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
             transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
@@ -52,33 +57,95 @@
             text-decoration: none;
             color: inherit;
         }
-        .project-card:nth-child(1) { animation-delay: 0.1s; }
-        .project-card:nth-child(2) { animation-delay: 0.2s; }
-        .project-card:nth-child(3) { animation-delay: 0.3s; }
-        .project-card:nth-child(4) { animation-delay: 0.4s; }
-        .project-card:nth-child(5) { animation-delay: 0.5s; }
-        .project-card:nth-child(6) { animation-delay: 0.6s; }
-        .project-card:nth-child(7) { animation-delay: 0.7s; }
-        .project-card:nth-child(8) { animation-delay: 0.8s; }
-        .project-card:nth-child(9) { animation-delay: 0.9s; }
-        .project-card:nth-child(10) { animation-delay: 1.0s; }
-        .project-card:nth-child(11) { animation-delay: 1.1s; }
-        .project-card:nth-child(12) { animation-delay: 1.2s; }
-        .project-card:nth-child(13) { animation-delay: 1.3s; }
-        .project-card:nth-child(14) { animation-delay: 1.4s; }
-        .project-card:nth-child(15) { animation-delay: 1.5s; }
-        .project-card:nth-child(16) { animation-delay: 1.6s; }
-        .project-card:nth-child(17) { animation-delay: 1.7s; }
-        .project-card:nth-child(18) { animation-delay: 1.8s; }
-        .project-card:nth-child(19) { animation-delay: 1.9s; }
-        .project-card:nth-child(20) { animation-delay: 2.0s; }
+
+        .project-card:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+
+        .project-card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .project-card:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        .project-card:nth-child(4) {
+            animation-delay: 0.4s;
+        }
+
+        .project-card:nth-child(5) {
+            animation-delay: 0.5s;
+        }
+
+        .project-card:nth-child(6) {
+            animation-delay: 0.6s;
+        }
+
+        .project-card:nth-child(7) {
+            animation-delay: 0.7s;
+        }
+
+        .project-card:nth-child(8) {
+            animation-delay: 0.8s;
+        }
+
+        .project-card:nth-child(9) {
+            animation-delay: 0.9s;
+        }
+
+        .project-card:nth-child(10) {
+            animation-delay: 1.0s;
+        }
+
+        .project-card:nth-child(11) {
+            animation-delay: 1.1s;
+        }
+
+        .project-card:nth-child(12) {
+            animation-delay: 1.2s;
+        }
+
+        .project-card:nth-child(13) {
+            animation-delay: 1.3s;
+        }
+
+        .project-card:nth-child(14) {
+            animation-delay: 1.4s;
+        }
+
+        .project-card:nth-child(15) {
+            animation-delay: 1.5s;
+        }
+
+        .project-card:nth-child(16) {
+            animation-delay: 1.6s;
+        }
+
+        .project-card:nth-child(17) {
+            animation-delay: 1.7s;
+        }
+
+        .project-card:nth-child(18) {
+            animation-delay: 1.8s;
+        }
+
+        .project-card:nth-child(19) {
+            animation-delay: 1.9s;
+        }
+
+        .project-card:nth-child(20) {
+            animation-delay: 2.0s;
+        }
+
         /* don't bother with anything over 20 because it isn't visible and leads to weird artifacts anyway */
         .project-card:hover {
             transform: translateY(-8px) scale(1.02);
-            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
             border-color: rgba(255, 107, 107, 0.6);
             background: rgba(255, 250, 240, 0.95);
         }
+
         .project-card::before {
             content: '';
             position: absolute;
@@ -86,12 +153,14 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
             transition: left 0.5s;
         }
+
         .project-card:hover::before {
             left: 100%;
         }
+
         .project-card h3 {
             margin-top: 0;
             color: #2c3e50;
@@ -102,6 +171,7 @@
             gap: 10px;
             text-align: left;
         }
+
         .project-card p {
             color: #555;
             margin: 15px 0;
@@ -112,13 +182,29 @@
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-20px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
+
         @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
+
         .search-container {
             text-align: center;
             margin-bottom: 20px;
@@ -127,6 +213,7 @@
             align-items: center;
             gap: 15px;
         }
+
         .search-wrapper {
             position: relative;
             width: 100%;
@@ -134,23 +221,27 @@
             display: flex;
             align-items: center;
         }
+
         .search-box {
             width: 100%;
-            padding: 12px 35px 12px 20px; /* Extra right padding for clear button */
+            padding: 12px 35px 12px 20px;
+            /* Extra right padding for clear button */
             font-size: 1em;
             border: none;
             border-radius: 25px;
             background: rgba(255, 255, 255, 0.9);
             color: #333;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
             outline: none;
         }
+
         .search-box:focus {
             background: rgba(255, 255, 255, 1);
-            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
             transform: scale(1.02);
         }
+
         .clear-search {
             position: absolute;
             right: 10px;
@@ -164,23 +255,28 @@
             padding: 5px;
             border-radius: 50%;
             transition: all 0.2s ease;
-            display: none; /* Hidden by default */
+            display: none;
+            /* Hidden by default */
             width: 20px;
             height: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
+
         .clear-search:hover {
             background: rgba(0, 0, 0, 0.1);
             color: #333;
         }
+
         .clear-search.visible {
             display: flex;
         }
+
         .project-card.hidden {
             display: none;
         }
+
         .shake-btn {
             background: linear-gradient(45deg, #ff4757, #ff3838);
             color: white;
@@ -194,11 +290,13 @@
             box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
             outline: none;
         }
+
         .shake-btn:hover {
             background: linear-gradient(45deg, #ff3838, #ff2828);
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(255, 71, 87, 0.4);
         }
+
         .shake-btn:active {
             transform: translateY(0);
         }
@@ -210,6 +308,7 @@
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
+
         .category-btn {
             padding: 10px 20px;
             border: none;
@@ -219,18 +318,21 @@
             font-size: 1em;
             cursor: pointer;
             transition: all 0.3s ease;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
             outline: none;
         }
+
         .category-btn:hover {
             background: rgba(255, 255, 255, 1);
             transform: translateY(-2px);
-            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
         }
+
         .category-btn.active {
             background: linear-gradient(45deg, #ff4757, #ff3838);
             color: white;
         }
+
         .category-btn.active:hover {
             background: linear-gradient(45deg, #ff3838, #ff2828);
         }
@@ -243,14 +345,15 @@
             .filters-section {
                 display: none;
             }
-            h1, p {
+
+            h1,
+            p {
                 display: none;
             }
         }
-
-
     </style>
 </head>
+
 <body>
     <h1>Project Navigator</h1>
     <p>Welcome! Click on any project below to navigate to its main page.</p>
@@ -266,7 +369,8 @@
 
     <div class="search-container">
         <div class="search-wrapper">
-            <input type="text" id="searchInput" placeholder="Search projects... (e.g., 'game html' or 'chatbot')" class="search-box">
+            <input type="text" id="searchInput" placeholder="Search projects... (e.g., 'game html' or 'chatbot')"
+                class="search-box">
             <button id="clearSearch" class="clear-search" title="Clear search">×</button>
         </div>
         <button id="shakeButton" class="shake-btn">🌋</button>
@@ -275,7 +379,8 @@
     <div class="project-grid">
         <a href="voxel-verse/index.html" class="project-card" data-category="games">
             <h3>⛏️ Voxel Verse</h3>
-            <p>A 3D first-person voxel sandbox game built with Three.js. Explore, break, and build in an infinite procedural world.</p>
+            <p>A 3D first-person voxel sandbox game built with Three.js. Explore, break, and build in an infinite
+                procedural world.</p>
         </a>
 
         <a href="planet-generator/index.html" class="project-card" data-category="games">
@@ -380,27 +485,32 @@
 
         <a href="particle-fireworks/index.html" class="project-card" data-category="games">
             <h3>🎆 Particle Fireworks</h3>
-            <p>Interactive fireworks simulation with customizable colors, physics, and choreograph mode for creating sequences.</p>
+            <p>Interactive fireworks simulation with customizable colors, physics, and choreograph mode for creating
+                sequences.</p>
         </a>
 
         <a href="dungeon-crawler/index.html" class="project-card" data-category="games">
             <h3>🏰 Procedural Dungeon Crawler</h3>
-            <p>Explore procedurally generated dungeons, fight monsters, collect gold, and level up in this classic RPG adventure.</p>
+            <p>Explore procedurally generated dungeons, fight monsters, collect gold, and level up in this classic RPG
+                adventure.</p>
         </a>
 
         <a href="hacker-simulator/index.html" class="project-card" data-category="games">
             <h3>💻 Hacker Simulator</h3>
-            <p>Experience a terminal-style hacker simulation with command-line interface, filesystem navigation, and cyber challenges.</p>
+            <p>Experience a terminal-style hacker simulation with command-line interface, filesystem navigation, and
+                cyber challenges.</p>
         </a>
 
         <a href="modular-synth/index.html" class="project-card" data-category="games">
             <h3>🎛️ Modular Synth</h3>
-            <p>Build and play with a modular synthesizer using drag-and-drop modules, patch cables, and real-time audio synthesis.</p>
+            <p>Build and play with a modular synthesizer using drag-and-drop modules, patch cables, and real-time audio
+                synthesis.</p>
         </a>
 
         <a href="expense-tracker/index.html" class="project-card" data-category="finance">
             <h3>💰 Expense Tracker</h3>
-            <p>A comprehensive expense tracking tool for managing shared expenses, payments, and balances between people.</p>
+            <p>A comprehensive expense tracking tool for managing shared expenses, payments, and balances between
+                people.</p>
         </a>
 
         <a href="timetracker/index.html" class="project-card" data-category="finance">
@@ -415,12 +525,14 @@
 
         <a href="multi-note-todo/index.html" class="project-card" data-category="other">
             <h3>📝 Multi-Note Todo App</h3>
-            <p>Organize your tasks with multiple notes, each containing their own todo lists with completion tracking.</p>
+            <p>Organize your tasks with multiple notes, each containing their own todo lists with completion tracking.
+            </p>
         </a>
 
         <a href="goal-setter/index.html" class="project-card" data-category="other">
             <h3>🎯 Goal Setter</h3>
-            <p>Advanced hierarchical goal tracking with automatic parent completion, progress sliders, and nested goal management.</p>
+            <p>Advanced hierarchical goal tracking with automatic parent completion, progress sliders, and nested goal
+                management.</p>
         </a>
 
         <a href="meal-planner/index.html" class="project-card" data-category="other">
@@ -430,12 +542,8 @@
 
         <a href="matrix-transformations/index.html" class="project-card" data-category="education">
             <h3>🔢 Matrix Transformations</h3>
-            <p>Interactive visualization of 2D and 3D matrix transformations with real-time controls and canvas rendering.</p>
-        </a>
-
-        <a href="workflow-chat/index.html" class="project-card" data-category="other">
-            <h3>🔄 Workflow Chat</h3>
-            <p>Chat interface for executing structured workflows.</p>
+            <p>Interactive visualization of 2D and 3D matrix transformations with real-time controls and canvas
+                rendering.</p>
         </a>
 
         <a href="virtual-aquarium/index.html" class="project-card" data-category="games">
@@ -445,22 +553,26 @@
 
         <a href="human-authorship-verifier/index.html" class="project-card" data-category="other">
             <h3>✍️ Human Authorship Verifier</h3>
-            <p>Cryptographically verify human authorship with behavioral logging, digital signatures, and anonymous user fingerprints.</p>
+            <p>Cryptographically verify human authorship with behavioral logging, digital signatures, and anonymous user
+                fingerprints.</p>
         </a>
 
         <a href="human-authorship-verifier/corporate.html" class="project-card" data-category="other">
             <h3>🏢 HAV Corporate Site</h3>
-            <p>Professional corporate website showcasing the Human Authorship Verifier with enterprise features, use cases, and business value proposition.</p>
+            <p>Professional corporate website showcasing the Human Authorship Verifier with enterprise features, use
+                cases, and business value proposition.</p>
         </a>
 
         <a href="webgpu-feature-detector.html" class="project-card" data-category="education">
             <h3>🎮 WebGPU Feature Detector</h3>
-            <p>Comprehensive WebGPU support detection tool that checks browser compatibility, available features, device limits, and provides live compatibility data from caniuse.com.</p>
+            <p>Comprehensive WebGPU support detection tool that checks browser compatibility, available features, device
+                limits, and provides live compatibility data from caniuse.com.</p>
         </a>
 
         <a href="personal-expense-survival-calculator/index.html" class="project-card" data-category="finance">
             <h3>💰 Personal Expense Survival Calculator</h3>
-            <p>Calculate how long your savings will last with inflation and investment risk. Features month-by-month analytics, risk scenarios, and comprehensive financial projections.</p>
+            <p>Calculate how long your savings will last with inflation and investment risk. Features month-by-month
+                analytics, risk scenarios, and comprehensive financial projections.</p>
         </a>
 
         <a href="city-builder/index.html" class="project-card" data-category="games">
@@ -487,17 +599,65 @@
             <h3>🧮 Math & F# Cheat Sheet</h3>
             <p>Comprehensive mapping of KaTeX math notation to F# code equivalents.</p>
         </a>
+
+        <a href="puzzle-platformer/index.html" class="project-card" data-category="games">
+            <h3>🧩 Puzzle Platformer</h3>
+            <p>A puzzle platformer game with buttons, doors, and dashing.</p>
+        </a>
+
+        <a href="htm-prototype/index.html" class="project-card" data-category="education">
+            <h3>🧠 HTM Prototype</h3>
+            <p>Hierarchical Temporal Memory visualization and prototype.</p>
+        </a>
+
+        <a href="algorithm-visualizer/index.html" class="project-card" data-category="education">
+            <h3>📊 Algorithm Visualizer</h3>
+            <p>Visualize sorting algorithms like Bubble, Insertion, Quick, and Merge sort.</p>
+        </a>
+
+        <a href="car-simulator-2d/index.html" class="project-card" data-category="games">
+            <h3>🚗 2D Car Sandbox</h3>
+            <p>Physics sandbox and car simulator with crate spawning.</p>
+        </a>
+
+        <a href="tower-defense/index.html" class="project-card" data-category="games">
+            <h3>🏰 Tower Defense</h3>
+            <p>A classic tower defense game.</p>
+        </a>
+
+        <a href="dicom-tag-explorer.html" class="project-card" data-category="other">
+            <h3>🏷️ DICOM Tag Explorer</h3>
+            <p>Analyze DICOM/DICOS tags.</p>
+        </a>
+
+        <a href="dicom-viewer.html" class="project-card" data-category="other">
+            <h3>🩻 DICOM Viewer</h3>
+            <p>View DICOM/DICOS images in the browser.</p>
+        </a>
+
+        <a href="vtk-viewer.html" class="project-card" data-category="other">
+            <h3>🧊 VTK Viewer</h3>
+            <p>3D VTK file viewer.</p>
+        </a>
     </div>
 
 
 
-    <div style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(255, 255, 255, 0.1); border-radius: 12px; backdrop-filter: blur(10px);">
-        <h2 style="color: #fff; font-size: 1.5em; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; gap: 10px;">
+    <div
+        style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(255, 255, 255, 0.1); border-radius: 12px; backdrop-filter: blur(10px);">
+        <h2
+            style="color: #fff; font-size: 1.5em; margin-bottom: 10px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; gap: 10px;">
             <span style="font-size: 1.2em;">🤖</span>
             About the Vibe Stack
         </h2>
         <p style="color: #fff; font-size: 1em; opacity: 0.9; line-height: 1.5;">
-            This entire site was built using Vibe Stack - where AI meets actual development experience! Featuring Cline for AI-assisted coding, the cutting-edge Grok code model for intelligent generation, and VSCode as the battle-tested IDE. Vibe coding is the future - it's going to make traditional developers extinct. Now anyone can build anything - as long as you don't mind the occasional live database being dropped, a few API keys getting leaked, and your production server spontaneously combusting! But remember, even with all this AI wizardry, this was crafted by a senior developer who spent 30-40+ turns wrestling with the AI to get anything remotely functional. The future is soon, but it still needs a human touch!
+            This entire site was built using Vibe Stack - where AI meets actual development experience! Featuring Cline
+            for AI-assisted coding, the cutting-edge Grok code model for intelligent generation, and VSCode as the
+            battle-tested IDE. Vibe coding is the future - it's going to make traditional developers extinct. Now anyone
+            can build anything - as long as you don't mind the occasional live database being dropped, a few API keys
+            getting leaked, and your production server spontaneously combusting! But remember, even with all this AI
+            wizardry, this was crafted by a senior developer who spent 30-40+ turns wrestling with the AI to get
+            anything remotely functional. The future is soon, but it still needs a human touch!
         </p>
     </div>
 
@@ -534,7 +694,6 @@
             "goal-setter": 1612,
             "meal-planner": 2512,
             "matrix-transformations": 1437,
-            "workflow-chat": 3085,
             "virtual-aquarium": 2268,
             "human-authorship-verifier": 5651,
             "human-authorship-verifier/corporate.html": 5651,
@@ -543,7 +702,15 @@
             "city-builder": 3632,
             "background-remover.html": 58,
             "data-structures-explorer": 1497,
-            "mermaid-diagram-refiner": 1153
+            "mermaid-diagram-refiner": 1153,
+            "puzzle-platformer": 1137,
+            "htm-prototype": 1990,
+            "algorithm-visualizer": 586,
+            "car-simulator-2d": 493,
+            "tower-defense": 1140,
+            "dicom-tag-explorer.html": 382,
+            "dicom-viewer.html": 317,
+            "vtk-viewer.html": 356
         };
 
         function getComplexityLevel(loc) {
@@ -552,7 +719,7 @@
             return { level: 'High', color: '#F44336', icon: '🔴' };
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const searchInput = document.getElementById('searchInput');
             const clearSearchButton = document.getElementById('clearSearch');
             const shakeButton = document.getElementById('shakeButton');
@@ -628,14 +795,14 @@
             }
 
             // Clear search functionality
-            clearSearchButton.addEventListener('click', function() {
+            clearSearchButton.addEventListener('click', function () {
                 searchInput.value = '';
                 searchInput.focus();
                 updateClearButton();
                 filterCards();
             });
 
-            searchInput.addEventListener('input', function() {
+            searchInput.addEventListener('input', function () {
                 filterCards();
                 // Update clear button visibility
                 updateClearButton();
@@ -644,7 +811,7 @@
             // Initial check for clear button
             updateClearButton();
 
-            shakeButton.addEventListener('click', function() {
+            shakeButton.addEventListener('click', function () {
                 if (isExploded) {
                     resetCards();
                 } else {
@@ -726,12 +893,12 @@
 
                                 // Random triangle shape
                                 const triangle = {
-                                    x1: -size/2 + (Math.random() - 0.5) * size,
-                                    y1: -size/2 + (Math.random() - 0.5) * size,
-                                    x2: size/2 + (Math.random() - 0.5) * size,
-                                    y2: -size/2 + (Math.random() - 0.5) * size,
+                                    x1: -size / 2 + (Math.random() - 0.5) * size,
+                                    y1: -size / 2 + (Math.random() - 0.5) * size,
+                                    x2: size / 2 + (Math.random() - 0.5) * size,
+                                    y2: -size / 2 + (Math.random() - 0.5) * size,
                                     x3: (Math.random() - 0.5) * size,
-                                    y3: size/2 + (Math.random() - 0.5) * size,
+                                    y3: size / 2 + (Math.random() - 0.5) * size,
                                     color: cardColors[Math.floor(Math.random() * cardColors.length)]
                                 };
 
@@ -907,4 +1074,5 @@
         });
     </script>
 </body>
+
 </html>
