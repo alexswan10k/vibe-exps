@@ -5,226 +5,391 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Modular Synth Prototype</title>
     <style>
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #222;
-    color: #fff;
-}
+        :root {
+            --bg-color: #1a1a1a;
+            --rack-bg: #121212;
+            --module-bg: #2a2a2a;
+            --module-header-bg: #333;
+            --text-color: #eee;
+            --accent-color: #4CAF50;
+            --knob-color: #ddd;
+            --jack-color: #666;
+            --cable-color: #76ff03;
+        }
 
-.container {
-    display: flex;
-    height: 100vh;
-}
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden; /* Prevent body scroll */
+        }
 
-.module-panel {
-    width: 200px;
-    background-color: #333;
-    padding: 20px;
-    box-sizing: border-box;
-}
+        .container {
+            display: flex;
+            height: 100vh;
+        }
 
-.module-panel h2 {
-    margin-top: 0;
-}
+        /* Sidebar */
+        .module-panel {
+            width: 220px;
+            background-color: #222;
+            padding: 20px;
+            box-sizing: border-box;
+            border-right: 1px solid #444;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+            z-index: 10;
+        }
 
-.module-item {
-    background-color: #444;
-    padding: 10px;
-    margin-bottom: 10px;
-    cursor: grab;
-    border-radius: 5px;
-    text-align: center;
-}
+        .module-panel h2 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: #fff;
+            border-bottom: 2px solid #444;
+            padding-bottom: 10px;
+        }
 
-.module-item:hover {
-    background-color: #555;
-}
+        .module-item {
+            background-color: #333;
+            padding: 12px;
+            cursor: grab;
+            border-radius: 4px;
+            text-align: left;
+            border: 1px solid #444;
+            transition: background-color 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+        }
 
-.rack {
-    flex: 1;
-    background-color: #111;
-    padding: 20px;
-    box-sizing: border-box;
-    position: relative;
-}
+        .module-item:hover {
+            background-color: #444;
+            border-color: #666;
+            transform: translateX(5px);
+        }
 
-.rack h2 {
-    margin-top: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
+        .module-item:active {
+            cursor: grabbing;
+        }
 
-.controls {
-    display: flex;
-    gap: 10px;
-}
+        /* Main Rack Area */
+        .rack {
+            flex: 1;
+            background-color: var(--rack-bg);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
 
-.save-btn, .load-btn {
-    background-color: #444;
-    color: #fff;
-    border: 1px solid #666;
-    padding: 8px 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-}
+        .rack-header {
+            padding: 15px 20px;
+            background-color: #1a1a1a;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
 
-.save-btn:hover, .load-btn:hover {
-    background-color: #555;
-}
+        .rack-header h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
 
-.load-btn {
-    position: relative;
-}
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
 
-.load-input {
-    position: absolute;
-    left: 0;
-    top: 0;
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    cursor: pointer;
-}
+        .btn {
+            background-color: #444;
+            color: #fff;
+            border: 1px solid #555;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
 
-.rack-area {
-    height: calc(100% - 40px);
-    background-color: #000;
-    border: 1px solid #444;
-    position: relative;
-    overflow: hidden;
-}
+        .btn:hover {
+            background-color: #555;
+            border-color: #777;
+        }
 
-.module {
-    position: absolute;
-    background-color: #333;
-    border: 1px solid #666;
-    border-radius: 5px;
-    padding: 10px;
-    min-width: 120px;
-    min-height: 100px;
-    cursor: move;
-}
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
 
-.module-header {
-    background-color: #444;
-    padding: 5px;
-    margin: -10px -10px 10px -10px;
-    border-radius: 5px 5px 0 0;
-    cursor: move;
-}
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
 
-.patch-point {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    background-color: #888;
-    border-radius: 50%;
-    cursor: pointer;
-}
+        .rack-area {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
 
-.patch-point:hover {
-    background-color: #aaa;
-}
+        /* Modules */
+        .module {
+            position: absolute;
+            background-color: var(--module-bg);
+            border: 1px solid #555;
+            border-radius: 6px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+            /* Default size, can be overridden */
+            width: 160px; 
+            min-height: 200px;
+        }
 
-.patch-point.active {
-    background-color: #ff0;
-    box-shadow: 0 0 10px #ff0;
-}
+        .module-header {
+            background-color: var(--module-header-bg);
+            padding: 8px;
+            border-radius: 5px 5px 0 0;
+            cursor: move;
+            border-bottom: 1px solid #444;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-align: center;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
 
-.connection {
-    position: absolute;
-    pointer-events: none;
-    stroke: #0f0;
-    stroke-width: 2;
-    fill: none;
-}
+        .module-body {
+            flex: 1;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
 
-.potentiometer {
-    width: 45px;
-    height: 45px;
-    background-color: #666;
-    border-radius: 50%;
-    margin: 2px;
-    cursor: pointer;
-    position: relative;
-    border: 2px solid #888;
-}
+        /* Controls Area */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+            gap: 10px;
+            justify-items: center;
+            align-items: start;
+        }
 
-.potentiometer input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 100%;
-    height: 6px;
-    background: #444;
-    outline: none;
-    border-radius: 3px;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
+        .control-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
 
-.potentiometer input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    background: #fff;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid #ccc;
-}
+        .control-label {
+            font-size: 0.7rem;
+            color: #aaa;
+            text-align: center;
+        }
 
-.potentiometer input[type="range"]::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    background: #fff;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 2px solid #ccc;
-}
+        /* Potentiometer */
+        .knob {
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, #444 0%, #222 100%);
+            border-radius: 50%;
+            position: relative;
+            cursor: ns-resize; /* Vertical drag */
+            border: 2px solid #555;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
 
-.switch {
-    width: 50px;
-    height: 25px;
-    background-color: #666;
-    border-radius: 12px;
-    margin: 2px;
-    cursor: pointer;
-    position: relative;
-    border: 2px solid #888;
-}
+        .knob::after {
+            content: '';
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            width: 2px;
+            height: 15px;
+            background-color: #fff;
+            transform-origin: bottom center;
+            transform: translateX(-50%) rotate(var(--rotation));
+            pointer-events: none;
+        }
 
-.switch input {
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-    margin: 0;
-    cursor: pointer;
-}
+        /* Switch */
+        .toggle-switch {
+            width: 40px;
+            height: 20px;
+            background-color: #222;
+            border-radius: 10px;
+            position: relative;
+            cursor: pointer;
+            border: 1px solid #555;
+        }
 
-.slider {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 19px;
-    height: 19px;
-    background-color: #fff;
-    border-radius: 50%;
-    transition: left 0.2s;
-    border: 1px solid #ccc;
-}
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 14px;
+            height: 14px;
+            background-color: #888;
+            border-radius: 50%;
+            transition: left 0.2s;
+        }
 
-.switch input:checked + .slider {
-    left: 27px;
-}
+        .toggle-switch.active {
+            background-color: #2e4c2e;
+        }
+
+        .toggle-switch.active::after {
+            left: 22px;
+            background-color: var(--accent-color);
+        }
+
+        /* Patch Points */
+        .io-panel {
+            margin-top: auto;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: space-between;
+            border-top: 1px solid #333;
+            padding-top: 10px;
+        }
+
+        .io-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .jack {
+            width: 24px;
+            height: 24px;
+            background-color: #333;
+            border: 2px solid #666;
+            border-radius: 50%;
+            position: relative;
+            cursor: crosshair;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .jack::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            background-color: #000;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .jack:hover {
+            border-color: #999;
+        }
+
+        .jack.active {
+            border-color: #ff0;
+            box-shadow: 0 0 5px #ff0;
+        }
+
+        .jack.input { border-color: #666; }
+        .jack.output { border-color: #888; background-color: #444; }
+
+        .jack-label {
+            font-size: 0.65rem;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        /* Cables */
+        .cables-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .cable-path {
+            fill: none;
+            stroke-width: 3;
+            stroke-linecap: round;
+            opacity: 0.8;
+            pointer-events: stroke;
+            cursor: pointer;
+            transition: stroke-width 0.2s;
+        }
+        
+        .cable-path:hover {
+            stroke-width: 5;
+            opacity: 1;
+        }
+
+        /* Specific Module Styles */
+        .step-sequencer-grid {
+            display: flex;
+            gap: 5px;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        
+        .step-btn {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #555;
+            background: #222;
+            color: #555;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+        }
+        
+        .step-btn.active {
+            background: var(--accent-color);
+            color: #fff;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 5px var(--accent-color);
+        }
+        
+        .step-btn.current {
+            border-color: #fff;
+            transform: scale(1.1);
+        }
+
+        canvas.oscilloscope-display {
+            width: 100%;
+            height: 80px;
+            background: #000;
+            border: 1px solid #444;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
     </style>
     <!-- React from CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -236,2829 +401,1154 @@ body {
     <div id="root"></div>
 
     <script type="text/babel">
-/**
- * @typedef {Object} PatchPoint
- * @property {string} id - Unique identifier for the patch point
- * @property {string} name - Display name of the patch point
- * @property {'input'|'output'} type - Whether this is an input or output
- * @property {number} x - X position relative to module
- * @property {number} y - Y position relative to module
- */
-
-/**
- * @typedef {Object} Control
- * @property {string} id - Unique identifier for the control
- * @property {string} name - Display name of the control
- * @property {'potentiometer'|'switch'} type - Type of control
- * @property {number} value - Current value (0-1 for potentiometers, 0/1 for switches)
- * @property {number} x - X position relative to module
- * @property {number} y - Y position relative to module
- */
-
-/**
- * @typedef {Object} Module
- * @property {string} id - Unique identifier
- * @property {string} type - Module type (oscillator, vcf, etc.)
- * @property {string} name - Display name
- * @property {number} x - X position on rack
- * @property {number} y - Y position on rack
- * @property {number} width - Module width
- * @property {number} height - Module height
- * @property {PatchPoint[]} patchPoints - Array of patch points
- * @property {Control[]} controls - Array of controls
- */
-
-/**
- * @typedef {Object} Connection
- * @property {string} id - Unique identifier
- * @property {string} fromModuleId - ID of source module
- * @property {string} fromPatchId - ID of source patch point
- * @property {string} toModuleId - ID of destination module
- * @property {string} toPatchId - ID of destination patch point
- */
-
-/**
- * Creates a module definition with JSDoc types
- * @param {string} type - Module type
- * @param {string} name - Display name
- * @param {number} width - Module width
- * @param {number} height - Module height
- * @param {PatchPoint[]} patchPoints - Patch points array
- * @param {Control[]} controls - Controls array
- * @returns {Omit<Module, 'id' | 'x' | 'y'>} Module template
- */
-function createModuleTemplate(type, name, width, height, patchPoints, controls) {
-    return {
-        type,
-        name,
-        width,
-        height,
-        patchPoints: patchPoints.map((point, index) => ({
-            ...point,
-            id: `${type}-patch-${index}`
-        })),
-        controls: controls.map((control, index) => ({
-            ...control,
-            id: `${type}-control-${index}`,
-            value: control.type === 'switch' ? 0 : 0.5
-        }))
-    };
-}
-
-// Module templates
-const MODULE_TEMPLATES = {
-    oscillator: createModuleTemplate(
-        'oscillator',
-        'Oscillator',
-        160,
-        120,
-        [
-            { name: 'V/Oct', type: 'input', x: -5, y: 40 },
-            { name: 'Out', type: 'output', x: 155, y: 60 }
-        ],
-        [
-            { name: 'Frequency', type: 'potentiometer', x: 30, y: 40 },
-            { name: 'Waveform', type: 'potentiometer', x: 90, y: 40 }
-        ]
-    ),
-
-    vcf: createModuleTemplate(
-        'vcf',
-        'VCF',
-        140,
-        140,
-        [
-            { name: 'In', type: 'input', x: -5, y: 40 },
-            { name: 'Cutoff Mod', type: 'input', x: -5, y: 80 },
-            { name: 'Out', type: 'output', x: 135, y: 60 }
-        ],
-        [
-            { name: 'Cutoff', type: 'potentiometer', x: 20, y: 40 },
-            { name: 'Resonance', type: 'potentiometer', x: 80, y: 40 }
-        ]
-    ),
-
-    vca: createModuleTemplate(
-        'vca',
-        'VCA',
-        140,
-        120,
-        [
-            { name: 'Audio In', type: 'input', x: -5, y: 40 },
-            { name: 'CV In', type: 'input', x: -5, y: 80 },
-            { name: 'Out', type: 'output', x: 135, y: 60 }
-        ],
-        [
-            { name: 'Level', type: 'potentiometer', x: 50, y: 40 }
-        ]
-    ),
-
-    envelope: createModuleTemplate(
-        'envelope',
-        'Envelope',
-        140,
-        160,
-        [
-            { name: 'Gate', type: 'input', x: -5, y: 80 },
-            { name: 'Out', type: 'output', x: 135, y: 80 }
-        ],
-        [
-            { name: 'Attack', type: 'potentiometer', x: 20, y: 40 },
-            { name: 'Decay', type: 'potentiometer', x: 80, y: 40 },
-            { name: 'Sustain', type: 'potentiometer', x: 20, y: 80 },
-            { name: 'Release', type: 'potentiometer', x: 80, y: 80 }
-        ]
-    ),
-
-    'cv-gate': createModuleTemplate(
-        'cv-gate',
-        'CV/Gate Generator',
-        140,
-        120,
-        [
-            { name: 'CV Out', type: 'output', x: 135, y: 40 },
-            { name: 'Gate Out', type: 'output', x: 135, y: 80 }
-        ],
-        [
-            { name: 'CV Level', type: 'potentiometer', x: 20, y: 40 },
-            { name: 'Gate', type: 'switch', x: 80, y: 40 }
-        ]
-    ),
-
-    output: createModuleTemplate(
-        'output',
-        'Output',
-        140,
-        120,
-        [
-            { name: 'Audio In', type: 'input', x: -5, y: 60 }
-        ],
-        [
-            { name: 'Volume', type: 'potentiometer', x: 50, y: 40 }
-        ]
-    ),
-
-    mixer: createModuleTemplate(
-        'mixer',
-        'Mixer',
-        200,
-        180,
-        [
-            { name: 'In 1', type: 'input', x: -5, y: 35 },
-            { name: 'In 2', type: 'input', x: -5, y: 65 },
-            { name: 'In 3', type: 'input', x: -5, y: 95 },
-            { name: 'In 4', type: 'input', x: -5, y: 125 },
-            { name: 'Out', type: 'output', x: 195, y: 80 }
-        ],
-        [
-            { name: 'Level 1', type: 'potentiometer', x: 30, y: 25 },
-            { name: 'Level 2', type: 'potentiometer', x: 30, y: 55 },
-            { name: 'Level 3', type: 'potentiometer', x: 30, y: 85 },
-            { name: 'Level 4', type: 'potentiometer', x: 30, y: 115 },
-            { name: 'Master', type: 'potentiometer', x: 130, y: 70 }
-        ]
-    ),
-
-    sequencer: createModuleTemplate(
-        'sequencer',
-        'Sequencer',
-        220,
-        160,
-        [
-            { name: 'CV Out', type: 'output', x: 215, y: 60 },
-            { name: 'Gate Out', type: 'output', x: 215, y: 100 }
-        ],
-        [
-            { name: 'Tempo', type: 'potentiometer', x: 20, y: 30 },
-            { name: 'Play/Stop', type: 'switch', x: 100, y: 30 }
-        ]
-    ),
-
-    oscilloscope: createModuleTemplate(
-        'oscilloscope',
-        'Oscilloscope',
-        200,
-        140,
-        [
-            { name: 'In', type: 'input', x: -5, y: 70 }
-        ],
-        [
-            { name: 'Timebase', type: 'potentiometer', x: 20, y: 20 },
-            { name: 'Vertical', type: 'potentiometer', x: 80, y: 20 },
-            { name: 'Trigger', type: 'potentiometer', x: 140, y: 20 }
-        ]
-    ),
-
-    lfo: createModuleTemplate(
-        'lfo',
-        'LFO',
-        140,
-        120,
-        [
-            { name: 'Out', type: 'output', x: 135, y: 60 }
-        ],
-        [
-            { name: 'Frequency', type: 'potentiometer', x: 20, y: 40 },
-            { name: 'Amplitude', type: 'potentiometer', x: 80, y: 40 }
-        ]
-    ),
-
-    'level-meter': createModuleTemplate(
-        'level-meter',
-        'Level Meter',
-        120,
-        140,
-        [
-            { name: 'In', type: 'input', x: -5, y: 70 }
-        ],
-        []
-    ),
-
-    gate: createModuleTemplate(
-        'gate',
-        'Gate',
-        120,
-        100,
-        [
-            { name: 'Out', type: 'output', x: 115, y: 50 }
-        ],
-        [
-            { name: 'Gate', type: 'switch', x: 50, y: 40 }
-        ]
-    )
-};
-
-/**
- * Creates a new module instance
- * @param {string} type - Module type
- * @param {number} x - X position
- * @param {number} y - Y position
- * @returns {Module} New module instance
- */
-function createModule(type, x, y) {
-    const template = MODULE_TEMPLATES[type];
-    if (!template) {
-        throw new Error(`Unknown module type: ${type}`);
-    }
-
-    const moduleId = `${type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    return {
-        id: moduleId,
-        ...template,
-        patchPoints: template.patchPoints.map((point, index) => ({
-            ...point,
-            id: `${moduleId}-patch-${index}`
-        })),
-        controls: template.controls.map((control, index) => ({
-            ...control,
-            id: `${moduleId}-control-${index}`
-        })),
-        x,
-        y
-    };
-}
-
-/**
- * Creates a new connection
- * @param {string} fromModuleId - Source module ID
- * @param {string} fromPatchId - Source patch point ID
- * @param {string} toModuleId - Destination module ID
- * @param {string} toPatchId - Destination patch point ID
- * @returns {Connection} New connection
- */
-function createConnection(fromModuleId, fromPatchId, toModuleId, toPatchId) {
-    return {
-        id: `connection-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        fromModuleId,
-        fromPatchId,
-        toModuleId,
-        toPatchId
-    };
-}
-
-/**
- * Audio Engine - Manages Web Audio API nodes and connections
- */
-class AudioEngine {
-    constructor() {
-        this.audioContext = null;
-        this.audioNodes = new Map();
-        this.gainNodes = new Map();
-        this.initialized = false;
-    }
-
-    /**
-     * Initialize the audio context
-     */
-    async init() {
-        if (this.initialized) return;
-
-        try {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.initialized = true;
-        } catch (error) {
-            console.error('Failed to initialize audio context:', error);
-        }
-    }
-
-    /**
-     * Create audio node for a module
-     * @param {Module} module - Module data
-     * @returns {AudioNode|null} Created audio node
-     */
-    createAudioNode(module) {
-        if (!this.audioContext) return null;
-
-        switch (module.type) {
-            case 'oscillator':
-                const oscillator = this.audioContext.createOscillator();
-                const oscGain = this.audioContext.createGain();
-                const vOctGain = this.audioContext.createGain();
-
-                oscillator.frequency.value = 440; // Default frequency
-                oscillator.type = 'sine';
-                oscGain.gain.value = 0.1; // Low volume to prevent clipping
-                vOctGain.gain.value = 1; // Default multiplier
-
-                oscillator.connect(oscGain);
-                vOctGain.connect(oscillator.frequency);
-                oscillator.start();
-
-                this.audioNodes.set(module.id, oscillator);
-                this.gainNodes.set(module.id, oscGain);
-                this.gainNodes.set(`${module.id}-v-oct`, vOctGain);
-
-                return oscGain;
-
-            case 'output':
-                const outputGain = this.audioContext.createGain();
-                outputGain.gain.value = 0.5; // Default volume
-                outputGain.connect(this.audioContext.destination);
-
-                this.gainNodes.set(module.id, outputGain);
-                return outputGain;
-
-            case 'vca':
-                const vcaGain = this.audioContext.createGain();
-                vcaGain.gain.value = 0;
-
-                // Create CV input gain node for modulation
-                const vcaCvGain = this.audioContext.createGain();
-                vcaCvGain.gain.value = 0;
-
-                this.gainNodes.set(module.id, vcaGain);
-                this.gainNodes.set(`${module.id}-cv`, vcaCvGain);
-
-                // Connect CV input to modulate the main gain
-                vcaCvGain.connect(vcaGain.gain);
-
-                return vcaGain;
-
-            case 'vcf':
-                const filter = this.audioContext.createBiquadFilter();
-                filter.type = 'lowpass';
-                filter.frequency.value = 1000;
-                filter.Q.value = 1;
-
-                this.audioNodes.set(module.id, filter);
-                return filter;
-
-            case 'mixer':
-                // Create mixer with four input channels and master output
-                const mixerInput1 = this.audioContext.createGain();
-                const mixerInput2 = this.audioContext.createGain();
-                const mixerInput3 = this.audioContext.createGain();
-                const mixerInput4 = this.audioContext.createGain();
-                const mixerMaster = this.audioContext.createGain();
-
-                mixerInput1.gain.value = 0.5; // Default level 1
-                mixerInput2.gain.value = 0.5; // Default level 2
-                mixerInput3.gain.value = 0.5; // Default level 3
-                mixerInput4.gain.value = 0.5; // Default level 4
-                mixerMaster.gain.value = 0.5; // Default master
-
-                mixerInput1.connect(mixerMaster);
-                mixerInput2.connect(mixerMaster);
-                mixerInput3.connect(mixerMaster);
-                mixerInput4.connect(mixerMaster);
-
-                // Store references for updating
-                this.audioNodes.set(`${module.id}-input1`, mixerInput1);
-                this.audioNodes.set(`${module.id}-input2`, mixerInput2);
-                this.audioNodes.set(`${module.id}-input3`, mixerInput3);
-                this.audioNodes.set(`${module.id}-input4`, mixerInput4);
-                this.gainNodes.set(module.id, mixerMaster);
-
-                return mixerMaster;
-
-            case 'envelope':
-                // Simple envelope generator using gain node
-                const envGain = this.audioContext.createGain();
-                envGain.gain.value = 0;
-
-                this.gainNodes.set(module.id, envGain);
-                return envGain;
-
-            case 'oscilloscope':
-                // Oscilloscope needs a gain node to receive input signals and an analyser for visualization
-                const scopeGain = this.audioContext.createGain();
-                scopeGain.gain.value = 1; // Unity gain for monitoring
-
-                const analyser = this.audioContext.createAnalyser();
-                analyser.fftSize = 2048;
-                analyser.smoothingTimeConstant = 0.8;
-
-                // Connect gain to analyser
-                scopeGain.connect(analyser);
-
-                this.gainNodes.set(module.id, scopeGain);
-                this.audioNodes.set(module.id, analyser); // Store analyser for access by component
-                return scopeGain;
-
-            case 'lfo':
-                // LFO (Low Frequency Oscillator) - creates modulation signals
-                const lfoOscillator = this.audioContext.createOscillator();
-                const lfoGain = this.audioContext.createGain();
-
-                lfoOscillator.frequency.value = 1; // Default 1 Hz
-                lfoOscillator.type = 'sine';
-                lfoGain.gain.value = 0.5; // Default amplitude
-
-                lfoOscillator.connect(lfoGain);
-                lfoOscillator.start();
-
-                this.audioNodes.set(module.id, lfoOscillator);
-                this.gainNodes.set(module.id, lfoGain);
-                return lfoGain;
-
-            case 'level-meter':
-                // Level Meter - needs a gain node to receive input signals and an analyser for level monitoring
-                const levelGain = this.audioContext.createGain();
-                levelGain.gain.value = 1; // Unity gain for monitoring
-
-                const levelAnalyser = this.audioContext.createAnalyser();
-                levelAnalyser.fftSize = 2048;
-                levelAnalyser.smoothingTimeConstant = 0.8;
-
-                // Connect gain to analyser
-                levelGain.connect(levelAnalyser);
-
-                this.gainNodes.set(module.id, levelGain);
-                this.audioNodes.set(module.id, levelAnalyser); // Store analyser for access by component
-                return levelGain;
-
-            case 'gate':
-                // Gate - simple toggle that outputs 1.0 (high) or 0.0 (low)
-                const gateGain = this.audioContext.createGain();
-                gateGain.gain.value = 0; // Default to off (0)
-
-                this.gainNodes.set(module.id, gateGain);
-                return gateGain;
-
-            default:
-                // Generic gain node for other modules
-                const gain = this.audioContext.createGain();
-                this.gainNodes.set(module.id, gain);
-                return gain;
-        }
-    }
-
-    /**
-     * Update audio node parameters based on module controls
-     * @param {Module} module - Module data
-     */
-    updateModule(module) {
-        if (!this.audioContext) return;
-
-        const audioNode = this.audioNodes.get(module.id);
-        const gainNode = this.gainNodes.get(module.id);
-
-        switch (module.type) {
-            case 'oscillator':
-                if (audioNode) {
-                    const freqControl = module.controls.find(c => c.name === 'Frequency');
-                    if (freqControl) {
-                        // Map 0-1 to 20-2000 Hz
-                        audioNode.frequency.value = 20 + (freqControl.value * 1980);
-                    }
-
-                    const waveformControl = module.controls.find(c => c.name === 'Waveform');
-                    if (waveformControl) {
-                        // Map 0-1 range to sine -> square -> sawtooth
-                        if (waveformControl.value < 0.33) {
-                            audioNode.type = 'sine';
-                        } else if (waveformControl.value < 0.66) {
-                            audioNode.type = 'square';
-                        } else {
-                            audioNode.type = 'sawtooth';
-                        }
-                    }
-
-                    // Handle V/Oct input modulation
-                    const vOctGain = this.gainNodes.get(`${module.id}-v-oct`);
-                    if (vOctGain) {
-                        // V/Oct standard: 1V per octave, so 1V = 2x frequency
-                        // Map 0-1 to appropriate frequency multiplier
-                        vOctGain.gain.value = Math.pow(2, (freqControl ? freqControl.value * 5 : 2.5) - 2.5);
-                    }
-                }
-                break;
-
-            case 'output':
-                if (gainNode) {
-                    const volumeControl = module.controls.find(c => c.name === 'Volume');
-                    if (volumeControl) {
-                        gainNode.gain.value = volumeControl.value;
-                    }
-                }
-                break;
-
-            case 'vcf':
-                if (audioNode) {
-                    const cutoffControl = module.controls.find(c => c.name === 'Cutoff');
-                    if (cutoffControl) {
-                        // Map 0-1 to 20-20000 Hz
-                        audioNode.frequency.value = 20 + (cutoffControl.value * 19980);
-                    }
-
-                    const resonanceControl = module.controls.find(c => c.name === 'Resonance');
-                    if (resonanceControl) {
-                        audioNode.Q.value = 0.1 + (resonanceControl.value * 20);
-                    }
-                }
-                break;
-
-            case 'vca':
-                if (gainNode) {
-                    const levelControl = module.controls.find(c => c.name === 'Level');
-                    if (levelControl) {
-                        gainNode.gain.value = levelControl.value;
-                    }
-                }
-                // CV input modulation is handled via the gain connection in createAudioNode
-                break;
-
-            case 'mixer':
-                // Update mixer input levels and master
-                const mixerInput1 = this.audioNodes.get(`${module.id}-input1`);
-                const mixerInput2 = this.audioNodes.get(`${module.id}-input2`);
-                const mixerInput3 = this.audioNodes.get(`${module.id}-input3`);
-                const mixerInput4 = this.audioNodes.get(`${module.id}-input4`);
-                const mixerMaster = this.gainNodes.get(module.id);
-
-                const level1Control = module.controls.find(c => c.name === 'Level 1');
-                const level2Control = module.controls.find(c => c.name === 'Level 2');
-                const level3Control = module.controls.find(c => c.name === 'Level 3');
-                const level4Control = module.controls.find(c => c.name === 'Level 4');
-                const masterControl = module.controls.find(c => c.name === 'Master');
-
-                if (mixerInput1 && level1Control) {
-                    mixerInput1.gain.value = level1Control.value;
-                }
-                if (mixerInput2 && level2Control) {
-                    mixerInput2.gain.value = level2Control.value;
-                }
-                if (mixerInput3 && level3Control) {
-                    mixerInput3.gain.value = level3Control.value;
-                }
-                if (mixerInput4 && level4Control) {
-                    mixerInput4.gain.value = level4Control.value;
-                }
-                if (mixerMaster && masterControl) {
-                    mixerMaster.gain.value = masterControl.value;
-                }
-                break;
-
-            case 'lfo':
-                if (audioNode) {
-                    const freqControl = module.controls.find(c => c.name === 'Frequency');
-                    if (freqControl) {
-                        // Map 0-1 to 0.1-20 Hz (LFO range)
-                        audioNode.frequency.value = 0.1 + (freqControl.value * 19.9);
-                    }
-                }
-                if (gainNode) {
-                    const ampControl = module.controls.find(c => c.name === 'Amplitude');
-                    if (ampControl) {
-                        gainNode.gain.value = ampControl.value;
-                    }
-                }
-                break;
-
-            case 'gate':
-                if (gainNode) {
-                    const gateControl = module.controls.find(c => c.name === 'Gate');
-                    if (gateControl) {
-                        // Output 1.0 for gate on, 0.0 for gate off
-                        gainNode.gain.value = gateControl.value;
-                    }
-                }
-                break;
-        }
-    }
-
-    /**
-     * Connect audio nodes based on connections
-     * @param {Module[]} modules - All modules
-     * @param {Connection[]} connections - All connections
-     */
-    updateConnections(modules, connections) {
-        if (!this.audioContext) return;
-
-        // First, disconnect ALL gain nodes from everything except their internal connections
-        this.gainNodes.forEach((node, moduleId) => {
-            try {
-                // Disconnect from all destinations
-                node.disconnect();
-            } catch (e) {
-                // Ignore disconnect errors
-            }
-        });
-
-        // Reconnect internal oscillator connections (oscillator -> gain)
-        this.audioNodes.forEach((node, moduleId) => {
-            const module = modules.find(m => m.id === moduleId);
-            if (module && module.type === 'oscillator') {
-                try {
-                    const gainNode = this.gainNodes.get(moduleId);
-                    if (gainNode) {
-                        node.connect(gainNode);
-                    }
-                } catch (e) {
-                    // Ignore errors
-                }
-            }
-        });
-
-        // Now reconnect based on current connections
-        connections.forEach(connection => {
-            const fromModule = modules.find(m => m.id === connection.fromModuleId);
-            const toModule = modules.find(m => m.id === connection.toModuleId);
-
-            if (!fromModule || !toModule) return;
-
-            // For source modules, use the gain node (output of the module)
-            let fromNode = null;
-            if (fromModule.type === 'oscillator') {
-                fromNode = this.gainNodes.get(fromModule.id); // Use gain node for oscillator
-            } else if (fromModule.type === 'sequencer') {
-                // For sequencer, route to the correct output based on patch point
-                const fromPatchPoint = fromModule.patchPoints.find(p => p.id === connection.fromPatchId);
-                if (fromPatchPoint) {
-                    if (fromPatchPoint.name === 'CV Out') {
-                        fromNode = this.gainNodes.get(`${fromModule.id}-cv`);
-                    } else if (fromPatchPoint.name === 'Gate Out') {
-                        fromNode = this.gainNodes.get(`${fromModule.id}-gate`);
-                    }
-                }
-                // Fallback to main gain node if patch point not found
-                if (!fromNode) {
-                    fromNode = this.gainNodes.get(fromModule.id);
-                }
-            } else if (fromModule.type === 'gate') {
-                // For gate module, use the main gain node
-                fromNode = this.gainNodes.get(fromModule.id);
-            } else {
-                fromNode = this.audioNodes.get(fromModule.id) || this.gainNodes.get(fromModule.id);
-            }
-
-            // For destination modules, use the appropriate input node
-            let toNode = null;
-            if (toModule.type === 'output') {
-                toNode = this.gainNodes.get(toModule.id); // Output module's gain node
-            } else if (toModule.type === 'oscillator') {
-                // For oscillator, route to the correct input
-                const toPatchPoint = toModule.patchPoints.find(p => p.id === connection.toPatchId);
-                if (toPatchPoint) {
-                    if (toPatchPoint.name === 'V/Oct') {
-                        toNode = this.gainNodes.get(`${toModule.id}-v-oct`);
-                    }
-                }
-                // Fallback to main gain node if patch point not found
-                if (!toNode) {
-                    toNode = this.gainNodes.get(toModule.id);
-                }
-            } else if (toModule.type === 'vca') {
-                // For VCA, route to the correct input
-                const toPatchPoint = toModule.patchPoints.find(p => p.id === connection.toPatchId);
-                if (toPatchPoint) {
-                    if (toPatchPoint.name === 'CV In') {
-                        toNode = this.gainNodes.get(`${toModule.id}-cv`);
-                    } else if (toPatchPoint.name === 'Audio In') {
-                        toNode = this.gainNodes.get(toModule.id);
-                    }
-                }
-                // Fallback to main gain node if patch point not found
-                if (!toNode) {
-                    toNode = this.gainNodes.get(toModule.id);
-                }
-            } else if (toModule.type === 'mixer') {
-                // For mixer, route to the correct input channel
-                const toPatchPoint = toModule.patchPoints.find(p => p.id === connection.toPatchId);
-                if (toPatchPoint) {
-                    if (toPatchPoint.name === 'In 1') {
-                        toNode = this.audioNodes.get(`${toModule.id}-input1`);
-                    } else if (toPatchPoint.name === 'In 2') {
-                        toNode = this.audioNodes.get(`${toModule.id}-input2`);
-                    } else if (toPatchPoint.name === 'In 3') {
-                        toNode = this.audioNodes.get(`${toModule.id}-input3`);
-                    } else if (toPatchPoint.name === 'In 4') {
-                        toNode = this.audioNodes.get(`${toModule.id}-input4`);
-                    }
-                }
-                // Fallback to master if patch point not found
-                if (!toNode) {
-                    toNode = this.gainNodes.get(toModule.id);
-                }
-            } else if (toModule.type === 'level-meter') {
-                // For level meter, route to the gain node (which feeds into analyser)
-                toNode = this.gainNodes.get(toModule.id);
-            } else {
-                toNode = this.audioNodes.get(toModule.id) || this.gainNodes.get(toModule.id);
-            }
-
-            if (fromNode && toNode) {
-                try {
-                    fromNode.connect(toNode);
-                } catch (error) {
-                    console.error('Failed to connect audio nodes:', error);
-                }
-            }
-        });
-
-        // Ensure output modules are connected to destination only if they have input connections
-        modules.forEach(module => {
-            if (module.type === 'output') {
-                const outputNode = this.gainNodes.get(module.id);
-                if (outputNode) {
-                    // Check if this output module has any input connections
-                    const hasInputConnection = connections.some(conn => conn.toModuleId === module.id);
-                    if (hasInputConnection) {
-                        try {
-                            outputNode.connect(this.audioContext.destination);
-                        } catch (error) {
-                            console.error('Failed to connect output to destination:', error);
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    /**
-     * Remove audio node for a module
-     * @param {string} moduleId - Module ID
-     */
-    removeModule(moduleId) {
-        const audioNode = this.audioNodes.get(moduleId);
-        const gainNode = this.gainNodes.get(moduleId);
-
-        if (audioNode) {
-            try {
-                audioNode.disconnect();
-                if (audioNode.stop) audioNode.stop();
-            } catch (e) {
-                // Ignore errors
-            }
-            this.audioNodes.delete(moduleId);
-        }
-
-        if (gainNode) {
-            try {
-                gainNode.disconnect();
-            } catch (e) {
-                // Ignore errors
-            }
-            this.gainNodes.delete(moduleId);
-        }
-    }
-}
-
-const { useState, useRef, useCallback } = React;
-
-/**
- * ModulePanel Component - Shows available modules to drag
- * @param {Object} props
- * @param {function} props.onDragStart - Called when dragging starts
- */
-function ModulePanel({ onDragStart }) {
-    const availableModules = [
-        { type: 'oscillator', name: 'Oscillator' },
-        { type: 'vcf', name: 'VCF' },
-        { type: 'vca', name: 'VCA' },
-        { type: 'envelope', name: 'Envelope' },
-        { type: 'cv-gate', name: 'CV/Gate Generator' },
-        { type: 'mixer', name: 'Mixer' },
-        { type: 'sequencer', name: 'Sequencer' },
-        { type: 'oscilloscope', name: 'Oscilloscope' },
-        { type: 'level-meter', name: 'Level Meter' },
-        { type: 'gate', name: 'Gate' },
-        { type: 'lfo', name: 'LFO' },
-        { type: 'output', name: 'Output' }
-    ];
-
-    return (
-        <div className="module-panel">
-            <h2>Modules</h2>
-            {availableModules.map(module => (
-                <div
-                    key={module.type}
-                    className="module-item"
-                    draggable
-                    onDragStart={(e) => onDragStart(e, module.type)}
-                >
-                    {module.name}
-                </div>
-            ))}
-        </div>
-    );
-}
-
-/**
- * PatchPoint Component - Individual connection point on modules
- * @param {Object} props
- * @param {import('./modules.js').PatchPoint} props.patchPoint - Patch point data
- * @param {function} props.onMouseDown - Called when mouse down on patch point
- * @param {boolean} props.isConnecting - Whether currently connecting
- * @param {string|null} props.connectionStartId - ID of connection start point
- */
-function PatchPoint({ patchPoint, onMouseDown, isConnecting, connectionStartId }) {
-    const handleMouseDown = useCallback((e) => {
-        e.stopPropagation();
-        onMouseDown(patchPoint.id);
-    }, [patchPoint.id, onMouseDown]);
-
-    const isActive = isConnecting && connectionStartId === patchPoint.id;
-
-    return (
-        <div
-            className={`patch-point ${patchPoint.type} ${isActive ? 'active' : ''}`}
-            style={{
-                left: patchPoint.x,
-                top: patchPoint.y,
-                transform: 'translate(-50%, -50%)'
-            }}
-            onMouseDown={handleMouseDown}
-            title={patchPoint.name}
-        />
-    );
-}
-
-/**
- * Control Component - Potentiometer or switch
- * @param {Object} props
- * @param {import('./modules.js').Control} props.control - Control data
- * @param {function} props.onChange - Called when control value changes
- */
-function Control({ control, onChange }) {
-    const handleChange = useCallback((e) => {
-        const value = control.type === 'switch'
-            ? (e.target.checked ? 1 : 0)
-            : parseFloat(e.target.value);
-        onChange(control.id, value);
-    }, [control.id, control.type, onChange]);
-
-    const handleInput = useCallback((e) => {
-        const value = parseFloat(e.target.value);
-        onChange(control.id, value);
-    }, [control.id, onChange]);
-
-    const handleMouseDown = useCallback((e) => {
-        // Prevent module dragging when interacting with controls
-        e.stopPropagation();
-    }, []);
-
-    if (control.type === 'switch') {
-        return (
-            <div
-                className="switch"
-                style={{ left: control.x, top: control.y }}
-                title={control.name}
-                onMouseDown={handleMouseDown}
-            >
-                <input
-                    type="checkbox"
-                    checked={control.value === 1}
-                    onChange={handleChange}
-                />
-                <span className="slider"></span>
-            </div>
-        );
-    }
-
-    return (
-        <div
-            className="potentiometer"
-            style={{ left: control.x, top: control.y }}
-            title={control.name}
-            onMouseDown={handleMouseDown}
-        >
-            <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={control.value}
-                onInput={handleInput}
-                onChange={handleChange}
-            />
-        </div>
-    );
-}
-
-/**
- * SequencerModule Component - Special sequencer module with step buttons
- * @param {Object} props
- * @param {Module} props.module - Module data
- * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
- * @param {function} props.onControlChange - Called when control changes
- * @param {function} props.onModuleMove - Called when module is moved
- * @param {boolean} props.isConnecting - Whether currently connecting
- * @param {string|null} props.connectionStartId - ID of connection start point
- * @param {function} props.onStepChange - Called when step values change
- * @param {number[]} props.stepValues - Current step values
- * @param {number} props.currentStep - Current playing step
- */
-function SequencerModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId, onStepChange, stepValues, currentStep }) {
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const moduleRef = useRef(null);
-
-    const handleMouseDown = useCallback((e) => {
-        if (e.target.closest('.patch-point') || e.target.closest('.potentiometer, .switch') || e.target.closest('.step-btn')) {
-            return; // Don't drag if clicking on patch points, controls, or step buttons
-        }
-
-        setIsDragging(true);
-        const rect = moduleRef.current.getBoundingClientRect();
-        setDragStart({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        });
-    }, []);
-
-    const handleMouseMove = useCallback((e) => {
-        if (!isDragging) return;
-
-        const rackArea = moduleRef.current.parentElement;
-        const rackRect = rackArea.getBoundingClientRect();
-
-        const newX = Math.max(0, Math.min(
-            e.clientX - rackRect.left - dragStart.x,
-            rackRect.width - module.width
-        ));
-        const newY = Math.max(0, Math.min(
-            e.clientY - rackRect.top - dragStart.y,
-            rackRect.height - module.height
-        ));
-
-        onModuleMove(module.id, newX, newY);
-    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
-
-    const handleMouseUp = useCallback(() => {
-        setIsDragging(false);
-    }, []);
-
-    // Add global mouse event listeners when dragging
-    React.useEffect(() => {
-        if (isDragging) {
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isDragging, handleMouseMove, handleMouseUp]);
-
-    const handleStepClick = useCallback((stepIndex) => {
-        const newValue = stepValues[stepIndex] > 0 ? 0 : 0.5; // Toggle between off and middle C
-        const newStepValues = [...stepValues];
-        newStepValues[stepIndex] = newValue;
-        onStepChange(module.id, newStepValues);
-    }, [stepValues, onStepChange, module.id]);
-
-    return (
-        <div
-            ref={moduleRef}
-            className="module"
-            style={{
-                left: module.x,
-                top: module.y,
-                width: module.width,
-                height: module.height,
-                cursor: isDragging ? 'grabbing' : 'grab'
-            }}
-            onMouseDown={handleMouseDown}
-        >
-            <div className="module-header">{module.name}</div>
-
-            {/* Step buttons */}
-            <div style={{
-                position: 'absolute',
-                top: '50px',
-                left: '10px',
-                right: '10px',
-                display: 'flex',
-                justifyContent: 'space-between'
-            }}>
-                {[0, 1, 2, 3].map(stepIndex => (
-                    <button
-                        key={stepIndex}
-                        className="step-btn"
-                        style={{
-                            width: '35px',
-                            height: '35px',
-                            backgroundColor: stepValues[stepIndex] > 0 ? '#4CAF50' : '#666',
-                            border: currentStep === stepIndex ? '2px solid #ff0' : '1px solid #888',
-                            borderRadius: '4px',
-                            color: '#fff',
-                            fontSize: '12px',
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}
-                        onClick={() => handleStepClick(stepIndex)}
-                    >
-                        {stepIndex + 1}
-                    </button>
-                ))}
-            </div>
-
-            {module.patchPoints.map(patchPoint => (
-                <React.Fragment key={patchPoint.id}>
-                    <PatchPoint
-                        patchPoint={patchPoint}
-                        onMouseDown={onPatchPointMouseDown}
-                        isConnecting={isConnecting}
-                        connectionStartId={connectionStartId}
-                    />
-                    <div
-                        style={{
-                            position: 'absolute',
-                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
-                            top: patchPoint.y - 8,
-                            fontSize: '10px',
-                            color: '#ccc',
-                            pointerEvents: 'none',
-                            whiteSpace: 'nowrap',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        {patchPoint.name}
-                    </div>
-                </React.Fragment>
-            ))}
-
-            {module.controls.map(control => (
-                <Control
-                    key={control.id}
-                    control={control}
-                    onChange={onControlChange}
-                />
-            ))}
-        </div>
-    );
-}
-
-/**
- * OscilloscopeModule Component - Special oscilloscope module for signal visualization
- * @param {Object} props
- * @param {Module} props.module - Module data
- * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
- * @param {function} props.onControlChange - Called when control changes
- * @param {function} props.onModuleMove - Called when module is moved
- * @param {boolean} props.isConnecting - Whether currently connecting
- * @param {string|null} props.connectionStartId - ID of connection start point
- * @param {AudioEngine} props.audioEngine - Audio engine instance
- */
-function OscilloscopeModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId, audioEngine }) {
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const moduleRef = useRef(null);
-    const canvasRef = useRef(null);
-    const analyserRef = useRef(null);
-    const animationRef = useRef(null);
-
-    const handleMouseDown = useCallback((e) => {
-        if (e.target.closest('.patch-point') || e.target.closest('.potentiometer, .switch')) {
-            return; // Don't drag if clicking on patch points or controls
-        }
-
-        setIsDragging(true);
-        const rect = moduleRef.current.getBoundingClientRect();
-        setDragStart({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        });
-    }, []);
-
-    const handleMouseMove = useCallback((e) => {
-        if (!isDragging) return;
-
-        const rackArea = moduleRef.current.parentElement;
-        const rackRect = rackArea.getBoundingClientRect();
-
-        const newX = Math.max(0, Math.min(
-            e.clientX - rackRect.left - dragStart.x,
-            rackRect.width - module.width
-        ));
-        const newY = Math.max(0, Math.min(
-            e.clientY - rackRect.top - dragStart.y,
-            rackRect.height - module.height
-        ));
-
-        onModuleMove(module.id, newX, newY);
-    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
-
-    const handleMouseUp = useCallback(() => {
-        setIsDragging(false);
-    }, []);
-
-    // Add global mouse event listeners when dragging
-    React.useEffect(() => {
-        if (isDragging) {
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isDragging, handleMouseMove, handleMouseUp]);
-
-    // Oscilloscope visualization
-    React.useEffect(() => {
-        if (!audioEngine || !canvasRef.current) return;
-
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
-
-        // Get the analyser created by AudioEngine
-        const analyser = audioEngine.audioNodes.get(module.id);
-        if (!analyser) return;
-
-        analyserRef.current = analyser;
-
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-
-        const draw = () => {
-            analyser.getByteTimeDomainData(dataArray);
-
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#0f0';
-            ctx.beginPath();
-
-            const sliceWidth = canvas.width / bufferLength;
-            let x = 0;
-
-            for (let i = 0; i < bufferLength; i++) {
-                const v = dataArray[i] / 128.0;
-                const y = v * canvas.height / 2;
-
-                if (i === 0) {
-                    ctx.moveTo(x, y);
-                } else {
-                    ctx.lineTo(x, y);
-                }
-
-                x += sliceWidth;
-            }
-
-            ctx.stroke();
-            animationRef.current = requestAnimationFrame(draw);
-        };
-
-        draw();
-
-        return () => {
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
-        };
-    }, [audioEngine, module.id]);
-
-    return (
-        <div
-            ref={moduleRef}
-            className="module"
-            style={{
-                left: module.x,
-                top: module.y,
-                width: module.width,
-                height: module.height,
-                cursor: isDragging ? 'grabbing' : 'grab'
-            }}
-            onMouseDown={handleMouseDown}
-        >
-            <div className="module-header">{module.name}</div>
-
-            {/* Oscilloscope display */}
-            <canvas
-                ref={canvasRef}
-                width="160"
-                height="80"
-                style={{
-                    position: 'absolute',
-                    top: '40px',
-                    left: '20px',
-                    backgroundColor: '#000',
-                    border: '1px solid #444'
-                }}
-            />
-
-            {module.patchPoints.map(patchPoint => (
-                <React.Fragment key={patchPoint.id}>
-                    <PatchPoint
-                        patchPoint={patchPoint}
-                        onMouseDown={onPatchPointMouseDown}
-                        isConnecting={isConnecting}
-                        connectionStartId={connectionStartId}
-                    />
-                    <div
-                        style={{
-                            position: 'absolute',
-                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
-                            top: patchPoint.y - 8,
-                            fontSize: '10px',
-                            color: '#ccc',
-                            pointerEvents: 'none',
-                            whiteSpace: 'nowrap',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        {patchPoint.name}
-                    </div>
-                </React.Fragment>
-            ))}
-
-            {module.controls.map(control => (
-                <Control
-                    key={control.id}
-                    control={control}
-                    onChange={onControlChange}
-                />
-            ))}
-        </div>
-    );
-}
-
-/**
- * LevelMeterModule Component - Simple level meter for signal monitoring
- * @param {Object} props
- * @param {Module} props.module - Module data
- * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
- * @param {function} props.onControlChange - Called when control changes
- * @param {function} props.onModuleMove - Called when module is moved
- * @param {boolean} props.isConnecting - Whether currently connecting
- * @param {string|null} props.connectionStartId - ID of connection start point
- * @param {AudioEngine} props.audioEngine - Audio engine instance
- */
-function LevelMeterModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId, audioEngine }) {
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const [level, setLevel] = useState(0);
-    const moduleRef = useRef(null);
-    const analyserRef = useRef(null);
-    const animationRef = useRef(null);
-
-    const handleMouseDown = useCallback((e) => {
-        if (e.target.closest('.patch-point')) {
-            return; // Don't drag if clicking on patch points
-        }
-
-        setIsDragging(true);
-        const rect = moduleRef.current.getBoundingClientRect();
-        setDragStart({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        });
-    }, []);
-
-    const handleMouseMove = useCallback((e) => {
-        if (!isDragging) return;
-
-        const rackArea = moduleRef.current.parentElement;
-        const rackRect = rackArea.getBoundingClientRect();
-
-        const newX = Math.max(0, Math.min(
-            e.clientX - rackRect.left - dragStart.x,
-            rackRect.width - module.width
-        ));
-        const newY = Math.max(0, Math.min(
-            e.clientY - rackRect.top - dragStart.y,
-            rackRect.height - module.height
-        ));
-
-        onModuleMove(module.id, newX, newY);
-    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
-
-    const handleMouseUp = useCallback(() => {
-        setIsDragging(false);
-    }, []);
-
-    // Add global mouse event listeners when dragging
-    React.useEffect(() => {
-        if (isDragging) {
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isDragging, handleMouseMove, handleMouseUp]);
-
-    // Level meter monitoring
-    React.useEffect(() => {
-        if (!audioEngine) return;
-
-        // Get the analyser created by AudioEngine
-        const analyser = audioEngine.audioNodes.get(module.id);
-        if (!analyser) return;
-
-        analyserRef.current = analyser;
-
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-
-        const updateLevel = () => {
-            analyser.getByteTimeDomainData(dataArray);
-
-            // Calculate RMS level
-            let sum = 0;
-            for (let i = 0; i < bufferLength; i++) {
-                const sample = (dataArray[i] - 128) / 128; // Convert to -1 to 1 range
-                sum += sample * sample;
-            }
-            const rms = Math.sqrt(sum / bufferLength);
-
-            // Convert to dB and scale to 0-1 range
-            const dbLevel = 20 * Math.log10(rms + 0.0001); // Add small offset to avoid -inf
-            const normalizedLevel = Math.max(0, Math.min(1, (dbLevel + 60) / 60)); // -60dB to 0dB range
-
-            setLevel(normalizedLevel);
-            animationRef.current = requestAnimationFrame(updateLevel);
-        };
-
-        updateLevel();
-
-        return () => {
-            if (animationRef.current) {
-                cancelAnimationFrame(animationRef.current);
-            }
-        };
-    }, [audioEngine, module.id]);
-
-    return (
-        <div
-            ref={moduleRef}
-            className="module"
-            style={{
-                left: module.x,
-                top: module.y,
-                width: module.width,
-                height: module.height,
-                cursor: isDragging ? 'grabbing' : 'grab'
-            }}
-            onMouseDown={handleMouseDown}
-        >
-            <div className="module-header">{module.name}</div>
-
-            {/* Level meter display */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: '40px',
-                    left: '20px',
-                    width: '80px',
-                    height: '80px',
-                    backgroundColor: '#000',
-                    border: '1px solid #444',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}
-            >
-                {/* Level bar */}
-                <div
-                    style={{
-                        width: '20px',
-                        height: '60px',
-                        backgroundColor: '#333',
-                        border: '1px solid #666',
-                        position: 'relative',
-                        marginBottom: '5px'
-                    }}
-                >
-                    <div
-                        style={{
-                            position: 'absolute',
-                            bottom: '0',
-                            left: '0',
-                            right: '0',
-                            height: `${level * 100}%`,
-                            backgroundColor: level > 0.8 ? '#f00' : level > 0.6 ? '#ff0' : '#0f0',
-                            transition: 'height 0.1s ease-out'
-                        }}
-                    />
-                </div>
-
-                {/* Level value */}
-                <div
-                    style={{
-                        fontSize: '12px',
-                        color: '#fff',
-                        fontFamily: 'monospace',
-                        textAlign: 'center'
-                    }}
-                >
-                    {Math.round(level * 100)}%
-                </div>
-            </div>
-
-            {module.patchPoints.map(patchPoint => (
-                <React.Fragment key={patchPoint.id}>
-                    <PatchPoint
-                        patchPoint={patchPoint}
-                        onMouseDown={onPatchPointMouseDown}
-                        isConnecting={isConnecting}
-                        connectionStartId={connectionStartId}
-                    />
-                    <div
-                        style={{
-                            position: 'absolute',
-                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
-                            top: patchPoint.y - 8,
-                            fontSize: '10px',
-                            color: '#ccc',
-                            pointerEvents: 'none',
-                            whiteSpace: 'nowrap',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        {patchPoint.name}
-                    </div>
-                </React.Fragment>
-            ))}
-        </div>
-    );
-}
-
-/**
- * Module Component - Individual synth module
- * @param {Object} props
- * @param {Module} props.module - Module data
- * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
- * @param {function} props.onControlChange - Called when control changes
- * @param {function} props.onModuleMove - Called when module is moved
- * @param {boolean} props.isConnecting - Whether currently connecting
- * @param {string|null} props.connectionStartId - ID of connection start point
- */
-function SynthModule({ module, onPatchPointMouseDown, onControlChange, onModuleMove, isConnecting, connectionStartId }) {
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-    const moduleRef = useRef(null);
-
-    const handleMouseDown = useCallback((e) => {
-        if (e.target.closest('.patch-point') || e.target.closest('.potentiometer, .switch')) {
-            return; // Don't drag if clicking on patch points or controls
-        }
-
-        setIsDragging(true);
-        const rect = moduleRef.current.getBoundingClientRect();
-        setDragStart({
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-        });
-    }, []);
-
-    const handleMouseMove = useCallback((e) => {
-        if (!isDragging) return;
-
-        const rackArea = moduleRef.current.parentElement;
-        const rackRect = rackArea.getBoundingClientRect();
-
-        const newX = Math.max(0, Math.min(
-            e.clientX - rackRect.left - dragStart.x,
-            rackRect.width - module.width
-        ));
-        const newY = Math.max(0, Math.min(
-            e.clientY - rackRect.top - dragStart.y,
-            rackRect.height - module.height
-        ));
-
-        onModuleMove(module.id, newX, newY);
-    }, [isDragging, dragStart, module.id, module.width, module.height, onModuleMove]);
-
-    const handleMouseUp = useCallback(() => {
-        setIsDragging(false);
-    }, []);
-
-    // Add global mouse event listeners when dragging
-    React.useEffect(() => {
-        if (isDragging) {
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isDragging, handleMouseMove, handleMouseUp]);
-
-    return (
-        <div
-            ref={moduleRef}
-            className="module"
-            style={{
-                left: module.x,
-                top: module.y,
-                width: module.width,
-                height: module.height,
-                cursor: isDragging ? 'grabbing' : 'grab'
-            }}
-            onMouseDown={handleMouseDown}
-        >
-            <div className="module-header">{module.name}</div>
-
-            {module.patchPoints.map(patchPoint => (
-                <React.Fragment key={patchPoint.id}>
-                    <PatchPoint
-                        patchPoint={patchPoint}
-                        onMouseDown={onPatchPointMouseDown}
-                        isConnecting={isConnecting}
-                        connectionStartId={connectionStartId}
-                    />
-                    <div
-                        style={{
-                            position: 'absolute',
-                            left: patchPoint.type === 'input' ? patchPoint.x + 8 : patchPoint.x - 35,
-                            top: patchPoint.y - 8,
-                            fontSize: '10px',
-                            color: '#ccc',
-                            pointerEvents: 'none',
-                            whiteSpace: 'nowrap',
-                            fontWeight: 'bold'
-                        }}
-                    >
-                        {patchPoint.name}
-                    </div>
-                </React.Fragment>
-            ))}
-
-            {module.controls.map(control => (
-                <Control
-                    key={control.id}
-                    control={control}
-                    onChange={onControlChange}
-                />
-            ))}
-        </div>
-    );
-}
-
-/**
- * ConnectionLine Component - Visual connection between modules
- * @param {Object} props
- * @param {Connection} props.connection - Connection data
- * @param {Module[]} props.modules - All modules
- * @param {function} props.onRemove - Called when connection is clicked for removal
- */
-function ConnectionLine({ connection, modules, onRemove }) {
-    const getPatchPointPosition = useCallback((moduleId, patchId) => {
-        const module = modules.find(m => m.id === moduleId);
-        if (!module) return null;
-
-        const patchPoint = module.patchPoints.find(p => p.id === patchId);
-        if (!patchPoint) return null;
-
-        return {
-            x: module.x + patchPoint.x,
-            y: module.y + patchPoint.y
-        };
-    }, [modules]);
-
-    const fromPos = getPatchPointPosition(connection.fromModuleId, connection.fromPatchId);
-    const toPos = getPatchPointPosition(connection.toModuleId, connection.toPatchId);
-
-    if (!fromPos || !toPos) return null;
-
-    const dx = toPos.x - fromPos.x;
-    const dy = toPos.y - fromPos.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    // Create curved path
-    const midX = (fromPos.x + toPos.x) / 2;
-    const midY = (fromPos.y + toPos.y) / 2;
-    const controlOffset = Math.abs(dx) > Math.abs(dy) ? Math.abs(dx) * 0.3 : Math.abs(dy) * 0.3;
-
-    const pathData = `M ${fromPos.x} ${fromPos.y} Q ${midX} ${fromPos.y} ${midX} ${midY} Q ${midX} ${toPos.y} ${toPos.x} ${toPos.y}`;
-
-    return (
-        <svg
-            className="connection"
-            style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                pointerEvents: 'none',
-                zIndex: 1
-            }}
-        >
-            <path
-                d={pathData}
-                stroke="#0f0"
-                strokeWidth="2"
-                fill="none"
-                style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(connection.id);
-                }}
-            />
-        </svg>
-    );
-}
-
-/**
- * Rack Component - Main synthesis area
- * @param {Object} props
- * @param {Module[]} props.modules - Array of modules
- * @param {Connection[]} props.connections - Array of connections
- * @param {function} props.onDrop - Called when item is dropped
- * @param {function} props.onPatchPointMouseDown - Called when patch point clicked
- * @param {function} props.onControlChange - Called when control changes
- * @param {function} props.onSequencerControlChange - Called when sequencer control changes
- * @param {function} props.onModuleMove - Called when module is moved
- * @param {function} props.onConnectionRemove - Called when connection is removed
- * @param {boolean} props.isConnecting - Whether currently connecting
- * @param {string|null} props.connectionStartId - ID of connection start point
- * @param {function} props.onLoadState - Called when loading a new state
- * @param {Object} props.sequencerStates - Sequencer state for each sequencer module
- * @param {function} props.onStepChange - Called when step values change
- * @param {AudioEngine} props.audioEngine - Audio engine instance
- */
-function Rack({
-    modules,
-    connections,
-    onDrop,
-    onPatchPointMouseDown,
-    onControlChange,
-    onSequencerControlChange,
-    onModuleMove,
-    onConnectionRemove,
-    isConnecting,
-    connectionStartId,
-    onLoadState,
-    sequencerStates,
-    onStepChange,
-    audioEngine
-}) {
-    const rackRef = useRef(null);
-    const fileInputRef = useRef(null);
-
-    const handleDragOver = useCallback((e) => {
-        e.preventDefault();
-    }, []);
-
-    const handleDrop = useCallback((e) => {
-        e.preventDefault();
-        const type = e.dataTransfer.getData('text/plain');
-        if (type && rackRef.current) {
-            const rect = rackRef.current.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            onDrop(type, x, y);
-        }
-    }, [onDrop]);
-
-    /**
-     * Save current state as JSON
-     */
-    const handleSave = useCallback(() => {
-        const state = {
-            modules: modules.map(module => ({
-                type: module.type,
-                name: module.name,
-                x: module.x,
-                y: module.y,
-                width: module.width,
-                height: module.height,
-                patchPoints: module.patchPoints.map(point => ({
-                    id: point.id,
-                    name: point.name,
-                    type: point.type,
-                    x: point.x,
-                    y: point.y
-                })),
-                controls: module.controls.map(control => ({
-                    id: control.id,
-                    name: control.name,
-                    type: control.type,
-                    value: control.value,
-                    x: control.x,
-                    y: control.y
-                }))
-            })),
-            connections: connections.map(connection => ({
-                id: connection.id,
-                fromModuleId: connection.fromModuleId,
-                fromPatchId: connection.fromPatchId,
-                toModuleId: connection.toModuleId,
-                toPatchId: connection.toPatchId
-            }))
-        };
-
-        const dataStr = JSON.stringify(state, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'modular-synth-patch.json';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }, [modules, connections]);
-
-    /**
-     * Handle file selection for loading
-     */
-    const handleFileSelect = useCallback((e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                try {
-                    const state = JSON.parse(event.target.result);
-                    onLoadState(state);
-                } catch (error) {
-                    console.error('Error loading JSON file:', error);
-                    alert('Error loading file. Please check the JSON format.');
-                }
-            };
-            reader.readAsText(file);
-        }
-        // Reset file input
-        e.target.value = '';
-    }, [onLoadState]);
-
-    /**
-     * Load default preset (2 oscillators -> mixer -> filter -> vca -> output with envelopes)
-     */
-    const handleLoadDefault = useCallback(() => {
-        const defaultState = {
-            modules: [
-                // Oscillator 1
-                {
-                    type: 'oscillator',
-                    name: 'Osc 1',
-                    x: 20,
-                    y: 20,
-                    width: 140,
-                    height: 120,
-                    patchPoints: [
-                        { id: 'osc1-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
-                    ],
-                    controls: [
-                        { id: 'osc1-control-0', name: 'Frequency', type: 'potentiometer', value: 0.25, x: 20, y: 40 },
-                        { id: 'osc1-control-1', name: 'Waveform', type: 'potentiometer', value: 0.0, x: 80, y: 40 }
-                    ]
-                },
-                // Oscillator 2
-                {
-                    type: 'oscillator',
-                    name: 'Osc 2',
-                    x: 20,
-                    y: 160,
-                    width: 140,
-                    height: 120,
-                    patchPoints: [
-                        { id: 'osc2-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
-                    ],
-                    controls: [
-                        { id: 'osc2-control-0', name: 'Frequency', type: 'potentiometer', value: 0.35, x: 20, y: 40 },
-                        { id: 'osc2-control-1', name: 'Waveform', type: 'potentiometer', value: 0.33, x: 80, y: 40 }
-                    ]
-                },
-                // Mixer
-                {
-                    type: 'mixer',
-                    name: 'Mixer',
-                    x: 200,
-                    y: 20,
-                    width: 200,
-                    height: 180,
-                    patchPoints: [
-                        { id: 'mixer-patch-0', name: 'In 1', type: 'input', x: -5, y: 35 },
-                        { id: 'mixer-patch-1', name: 'In 2', type: 'input', x: -5, y: 65 },
-                        { id: 'mixer-patch-2', name: 'In 3', type: 'input', x: -5, y: 95 },
-                        { id: 'mixer-patch-3', name: 'In 4', type: 'input', x: -5, y: 125 },
-                        { id: 'mixer-patch-4', name: 'Out', type: 'output', x: 195, y: 80 }
-                    ],
-                    controls: [
-                        { id: 'mixer-control-0', name: 'Level 1', type: 'potentiometer', value: 0.8, x: 30, y: 25 },
-                        { id: 'mixer-control-1', name: 'Level 2', type: 'potentiometer', value: 0.8, x: 30, y: 55 },
-                        { id: 'mixer-control-2', name: 'Level 3', type: 'potentiometer', value: 0.0, x: 30, y: 85 },
-                        { id: 'mixer-control-3', name: 'Level 4', type: 'potentiometer', value: 0.0, x: 30, y: 115 },
-                        { id: 'mixer-control-4', name: 'Master', type: 'potentiometer', value: 0.7, x: 130, y: 70 }
-                    ]
-                },
-                // Filter Envelope
-                {
-                    type: 'envelope',
-                    name: 'Filter Env',
-                    x: 450,
-                    y: 20,
-                    width: 140,
-                    height: 160,
-                    patchPoints: [
-                        { id: 'filter-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
-                        { id: 'filter-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
-                    ],
-                    controls: [
-                        { id: 'filter-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.1, x: 20, y: 40 },
-                        { id: 'filter-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.3, x: 80, y: 40 },
-                        { id: 'filter-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.7, x: 20, y: 80 },
-                        { id: 'filter-env-control-3', name: 'Release', type: 'potentiometer', value: 0.4, x: 80, y: 80 }
-                    ]
-                },
-                // VCF Filter
-                {
-                    type: 'vcf',
-                    name: 'VCF',
-                    x: 620,
-                    y: 20,
-                    width: 140,
-                    height: 140,
-                    patchPoints: [
-                        { id: 'vcf-patch-0', name: 'In', type: 'input', x: -5, y: 40 },
-                        { id: 'vcf-patch-1', name: 'Cutoff Mod', type: 'input', x: -5, y: 80 },
-                        { id: 'vcf-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
-                    ],
-                    controls: [
-                        { id: 'vcf-control-0', name: 'Cutoff', type: 'potentiometer', value: 0.4, x: 20, y: 40 },
-                        { id: 'vcf-control-1', name: 'Resonance', type: 'potentiometer', value: 0.3, x: 80, y: 40 }
-                    ]
-                },
-                // Amp Envelope
-                {
-                    type: 'envelope',
-                    name: 'Amp Env',
-                    x: 450,
-                    y: 200,
-                    width: 140,
-                    height: 160,
-                    patchPoints: [
-                        { id: 'amp-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
-                        { id: 'amp-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
-                    ],
-                    controls: [
-                        { id: 'amp-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.05, x: 20, y: 40 },
-                        { id: 'amp-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.2, x: 80, y: 40 },
-                        { id: 'amp-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.8, x: 20, y: 80 },
-                        { id: 'amp-env-control-3', name: 'Release', type: 'potentiometer', value: 0.6, x: 80, y: 80 }
-                    ]
-                },
-                // VCA
-                {
-                    type: 'vca',
-                    name: 'VCA',
-                    x: 620,
-                    y: 180,
-                    width: 140,
-                    height: 120,
-                    patchPoints: [
-                        { id: 'vca-patch-0', name: 'Audio In', type: 'input', x: -5, y: 40 },
-                        { id: 'vca-patch-1', name: 'CV In', type: 'input', x: -5, y: 80 },
-                        { id: 'vca-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
-                    ],
-                    controls: [
-                        { id: 'vca-control-0', name: 'Level', type: 'potentiometer', value: 0.0, x: 50, y: 40 }
-                    ]
-                },
-                // Output
-                {
-                    type: 'output',
-                    name: 'Output',
-                    x: 800,
-                    y: 100,
-                    width: 140,
-                    height: 120,
-                    patchPoints: [
-                        { id: 'output-patch-0', name: 'Audio In', type: 'input', x: -5, y: 60 }
-                    ],
-                    controls: [
-                        { id: 'output-control-0', name: 'Volume', type: 'potentiometer', value: 0.9, x: 50, y: 40 }
-                    ]
-                }
-            ],
-            connections: [
-                // Osc 1 -> Mixer In 1
-                {
-                    id: 'connection-osc1-mixer1',
-                    fromModuleId: 'osc1',
-                    fromPatchId: 'osc1-patch-0',
-                    toModuleId: 'mixer',
-                    toPatchId: 'mixer-patch-0'
-                },
-                // Osc 2 -> Mixer In 2
-                {
-                    id: 'connection-osc2-mixer2',
-                    fromModuleId: 'osc2',
-                    fromPatchId: 'osc2-patch-0',
-                    toModuleId: 'mixer',
-                    toPatchId: 'mixer-patch-1'
-                },
-                // Mixer -> VCF
-                {
-                    id: 'connection-mixer-vcf',
-                    fromModuleId: 'mixer',
-                    fromPatchId: 'mixer-patch-4',
-                    toModuleId: 'vcf',
-                    toPatchId: 'vcf-patch-0'
-                },
-                // Filter Env -> VCF Cutoff Mod
-                {
-                    id: 'connection-filter-env-vcf',
-                    fromModuleId: 'filter-env',
-                    fromPatchId: 'filter-env-patch-1',
-                    toModuleId: 'vcf',
-                    toPatchId: 'vcf-patch-1'
-                },
-                // VCF -> VCA Audio In
-                {
-                    id: 'connection-vcf-vca',
-                    fromModuleId: 'vcf',
-                    fromPatchId: 'vcf-patch-2',
-                    toModuleId: 'vca',
-                    toPatchId: 'vca-patch-0'
-                },
-                // Amp Env -> VCA CV In
-                {
-                    id: 'connection-amp-env-vca',
-                    fromModuleId: 'amp-env',
-                    fromPatchId: 'amp-env-patch-1',
-                    toModuleId: 'vca',
-                    toPatchId: 'vca-patch-1'
-                },
-                // VCA -> Output
-                {
-                    id: 'connection-vca-output',
-                    fromModuleId: 'vca',
-                    fromPatchId: 'vca-patch-2',
-                    toModuleId: 'output',
-                    toPatchId: 'output-patch-0'
-                }
-            ]
-        };
-
-        onLoadState(defaultState);
-    }, [onLoadState]);
-
-    return (
-        <div className="rack">
-            <h2>
-                Rack
-                <div className="controls">
-                    <button className="save-btn" onClick={handleSave}>Save</button>
-                    <button className="load-btn" onClick={() => fileInputRef.current?.click()}>
-                        Load
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".json"
-                            onChange={handleFileSelect}
-                            className="load-input"
-                        />
-                    </button>
-                    <button className="save-btn" onClick={handleLoadDefault}>Default</button>
-                </div>
-            </h2>
-            <div
-                ref={rackRef}
-                className="rack-area"
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-            >
-                {modules.map(module => {
-                    if (module.type === 'sequencer') {
-                        const sequencerState = sequencerStates[module.id] || {
-                            stepValues: [0.5, 0, 0.3, 0],
-                            currentStep: 0,
-                            isPlaying: false,
-                            tempo: 120
-                        };
-                        return (
-                            <SequencerModule
-                                key={module.id}
-                                module={module}
-                                onPatchPointMouseDown={onPatchPointMouseDown}
-                                onControlChange={onSequencerControlChange}
-                                onModuleMove={onModuleMove}
-                                isConnecting={isConnecting}
-                                connectionStartId={connectionStartId}
-                                onStepChange={onStepChange}
-                                stepValues={sequencerState.stepValues}
-                                currentStep={sequencerState.currentStep}
-                            />
-                        );
-                    } else if (module.type === 'oscilloscope') {
-                        return (
-                            <OscilloscopeModule
-                                key={module.id}
-                                module={module}
-                                onPatchPointMouseDown={onPatchPointMouseDown}
-                                onControlChange={onControlChange}
-                                onModuleMove={onModuleMove}
-                                isConnecting={isConnecting}
-                                connectionStartId={connectionStartId}
-                                audioEngine={audioEngine}
-                            />
-                        );
-                    } else if (module.type === 'level-meter') {
-                        return (
-                            <LevelMeterModule
-                                key={module.id}
-                                module={module}
-                                onPatchPointMouseDown={onPatchPointMouseDown}
-                                onControlChange={onControlChange}
-                                onModuleMove={onModuleMove}
-                                isConnecting={isConnecting}
-                                connectionStartId={connectionStartId}
-                                audioEngine={audioEngine}
-                            />
-                        );
-                    } else {
-                        return (
-                            <SynthModule
-                                key={module.id}
-                                module={module}
-                                onPatchPointMouseDown={onPatchPointMouseDown}
-                                onControlChange={onControlChange}
-                                onModuleMove={onModuleMove}
-                                isConnecting={isConnecting}
-                                connectionStartId={connectionStartId}
-                            />
-                        );
-                    }
-                })}
-
-                {connections.map(connection => (
-                    <ConnectionLine
-                        key={connection.id}
-                        connection={connection}
-                        modules={modules}
-                        onRemove={onConnectionRemove}
-                    />
-                ))}
-            </div>
-        </div>
-    );
-}
-
-/**
- * Main App Component
- */
-function App() {
-    /** @type {[Module[], function]} */
-    const [modules, setModules] = useState([]);
-    /** @type {[Connection[], function]} */
-    const [connections, setConnections] = useState([]);
-    /** @type {[boolean, function]} */
-    const [isConnecting, setIsConnecting] = useState(false);
-    /** @type {[string|null, function]} */
-    const [connectionStart, setConnectionStart] = useState(null);
-    /** @type {[AudioEngine, function]} */
-    const [audioEngine, setAudioEngine] = useState(null);
-    /** @type {[Object, function]} */
-    const [sequencerStates, setSequencerStates] = useState({});
-
-    // Initialize audio engine
-    React.useEffect(() => {
-        const engine = new AudioEngine();
-        engine.init().then(() => {
-            setAudioEngine(engine);
-        });
-    }, []);
-
-    // Load default preset on app start
-    React.useEffect(() => {
-        if (audioEngine && modules.length === 0) {
-            const defaultState = {
-                modules: [
-                    // Oscillator 1
-                    {
-                        type: 'oscillator',
-                        name: 'Osc 1',
-                        x: 20,
-                        y: 20,
-                        width: 140,
-                        height: 120,
-                        patchPoints: [
-                            { id: 'osc1-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
-                        ],
-                        controls: [
-                            { id: 'osc1-control-0', name: 'Frequency', type: 'potentiometer', value: 0.25, x: 20, y: 40 },
-                            { id: 'osc1-control-1', name: 'Waveform', type: 'potentiometer', value: 0.0, x: 80, y: 40 }
-                        ]
-                    },
-                    // Oscillator 2
-                    {
-                        type: 'oscillator',
-                        name: 'Osc 2',
-                        x: 20,
-                        y: 160,
-                        width: 140,
-                        height: 120,
-                        patchPoints: [
-                            { id: 'osc2-patch-0', name: 'Out', type: 'output', x: 135, y: 60 }
-                        ],
-                        controls: [
-                            { id: 'osc2-control-0', name: 'Frequency', type: 'potentiometer', value: 0.35, x: 20, y: 40 },
-                            { id: 'osc2-control-1', name: 'Waveform', type: 'potentiometer', value: 0.33, x: 80, y: 40 }
-                        ]
-                    },
-                    // Mixer
-                    {
-                        type: 'mixer',
-                        name: 'Mixer',
-                        x: 200,
-                        y: 20,
-                        width: 200,
-                        height: 180,
-                        patchPoints: [
-                            { id: 'mixer-patch-0', name: 'In 1', type: 'input', x: -5, y: 35 },
-                            { id: 'mixer-patch-1', name: 'In 2', type: 'input', x: -5, y: 65 },
-                            { id: 'mixer-patch-2', name: 'In 3', type: 'input', x: -5, y: 95 },
-                            { id: 'mixer-patch-3', name: 'In 4', type: 'input', x: -5, y: 125 },
-                            { id: 'mixer-patch-4', name: 'Out', type: 'output', x: 195, y: 80 }
-                        ],
-                        controls: [
-                            { id: 'mixer-control-0', name: 'Level 1', type: 'potentiometer', value: 0.8, x: 30, y: 25 },
-                            { id: 'mixer-control-1', name: 'Level 2', type: 'potentiometer', value: 0.8, x: 30, y: 55 },
-                            { id: 'mixer-control-2', name: 'Level 3', type: 'potentiometer', value: 0.0, x: 30, y: 85 },
-                            { id: 'mixer-control-3', name: 'Level 4', type: 'potentiometer', value: 0.0, x: 30, y: 115 },
-                            { id: 'mixer-control-4', name: 'Master', type: 'potentiometer', value: 0.7, x: 130, y: 70 }
-                        ]
-                    },
-                    // Filter Envelope
-                    {
-                        type: 'envelope',
-                        name: 'Filter Env',
-                        x: 450,
-                        y: 20,
-                        width: 140,
-                        height: 160,
-                        patchPoints: [
-                            { id: 'filter-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
-                            { id: 'filter-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
-                        ],
-                        controls: [
-                            { id: 'filter-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.1, x: 20, y: 40 },
-                            { id: 'filter-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.3, x: 80, y: 40 },
-                            { id: 'filter-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.7, x: 20, y: 80 },
-                            { id: 'filter-env-control-3', name: 'Release', type: 'potentiometer', value: 0.4, x: 80, y: 80 }
-                        ]
-                    },
-                    // VCF Filter
-                    {
-                        type: 'vcf',
-                        name: 'VCF',
-                        x: 620,
-                        y: 20,
-                        width: 140,
-                        height: 140,
-                        patchPoints: [
-                            { id: 'vcf-patch-0', name: 'In', type: 'input', x: -5, y: 40 },
-                            { id: 'vcf-patch-1', name: 'Cutoff Mod', type: 'input', x: -5, y: 80 },
-                            { id: 'vcf-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
-                        ],
-                        controls: [
-                            { id: 'vcf-control-0', name: 'Cutoff', type: 'potentiometer', value: 0.4, x: 20, y: 40 },
-                            { id: 'vcf-control-1', name: 'Resonance', type: 'potentiometer', value: 0.3, x: 80, y: 40 }
-                        ]
-                    },
-                    // Amp Envelope
-                    {
-                        type: 'envelope',
-                        name: 'Amp Env',
-                        x: 450,
-                        y: 200,
-                        width: 140,
-                        height: 160,
-                        patchPoints: [
-                            { id: 'amp-env-patch-0', name: 'Gate', type: 'input', x: -5, y: 80 },
-                            { id: 'amp-env-patch-1', name: 'Out', type: 'output', x: 135, y: 80 }
-                        ],
-                        controls: [
-                            { id: 'amp-env-control-0', name: 'Attack', type: 'potentiometer', value: 0.05, x: 20, y: 40 },
-                            { id: 'amp-env-control-1', name: 'Decay', type: 'potentiometer', value: 0.2, x: 80, y: 40 },
-                            { id: 'amp-env-control-2', name: 'Sustain', type: 'potentiometer', value: 0.8, x: 20, y: 80 },
-                            { id: 'amp-env-control-3', name: 'Release', type: 'potentiometer', value: 0.6, x: 80, y: 80 }
-                        ]
-                    },
-                    // VCA
-                    {
-                        type: 'vca',
-                        name: 'VCA',
-                        x: 620,
-                        y: 180,
-                        width: 140,
-                        height: 120,
-                        patchPoints: [
-                            { id: 'vca-patch-0', name: 'Audio In', type: 'input', x: -5, y: 40 },
-                            { id: 'vca-patch-1', name: 'CV In', type: 'input', x: -5, y: 80 },
-                            { id: 'vca-patch-2', name: 'Out', type: 'output', x: 135, y: 60 }
-                        ],
-                        controls: [
-                            { id: 'vca-control-0', name: 'Level', type: 'potentiometer', value: 0.0, x: 50, y: 40 }
-                        ]
-                    },
-                    // Output
-                    {
-                        type: 'output',
-                        name: 'Output',
-                        x: 800,
-                        y: 100,
-                        width: 140,
-                        height: 120,
-                        patchPoints: [
-                            { id: 'output-patch-0', name: 'Audio In', type: 'input', x: -5, y: 60 }
-                        ],
-                        controls: [
-                            { id: 'output-control-0', name: 'Volume', type: 'potentiometer', value: 0.9, x: 50, y: 40 }
-                        ]
-                    }
+        // --- Types & Config ---
+
+        const MODULE_DEFINITIONS = {
+            oscillator: {
+                name: 'Oscillator',
+                width: 180,
+                controls: [
+                    { id: 'freq', name: 'Frequency', type: 'knob', default: 0.25 },
+                    { id: 'wave', name: 'Waveform', type: 'knob', default: 0 }
                 ],
-                connections: [
-                    // Osc 1 -> Mixer In 1
-                    {
-                        id: 'connection-osc1-mixer1',
-                        fromModuleId: 'osc1',
-                        fromPatchId: 'osc1-patch-0',
-                        toModuleId: 'mixer',
-                        toPatchId: 'mixer-patch-0'
-                    },
-                    // Osc 2 -> Mixer In 2
-                    {
-                        id: 'connection-osc2-mixer2',
-                        fromModuleId: 'osc2',
-                        fromPatchId: 'osc2-patch-0',
-                        toModuleId: 'mixer',
-                        toPatchId: 'mixer-patch-1'
-                    },
-                    // Mixer -> VCF
-                    {
-                        id: 'connection-mixer-vcf',
-                        fromModuleId: 'mixer',
-                        fromPatchId: 'mixer-patch-4',
-                        toModuleId: 'vcf',
-                        toPatchId: 'vcf-patch-0'
-                    },
-                    // Filter Env -> VCF Cutoff Mod
-                    {
-                        id: 'connection-filter-env-vcf',
-                        fromModuleId: 'filter-env',
-                        fromPatchId: 'filter-env-patch-1',
-                        toModuleId: 'vcf',
-                        toPatchId: 'vcf-patch-1'
-                    },
-                    // VCF -> VCA Audio In
-                    {
-                        id: 'connection-vcf-vca',
-                        fromModuleId: 'vcf',
-                        fromPatchId: 'vcf-patch-2',
-                        toModuleId: 'vca',
-                        toPatchId: 'vca-patch-0'
-                    },
-                    // Amp Env -> VCA CV In
-                    {
-                        id: 'connection-amp-env-vca',
-                        fromModuleId: 'amp-env',
-                        fromPatchId: 'amp-env-patch-1',
-                        toModuleId: 'vca',
-                        toPatchId: 'vca-patch-1'
-                    },
-                    // VCA -> Output
-                    {
-                        id: 'connection-vca-output',
-                        fromModuleId: 'vca',
-                        fromPatchId: 'vca-patch-2',
-                        toModuleId: 'output',
-                        toPatchId: 'output-patch-0'
-                    }
+                inputs: [
+                    { id: 'voct', name: 'V/Oct' },
+                    { id: 'fm', name: 'FM' }
+                ],
+                outputs: [
+                    { id: 'out', name: 'Out' }
                 ]
-            };
+            },
+            vcf: {
+                name: 'Filter (VCF)',
+                width: 160,
+                controls: [
+                    { id: 'cutoff', name: 'Cutoff', type: 'knob', default: 0.5 },
+                    { id: 'res', name: 'Res', type: 'knob', default: 0 }
+                ],
+                inputs: [
+                    { id: 'in', name: 'In' },
+                    { id: 'mod', name: 'Mod' }
+                ],
+                outputs: [
+                    { id: 'out', name: 'Out' }
+                ]
+            },
+            vca: {
+                name: 'Amplifier (VCA)',
+                width: 140,
+                controls: [
+                    { id: 'level', name: 'Level', type: 'knob', default: 0 }
+                ],
+                inputs: [
+                    { id: 'in', name: 'In' },
+                    { id: 'cv', name: 'CV' }
+                ],
+                outputs: [
+                    { id: 'out', name: 'Out' }
+                ]
+            },
+            envelope: {
+                name: 'Envelope (ADSR)',
+                width: 200,
+                controls: [
+                    { id: 'a', name: 'A', type: 'knob', default: 0.1 },
+                    { id: 'd', name: 'D', type: 'knob', default: 0.2 },
+                    { id: 's', name: 'S', type: 'knob', default: 0.5 },
+                    { id: 'r', name: 'R', type: 'knob', default: 0.3 }
+                ],
+                inputs: [
+                    { id: 'gate', name: 'Gate' }
+                ],
+                outputs: [
+                    { id: 'out', name: 'Out' }
+                ]
+            },
+            mixer: {
+                name: 'Mixer',
+                width: 180,
+                controls: [
+                    { id: 'lvl1', name: 'Ch 1', type: 'knob', default: 0.5 },
+                    { id: 'lvl2', name: 'Ch 2', type: 'knob', default: 0.5 },
+                    { id: 'lvl3', name: 'Ch 3', type: 'knob', default: 0.5 },
+                    { id: 'master', name: 'Master', type: 'knob', default: 0.8 }
+                ],
+                inputs: [
+                    { id: 'in1', name: 'In 1' },
+                    { id: 'in2', name: 'In 2' },
+                    { id: 'in3', name: 'In 3' }
+                ],
+                outputs: [
+                    { id: 'out', name: 'Out' }
+                ]
+            },
+            lfo: {
+                name: 'LFO',
+                width: 140,
+                controls: [
+                    { id: 'freq', name: 'Rate', type: 'knob', default: 0.2 },
+                    { id: 'amt', name: 'Amt', type: 'knob', default: 1 }
+                ],
+                inputs: [],
+                outputs: [
+                    { id: 'out', name: 'Out' }
+                ]
+            },
+            sequencer: {
+                name: 'Sequencer',
+                width: 220,
+                controls: [
+                    { id: 'tempo', name: 'Tempo', type: 'knob', default: 0.5 },
+                    { id: 'run', name: 'Run', type: 'switch', default: 0 }
+                ],
+                inputs: [],
+                outputs: [
+                    { id: 'cv', name: 'CV' },
+                    { id: 'gate', name: 'Gate' }
+                ]
+            },
+            oscilloscope: {
+                name: 'Oscilloscope',
+                width: 200,
+                controls: [],
+                inputs: [
+                    { id: 'in', name: 'In' }
+                ],
+                outputs: []
+            },
+            output: {
+                name: 'Master Output',
+                width: 140,
+                controls: [
+                    { id: 'vol', name: 'Volume', type: 'knob', default: 0.5 }
+                ],
+                inputs: [
+                    { id: 'in', name: 'L/Mono' }
+                ],
+                outputs: []
+            }
+        };
 
-            // Create new modules with fresh IDs
-            const newModules = defaultState.modules.map(moduleData => {
-                const template = MODULE_TEMPLATES[moduleData.type];
-                if (!template) {
-                    console.warn(`Unknown module type: ${moduleData.type}`);
-                    return null;
+        // --- Audio Engine ---
+        class AudioEngine {
+            constructor() {
+                this.ctx = null;
+                this.nodes = new Map(); // Map<moduleId, AudioNode|Object>
+                this.initialized = false;
+            }
+
+            async init() {
+                if (this.initialized) {
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        await this.ctx.resume();
+                    }
+                    return;
+                }
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+                this.initialized = true;
+            }
+
+            getFrequency(val) {
+                // Exponential mapping for frequency
+                // 0 -> 20Hz, 1 -> 2000Hz (roughly)
+                // Using formula: 20 * (100 ^ val)
+                return 20 * Math.pow(100, val);
+            }
+
+            // Create nodes for a module
+            createModule(module) {
+                if (!this.ctx) return;
+                const id = module.id;
+                
+                switch(module.type) {
+                    case 'oscillator':
+                        const osc = this.ctx.createOscillator();
+                        const oscGain = this.ctx.createGain(); // Output gain
+                        const fmGain = this.ctx.createGain(); // FM depth
+                        
+                        osc.type = 'sine';
+                        osc.start();
+                        osc.connect(oscGain);
+                        
+                        // FM setup
+                        fmGain.gain.value = 500; // FM index
+                        fmGain.connect(osc.frequency);
+
+                        this.nodes.set(id, { 
+                            main: oscGain, 
+                            inputs: { 
+                                voct: osc.frequency, 
+                                fm: fmGain 
+                            }, 
+                            core: osc 
+                        });
+                        break;
+
+                    case 'vcf':
+                        const filter = this.ctx.createBiquadFilter();
+                        const modGain = this.ctx.createGain();
+                        
+                        filter.type = 'lowpass';
+                        modGain.connect(filter.frequency);
+                        modGain.gain.value = 1000; // Mod depth
+
+                        this.nodes.set(id, { 
+                            main: filter, 
+                            inputs: { 
+                                in: filter, 
+                                mod: modGain 
+                            }, 
+                            core: filter 
+                        });
+                        break;
+                    
+                    case 'vca':
+                        const vca = this.ctx.createGain();
+                        const cvGain = this.ctx.createGain();
+                        vca.gain.value = 0;
+                        cvGain.connect(vca.gain);
+                        
+                        this.nodes.set(id, { 
+                            main: vca, 
+                            inputs: { 
+                                in: vca, 
+                                cv: cvGain 
+                            }, 
+                            core: vca 
+                        });
+                        break;
+
+                    case 'envelope':
+                        // Envelopes don't process audio, they generate CV.
+                        // We use a constant source for output that we modulate.
+                        const envOut = this.ctx.createConstantSource();
+                        envOut.offset.value = 0;
+                        envOut.start();
+                        
+                        this.nodes.set(id, { 
+                            main: envOut, 
+                            inputs: { gate: null }, // Special handling for gate
+                            core: envOut,
+                            state: { stage: 'idle', val: 0, time: 0 }
+                        });
+                        break;
+
+                    case 'mixer':
+                        const master = this.ctx.createGain();
+                        const ch1 = this.ctx.createGain();
+                        const ch2 = this.ctx.createGain();
+                        const ch3 = this.ctx.createGain();
+                        
+                        ch1.connect(master);
+                        ch2.connect(master);
+                        ch3.connect(master);
+                        
+                        this.nodes.set(id, { 
+                            main: master, 
+                            inputs: { 
+                                in1: ch1, 
+                                in2: ch2, 
+                                in3: ch3 
+                            },
+                            chGains: [ch1, ch2, ch3]
+                        });
+                        break;
+                    
+                    case 'lfo':
+                        const lfo = this.ctx.createOscillator();
+                        const lfoAmp = this.ctx.createGain();
+                        lfo.connect(lfoAmp);
+                        lfo.start();
+                        
+                        this.nodes.set(id, {
+                            main: lfoAmp,
+                            core: lfo,
+                            amp: lfoAmp
+                        });
+                        break;
+
+                    case 'output':
+                        const outGain = this.ctx.createGain();
+                        outGain.connect(this.ctx.destination);
+                        this.nodes.set(id, {
+                            main: null, // No output to other modules
+                            inputs: { in: outGain },
+                            core: outGain
+                        });
+                        break;
+                        
+                    case 'oscilloscope':
+                        const analyser = this.ctx.createAnalyser();
+                        analyser.fftSize = 2048;
+                        this.nodes.set(id, {
+                            main: null,
+                            inputs: { in: analyser },
+                            core: analyser
+                        });
+                        break;
+
+                    case 'sequencer':
+                        // Sequencer outputs CV/Gate.
+                        const seqCv = this.ctx.createConstantSource();
+                        const seqGate = this.ctx.createConstantSource();
+                        seqCv.start();
+                        seqGate.start();
+                        
+                        this.nodes.set(id, {
+                            main: null, // multiple outputs
+                            outputs: { cv: seqCv, gate: seqGate },
+                            inputs: {}
+                        });
+                        break;
+                }
+            }
+
+            updateModule(module) {
+                if (!this.ctx || !this.nodes.has(module.id)) return;
+                const nodeData = this.nodes.get(module.id);
+                
+                // Helper to get control val
+                const getVal = (id) => {
+                    const c = module.controls.find(c => c.id === id);
+                    return c ? c.value : 0;
                 }
 
-                const moduleId = `${moduleData.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                switch(module.type) {
+                    case 'oscillator':
+                        const freqVal = getVal('freq');
+                        const waveVal = getVal('wave');
+                        
+                        // Freq: 20Hz to 2000Hz (approx)
+                        // Simple linear mapping for now: 20 + val * 1000
+                        const freq = 20 + (freqVal * 2000);
+                        nodeData.core.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.05);
+                        
+                        // Waveform blending (discrete for simple osc)
+                        if (waveVal < 0.33) nodeData.core.type = 'sine';
+                        else if (waveVal < 0.66) nodeData.core.type = 'square';
+                        else nodeData.core.type = 'sawtooth';
+                        break;
+                        
+                    case 'vcf':
+                        const cutoff = getVal('cutoff');
+                        const res = getVal('res');
+                        // 20Hz to 10kHz
+                        nodeData.core.frequency.setTargetAtTime(20 + cutoff * 10000, this.ctx.currentTime, 0.05);
+                        nodeData.core.Q.value = res * 20;
+                        break;
+                        
+                    case 'vca':
+                        // Initial gain set by 'Level' knob + CV
+                        // We set the base gain, CV adds to it.
+                        // Actually, better: VCA usually closed (0) and opened by Env.
+                        // 'Level' knob acts as offset or input attenuator? 
+                        // Let's make 'Level' knob a bias (drone) or max volume.
+                        // Standard VCA: Output = In * (LevelKnob + CV)
+                        // If we implement CV scaling, it gets complex.
+                        // Simple version: Level is bias.
+                        // nodeData.core.gain.value = getVal('level'); 
+                        // BUT, if we have CV connection, we rely on that.
+                        // Let's make Level knob set the MAXIMUM gain the CV can reach, 
+                        // OR acting as a manual offset.
+                        // Let's say Level is manual offset.
+                        nodeData.core.gain.setTargetAtTime(getVal('level'), this.ctx.currentTime, 0.05);
+                        break;
 
-                return {
-                    id: moduleId,
-                    ...template,
-                    x: moduleData.x,
-                    y: moduleData.y,
-                    patchPoints: template.patchPoints.map((point, index) => ({
-                        ...point,
-                        id: `${moduleId}-patch-${index}`
-                    })),
-                    controls: moduleData.controls.map((controlData, index) => ({
-                        ...template.controls[index],
-                        id: `${moduleId}-control-${index}`,
-                        value: controlData.value
-                    }))
+                    case 'mixer':
+                        nodeData.chGains[0].gain.value = getVal('lvl1');
+                        nodeData.chGains[1].gain.value = getVal('lvl2');
+                        nodeData.chGains[2].gain.value = getVal('lvl3');
+                        nodeData.main.gain.value = getVal('master');
+                        break;
+
+                    case 'lfo':
+                        // 0.1Hz to 20Hz
+                        const lfoFreq = 0.1 + (getVal('freq') * 20);
+                        nodeData.core.frequency.value = lfoFreq;
+                        nodeData.amp.gain.value = getVal('amt') * 1000; // Scale for modulation
+                        break;
+
+                    case 'output':
+                        nodeData.core.gain.value = getVal('vol');
+                        break;
+                    
+                    case 'envelope':
+                        // Updates occur on trigger
+                        nodeData.params = {
+                            a: getVal('a'),
+                            d: getVal('d'),
+                            s: getVal('s'),
+                            r: getVal('r')
+                        };
+                        break;
+                }
+            }
+
+            triggerEnvelope(moduleId, gateOpen) {
+                if (!this.ctx) return;
+                const nodeData = this.nodes.get(moduleId);
+                if (!nodeData || !nodeData.params) return;
+                
+                const { a, d, s, r } = nodeData.params;
+                const now = this.ctx.currentTime;
+                const target = nodeData.core.offset;
+
+                // Max envelope value is 1 (which usually corresponds to e.g. 1000Hz mod or 1.0 gain)
+                
+                target.cancelScheduledValues(now);
+                
+                if (gateOpen) {
+                    // Attack
+                    target.setValueAtTime(target.value, now);
+                    target.linearRampToValueAtTime(1, now + (a * 2) + 0.005);
+                    // Decay to Sustain
+                    target.linearRampToValueAtTime(s, now + (a * 2) + (d * 2) + 0.005);
+                } else {
+                    // Release
+                    target.setValueAtTime(target.value, now);
+                    target.linearRampToValueAtTime(0, now + (r * 2) + 0.005);
+                }
+            }
+            
+            updateSequencer(moduleId, cvValue, gateValue) {
+                const nodeData = this.nodes.get(moduleId);
+                if (nodeData && nodeData.outputs) {
+                    nodeData.outputs.cv.offset.value = cvValue; // 0-1 (mapped later to freq)
+                    nodeData.outputs.gate.offset.value = gateValue;
+                }
+            }
+
+            connect(fromId, fromPatch, toId, toPatch) {
+                const source = this.nodes.get(fromId);
+                const dest = this.nodes.get(toId);
+                if (!source || !dest) return;
+
+                // Determine source node
+                let srcNode = source.main;
+                if (source.outputs && source.outputs[fromPatch]) {
+                    srcNode = source.outputs[fromPatch];
+                }
+
+                // Determine dest node
+                let dstNode = null;
+                if (dest.inputs && dest.inputs[toPatch]) {
+                    dstNode = dest.inputs[toPatch];
+                } else if (toPatch === 'gate' && dest.inputs.gate === null) {
+                    // Special case for envelope gate input (handled logically, not audio-wise mostly)
+                    // But for visual consistency we might need to track it. 
+                    // Wait, Env Gate is logic. We need to listen to the source.
+                    // If source is Gate/Square LFO, we can use a ScriptProcessor or Analyser? 
+                    // For this prototype, we'll cheat: 
+                    // If connecting Sequencer Gate -> Env Gate, we handle it in React logic via events if possible,
+                    // OR we use the audio graph. 
+                    // Let's use audio graph: connect to a gain node, and monitor it?
+                    // Too complex for single file. 
+                    // Fallback: Sequencer Logic triggers Envelope Logic directly in React state if connected.
+                    return; 
+                }
+
+                if (srcNode && dstNode) {
+                    try { srcNode.connect(dstNode); } catch(e) {}
+                }
+            }
+
+            disconnectAll() {
+                if(!this.ctx) return;
+                this.nodes.forEach(n => {
+                    // Do NOT disconnect n.core if it's different from n.main (internal wiring)
+                    // Only disconnect the nodes that connect to OTHER modules
+                    
+                    // If core IS main (like VCF/VCA), it gets disconnected by main check below.
+                    // If core connects to main (Osc/LFO), we MUST keep core->main connection.
+                    
+                    if (n.main && n.main.disconnect) n.main.disconnect();
+                    if (n.outputs) Object.values(n.outputs).forEach(o => o.disconnect());
+                });
+            }
+        }
+
+        // --- React Components ---
+
+        const { useState, useEffect, useRef, useLayoutEffect, useMemo } = React;
+
+        function Knob({ label, value, onChange }) {
+            const [dragging, setDragging] = useState(false);
+            const [startY, setStartY] = useState(0);
+            const [startVal, setStartVal] = useState(0);
+
+            const handleMouseDown = (e) => {
+                e.stopPropagation();
+                setDragging(true);
+                setStartY(e.clientY);
+                setStartVal(value);
+            };
+
+            useEffect(() => {
+                const handleMouseMove = (e) => {
+                    if (!dragging) return;
+                    const delta = startY - e.clientY;
+                    // sensitivity 
+                    const change = delta * 0.005; 
+                    let newVal = Math.max(0, Math.min(1, startVal + change));
+                    onChange(newVal);
                 };
-            }).filter(Boolean);
 
-            // Create connections with updated module IDs
-            const newConnections = defaultState.connections.map(connectionData => {
-                // Find modules by matching patch point names
-                const fromModuleIndex = defaultState.modules.findIndex(m =>
-                    m.patchPoints.some(p => p.id === connectionData.fromPatchId)
-                );
-                const toModuleIndex = defaultState.modules.findIndex(m =>
-                    m.patchPoints.some(p => p.id === connectionData.toPatchId)
-                );
+                const handleMouseUp = () => {
+                    setDragging(false);
+                };
 
-                if (fromModuleIndex === -1 || toModuleIndex === -1) {
-                    console.warn('Could not find modules for connection:', connectionData);
-                    return null;
+                if (dragging) {
+                    window.addEventListener('mousemove', handleMouseMove);
+                    window.addEventListener('mouseup', handleMouseUp);
                 }
+                return () => {
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [dragging, startY, startVal, onChange]);
 
-                const fromModule = newModules[fromModuleIndex];
-                const toModule = newModules[toModuleIndex];
+            // Map 0-1 to -135deg to +135deg
+            const rotation = -135 + (value * 270);
 
-                if (!fromModule || !toModule) return null;
-
-                // Find patch points by name
-                const fromPatchName = defaultState.modules[fromModuleIndex].patchPoints.find(p => p.id === connectionData.fromPatchId)?.name;
-                const toPatchName = defaultState.modules[toModuleIndex].patchPoints.find(p => p.id === connectionData.toPatchId)?.name;
-
-                if (!fromPatchName || !toPatchName) return null;
-
-                const fromPatch = fromModule.patchPoints.find(p => p.name === fromPatchName);
-                const toPatch = toModule.patchPoints.find(p => p.name === toPatchName);
-
-                if (!fromPatch || !toPatch) return null;
-
-                return createConnection(fromModule.id, fromPatch.id, toModule.id, toPatch.id);
-            }).filter(Boolean);
-
-            // Update state
-            setModules(newModules);
-            setConnections(newConnections);
+            return (
+                <div className="control-wrapper">
+                    <div 
+                        className="knob" 
+                        style={{ '--rotation': `${rotation}deg` }}
+                        onMouseDown={handleMouseDown}
+                        title={`${label}: ${(value * 100).toFixed(0)}%`}
+                    ></div>
+                    <span className="control-label">{label}</span>
+                </div>
+            );
         }
-    }, [audioEngine, modules.length]);
 
-    // Resume audio context on user interaction
-    React.useEffect(() => {
-        const resumeAudio = async () => {
-            if (audioEngine && audioEngine.audioContext && audioEngine.audioContext.state === 'suspended') {
-                try {
-                    await audioEngine.audioContext.resume();
-                    console.log('Audio context resumed');
-                } catch (error) {
-                    console.error('Failed to resume audio context:', error);
-                }
-            }
-        };
-
-        const handleInteraction = () => {
-            resumeAudio();
-            // Remove listeners after first interaction
-            document.removeEventListener('click', handleInteraction);
-            document.removeEventListener('keydown', handleInteraction);
-        };
-
-        document.addEventListener('click', handleInteraction);
-        document.addEventListener('keydown', handleInteraction);
-
-        return () => {
-            document.removeEventListener('click', handleInteraction);
-            document.removeEventListener('keydown', handleInteraction);
-        };
-    }, [audioEngine]);
-
-    // Create audio nodes when modules are added
-    React.useEffect(() => {
-        if (!audioEngine) return;
-
-        modules.forEach(module => {
-            if (!audioEngine.audioNodes.has(module.id) && !audioEngine.gainNodes.has(module.id)) {
-                audioEngine.createAudioNode(module);
-            }
-        });
-    }, [modules, audioEngine]);
-
-    // Update audio parameters when modules change
-    React.useEffect(() => {
-        if (!audioEngine) return;
-
-        modules.forEach(module => {
-            audioEngine.updateModule(module);
-        });
-    }, [modules, audioEngine]);
-
-    // Update audio connections when connections change
-    React.useEffect(() => {
-        if (!audioEngine) return;
-
-        audioEngine.updateConnections(modules, connections);
-    }, [connections, modules, audioEngine]);
-
-    /**
-     * Handle module creation from drag and drop
-     * @param {string} type - Module type
-     * @param {number} x - X position
-     * @param {number} y - Y position
-     */
-    const handleModuleDrop = useCallback((type, x, y) => {
-        try {
-            const newModule = createModule(type, x, y);
-            setModules(prev => [...prev, newModule]);
-        } catch (error) {
-            console.error('Error creating module:', error);
+        function Switch({ label, value, onChange }) {
+            return (
+                <div className="control-wrapper">
+                    <div 
+                        className={`toggle-switch ${value ? 'active' : ''}`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onChange(value ? 0 : 1);
+                        }}
+                    ></div>
+                    <span className="control-label">{label}</span>
+                </div>
+            );
         }
-    }, []);
 
-    /**
-     * Handle patch point mouse down for connections
-     * @param {string} patchPointId - ID of clicked patch point
-     */
-    const handlePatchPointMouseDown = useCallback((patchPointId) => {
-        if (!isConnecting) {
-            // Start connection
-            setIsConnecting(true);
-            setConnectionStart(patchPointId);
-        } else {
-            // Complete connection
-            if (connectionStart && connectionStart !== patchPointId) {
-                // Find modules and patch points
-                let fromModule = null;
-                let fromPatch = null;
-                let toModule = null;
-                let toPatch = null;
+        function Jack({ id, label, type, active, onMouseDown }) {
+            return (
+                <div className="io-group">
+                    <div 
+                        id={id}
+                        className={`jack ${type} ${active ? 'active' : ''}`}
+                        onMouseDown={(e) => {
+                            e.stopPropagation();
+                            onMouseDown(id, type);
+                        }}
+                        title={label}
+                    ></div>
+                    <span className="jack-label">{label}</span>
+                </div>
+            );
+        }
 
-                for (const module of modules) {
-                    const fromPatchPoint = module.patchPoints.find(p => p.id === connectionStart);
-                    const toPatchPoint = module.patchPoints.find(p => p.id === patchPointId);
+        function SequencerDisplay({ stepValues, currentStep, onStepToggle }) {
+            return (
+                <div className="step-sequencer-grid">
+                    {stepValues.map((val, idx) => (
+                        <div 
+                            key={idx}
+                            className={`step-btn ${val > 0 ? 'active' : ''} ${currentStep === idx ? 'current' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); onStepToggle(idx); }}
+                        >
+                            {idx + 1}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
 
-                    if (fromPatchPoint) {
-                        fromModule = module;
-                        fromPatch = fromPatchPoint;
+        function OscilloscopeDisplay({ moduleId, audioEngine }) {
+            const canvasRef = useRef(null);
+            
+            useEffect(() => {
+                if (!audioEngine || !audioEngine.nodes.has(moduleId)) return;
+                const nodeData = audioEngine.nodes.get(moduleId);
+                const analyser = nodeData.core;
+                if (!analyser || !canvasRef.current) return;
+
+                const ctx = canvasRef.current.getContext('2d');
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
+                let afId;
+
+                const draw = () => {
+                    analyser.getByteTimeDomainData(dataArray);
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = '#0f0';
+                    ctx.beginPath();
+                    
+                    const sliceWidth = ctx.canvas.width / bufferLength;
+                    let x = 0;
+                    for (let i = 0; i < bufferLength; i++) {
+                        const v = dataArray[i] / 128.0;
+                        const y = v * ctx.canvas.height / 2;
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                        x += sliceWidth;
                     }
-                    if (toPatchPoint) {
-                        toModule = module;
-                        toPatch = toPatchPoint;
-                    }
-                }
+                    ctx.stroke();
+                    afId = requestAnimationFrame(draw);
+                };
+                draw();
+                return () => cancelAnimationFrame(afId);
+            }, [moduleId, audioEngine]);
 
-                if (fromModule && fromPatch && toModule && toPatch) {
-                    // Validate connection (output to input)
-                    if (fromPatch.type === 'output' && toPatch.type === 'input') {
-                        const newConnection = createConnection(
-                            fromModule.id,
-                            fromPatch.id,
-                            toModule.id,
-                            toPatch.id
-                        );
-                        setConnections(prev => [...prev, newConnection]);
-                    }
-                }
-            }
-
-            setIsConnecting(false);
-            setConnectionStart(null);
-        }
-    }, [isConnecting, connectionStart, modules]);
-
-    /**
-     * Handle control value changes
-     * @param {string} controlId - ID of control
-     * @param {number} value - New value
-     */
-    const handleControlChange = useCallback((controlId, value) => {
-        setModules(prev => prev.map(module => ({
-            ...module,
-            controls: module.controls.map(control =>
-                control.id === controlId ? { ...control, value } : control
-            )
-        })));
-    }, []);
-
-    /**
-     * Handle module movement
-     * @param {string} moduleId - ID of module
-     * @param {number} x - New X position
-     * @param {number} y - New Y position
-     */
-    const handleModuleMove = useCallback((moduleId, x, y) => {
-        setModules(prev => prev.map(module =>
-            module.id === moduleId ? { ...module, x, y } : module
-        ));
-    }, []);
-
-    /**
-     * Handle connection removal
-     * @param {string} connectionId - ID of connection to remove
-     */
-    const handleConnectionRemove = useCallback((connectionId) => {
-        setConnections(prev => {
-            const newConnections = prev.filter(conn => conn.id !== connectionId);
-            // Audio connections will be updated via useEffect when connections state changes
-            return newConnections;
-        });
-    }, []);
-
-    /**
-     * Handle loading a new state from JSON
-     * @param {Object} state - State object with modules and connections
-     */
-    const handleLoadState = useCallback((state) => {
-        if (!state.modules || !state.connections) {
-            console.error('Invalid state format');
-            return;
+            return <canvas ref={canvasRef} className="oscilloscope-display" width="180" height="80" />;
         }
 
-        // Clear current audio nodes
-        if (audioEngine) {
-            modules.forEach(module => {
-                audioEngine.removeModule(module.id);
-            });
-        }
+        function Module({ data, def, selected, onMove, onChange, onJackMouseDown, extra }) {
+            const [dragging, setDragging] = useState(false);
+            const [offset, setOffset] = useState({ x: 0, y: 0 });
+            const ref = useRef(null);
 
-        // Create new modules with fresh IDs
-        const newModules = state.modules.map(moduleData => {
-            const template = MODULE_TEMPLATES[moduleData.type];
-            if (!template) {
-                console.warn(`Unknown module type: ${moduleData.type}`);
-                return null;
-            }
-
-            const moduleId = `${moduleData.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-            return {
-                id: moduleId,
-                ...template,
-                x: moduleData.x,
-                y: moduleData.y,
-                patchPoints: template.patchPoints.map((point, index) => ({
-                    ...point,
-                    id: `${moduleId}-patch-${index}`
-                })),
-                controls: moduleData.controls.map((controlData, index) => ({
-                    ...template.controls[index],
-                    id: `${moduleId}-control-${index}`,
-                    value: controlData.value
-                }))
+            const handleMouseDown = (e) => {
+                e.stopPropagation();
+                const rect = ref.current.getBoundingClientRect();
+                setOffset({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                setDragging(true);
             };
-        }).filter(Boolean);
 
-        // Create connections with updated module IDs
-        const newConnections = state.connections.map(connectionData => {
-            // Find modules by matching patch point names
-            const fromModuleIndex = state.modules.findIndex(m =>
-                m.patchPoints.some(p => p.id === connectionData.fromPatchId)
-            );
-            const toModuleIndex = state.modules.findIndex(m =>
-                m.patchPoints.some(p => p.id === connectionData.toPatchId)
-            );
+            useEffect(() => {
+                const handleMouseMove = (e) => {
+                    if (!dragging) return;
+                    const parentRect = ref.current.parentElement.getBoundingClientRect();
+                    const newX = e.clientX - parentRect.left - offset.x;
+                    const newY = e.clientY - parentRect.top - offset.y;
+                    onMove(data.id, newX, newY);
+                };
+                const handleMouseUp = () => setDragging(false);
 
-            if (fromModuleIndex === -1 || toModuleIndex === -1) {
-                console.warn('Could not find modules for connection:', connectionData);
-                return null;
-            }
-
-            const fromModule = newModules[fromModuleIndex];
-            const toModule = newModules[toModuleIndex];
-
-            if (!fromModule || !toModule) return null;
-
-            // Find patch points by name
-            const fromPatchName = state.modules[fromModuleIndex].patchPoints.find(p => p.id === connectionData.fromPatchId)?.name;
-            const toPatchName = state.modules[toModuleIndex].patchPoints.find(p => p.id === connectionData.toPatchId)?.name;
-
-            if (!fromPatchName || !toPatchName) return null;
-
-            const fromPatch = fromModule.patchPoints.find(p => p.name === fromPatchName);
-            const toPatch = toModule.patchPoints.find(p => p.name === toPatchName);
-
-            if (!fromPatch || !toPatch) return null;
-
-            return createConnection(fromModule.id, fromPatch.id, toModule.id, toPatch.id);
-        }).filter(Boolean);
-
-        // Update state
-        setModules(newModules);
-        setConnections(newConnections);
-        setIsConnecting(false);
-        setConnectionStart(null);
-    }, [audioEngine, modules]);
-
-    /**
-     * Handle drag start from module panel
-     * @param {DragEvent} e - Drag event
-     * @param {string} type - Module type
-     */
-    const handleDragStart = useCallback((e, type) => {
-        e.dataTransfer.setData('text/plain', type);
-    }, []);
-
-    /**
-     * Handle step value changes for sequencers
-     * @param {string} sequencerId - ID of the sequencer module
-     * @param {number[]} stepValues - New step values
-     */
-    const handleStepChange = useCallback((sequencerId, stepValues) => {
-        setSequencerStates(prev => ({
-            ...prev,
-            [sequencerId]: {
-                ...prev[sequencerId],
-                stepValues: stepValues
-            }
-        }));
-    }, []);
-
-    /**
-     * Handle control changes for sequencers (tempo and play/stop)
-     */
-    const handleSequencerControlChange = useCallback((controlId, value) => {
-        // Find which sequencer this control belongs to
-        const sequencerModule = modules.find(module =>
-            module.type === 'sequencer' &&
-            module.controls.some(control => control.id === controlId)
-        );
-
-        if (!sequencerModule) return;
-
-        const control = sequencerModule.controls.find(c => c.id === controlId);
-        if (!control) return;
-
-        if (control.name === 'Tempo') {
-            // Map 0-1 to 60-240 BPM
-            const tempo = 60 + (value * 180);
-            setSequencerStates(prev => ({
-                ...prev,
-                [sequencerModule.id]: {
-                    ...prev[sequencerModule.id],
-                    tempo: tempo
+                if (dragging) {
+                    window.addEventListener('mousemove', handleMouseMove);
+                    window.addEventListener('mouseup', handleMouseUp);
                 }
-            }));
-        } else if (control.name === 'Play/Stop') {
-            const isPlaying = value === 1;
-            setSequencerStates(prev => ({
-                ...prev,
-                [sequencerModule.id]: {
-                    ...prev[sequencerModule.id],
-                    isPlaying: isPlaying,
-                    currentStep: isPlaying ? prev[sequencerModule.id]?.currentStep || 0 : 0
-                }
-            }));
+                return () => {
+                    window.removeEventListener('mousemove', handleMouseMove);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                };
+            }, [dragging, offset, data.id, onMove]);
+
+            const handleControlChange = (ctrlId, val) => {
+                onChange(data.id, ctrlId, val);
+            };
+
+            return (
+                <div 
+                    className="module" 
+                    ref={ref}
+                    style={{ 
+                        left: data.x, 
+                        top: data.y, 
+                        width: def.width,
+                        zIndex: dragging ? 100 : 10
+                    }}
+                >
+                    <div className="module-header" onMouseDown={handleMouseDown}>
+                        {def.name}
+                    </div>
+                    <div className="module-body">
+                        {/* Custom Module Content */}
+                        {data.type === 'sequencer' && extra && (
+                            <SequencerDisplay 
+                                stepValues={extra.stepValues} 
+                                currentStep={extra.currentStep}
+                                onStepToggle={extra.onStepToggle}
+                            />
+                        )}
+                        {data.type === 'oscilloscope' && extra && (
+                            <OscilloscopeDisplay moduleId={data.id} audioEngine={extra.audioEngine} />
+                        )}
+
+                        {/* Controls */}
+                        <div className="controls-grid">
+                            {def.controls.map(c => {
+                                const current = data.controls.find(ctrl => ctrl.id === c.id);
+                                const val = current ? current.value : c.default;
+                                return c.type === 'switch' ? (
+                                    <Switch 
+                                        key={c.id} 
+                                        label={c.name} 
+                                        value={val} 
+                                        onChange={(v) => handleControlChange(c.id, v)} 
+                                    />
+                                ) : (
+                                    <Knob 
+                                        key={c.id} 
+                                        label={c.name} 
+                                        value={val} 
+                                        onChange={(v) => handleControlChange(c.id, v)} 
+                                    />
+                                );
+                            })}
+                        </div>
+
+                        {/* IO */}
+                        <div className="io-panel">
+                            {def.inputs.map(input => (
+                                <Jack 
+                                    key={input.id} 
+                                    id={`${data.id}-in-${input.id}`}
+                                    label={input.name} 
+                                    type="input"
+                                    onMouseDown={onJackMouseDown}
+                                />
+                            ))}
+                            <div style={{flex:1}}></div>
+                            {def.outputs.map(output => (
+                                <Jack 
+                                    key={output.id} 
+                                    id={`${data.id}-out-${output.id}`}
+                                    label={output.name} 
+                                    type="output"
+                                    onMouseDown={onJackMouseDown}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
         }
 
-        // Also update the module control value
-        handleControlChange(controlId, value);
-    }, [modules, handleControlChange]);
+        function Cable({ fromId, toId, onRemove }) {
+            const [path, setPath] = useState('');
 
-    // Sequencer timing logic
-    React.useEffect(() => {
-        const intervals = new Map();
+            // Recalculate path on every frame/render to track moving modules
+            useEffect(() => {
+                const updatePath = () => {
+                    const el1 = document.getElementById(fromId);
+                    const el2 = document.getElementById(toId);
+                    if (!el1 || !el2) return;
 
-        Object.entries(sequencerStates).forEach(([sequencerId, state]) => {
-            if (state.isPlaying && state.tempo) {
-                const intervalMs = (60 / state.tempo) * 1000; // Convert BPM to milliseconds per step
+                    // Get centers relative to container
+                    const r1 = el1.getBoundingClientRect();
+                    const r2 = el2.getBoundingClientRect();
+                    
+                    // We need relative coords to the SVG container (which fills the rack)
+                    // We assume the SVG is at 0,0 of the rack-area.
+                    // We can use the parent rack-area BBox
+                    const container = document.querySelector('.rack-area');
+                    if (!container) return;
+                    const cR = container.getBoundingClientRect();
 
-                if (!intervals.has(sequencerId)) {
-                    const interval = setInterval(() => {
-                        setSequencerStates(prev => {
-                            const currentState = prev[sequencerId];
-                            if (!currentState || !currentState.isPlaying) return prev;
+                    const x1 = r1.left - cR.left + r1.width/2;
+                    const y1 = r1.top - cR.top + r1.height/2;
+                    const x2 = r2.left - cR.left + r2.width/2;
+                    const y2 = r2.top - cR.top + r2.height/2;
 
-                            const nextStep = (currentState.currentStep + 1) % 4;
-                            const stepValue = currentState.stepValues[nextStep];
+                    const dx = Math.abs(x2 - x1);
+                    const dy = Math.abs(y2 - y1);
+                    const controlX = Math.max(dx * 0.5, 50);
+                    const controlY = Math.max(dy * 0.5, 50);
+                    
+                    // Bezier curve with some gravity/slack look
+                    // M x1 y1 C x1 y1+c, x2 y2+c, x2 y2
+                    
+                    setPath(`M ${x1} ${y1} C ${x1} ${y1 + controlY + 50}, ${x2} ${y2 + controlY + 50}, ${x2} ${y2}`);
+                };
+                
+                // Use ResizeObserver or MutationObserver? 
+                // Simpler: rAF loop for smooth updates during drag
+                let frame;
+                const loop = () => {
+                    updatePath();
+                    frame = requestAnimationFrame(loop);
+                };
+                loop();
+                return () => cancelAnimationFrame(frame);
+            }, [fromId, toId]);
 
-                            // Update CV and gate outputs
-                            if (audioEngine) {
-                                // CV output (pitch)
-                                const cvGain = audioEngine.gainNodes.get(`${sequencerId}-cv`);
-                                if (cvGain) {
-                                    cvGain.gain.value = stepValue; // 0-1 range for pitch
-                                }
+            return (
+                <path 
+                    d={path} 
+                    className="cable-path" 
+                    stroke="var(--cable-color)" 
+                    onClick={onRemove}
+                />
+            );
+        }
 
-                                // Gate output (trigger)
-                                const gateGain = audioEngine.gainNodes.get(`${sequencerId}-gate`);
-                                if (gateGain) {
-                                    gateGain.gain.value = stepValue > 0 ? 1 : 0; // Gate on/off
+        function App() {
+            const [modules, setModules] = useState([]);
+            const [cables, setCables] = useState([]);
+            const [audio, setAudio] = useState(new AudioEngine());
+            const [cableStart, setCableStart] = useState(null); // { id, type }
+            const [sequencerStates, setSequencerStates] = useState({});
+            const fileInputRef = useRef(null);
+
+            const savePatch = () => {
+                const patch = { modules, cables, sequencerStates };
+                const blob = new Blob([JSON.stringify(patch)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'synth-patch.json';
+                a.click();
+            };
+
+            const loadPatch = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const data = JSON.parse(evt.target.result);
+                        if (data.modules && data.cables) {
+                            // Re-create audio nodes
+                            data.modules.forEach(m => audio.createModule(m));
+                            
+                            setModules(data.modules);
+                            setCables(data.cables);
+                            if (data.sequencerStates) setSequencerStates(data.sequencerStates);
+                        }
+                    } catch (err) {
+                        alert('Failed to load patch');
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = ''; // Reset
+            };
+
+            // Init Audio
+            useEffect(() => {
+                const init = async () => {
+                    await audio.init();
+                    loadDefaultPatch();
+                };
+                // User gesture required for AudioContext usually
+                const onClick = () => {
+                    init();
+                    document.removeEventListener('click', onClick);
+                };
+                document.addEventListener('click', onClick);
+            }, []);
+
+            // Audio Graph Sync
+            useEffect(() => {
+                // When cables change, update connections
+                // Simplest strategy: Rebuild connections
+                if (!audio.initialized) return;
+                
+                // We don't disconnect everything blindly to avoid glitches, 
+                // but for this prototype, we just ensure connections exist.
+                // Actually, the AudioEngine disconnectAll is aggressive. 
+                // Let's just try to connect new ones.
+                
+                // BETTER: The AudioEngine should expose a method to 'sync' topology
+                // or we just call connect() for every cable. WebAudio allows multi-connection.
+                // Disconnecting specific old ones is hard without tracking.
+                // Let's rely on disconnectAll() then reconnectAll() for correctness, 
+                // accepting minor glitch on patching.
+                
+                audio.disconnectAll();
+                
+                // Reconnect internal
+                modules.forEach(m => audio.updateModule(m));
+                
+                cables.forEach(c => {
+                    // Parse IDs: "modId-type-portId"
+                    // ex: "osc1-out-out", "filter1-in-in"
+                    const parse = (str) => {
+                        const parts = str.split('-');
+                        // Structure: moduleId-[in/out]-portId
+                        // But moduleId might contain dashes. 
+                        // We generated jack IDs as `${data.id}-in-${input.id}`
+                        // So we split by '-in-' or '-out-'
+                        let modId, portId;
+                        if (str.includes('-in-')) {
+                            [modId, portId] = str.split('-in-');
+                        } else {
+                            [modId, portId] = str.split('-out-');
+                        }
+                        return { modId, portId };
+                    };
+                    
+                    const src = parse(c.from);
+                    const dst = parse(c.to);
+                    
+                    audio.connect(src.modId, src.portId, dst.modId, dst.portId);
+                });
+                
+            }, [cables, audio.initialized]);
+
+            // Module Parameter Sync
+            useEffect(() => {
+                if(!audio.initialized) return;
+                modules.forEach(m => audio.updateModule(m));
+            }, [modules, audio.initialized]);
+
+            // Sequencer Logic Loop
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    // Iterate all sequencers
+                    const now = audio.ctx ? audio.ctx.currentTime : 0;
+                    
+                    setSequencerStates(prev => {
+                        const next = { ...prev };
+                        let changed = false;
+
+                        modules.filter(m => m.type === 'sequencer').forEach(seq => {
+                            const state = next[seq.id] || { stepValues: [0,0,0,0], currentStep: 0, lastTime: 0 };
+                            const runCtrl = seq.controls.find(c => c.id === 'run');
+                            const isRunning = runCtrl ? runCtrl.value : 0;
+                            
+                            if (isRunning) {
+                                const tempoCtrl = seq.controls.find(c => c.id === 'tempo');
+                                const tempo = 60 + (tempoCtrl ? tempoCtrl.value : 0.5) * 180; // 60-240
+                                const beatTime = 60 / tempo;
+                                
+                                if (now - state.lastTime >= beatTime) {
+                                    state.currentStep = (state.currentStep + 1) % 4;
+                                    state.lastTime = now;
+                                    
+                                    // Trigger output
+                                    // Map step value (0 or 1) to CV?
+                                    // Actually, let's make step buttons toggles for Gate, 
+                                    // and maybe they have a value?
+                                    // Simplified: Steps are ON/OFF (gate). CV is flat?
+                                    // Or Steps have pitch? We only have buttons.
+                                    // Let's assume buttons are Gate ON. CV is... random? or fixed?
+                                    // Let's make buttons toggle Gate. CV = 0.
+                                    // Wait, typical simple sequencers have knobs per step.
+                                    // We simplified to buttons.
+                                    // Let's say buttons are Gate. 
+                                    // Audio Engine needs update.
+                                    
+                                    const gate = state.stepValues[state.currentStep] ? 1 : 0;
+                                    audio.updateSequencer(seq.id, 0, gate);
+                                    
+                                    // Check connections to Envelopes (Logic Bridge)
+                                    // Find cables from this sequencer Gate output to Envelopes
+                                    cables.forEach(c => {
+                                        if (c.from.includes(`${seq.id}-out-gate`)) {
+                                            // Find dest
+                                            if (c.to.includes('gate')) {
+                                                // Trigger envelope
+                                                const [destId] = c.to.split('-in-');
+                                                audio.triggerEnvelope(destId, gate);
+                                            }
+                                        }
+                                    });
+                                    
+                                    changed = true;
                                 }
                             }
-
-                            return {
-                                ...prev,
-                                [sequencerId]: {
-                                    ...currentState,
-                                    currentStep: nextStep
-                                }
-                            };
+                            next[seq.id] = state;
                         });
-                    }, intervalMs);
+                        
+                        return changed ? next : prev;
+                    });
+                }, 50);
+                return () => clearInterval(interval);
+            }, [modules, cables, audio]);
 
-                    intervals.set(sequencerId, interval);
+
+            const addModule = (type, x = 100, y = 100) => {
+                const def = MODULE_DEFINITIONS[type];
+                const id = type + '_' + Date.now();
+                
+                const newMod = {
+                    id,
+                    type,
+                    x, y,
+                    controls: def.controls.map(c => ({ id: c.id, value: c.default }))
+                };
+                
+                setModules(prev => [...prev, newMod]);
+                audio.createModule(newMod);
+            };
+
+            const loadDefaultPatch = () => {
+                // Clear existing
+                setModules([]);
+                setCables([]);
+                
+                // Create Basic Patch: Osc -> VCF -> VCA -> Out
+                // Plus Envelope -> VCA
+                
+                // We need to wait for state update cycles or just build state object
+                // Batching...
+                
+                const m1 = { id: 'osc1', type: 'oscillator', x: 50, y: 50, controls: [{id:'freq', value:0.3}, {id:'wave', value:0.5}] };
+                const m2 = { id: 'filter1', type: 'vcf', x: 250, y: 50, controls: [{id:'cutoff', value:0.5}, {id:'res', value:0.2}] };
+                const m3 = { id: 'vca1', type: 'vca', x: 450, y: 50, controls: [{id:'level', value:0.0}] };
+                const m4 = { id: 'out1', type: 'output', x: 650, y: 100, controls: [{id:'vol', value:0.8}] };
+                const m5 = { id: 'env1', type: 'envelope', x: 450, y: 250, controls: [{id:'a', value:0.01}, {id:'d', value:0.2}, {id:'s', value:0.5}, {id:'r', value:0.5}] };
+                const m6 = { id: 'seq1', type: 'sequencer', x: 50, y: 250, controls: [{id:'tempo', value:0.5}, {id:'run', value:1}] };
+                
+                // Register in Audio Engine
+                [m1,m2,m3,m4,m5,m6].forEach(m => audio.createModule(m));
+                
+                setModules([m1,m2,m3,m4,m5,m6]);
+                setSequencerStates({
+                    'seq1': { stepValues: [1,0,1,0], currentStep: 0, lastTime: 0 }
+                });
+
+                // Connections
+                const c1 = { from: 'osc1-out-out', to: 'filter1-in-in', id: 'c1' };
+                const c2 = { from: 'filter1-out-out', to: 'vca1-in-in', id: 'c2' };
+                const c3 = { from: 'vca1-out-out', to: 'out1-in-in', id: 'c3' };
+                const c4 = { from: 'env1-out-out', to: 'vca1-in-cv', id: 'c4' };
+                const c5 = { from: 'seq1-out-gate', to: 'env1-in-gate', id: 'c5' };
+                
+                setCables([c1, c2, c3, c4, c5]);
+            };
+
+            const handleMove = (id, x, y) => {
+                setModules(prev => prev.map(m => m.id === id ? { ...m, x, y } : m));
+            };
+
+            const handleChange = (modId, ctrlId, val) => {
+                setModules(prev => prev.map(m => {
+                    if (m.id !== modId) return m;
+                    const newCtrls = m.controls.map(c => c.id === ctrlId ? { ...c, value: val } : c);
+                    return { ...m, controls: newCtrls };
+                }));
+            };
+
+            const handleJackDown = (id, type) => {
+                if (!cableStart) {
+                    setCableStart({ id, type });
+                } else {
+                    if (cableStart.id === id) {
+                        setCableStart(null); // Cancel
+                        return;
+                    }
+                    if (cableStart.type === type) {
+                        // Can't connect input to input
+                        setCableStart({ id, type }); // Switch start point
+                        return;
+                    }
+                    
+                    // Create Connection
+                    const from = cableStart.type === 'output' ? cableStart.id : id;
+                    const to = cableStart.type === 'input' ? cableStart.id : id;
+                    
+                    setCables(prev => [...prev, { from, to, id: Date.now() }]);
+                    setCableStart(null);
                 }
-            } else {
-                // Stop playing
-                const interval = intervals.get(sequencerId);
-                if (interval) {
-                    clearInterval(interval);
-                    intervals.delete(sequencerId);
+            };
+            
+            const handleSequencerStep = (seqId, idx) => {
+                setSequencerStates(prev => {
+                    const st = prev[seqId] || { stepValues: [0,0,0,0], currentStep:0 };
+                    const newVals = [...st.stepValues];
+                    newVals[idx] = newVals[idx] ? 0 : 1;
+                    return { ...prev, [seqId]: { ...st, stepValues: newVals } };
+                });
+            };
+
+            // Drag from sidebar
+            const handleDragStart = (e, type) => {
+                e.dataTransfer.setData('type', type);
+            };
+            
+            const handleDrop = (e) => {
+                e.preventDefault();
+                const type = e.dataTransfer.getData('type');
+                if (type) {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    addModule(type, e.clientX - rect.left, e.clientY - rect.top);
                 }
-            }
-        });
+            };
 
-        // Cleanup intervals on unmount
-        return () => {
-            intervals.forEach(interval => clearInterval(interval));
-        };
-    }, [sequencerStates, audioEngine]);
+            return (
+                <div className="container">
+                    <div className="module-panel">
+                        <h2>Modules</h2>
+                        {Object.entries(MODULE_DEFINITIONS).map(([key, def]) => (
+                            <div 
+                                key={key} 
+                                className="module-item" 
+                                draggable 
+                                onDragStart={(e) => handleDragStart(e, key)}
+                            >
+                                {def.name}
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="rack">
+                        <div className="rack-header">
+                            <h2>Rack</h2>
+                            <div className="controls">
+                                <button className="btn" onClick={savePatch}>Save</button>
+                                <button className="btn" onClick={() => fileInputRef.current.click()}>Load</button>
+                                <input 
+                                    type="file" 
+                                    ref={fileInputRef} 
+                                    style={{display:'none'}} 
+                                    accept=".json" 
+                                    onChange={loadPatch} 
+                                />
+                                <button className="btn" onClick={() => { setModules([]); setCables([]); }}>Clear</button>
+                                <button className="btn" onClick={loadDefaultPatch}>Reset to Default</button>
+                                <div style={{color:'#666', fontSize:'0.8rem', display:'flex', alignItems:'center', marginLeft:'10px'}}>
+                                    {cableStart ? 'Select destination...' : 'Click jack to patch'}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="rack-area" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+                            <svg className="cables-layer">
+                                {cables.map(c => (
+                                    <Cable 
+                                        key={c.id} 
+                                        fromId={c.from} 
+                                        toId={c.to} 
+                                        onRemove={() => setCables(prev => prev.filter(x => x.id !== c.id))} 
+                                    />
+                                ))}
+                                {cableStart && (
+                                    // Visual line for pending connection could go here
+                                    // For now, simpler UI is fine
+                                    null
+                                )}
+                            </svg>
+                            
+                            {modules.map(m => (
+                                <Module 
+                                    key={m.id} 
+                                    data={m} 
+                                    def={MODULE_DEFINITIONS[m.type]} 
+                                    onMove={handleMove}
+                                    onChange={handleChange}
+                                    onJackMouseDown={handleJackDown}
+                                    extra={
+                                        m.type === 'sequencer' ? { 
+                                            stepValues: (sequencerStates[m.id] || {stepValues:[0,0,0,0]}).stepValues,
+                                            currentStep: (sequencerStates[m.id] || {}).currentStep,
+                                            onStepToggle: (idx) => handleSequencerStep(m.id, idx)
+                                        } : m.type === 'oscilloscope' ? {
+                                            audioEngine: audio
+                                        } : null
+                                    }
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
 
-    // Initialize sequencer states when modules are created
-    React.useEffect(() => {
-        const sequencerModules = modules.filter(module => module.type === 'sequencer');
-
-        setSequencerStates(prev => {
-            const newStates = { ...prev };
-
-            sequencerModules.forEach(module => {
-                if (!newStates[module.id]) {
-                    newStates[module.id] = {
-                        stepValues: [0.5, 0, 0.3, 0], // Default step values
-                        currentStep: 0,
-                        isPlaying: false,
-                        tempo: 120
-                    };
-                }
-
-                // Create CV and gate output nodes
-                if (audioEngine && !audioEngine.gainNodes.has(`${module.id}-cv`)) {
-                    const cvGain = audioEngine.audioContext.createGain();
-                    cvGain.gain.value = 0;
-                    audioEngine.gainNodes.set(`${module.id}-cv`, cvGain);
-
-                    const gateGain = audioEngine.audioContext.createGain();
-                    gateGain.gain.value = 0;
-                    audioEngine.gainNodes.set(`${module.id}-gate`, gateGain);
-                }
-            });
-
-            return newStates;
-        });
-    }, [modules, audioEngine]);
-
-    return (
-        <div className="container">
-            <ModulePanel onDragStart={handleDragStart} />
-            <Rack
-                modules={modules}
-                connections={connections}
-                onDrop={handleModuleDrop}
-                onPatchPointMouseDown={handlePatchPointMouseDown}
-                onControlChange={handleControlChange}
-                onSequencerControlChange={handleSequencerControlChange}
-                onModuleMove={handleModuleMove}
-                onConnectionRemove={handleConnectionRemove}
-                isConnecting={isConnecting}
-                connectionStartId={connectionStart}
-                onLoadState={handleLoadState}
-                sequencerStates={sequencerStates}
-                onStepChange={handleStepChange}
-                audioEngine={audioEngine}
-            />
-        </div>
-    );
-}
-
-// Render the React app
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
