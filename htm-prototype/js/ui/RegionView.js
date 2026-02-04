@@ -31,13 +31,10 @@ console.log('Loading RegionView.js');
         }
 
         if (isSelected) classes.push('selected');
+        if (isRelated) classes.push('related');
 
         let style = {};
-        if (isSelected) {
-            style = { ring: '2px solid white', transform: 'scale(1.15)', zIndex: 10, position: 'relative' };
-        } else if (isRelated) {
-            style = { ring: '1px dashed #22d3ee', background: 'rgba(34, 211, 238, 0.4)', zIndex: 5, position: 'relative' };
-        } else if (isFocusCol) {
+        if (isFocusCol && !isSelected && !isRelated) {
             style = { border: '1px solid rgba(255,255,255,0.1)' };
         }
 

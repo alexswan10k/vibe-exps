@@ -73,9 +73,11 @@
                                 y1: bitCenter.y,
                                 x2: colCenter.x,
                                 y2: colCenter.y,
-                                stroke: 'rgba(34, 211, 238, 0.4)', // Cyan
-                                strokeWidth: isFocused ? 2 : 0.5,
-                                strokeDasharray: isFocused ? '' : '2 2'
+                                stroke: isFocused ? 'rgba(34, 211, 238, 0.9)' : 'rgba(34, 211, 238, 0.1)', // Cyan
+                                strokeWidth: isFocused ? 2.5 : 0.5,
+                                strokeDasharray: isFocused ? '4 2' : '2 2',
+                                filter: isFocused ? 'url(#glow-cyan)' : 'none',
+                                className: isFocused ? 'conn-flow' : ''
                             }));
                         }
                     }
@@ -108,8 +110,10 @@
                                         key: `distal-${cIdx}-${cellIdx}-${sourceCell.column.index}-${sourceCell.index}`,
                                         d: `M ${sourceCenter.x} ${sourceCenter.y} Q ${midX} ${midY} ${targetCenter.x} ${targetCenter.y}`,
                                         fill: 'none',
-                                        stroke: 'rgba(168, 85, 247, 0.4)', // Purple
-                                        strokeWidth: isFocused ? 1.5 : 0.3,
+                                        stroke: isFocused ? 'rgba(168, 85, 247, 0.9)' : 'rgba(168, 85, 247, 0.1)', // Purple
+                                        strokeWidth: isFocused ? 2 : 0.3,
+                                        filter: isFocused ? 'url(#glow-purple)' : 'none',
+                                        className: isFocused ? 'conn-flow' : '',
                                         opacity: isFocused ? 1 : 0.5
                                     }));
                                 }
@@ -148,7 +152,20 @@
             ref: svgRef,
             className: 'absolute inset-0 pointer-events-none w-full h-full z-0',
             style: { height: '100%', pointerEvents: 'none', overflow: 'visible' }
-        }, lines);
+        },
+            // SVG Filters for Glow
+            h('defs', null,
+                h('filter', { id: 'glow-cyan', x: '-50%', y: '-50%', width: '200%', height: '200%' },
+                    h('feGaussianBlur', { stdDeviation: '2', result: 'blur' }),
+                    h('feComposite', { in: 'SourceGraphic', in2: 'blur', operator: 'over' })
+                ),
+                h('filter', { id: 'glow-purple', x: '-50%', y: '-50%', width: '200%', height: '200%' },
+                    h('feGaussianBlur', { stdDeviation: '2', result: 'blur' }),
+                    h('feComposite', { in: 'SourceGraphic', in2: 'blur', operator: 'over' })
+                )
+            ),
+            lines
+        );
     }
 
     window.ConnectionLines = ConnectionLines;
