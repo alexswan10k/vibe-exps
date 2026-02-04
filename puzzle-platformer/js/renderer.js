@@ -7,6 +7,21 @@ class Renderer {
         window.addEventListener('resize', () => this.resize());
 
         this.camera = { x: 0, y: 0 };
+        this.trauma = 0;
+
+        window.addEventListener('shake', (e) => {
+            this.addTrauma(e.detail.amount || 0.5);
+        });
+    }
+
+    addTrauma(amount) {
+        this.trauma = Math.min(this.trauma + amount, 1.0);
+    }
+
+    update(dt) {
+        if (this.trauma > 0) {
+            this.trauma = Math.max(0, this.trauma - dt * 1.5);
+        }
     }
 
     resize() {
@@ -39,8 +54,18 @@ class Renderer {
     }
 
     setCamera(x, y) {
-        this.camera.x = x;
-        this.camera.y = y;
+        let shakeX = 0;
+        let shakeY = 0;
+
+        if (this.trauma > 0) {
+            const shake = this.trauma * this.trauma;
+            const maxShake = 20;
+            shakeX = maxShake * shake * (Math.random() * 2 - 1);
+            shakeY = maxShake * shake * (Math.random() * 2 - 1);
+        }
+
+        this.camera.x = x + shakeX;
+        this.camera.y = y + shakeY;
     }
 
     drawRect(x, y, w, h, color, glow = false) {

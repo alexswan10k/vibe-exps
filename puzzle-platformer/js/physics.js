@@ -85,6 +85,8 @@ class Physics {
 
         // Reset grounded state - will be re-asserted in collision
         body.grounded = false;
+        body.touchingWall = false;
+        body.wallContact = 0;
     }
 
     resolveWorldCollisions(body) {
@@ -103,10 +105,13 @@ class Physics {
             // X collision
             if (body.x < wall.x) {
                 body.x -= overlapX;
+                body.wallContact = 1; // Wall is to the right
             } else {
                 body.x += overlapX;
+                body.wallContact = -1; // Wall is to the left
             }
             body.vx = 0;
+            body.touchingWall = true;
         } else {
             // Y collision
             if (body.y < wall.y) {

@@ -20,6 +20,21 @@ class Game {
             this.updateScore();
         });
 
+        window.addEventListener('particles-emit', (e) => {
+            if (this.particleSystem)
+                this.particleSystem.emit(e.detail.x, e.detail.y, e.detail.count, e.detail.color);
+        });
+
+        window.addEventListener('puzzle-trigger', (e) => {
+            if (this.level && this.level.entities) {
+                for (const ent of this.level.entities) {
+                    if (ent.type === 'door' && ent.id === e.detail.id) {
+                        ent.open();
+                    }
+                }
+            }
+        });
+
         this.entities = [];
     }
 
@@ -103,13 +118,17 @@ class Game {
 
     update(dt) {
         // Update Level (Generation)
-        this.level.update(this.player.x);
+        this.level.update(this.player.x, dt);
 
         // Update Player
         this.player.update(dt, this.input);
 
         // Update Physics
         this.physics.update(dt);
+
+        if (this.particleSystem) {
+            this.particleSystem.update(dt);
+        }
 
         // Camera Follow
         // Lerp camera towards player
@@ -132,6 +151,7 @@ class Game {
     }
 
     draw() {
+        this.renderer.update(1 / 60);
         this.renderer.clear();
         this.renderer.drawLevel(this.level);
 
@@ -142,8 +162,14 @@ class Game {
             }
         }
 
+        if (this.particleSystem) {
+            this.particleSystem.draw(this.renderer);
+        }
+
         this.renderer.drawPlayer(this.player);
     }
+
+
 
     updateScore() {
         this.scoreDisplay.innerText = `Range: ${this.score}m`;
