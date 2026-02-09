@@ -4,7 +4,7 @@ class SimplePointerLockControls {
         this.camera = camera;
         this.domElement = domElement;
         this.isLocked = false;
-        
+
         this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
         this.PI_2 = Math.PI / 2;
         this.minPolarAngle = 0;
@@ -61,6 +61,13 @@ class SimplePointerLockControls {
     onPointerLockError() { console.error('PointerLockControls: Error'); }
     lock() { this.domElement.requestPointerLock(); }
     unlock() { document.exitPointerLock(); }
+    rotate(movementX, movementY) {
+        this.euler.setFromQuaternion(this.camera.quaternion);
+        this.euler.y -= movementX * 0.002;
+        this.euler.x -= movementY * 0.002;
+        this.euler.x = Math.max(this.PI_2 - this.maxPolarAngle, Math.min(this.PI_2 - this.minPolarAngle, this.euler.x));
+        this.camera.quaternion.setFromEuler(this.euler);
+    }
     moveForward(distance) {
         const vec = new THREE.Vector3();
         vec.setFromMatrixColumn(this.camera.matrix, 0);
@@ -88,15 +95,15 @@ class SimplePointerLockControls {
 class Perlin {
     constructor() {
         this.p = new Uint8Array(512);
-        const p = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
-        190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,
-        68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
-        102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,
-        173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
-        223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,
-        178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,
-        214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,
-        195,78,66,215,61,156,180];
+        const p = [151, 160, 137, 91, 90, 15, 131, 13, 201, 95, 96, 53, 194, 233, 7, 225, 140, 36, 103, 30, 69, 142, 8, 99, 37, 240, 21, 10, 23,
+            190, 6, 148, 247, 120, 234, 75, 0, 26, 197, 62, 94, 252, 219, 203, 117, 35, 11, 32, 57, 177, 33, 88, 237, 149, 56, 87, 174, 20, 125, 136, 171, 168,
+            68, 175, 74, 165, 71, 134, 139, 48, 27, 166, 77, 146, 158, 231, 83, 111, 229, 122, 60, 211, 133, 230, 220, 105, 92, 41, 55, 46, 245, 40, 244,
+            102, 143, 54, 65, 25, 63, 161, 1, 216, 80, 73, 209, 76, 132, 187, 208, 89, 18, 169, 200, 196, 135, 130, 116, 188, 159, 86, 164, 100, 109, 198,
+            173, 186, 3, 64, 52, 217, 226, 250, 124, 123, 5, 202, 38, 147, 118, 126, 255, 82, 85, 212, 207, 206, 59, 227, 47, 16, 58, 17, 182, 189, 28, 42,
+            223, 183, 170, 213, 119, 248, 152, 2, 44, 154, 163, 70, 221, 153, 101, 155, 167, 43, 172, 9, 129, 22, 39, 253, 19, 98, 108, 110, 79, 113, 224, 232,
+            178, 185, 112, 104, 218, 246, 97, 228, 251, 34, 242, 193, 238, 210, 144, 12, 191, 179, 162, 241, 81, 51, 145, 235, 249, 14, 239, 107, 49, 192,
+            214, 31, 181, 199, 106, 157, 184, 84, 204, 176, 115, 121, 50, 45, 127, 4, 150, 254, 138, 236, 205, 93, 222, 114, 67, 29, 24, 72, 243, 141, 128,
+            195, 78, 66, 215, 61, 156, 180];
         for (let i = 0; i < 256; i++) { this.p[i] = p[i]; this.p[i + 256] = p[i]; }
     }
     fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
@@ -158,7 +165,9 @@ const moveState = { forward: false, backward: false, left: false, right: false }
 const velocity = new THREE.Vector3();
 const direction = new THREE.Vector3();
 let prevTime = performance.now();
+
 let isLocked = false;
+let isTouchActive = false;
 let activeBlockIndex = 0;
 
 // Physics
@@ -193,7 +202,7 @@ class Mob {
         this.direction = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
         this.moveTimer = 0;
         this.isMoving = false;
-        
+
         // Mesh
         const geometry = new THREE.BoxGeometry(this.type.scale, this.type.scale, this.type.scale);
         const material = new THREE.MeshLambertMaterial({ color: this.type.color });
@@ -229,26 +238,26 @@ class Mob {
         }
 
         // Physics/Collision
-        const subDelta = delta; 
-        
+        const subDelta = delta;
+
         // X Movement
         this.position.x += this.velocity.x * subDelta;
-        if (checkEntityCollision(this.position, this.type.scale/2, this.type.height, false)) {
-             this.position.x -= this.velocity.x * subDelta;
-             // Try to jump if blocked
-             if (this.velocity.y === 0) this.velocity.y = JUMP_SPEED * 0.6;
+        if (checkEntityCollision(this.position, this.type.scale / 2, this.type.height, false)) {
+            this.position.x -= this.velocity.x * subDelta;
+            // Try to jump if blocked
+            if (this.velocity.y === 0) this.velocity.y = JUMP_SPEED * 0.6;
         }
 
         // Z Movement
         this.position.z += this.velocity.z * subDelta;
-        if (checkEntityCollision(this.position, this.type.scale/2, this.type.height, false)) {
-             this.position.z -= this.velocity.z * subDelta;
-             if (this.velocity.y === 0) this.velocity.y = JUMP_SPEED * 0.6;
+        if (checkEntityCollision(this.position, this.type.scale / 2, this.type.height, false)) {
+            this.position.z -= this.velocity.z * subDelta;
+            if (this.velocity.y === 0) this.velocity.y = JUMP_SPEED * 0.6;
         }
 
         // Y Movement
         this.position.y += this.velocity.y * subDelta;
-        if (checkEntityCollision(this.position, this.type.scale/2, this.type.height, true)) {
+        if (checkEntityCollision(this.position, this.type.scale / 2, this.type.height, true)) {
             if (this.velocity.y < 0) { // Hit floor
                 // Push out logic could be better but this works for simple AI
                 this.position.y -= this.velocity.y * subDelta;
@@ -258,7 +267,7 @@ class Mob {
                 this.velocity.y = 0;
             }
         }
-        
+
         // Despawn/Limit logic
         if (this.position.y < -30) {
             this.velocity.y = 0;
@@ -283,7 +292,7 @@ class Chunk {
         this.instancedMeshes = []; // Array of InstancedMesh
         this.dirty = false;
         this.activeMobs = [];
-        
+
         this.generate();
         this.build();
     }
@@ -291,16 +300,16 @@ class Chunk {
     generate() {
         const scale = 0.03;
         const SEA_LEVEL = 4;
-        
+
         for (let x = 0; x < CHUNK_SIZE; x++) {
             for (let z = 0; z < CHUNK_SIZE; z++) {
                 const wx = this.cx * CHUNK_SIZE + x;
                 const wz = this.cz * CHUNK_SIZE + z;
-                
+
                 // Height Noise
                 const n = perlin.noise(wx * scale, wz * scale, 0);
                 const h = Math.floor((n + 1) * 0.5 * CHUNK_HEIGHT_SCALE); // 0 to 20 height
-                
+
                 // Fill Column
                 for (let y = -5; y <= Math.max(h, SEA_LEVEL); y++) {
                     let type = null;
@@ -337,16 +346,16 @@ class Chunk {
                         const treeHeight = 3 + Math.floor(Math.random() * 2);
                         // Trunk
                         for (let i = 1; i <= treeHeight; i++) {
-                            this.blocks.set(`${x},${h+i},${z}`, BLOCK_TYPES.WOOD);
+                            this.blocks.set(`${x},${h + i},${z}`, BLOCK_TYPES.WOOD);
                         }
                         // Leaves (Simple top)
-                        this.blocks.set(`${x},${h+treeHeight+1},${z}`, BLOCK_TYPES.LEAVES);
-                        this.blocks.set(`${x+1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
-                        this.blocks.set(`${x-1},${h+treeHeight},${z}`, BLOCK_TYPES.LEAVES);
-                        this.blocks.set(`${x},${h+treeHeight},${z+1}`, BLOCK_TYPES.LEAVES);
-                        this.blocks.set(`${x},${h+treeHeight},${z-1}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x},${h + treeHeight + 1},${z}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x + 1},${h + treeHeight},${z}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x - 1},${h + treeHeight},${z}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x},${h + treeHeight},${z + 1}`, BLOCK_TYPES.LEAVES);
+                        this.blocks.set(`${x},${h + treeHeight},${z - 1}`, BLOCK_TYPES.LEAVES);
                     }
-                    
+
                     // Mobs
                     if (Math.random() > 0.99) {
                         const r = Math.random();
@@ -366,14 +375,14 @@ class Chunk {
 
         // Sort blocks by type to create instanced meshes
         const blocksByType = Array.from({ length: COLOR_PALETTE.length }, () => []);
-        
+
         for (const [key, type] of this.blocks) {
             if (blocksByType[type] !== undefined) {
                 const parts = key.split(',');
                 const x = parseInt(parts[0]);
                 const y = parseInt(parts[1]);
                 const z = parseInt(parts[2]);
-                blocksByType[type].push({x, y, z});
+                blocksByType[type].push({ x, y, z });
             }
         }
 
@@ -397,10 +406,10 @@ class Chunk {
             mesh.instanceMatrix.needsUpdate = true;
             mesh.castShadow = true;
             mesh.receiveShadow = true;
-            
+
             // Store type info for raycasting interaction later
             mesh.userData = { chunk: this, type: typeIndex };
-            
+
             this.instancedMeshes.push(mesh);
             chunkMeshes.add(mesh);
         });
@@ -475,10 +484,15 @@ function init() {
     });
     controls.addEventListener('unlock', () => {
         instructions.style.display = 'flex'; isLocked = false;
-        moveState.forward = false; moveState.backward = false;
-        moveState.left = false; moveState.right = false;
+        if (!isTouchActive) {
+            moveState.forward = false; moveState.backward = false;
+            moveState.left = false; moveState.right = false;
+        }
     });
     scene.add(controls.getObject());
+
+    // Touch Controls
+    initTouchControls();
 
     // Inputs
     document.addEventListener('keydown', onKeyDown);
@@ -487,12 +501,12 @@ function init() {
     window.addEventListener('resize', onWindowResize);
 
     raycaster = new THREE.Raycaster();
-    
+
     // Add chunk holder
     scene.add(chunkMeshes);
 
     setupUI();
-    
+
     // Initial World Load
     updateChunks();
 }
@@ -501,17 +515,17 @@ function init() {
 function updateChunks() {
     const px = controls.getObject().position.x;
     const pz = controls.getObject().position.z;
-    
+
     const currentCx = Math.floor(px / CHUNK_SIZE);
     const currentCz = Math.floor(pz / CHUNK_SIZE);
 
     const activeKeys = new Set();
-    
+
     for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) {
         for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
             const key = `${currentCx + x},${currentCz + z}`;
             activeKeys.add(key);
-            
+
             if (!chunks.has(key)) {
                 const chunk = new Chunk(currentCx + x, currentCz + z);
                 chunks.set(key, chunk);
@@ -535,7 +549,7 @@ function getBlockGlobal(x, y, z) {
     const cx = Math.floor(ix / CHUNK_SIZE);
     const cz = Math.floor(iz / CHUNK_SIZE);
     const key = `${cx},${cz}`;
-    
+
     const chunk = chunks.get(key);
     if (!chunk) return undefined;
 
@@ -552,7 +566,7 @@ function setBlockGlobal(x, y, z, type) {
     const cx = Math.floor(ix / CHUNK_SIZE);
     const cz = Math.floor(iz / CHUNK_SIZE);
     const key = `${cx},${cz}`;
-    
+
     const chunk = chunks.get(key);
     if (chunk) {
         let rx = ix - (cx * CHUNK_SIZE);
@@ -563,18 +577,18 @@ function setBlockGlobal(x, y, z, type) {
 
 // Generalized Collision Detection
 function checkEntityCollision(pos, radius, height, checkLegs = true) {
-    const r = radius; 
+    const r = radius;
     const h = height;
-    
+
     // AABB Bounds
     const minX = pos.x - r;
     const maxX = pos.x + r;
     const minZ = pos.z - r;
     const maxZ = pos.z + r;
-    
+
     // Y Bounds
     // Step Height increased to 0.5 (knee) to prevent floor sticking
-    const stepHeight = 0.5; 
+    const stepHeight = 0.5;
     const minY = (pos.y - h) + (checkLegs ? 0 : stepHeight);
     const maxY = pos.y;
 
@@ -611,7 +625,7 @@ function animate() {
     const time = performance.now();
     let delta = Math.min((time - prevTime) / 1000, 0.1);
     prevTime = time;
-    
+
     // Chunk updates
     if (time - lastChunkUpdate > 200) {
         updateChunks();
@@ -623,22 +637,22 @@ function animate() {
         chunk.update(delta);
     }
 
-    if (isLocked) {
+    if (isLocked || isTouchActive) {
         // Apply Forces
         velocity.x -= velocity.x * 10.0 * delta;
         velocity.z -= velocity.z * 10.0 * delta;
-        velocity.y -= GRAVITY * delta; 
+        velocity.y -= GRAVITY * delta;
 
         direction.z = Number(moveState.forward) - Number(moveState.backward);
         direction.x = Number(moveState.right) - Number(moveState.left);
-        direction.normalize(); 
+        direction.normalize();
 
         if (moveState.forward || moveState.backward) velocity.z -= direction.z * MOVE_SPEED * 40.0 * delta;
         if (moveState.left || moveState.right) velocity.x -= direction.x * MOVE_SPEED * 40.0 * delta;
 
         // Sub-stepping for robust collision
         // We split the frame into small time steps to prevent tunneling
-        const steps = 5; 
+        const steps = 5;
         const subDelta = delta / steps;
 
         for (let i = 0; i < steps; i++) {
@@ -673,7 +687,7 @@ function animate() {
                 }
             }
         }
-        
+
         // World Boundary Reset
         if (controls.getObject().position.y < -30) {
             velocity.y = 0;
@@ -684,8 +698,7 @@ function animate() {
     renderer.render(scene, camera);
 }
 
-function onMouseDown(event) {
-    if (!isLocked) return;
+function performRaycastAction(actionType) {
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     const intersects = raycaster.intersectObjects(chunkMeshes.children);
     if (intersects.length > 0) {
@@ -697,9 +710,10 @@ function onMouseDown(event) {
         const bx = Math.round(dummy.position.x);
         const by = Math.round(dummy.position.y);
         const bz = Math.round(dummy.position.z);
-        if (event.button === 0) {
+
+        if (actionType === 'break') {
             setBlockGlobal(bx, by, bz, null);
-        } else if (event.button === 2) {
+        } else if (actionType === 'place') {
             const nx = hit.face.normal.x;
             const ny = hit.face.normal.y;
             const nz = hit.face.normal.z;
@@ -713,6 +727,165 @@ function onMouseDown(event) {
             setBlockGlobal(tx, ty, tz, activeBlockIndex);
         }
     }
+}
+
+function onMouseDown(event) {
+    if (!isLocked && !isTouchActive) return;
+    if (event.button === 0) performRaycastAction('break');
+    else if (event.button === 2) performRaycastAction('place');
+}
+
+// --- Touch Controls Logic ---
+function initTouchControls() {
+    const joystickZone = document.getElementById('joystick-zone');
+    const joystickKnob = document.getElementById('joystick-knob');
+    const lookZone = document.getElementById('touch-look-zone');
+    const btnBreak = document.getElementById('btn-break');
+    const btnPlace = document.getElementById('btn-place');
+    const btnJump = document.getElementById('btn-jump');
+    const btnToggle = document.getElementById('btn-toggle-touch');
+    const touchUI = document.getElementById('touch-controls');
+
+    // Toggle Button
+    btnToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        isTouchActive = !isTouchActive;
+        touchUI.style.display = isTouchActive ? 'block' : 'none';
+
+        if (isTouchActive) {
+            document.getElementById('instructions').style.display = 'none';
+        } else {
+            if (!isLocked) document.getElementById('instructions').style.display = 'flex';
+            moveState.forward = false;
+            moveState.backward = false;
+            moveState.left = false;
+            moveState.right = false;
+        }
+    });
+
+    // Joystick Logic
+    let joystickId = null;
+    let joystickCenter = { x: 0, y: 0 };
+
+    joystickZone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        joystickId = touch.identifier;
+        const rect = joystickZone.getBoundingClientRect();
+        joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        updateJoystick(touch.clientX, touch.clientY);
+    }, { passive: false });
+
+    joystickZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickId) {
+                updateJoystick(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                break;
+            }
+        }
+    }, { passive: false });
+
+    joystickZone.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joystickId) {
+                joystickId = null;
+                resetJoystick();
+                break;
+            }
+        }
+    }, { passive: false });
+
+    function updateJoystick(x, y) {
+        const maxDist = 35;
+        let dx = x - joystickCenter.x;
+        let dy = y - joystickCenter.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > maxDist) {
+            const ratio = maxDist / dist;
+            dx *= ratio;
+            dy *= ratio;
+        }
+
+        joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+        // Map to Move State
+        // Deadzone handled implicitly by threshold logic or just direct mapping
+        // Simple mapping:
+        const threshold = 10;
+        moveState.forward = dy < -threshold;
+        moveState.backward = dy > threshold;
+        moveState.left = dx < -threshold;
+        moveState.right = dx > threshold;
+    }
+
+    function resetJoystick() {
+        joystickKnob.style.transform = `translate(-50%, -50%)`;
+        moveState.forward = false;
+        moveState.backward = false;
+        moveState.left = false;
+        moveState.right = false;
+    }
+
+    // Look Logic
+    let lookId = null;
+    let lastLookX = 0;
+    let lastLookY = 0;
+
+    lookZone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        lookId = touch.identifier;
+        lastLookX = touch.clientX;
+        lastLookY = touch.clientY;
+    }, { passive: false });
+
+    lookZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === lookId) {
+                const dx = e.changedTouches[i].clientX - lastLookX;
+                const dy = e.changedTouches[i].clientY - lastLookY;
+                lastLookX = e.changedTouches[i].clientX;
+                lastLookY = e.changedTouches[i].clientY;
+
+                // Sensitivity multiplier
+                controls.rotate(dx * 1.5, dy * 1.5);
+                break;
+            }
+        }
+    }, { passive: false });
+
+    lookZone.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        // No reset needed for look
+    }, { passive: false });
+
+    // Buttons
+    const bindBtn = (btn, action) => {
+        btn.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent ghost clicks
+            e.stopPropagation();
+            action();
+            btn.style.transform = "scale(0.9)";
+            setTimeout(() => btn.style.transform = "scale(1)", 100);
+        }, { passive: false });
+    };
+
+    bindBtn(btnJump, () => {
+        if (canJump) { velocity.y = JUMP_SPEED; canJump = false; }
+    });
+    bindBtn(btnPlace, () => performRaycastAction('place'));
+    bindBtn(btnBreak, () => performRaycastAction('break'));
+}
+
+function onMouseDown(event) {
+    if (!isLocked && !isTouchActive) return;
+    if (event.button === 0) performRaycastAction('break');
+    else if (event.button === 2) performRaycastAction('place');
 }
 
 function setupUI() {

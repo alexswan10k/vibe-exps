@@ -1,12 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voxel Verse</title>
     <link rel="stylesheet" href="style.css">
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; }
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+        }
+
         #crosshair {
             position: absolute;
             top: 50%;
@@ -17,21 +23,35 @@
             pointer-events: none;
             mix-blend-mode: difference;
         }
-        #crosshair::before, #crosshair::after {
+
+        #crosshair::before,
+        #crosshair::after {
             content: '';
             position: absolute;
             background: white;
         }
-        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
-        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
-        
+
+        #crosshair::before {
+            top: 9px;
+            left: 0;
+            width: 20px;
+            height: 2px;
+        }
+
+        #crosshair::after {
+            top: 0;
+            left: 9px;
+            width: 2px;
+            height: 20px;
+        }
+
         #instructions {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -40,6 +60,7 @@
             cursor: pointer;
             z-index: 10;
         }
+
         #ui {
             position: absolute;
             bottom: 20px;
@@ -48,22 +69,25 @@
             text-shadow: 1px 1px 0 #000;
             pointer-events: none;
         }
+
         .block-slot {
             display: inline-block;
             width: 30px;
             height: 30px;
-            border: 2px solid rgba(255,255,255,0.5);
+            border: 2px solid rgba(255, 255, 255, 0.5);
             margin-right: 5px;
             text-align: center;
             line-height: 30px;
             font-weight: bold;
         }
+
         .block-slot.active {
             border-color: yellow;
             transform: scale(1.1);
         }
     </style>
 </head>
+
 <body>
     <div id="crosshair"></div>
     <div id="instructions">
@@ -77,10 +101,25 @@
         <div id="toolbar"></div>
     </div>
 
+    <!-- Touch Controls -->
+    <div id="touch-controls" style="display: none;">
+        <div id="joystick-zone">
+            <div id="joystick-knob"></div>
+        </div>
+        <div id="touch-buttons">
+            <div class="touch-btn" id="btn-break">🔨</div>
+            <div class="touch-btn" id="btn-place">🧱</div>
+            <div class="touch-btn" id="btn-jump">⬆️</div>
+        </div>
+        <div id="touch-look-zone"></div>
+    </div>
+    <button id="btn-toggle-touch">📱</button>
+
     <!-- Three.js Global Build (No Modules) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
+
     <!-- Game Logic -->
     <script src="script.js"></script>
 </body>
+
 </html>
