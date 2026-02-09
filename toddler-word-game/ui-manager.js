@@ -74,11 +74,11 @@ class UIManager {
 
             if (gameState === 'success') {
                 const storyBtn = document.createElement('button');
-                storyBtn.className = 'btn btn-purple';
+                storyBtn.className = 'btn-story';
                 storyBtn.disabled = isGenerating;
                 storyBtn.innerHTML = isGenerating
-                    ? '<div class="spinner"></div>'
-                    : '<i data-lucide="book-open"></i><span>Story Time!</span><i data-lucide="sparkles" class="text-yellow"></i>';
+                    ? '<div class="spinner"></div><span>Making Magic...</span>'
+                    : '<i data-lucide="book-open"></i><span>Story Time!</span><i data-lucide="sparkles"></i>';
                 storyBtn.onclick = () => this.game.generateStory();
                 actionsDiv.appendChild(storyBtn);
             }
