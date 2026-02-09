@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Beary Active 4.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            touch-action: none;
+            overflow: hidden;
+            background: #fff1f2;
+            transition: background-color 1s ease;
+        }
+
+        /* Animations */
+        @keyframes dance {
+
+            0%,
+            100% {
+                transform: rotate(0deg) translateY(0);
+            }
+
+            25% {
+                transform: rotate(-10deg) translateY(-10px);
+            }
+
+            75% {
+                transform: rotate(10deg) translateY(-5px);
+            }
+        }
+
+        .animate-dance {
+            animation: dance 0.6s ease-in-out infinite;
+        }
+
+        @keyframes breathe {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.03);
+            }
+        }
+
+        .animate-breathe {
+            animation: breathe 3s ease-in-out infinite;
+        }
+
+        /* Weather Effects */
+        .rain-drop {
+            position: absolute;
+            width: 2px;
+            height: 15px;
+            background: #60a5fa;
+            animation: rain 1s linear infinite;
+        }
+
+        @keyframes rain {
+            from {
+                transform: translateY(-20px);
+            }
+
+            to {
+                transform: translateY(100vh);
+            }
+        }
+
+        /* Floating UI */
+        .floater {
+            position: absolute;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            font-weight: 900;
+            text-shadow: 0 2px 0 rgba(255, 255, 255, 0.5);
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(0) scale(0.5);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-80px) scale(1.2);
+                opacity: 0;
+            }
+        }
+
+        .btn-press:active {
+            transform: scale(0.9);
+        }
+    </style>
+</head>
+
+<body class="h-screen w-screen flex flex-col items-center relative overflow-hidden text-slate-700">
+
+    <!-- Background Layer (Weather) -->
+    <div id="weather-layer" class="absolute inset-0 pointer-events-none z-0"></div>
+
+    <!-- HUD -->
+    <div class="w-full max-w-md p-4 z-20 flex flex-col gap-2">
+        <div
+            class="bg-white/80 backdrop-blur-md p-3 rounded-2xl shadow-sm border border-white/50 flex justify-between items-center">
+            <div class="flex flex-col w-full gap-2">
+                <!-- Compact Stat Bars -->
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold w-8 text-orange-500">FOOD</span>
+                    <div class="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
+                        <div id="bar-hunger"
+                            class="h-full bg-orange-400 rounded-full transition-all duration-500 w-full"></div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold w-8 text-blue-500">REST</span>
+                    <div class="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
+                        <div id="bar-energy" class="h-full bg-blue-400 rounded-full transition-all duration-500 w-full">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold w-8 text-pink-500">FUN</span>
+                    <div class="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
+                        <div id="bar-fun" class="h-full bg-pink-400 rounded-full transition-all duration-500 w-full">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME STAGE -->
+    <main class="relative flex-1 w-full max-w-md flex items-center justify-center z-10">
+
+        <!-- Action Popup (Toast) -->
+        <div id="toast"
+            class="absolute top-10 bg-slate-800 text-white px-4 py-2 rounded-full text-sm font-bold opacity-0 transition-opacity duration-300 pointer-events-none">
+            Welcome!
+        </div>
+
+        <!-- Bear Container -->
+        <div id="bear-container" class="relative w-72 h-72 touch-none select-none transition-transform duration-300">
+            <svg viewBox="0 0 200 200" class="w-full h-full drop-shadow-2xl overflow-visible">
+                <!-- Body Group -->
+                <g id="bear-body" transform-origin="100 150">
+                    <path d="M 60 170 C 60 120, 140 120, 140 170 C 140 190, 60 190, 60 170" fill="#8B4513" />
+                    <ellipse cx="100" cy="155" rx="25" ry="20" fill="#A0522D" opacity="0.6" />
+
+                    <!-- Arms -->
+                    <g id="arm-l" transform-origin="60 140">
+                        <ellipse cx="50" cy="140" rx="15" ry="12" fill="#8B4513" />
+                    </g>
+                    <g id="arm-r" transform-origin="140 140">
+                        <ellipse cx="150" cy="140" rx="15" ry="12" fill="#8B4513" />
+                    </g>
+
+                    <!-- Head Group (Physics) -->
+                    <g id="head-group" transform-origin="100 100">
+                        <circle cx="50" cy="50" r="22" fill="#8B4513" /> <!-- Ears -->
+                        <circle cx="150" cy="50" r="22" fill="#8B4513" />
+                        <circle cx="100" cy="90" r="55" fill="#8B4513" /> <!-- Head Base -->
+                        <ellipse cx="100" cy="105" rx="22" ry="18" fill="#DEB887" /> <!-- Muzzle -->
+                        <path d="M 95 100 L 105 100 L 100 108 Z" fill="#3E2723" /> <!-- Nose -->
+
+                        <!-- Dynamic Eyes -->
+                        <g id="eyes">
+                            <g id="eye-l" transform="translate(75, 85)">
+                                <circle r="6" fill="#1a1a1a" />
+                                <circle cx="2" cy="-2" r="2" fill="white" opacity="0.8" />
+                            </g>
+                            <g id="eye-r" transform="translate(125, 85)">
+                                <circle r="6" fill="#1a1a1a" />
+                                <circle cx="2" cy="-2" r="2" fill="white" opacity="0.8" />
+                            </g>
+                        </g>
+
+                        <!-- Dynamic Mouth -->
+                        <path id="mouth" d="M 90 115 Q 100 125 110 115" stroke="#3E2723" stroke-width="3" fill="none"
+                            stroke-linecap="round" />
+
+                        <!-- Wardrobe Layer -->
+                        <g id="hat-layer" transform="translate(0, -10)"></g>
+                        <g id="glasses-layer"></g>
+                    </g>
+                </g>
+            </svg>
+
+            <!-- Interaction Zone -->
+            <div id="touch-zone" class="absolute inset-0 rounded-full cursor-pointer"></div>
+        </div>
+    </main>
+
+    <!-- Controls -->
+    <nav
+        class="w-full max-w-md p-4 bg-white/90 backdrop-blur rounded-t-[2.5rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-20">
+
+        <!-- Main Actions -->
+        <div class="grid grid-cols-4 gap-3 mb-4">
+            <button onclick="actions.feed()" class="btn-press flex flex-col items-center gap-1">
+                <div
+                    class="w-12 h-12 bg-orange-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border-b-2 border-orange-200">
+                    🍎</div>
+                <span class="text-[9px] font-bold text-slate-500 tracking-wider">EAT</span>
+            </button>
+            <button onclick="actions.play()" class="btn-press flex flex-col items-center gap-1">
+                <div
+                    class="w-12 h-12 bg-yellow-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border-b-2 border-yellow-200">
+                    🎾</div>
+                <span class="text-[9px] font-bold text-slate-500 tracking-wider">PLAY</span>
+            </button>
+            <button onclick="actions.sleep()" class="btn-press flex flex-col items-center gap-1">
+                <div id="btn-sleep-icon"
+                    class="w-12 h-12 bg-indigo-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border-b-2 border-indigo-200">
+                    🌙</div>
+                <span id="btn-sleep-text" class="text-[9px] font-bold text-slate-500 tracking-wider">SLEEP</span>
+            </button>
+            <button onclick="actions.style()" class="btn-press flex flex-col items-center gap-1">
+                <div
+                    class="w-12 h-12 bg-purple-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border-b-2 border-purple-200">
+                    🎩</div>
+                <span class="text-[9px] font-bold text-slate-500 tracking-wider">STYLE</span>
+            </button>
+        </div>
+
+        <!-- Sub Actions -->
+        <div class="flex justify-between items-center px-2 pt-2 border-t border-slate-100">
+            <button onclick="actions.dance()"
+                class="px-4 py-2 bg-pink-100 text-pink-600 rounded-full text-xs font-bold btn-press">💃 DANCE</button>
+            <button onclick="actions.weather()"
+                class="px-4 py-2 bg-blue-100 text-blue-600 rounded-full text-xs font-bold btn-press">☁️ WEATHER</button>
+            <button onclick="actions.clean()"
+                class="px-4 py-2 bg-green-100 text-green-600 rounded-full text-xs font-bold btn-press">🧼 CLEAN</button>
+        </div>
+    </nav>
+
+    <script>
+        // --- GAME ENGINE ---
+        const Game = {
+            state: {
+                hunger: 70, energy: 80, fun: 60,
+                isSleeping: false,
+                isRaining: false,
+                wardrobeIndex: 0
+            },
+            wardrobe: [
+                { id: 'none', hat: '', glasses: '' },
+                { id: 'cap', hat: '<path d="M 60 75 Q 100 50 140 75 L 140 85 L 60 85 Z" fill="#ef4444"/><rect x="80" y="55" width="40" height="20" rx="5" fill="#ef4444"/>', glasses: '' },
+                { id: 'glasses', hat: '', glasses: '<g stroke="#333" stroke-width="2" fill="none"><circle cx="75" cy="85" r="10"/><circle cx="125" cy="85" r="10"/><line x1="85" y1="85" x2="115" y2="85"/></g>' },
+                { id: 'party', hat: '<path d="M 80 75 L 100 20 L 120 75 Z" fill="#eab308"/>', glasses: '<g stroke="#333" stroke-width="2" fill="none"><circle cx="75" cy="85" r="10"/><circle cx="125" cy="85" r="10"/><line x1="85" y1="85" x2="115" y2="85"/></g>' }
+            ],
+            refs: {
+                head: document.getElementById('head-group'),
+                body: document.getElementById('bear-body'),
+                mouth: document.getElementById('mouth'),
+                eyes: document.getElementById('eyes'),
+                hat: document.getElementById('hat-layer'),
+                glasses: document.getElementById('glasses-layer'),
+                toast: document.getElementById('toast'),
+                container: document.getElementById('bear-container'),
+                weather: document.getElementById('weather-layer')
+            }
+        };
+
+        // --- PHYSICS LOOP ---
+        let mouseX = 0, mouseY = 0;
+        let headX = 0, headY = 0;
+
+        function updatePhysics() {
+            // Smooth tracking
+            const speed = Game.state.isSleeping ? 0.02 : 0.1; // Sluggish when sleeping
+            const targetY = Game.state.isSleeping ? 10 : mouseY; // Droop head if asleep
+
+            headX += (mouseX - headX) * speed;
+            headY += (targetY - headY) * speed;
+
+            const rotate = headX * 0.3;
+            Game.refs.head.setAttribute('transform', `translate(${headX}, ${headY}) rotate(${rotate}, 100, 100)`);
+
+            // Eye tracking (only if awake)
+            if (!Game.state.isSleeping) {
+                const eyeOff = headX * 0.15;
+                document.getElementById('eye-l').setAttribute('transform', `translate(${75 + eyeOff}, 85)`);
+                document.getElementById('eye-r').setAttribute('transform', `translate(${125 + eyeOff}, 85)`);
+            }
+
+            requestAnimationFrame(updatePhysics);
+        }
+
+        // --- ACTIONS ---
+        const actions = {
+            feed: () => {
+                if (Game.state.isSleeping) return showToast("Shhh! Bear is sleeping.");
+                Game.state.hunger = Math.min(100, Game.state.hunger + 25);
+                animate('eat');
+                spawnFloat('🍎', 0, -50);
+            },
+            play: () => {
+                if (Game.state.isSleeping) return showToast("Zzz... (Wake up first)");
+                Game.state.fun = Math.min(100, Game.state.fun + 20);
+                Game.state.energy = Math.max(0, Game.state.energy - 10);
+                animate('jump');
+                spawnFloat('🎾', 0, -50);
+            },
+            sleep: () => {
+                Game.state.isSleeping = !Game.state.isSleeping;
+                toggleSleepMode();
+            },
+            style: () => {
+                Game.state.wardrobeIndex = (Game.state.wardrobeIndex + 1) % Game.wardrobe.length;
+                const style = Game.wardrobe[Game.state.wardrobeIndex];
+                Game.refs.hat.innerHTML = style.hat;
+                Game.refs.glasses.innerHTML = style.glasses;
+                spawnFloat('✨', 0, -50);
+                animate('jump');
+            },
+            dance: () => {
+                if (Game.state.isSleeping) {
+                    // Dancing wakes the bear up immediately!
+                    actions.sleep();
+                    showToast("WAKE UP PARTY!");
+                }
+                Game.state.fun = Math.min(100, Game.state.fun + 30);
+                Game.state.hunger -= 5;
+                Game.refs.body.classList.add('animate-dance');
+                spawnFloat('🎵', -30, -50);
+                spawnFloat('🎶', 30, -50);
+                setTimeout(() => Game.refs.body.classList.remove('animate-dance'), 2000);
+            },
+            weather: () => {
+                Game.state.isRaining = !Game.state.isRaining;
+                if (Game.state.isRaining) {
+                    document.body.style.background = '#e2e8f0'; // Gray
+                    Game.refs.weather.innerHTML = Array(20).fill('<div class="rain-drop" style="left:' + Math.random() * 100 + '%; animation-duration:' + (0.5 + Math.random()) + 's; animation-delay:' + Math.random() + 's"></div>').join('');
+                    showToast("It's raining...");
+                } else {
+                    document.body.style.background = '#fff1f2'; // Pinkish
+                    Game.refs.weather.innerHTML = '';
+                    showToast("Sunshine!");
+                }
+            },
+            clean: () => {
+                spawnFloat('🧼', 0, 0);
+                showToast("Squeaky clean!");
+            }
+        };
+
+        // --- HELPERS ---
+        function toggleSleepMode() {
+            const btnIcon = document.getElementById('btn-sleep-icon');
+            const btnText = document.getElementById('btn-sleep-text');
+
+            if (Game.state.isSleeping) {
+                // Sleep Visuals
+                document.body.style.filter = "brightness(0.7)";
+                btnIcon.innerText = "☀️";
+                btnText.innerText = "WAKE";
+
+                // Close Eyes
+                Game.refs.eyes.innerHTML = `
+                    <path d="M 70 85 L 80 85" stroke="#333" stroke-width="3" />
+                    <path d="M 120 85 L 130 85" stroke="#333" stroke-width="3" />
+                `;
+                Game.refs.mouth.setAttribute('d', 'M 95 115 L 105 115'); // Small mouth
+                Game.refs.body.classList.add('animate-breathe');
+
+                showToast("Goodnight...");
+            } else {
+                // Wake Visuals
+                document.body.style.filter = "brightness(1)";
+                btnIcon.innerText = "🌙";
+                btnText.innerText = "SLEEP";
+
+                // Open Eyes
+                Game.refs.eyes.innerHTML = `
+                    <g id="eye-l" transform="translate(75, 85)"><circle r="6" fill="#1a1a1a"/><circle cx="2" cy="-2" r="2" fill="white" opacity="0.8"/></g>
+                    <g id="eye-r" transform="translate(125, 85)"><circle r="6" fill="#1a1a1a"/><circle cx="2" cy="-2" r="2" fill="white" opacity="0.8"/></g>
+                `;
+                Game.refs.mouth.setAttribute('d', 'M 90 115 Q 100 125 110 115');
+                Game.refs.body.classList.remove('animate-breathe');
+
+                showToast("Rise and shine!");
+            }
+        }
+
+        function showToast(msg) {
+            Game.refs.toast.innerText = msg;
+            Game.refs.toast.style.opacity = '1';
+            Game.refs.toast.style.top = '15%';
+            setTimeout(() => {
+                Game.refs.toast.style.opacity = '0';
+                Game.refs.toast.style.top = '10%';
+            }, 1500);
+        }
+
+        function spawnFloat(emoji, xOff, yOff) {
+            const rect = Game.refs.container.getBoundingClientRect();
+            const el = document.createElement('div');
+            el.innerText = emoji;
+            el.className = 'floater text-4xl';
+            el.style.left = (rect.width / 2 + xOff) + 'px';
+            el.style.top = (rect.height / 2 + yOff) + 'px';
+            Game.refs.container.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        function animate(type) {
+            if (type === 'jump') {
+                Game.refs.container.style.transform = "scale(1.1) translateY(-10px)";
+                setTimeout(() => Game.refs.container.style.transform = "scale(1) translateY(0)", 200);
+            } else if (type === 'eat') {
+                Game.refs.mouth.setAttribute('d', 'M 90 110 Q 100 130 110 110'); // Open
+                setTimeout(() => Game.refs.mouth.setAttribute('d', 'M 90 115 Q 100 125 110 115'), 300); // Close
+            }
+        }
+
+        // --- EVENTS ---
+
+        // Mouse/Touch Tracking for Head
+        window.addEventListener('pointermove', (e) => {
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            mouseX = (e.clientX - cx) / 10;
+            mouseY = (e.clientY - cy) / 10;
+        });
+
+        // Rubbing Mechanic (Petting)
+        let lastRub = 0;
+        document.getElementById('touch-zone').addEventListener('pointermove', (e) => {
+            if (Date.now() - lastRub < 100) return; // Throttle
+
+            // Allow rubbing even while asleep (soothes the bear)
+            if (e.pressure > 0 || e.buttons > 0) {
+                lastRub = Date.now();
+                if (Game.state.isSleeping) {
+                    Game.state.energy = Math.min(100, Game.state.energy + 1);
+                    spawnFloat('💤', (Math.random() - 0.5) * 50, -50);
+                } else {
+                    Game.state.fun = Math.min(100, Game.state.fun + 1);
+                    spawnFloat('❤️', (Math.random() - 0.5) * 50, -50);
+                }
+            }
+        });
+
+        // Game Loop (Stats Decay)
+        setInterval(() => {
+            if (Game.state.isSleeping) {
+                Game.state.energy += 0.5;
+                Game.state.hunger -= 0.1;
+            } else {
+                Game.state.energy -= 0.2;
+                Game.state.hunger -= 0.4;
+                Game.state.fun -= 0.3;
+            }
+
+            // Clamp
+            Game.state.energy = Math.min(100, Math.max(0, Game.state.energy));
+            Game.state.hunger = Math.min(100, Math.max(0, Game.state.hunger));
+            Game.state.fun = Math.min(100, Math.max(0, Game.state.fun));
+
+            // Update UI
+            document.getElementById('bar-hunger').style.width = Game.state.hunger + '%';
+            document.getElementById('bar-energy').style.width = Game.state.energy + '%';
+            document.getElementById('bar-fun').style.width = Game.state.fun + '%';
+
+            // Mood Check (Mouth updates)
+            if (!Game.state.isSleeping) {
+                const avg = (Game.state.hunger + Game.state.fun) / 2;
+                if (avg < 30) Game.refs.mouth.setAttribute('d', 'M 90 125 Q 100 115 110 125'); // Sad
+                else if (avg > 70) Game.refs.mouth.setAttribute('d', 'M 90 115 Q 100 125 110 115'); // Happy
+            }
+
+        }, 500);
+
+        // Start Physics
+        updatePhysics();
+
+    </script>
+</body>
+
+</html>

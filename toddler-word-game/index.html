@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Toddler Word Fun!</title>
+    <meta name="description" content="A fun and interactive word game for toddlers to learn vocabulary through play.">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+    <div id="game-container">
+        <!-- Top Bar / Score -->
+        <div class="top-bar">
+            <i data-lucide="star" class="icon-star"></i>
+            <span id="score-display-val">0</span>
+        </div>
+
+        <!-- Main Game Area -->
+        <div class="target-section">
+            <button id="speak-target-btn">
+                <span class="label-text">Find the...</span>
+                <h1 id="target-word">...</h1>
+                <div class="volume-hint">
+                    <i data-lucide="volume-2"></i>
+                </div>
+            </button>
+
+            <!-- Sparkle Clue Button -->
+            <button id="clue-btn" title="Get a magic hint!">
+                <i data-lucide="sparkles"></i>
+            </button>
+        </div>
+
+        <!-- Options Grid -->
+        <div id="options-grid" class="options-grid">
+            <!-- Dynamically populated -->
+        </div>
+
+        <!-- Action Bar: Story & Next -->
+        <div id="action-bar" class="action-bar">
+            <!-- Dynamically populated -->
+        </div>
+
+        <!-- Confetti Overlay -->
+        <div id="confetti-container"></div>
+    </div>
+
+    <!-- Application Scripts -->
+    <script src="constants.js"></script>
+    <script src="game.js"></script>
+    <script src="ui-manager.js"></script>
+    <script src="main.js"></script>
+</body>
+
+</html>
