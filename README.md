@@ -1,6 +1,6 @@
 # Vibe Experiments
 
-A collection of interactive web-based experiments, games, and tools built with HTML, CSS, and JavaScript. These have been generated with Cline and "Grok code fast", iteratively (sometimes 30-50 iterations, so not 1 shot). I also have the added bonus of 15 years of dev experience to debug it where it goes off the rails, but to the most part these tools show a lot of promise for basic prototyping.
+A collection of interactive web-based experiments, games, and tools built with HTML, CSS, and JavaScript. This repository serves as a portfolio demonstrating the capabilities of a senior developer leveraging modern AI tools. Rather than simple one-shot demos, these projects represent a collaborative effort between human expertise and AI, showcasing how architectural knowledge combined with AI-assisted generation can produce robust, functional applications efficiently.
 
 ## Main Link
 [View Live Demo](https://alexswan10k.github.io/vibe-exps/)
