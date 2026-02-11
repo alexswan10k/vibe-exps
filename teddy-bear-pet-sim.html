@@ -97,6 +97,74 @@
         .btn-press:active {
             transform: scale(0.9);
         }
+
+        /* Hygiene */
+        .poop {
+            position: absolute;
+            font-size: 2rem;
+            animation: bounce 2s infinite;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .fly {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: black;
+            border-radius: 50%;
+            animation: buzz 0.5s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes buzz {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            25% {
+                transform: translate(5px, -5px);
+            }
+
+            50% {
+                transform: translate(0, -10px);
+            }
+
+            75% {
+                transform: translate(-5px, -5px);
+            }
+
+            100% {
+                transform: translate(0, 0);
+            }
+        }
+
+        .shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-10px) rotate(-5deg);
+            }
+
+            75% {
+                transform: translateX(10px) rotate(5deg);
+            }
+        }
+    </style>
+    <style>
+        /* Mini-Game */
+        .highlight {
+            filter: brightness(1.5) drop-shadow(0 0 10px gold);
+            cursor: pointer;
+        }
     </style>
 </head>
 
@@ -104,6 +172,10 @@
 
     <!-- Background Layer (Weather) -->
     <div id="weather-layer" class="absolute inset-0 pointer-events-none z-0"></div>
+
+    <!-- Lighting Layer (Day/Night) -->
+    <div id="night-overlay"
+        class="absolute inset-0 bg-slate-900 opacity-0 pointer-events-none transition-opacity duration-1000 z-30"></div>
 
     <!-- HUD -->
     <div class="w-full max-w-md p-4 z-20 flex flex-col gap-2">
@@ -132,6 +204,14 @@
                         </div>
                     </div>
                 </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-bold w-8 text-green-500">HYG</span>
+                    <div class="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden">
+                        <div id="bar-hygiene"
+                            class="h-full bg-green-400 rounded-full transition-all duration-500 w-full">
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -148,21 +228,41 @@
         <!-- Bear Container -->
         <div id="bear-container" class="relative w-72 h-72 touch-none select-none transition-transform duration-300">
             <svg viewBox="0 0 200 200" class="w-full h-full drop-shadow-2xl overflow-visible">
+                <!-- Environment (Floor & Wall) -->
+                <defs>
+                    <linearGradient id="wallGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="#fff1f2" />
+                        <stop offset="100%" stop-color="#fecdd3" />
+                    </linearGradient>
+                    <linearGradient id="floorGradient" x1="0" x2="0" y1="0" y2="1">
+                        <stop offset="0%" stop-color="#fce7f3" />
+                        <stop offset="100%" stop-color="#fbcfe8" />
+                    </linearGradient>
+                </defs>
+                <rect x="-100" y="-100" width="400" height="260" fill="url(#wallGradient)" /> <!-- Wall -->
+                <path d="M -100 160 L 300 160 L 300 300 L -100 300 Z" fill="url(#floorGradient)" /> <!-- Floor -->
+
+                <!-- Shadow -->
+                <ellipse cx="100" cy="185" rx="55" ry="10" fill="#000" opacity="0.15" />
+
                 <!-- Body Group -->
-                <g id="bear-body" transform-origin="100 150">
+                <g id="bear-body" transform-origin="100 150" onclick="MiniGame.handleInput('tummy')">
                     <path d="M 60 170 C 60 120, 140 120, 140 170 C 140 190, 60 190, 60 170" fill="#8B4513" />
                     <ellipse cx="100" cy="155" rx="25" ry="20" fill="#A0522D" opacity="0.6" />
 
                     <!-- Arms -->
-                    <g id="arm-l" transform-origin="60 140">
+                    <g id="arm-l" transform-origin="60 140"
+                        onclick="MiniGame.handleInput('arm-l'); event.stopPropagation()">
                         <ellipse cx="50" cy="140" rx="15" ry="12" fill="#8B4513" />
                     </g>
-                    <g id="arm-r" transform-origin="140 140">
+                    <g id="arm-r" transform-origin="140 140"
+                        onclick="MiniGame.handleInput('arm-r'); event.stopPropagation()">
                         <ellipse cx="150" cy="140" rx="15" ry="12" fill="#8B4513" />
                     </g>
 
                     <!-- Head Group (Physics) -->
-                    <g id="head-group" transform-origin="100 100">
+                    <g id="head-group" transform-origin="100 100"
+                        onclick="MiniGame.handleInput('head'); event.stopPropagation()">
                         <circle cx="50" cy="50" r="22" fill="#8B4513" /> <!-- Ears -->
                         <circle cx="150" cy="50" r="22" fill="#8B4513" />
                         <circle cx="100" cy="90" r="55" fill="#8B4513" /> <!-- Head Base -->
@@ -244,10 +344,13 @@
         // --- GAME ENGINE ---
         const Game = {
             state: {
-                hunger: 70, energy: 80, fun: 60,
+                hunger: 70, energy: 80, fun: 60, hygiene: 100,
                 isSleeping: false,
                 isRaining: false,
-                wardrobeIndex: 0
+                wardrobeIndex: 0,
+                digestiveTrack: 0,
+                poops: [], // Array of {id, x, y}
+                miniGameActive: false
             },
             wardrobe: [
                 { id: 'none', hat: '', glasses: '' },
@@ -297,16 +400,26 @@
         const actions = {
             feed: () => {
                 if (Game.state.isSleeping) return showToast("Shhh! Bear is sleeping.");
+                if (Game.state.hygiene < 30) {
+                    Game.refs.body.classList.add('shake');
+                    setTimeout(() => Game.refs.body.classList.remove('shake'), 500);
+                    return showToast("Toooo dirty to eat! 🤢");
+                }
                 Game.state.hunger = Math.min(100, Game.state.hunger + 25);
+                Game.state.digestiveTrack += 20; // Food adds to digestion
                 animate('eat');
                 spawnFloat('🍎', 0, -50);
             },
             play: () => {
                 if (Game.state.isSleeping) return showToast("Zzz... (Wake up first)");
-                Game.state.fun = Math.min(100, Game.state.fun + 20);
-                Game.state.energy = Math.max(0, Game.state.energy - 10);
-                animate('jump');
-                spawnFloat('🎾', 0, -50);
+                if (Game.state.hygiene < 40) {
+                    Game.refs.body.classList.add('shake');
+                    setTimeout(() => Game.refs.body.classList.remove('shake'), 500);
+                    return showToast("I smell bad! Clean me! 💩");
+                }
+                if (Game.state.miniGameActive) return;
+
+                MiniGame.start();
             },
             sleep: () => {
                 Game.state.isSleeping = !Game.state.isSleeping;
@@ -346,8 +459,13 @@
                 }
             },
             clean: () => {
-                spawnFloat('🧼', 0, 0);
-                showToast("Squeaky clean!");
+                document.body.style.cursor = "url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\"><text y=\"20\" font-size=\"20\">🧼</text></svg>'), auto";
+                showToast("Click poop to clean!");
+                window.isCleaning = true;
+                setTimeout(() => {
+                    document.body.style.cursor = "auto";
+                    window.isCleaning = false;
+                }, 5000);
             }
         };
 
@@ -358,35 +476,50 @@
 
             if (Game.state.isSleeping) {
                 // Sleep Visuals
-                document.body.style.filter = "brightness(0.7)";
+                document.getElementById('night-overlay').classList.remove('opacity-0');
+                document.getElementById('night-overlay').classList.add('opacity-60');
                 btnIcon.innerText = "☀️";
                 btnText.innerText = "WAKE";
 
-                // Close Eyes
-                Game.refs.eyes.innerHTML = `
-                    <path d="M 70 85 L 80 85" stroke="#333" stroke-width="3" />
-                    <path d="M 120 85 L 130 85" stroke="#333" stroke-width="3" />
-                `;
+                setEyes('closed');
                 Game.refs.mouth.setAttribute('d', 'M 95 115 L 105 115'); // Small mouth
                 Game.refs.body.classList.add('animate-breathe');
 
                 showToast("Goodnight...");
             } else {
                 // Wake Visuals
-                document.body.style.filter = "brightness(1)";
+                document.getElementById('night-overlay').classList.remove('opacity-60');
+                document.getElementById('night-overlay').classList.add('opacity-0');
                 btnIcon.innerText = "🌙";
                 btnText.innerText = "SLEEP";
 
-                // Open Eyes
-                Game.refs.eyes.innerHTML = `
-                    <g id="eye-l" transform="translate(75, 85)"><circle r="6" fill="#1a1a1a"/><circle cx="2" cy="-2" r="2" fill="white" opacity="0.8"/></g>
-                    <g id="eye-r" transform="translate(125, 85)"><circle r="6" fill="#1a1a1a"/><circle cx="2" cy="-2" r="2" fill="white" opacity="0.8"/></g>
-                `;
+                setEyes('open');
                 Game.refs.mouth.setAttribute('d', 'M 90 115 Q 100 125 110 115');
                 Game.refs.body.classList.remove('animate-breathe');
 
                 showToast("Rise and shine!");
             }
+        }
+
+        function setEyes(state) {
+            if (state === 'closed') {
+                Game.refs.eyes.innerHTML = `
+                    <path d="M 70 85 L 80 85" stroke="#333" stroke-width="3" />
+                    <path d="M 120 85 L 130 85" stroke="#333" stroke-width="3" />
+                `;
+            } else {
+                Game.refs.eyes.innerHTML = `
+                    <g id="eye-l" transform="translate(75, 85)"><circle r="6" fill="#1a1a1a"/><circle cx="2" cy="-2" r="2" fill="white" opacity="0.8"/></g>
+                    <g id="eye-r" transform="translate(125, 85)"><circle r="6" fill="#1a1a1a"/><circle cx="2" cy="-2" r="2" fill="white" opacity="0.8"/></g>
+                `;
+            }
+        }
+
+        function blink() {
+            setEyes('closed');
+            setTimeout(() => {
+                if (!Game.state.isSleeping) setEyes('open');
+            }, 100);
         }
 
         function showToast(msg) {
@@ -433,10 +566,12 @@
         // Rubbing Mechanic (Petting)
         let lastRub = 0;
         document.getElementById('touch-zone').addEventListener('pointermove', (e) => {
+            if (Game.state.miniGameActive) return; // Disable rubbing during game
             if (Date.now() - lastRub < 100) return; // Throttle
 
             // Allow rubbing even while asleep (soothes the bear)
             if (e.pressure > 0 || e.buttons > 0) {
+                if (window.isCleaning) return; // Don't pet while cleaning
                 lastRub = Date.now();
                 if (Game.state.isSleeping) {
                     Game.state.energy = Math.min(100, Game.state.energy + 1);
@@ -447,6 +582,161 @@
                 }
             }
         });
+
+        // Poop Interaction
+        function spawnPoop() {
+            const id = Date.now();
+            const rect = Game.refs.container.getBoundingClientRect();
+            // Random position on floor
+            const x = (Math.random() * 150 - 75); // relative to center
+            const y = 60 + (Math.random() * 40);
+
+            const el = document.createElement('div');
+            el.innerHTML = '💩';
+            el.className = 'poop';
+            el.id = 'poop-' + id;
+            // Center is roughly height/2 + y
+            el.style.left = (rect.width / 2 + x) + 'px';
+            el.style.top = (rect.height / 2 + y) + 'px';
+
+            // Add flies
+            for (let i = 0; i < 3; i++) {
+                const fly = document.createElement('div');
+                fly.className = 'fly';
+                fly.style.left = (Math.random() * 20 - 10) + 'px';
+                fly.style.top = (Math.random() * 20 - 20) + 'px';
+                fly.style.animationDelay = Math.random() + 's';
+                el.appendChild(fly);
+            }
+
+            el.onclick = () => {
+                if (window.isCleaning) {
+                    el.remove();
+                    Game.state.poops = Game.state.poops.filter(p => p.id !== id);
+                    Game.state.hygiene = Math.min(100, Game.state.hygiene + 20);
+                    spawnFloat('✨', x, y);
+                    animate('jump'); // Happy jump
+                    if (Game.state.poops.length === 0) {
+                        document.body.style.cursor = "auto";
+                        window.isCleaning = false;
+                        showToast("All clean!");
+                    }
+                } else {
+                    showToast("Eww! Use Clean tool!");
+                    Game.refs.body.classList.add('shake');
+                    setTimeout(() => Game.refs.body.classList.remove('shake'), 500);
+                }
+            };
+
+            Game.refs.container.appendChild(el);
+            Game.state.poops.push({ id, el });
+            showToast("Uh oh... 💩");
+        }
+
+        // --- MINI GAME (Beary Says) ---
+        const MiniGame = {
+            sequence: [],
+            playerIndex: 0,
+            round: 0,
+            parts: ['head', 'tummy', 'arm-l', 'arm-r'],
+
+            start: () => {
+                Game.state.miniGameActive = true;
+                MiniGame.sequence = [];
+                MiniGame.round = 1;
+                document.getElementById('touch-zone').style.pointerEvents = 'none'; // Allow clicking through
+                showToast("Watch Beary!");
+                setTimeout(MiniGame.nextRound, 1000);
+            },
+
+            nextRound: () => {
+                MiniGame.playerIndex = 0;
+                MiniGame.sequence.push(MiniGame.parts[Math.floor(Math.random() * MiniGame.parts.length)]);
+                MiniGame.playSequence();
+            },
+
+            playSequence: async () => {
+                for (let part of MiniGame.sequence) {
+                    await MiniGame.highlight(part);
+                    await new Promise(r => setTimeout(r, 300));
+                }
+                showToast("Your turn!");
+            },
+
+            highlight: (part) => {
+                return new Promise(resolve => {
+                    const el = part === 'tummy' ? document.getElementById('bear-body') :
+                        part === 'head' ? document.getElementById('head-group') :
+                            document.getElementById(part);
+
+                    el.classList.add('highlight');
+                    // Play Note (visual)
+                    const rect = el.getBoundingClientRect();
+                    const note = part === 'head' ? '🎵' : part === 'tummy' ? '🥁' : '🎹';
+
+                    const floater = document.createElement('div');
+                    floater.innerText = note;
+                    floater.className = 'floater text-4xl';
+                    floater.style.left = (rect.left + rect.width / 2 - 20) + 'px'; // Abs position hack
+                    floater.style.top = (rect.top + rect.height / 2 - 50) + 'px';
+                    document.body.appendChild(floater);
+                    setTimeout(() => floater.remove(), 1000);
+
+                    setTimeout(() => {
+                        el.classList.remove('highlight');
+                        resolve();
+                    }, 500);
+                });
+            },
+
+            handleInput: (part) => {
+                if (!Game.state.miniGameActive) return;
+
+                // Visual feedback immediate
+                const el = part === 'tummy' ? document.getElementById('bear-body') :
+                    part === 'head' ? document.getElementById('head-group') :
+                        document.getElementById(part);
+                el.classList.add('highlight');
+                setTimeout(() => el.classList.remove('highlight'), 200);
+
+                if (part === MiniGame.sequence[MiniGame.playerIndex]) {
+                    MiniGame.playerIndex++;
+                    if (MiniGame.playerIndex >= MiniGame.sequence.length) {
+                        // Round Complete
+                        setTimeout(() => {
+                            showToast("Good job! 👍");
+                            spawnFloat('🌟', 0, -50);
+                            Game.state.fun = Math.min(100, Game.state.fun + 10);
+                            Game.state.energy = Math.max(0, Game.state.energy - 5);
+
+                            MiniGame.round++;
+                            if (MiniGame.round > 3) { // Game Over Win
+                                MiniGame.end(true);
+                            } else {
+                                setTimeout(MiniGame.nextRound, 1000);
+                            }
+                        }, 500);
+                    }
+                } else {
+                    // Fail
+                    MiniGame.end(false);
+                }
+            },
+
+            end: (win) => {
+                Game.state.miniGameActive = false;
+                document.getElementById('touch-zone').style.pointerEvents = 'auto'; // Restore rubbing
+                if (win) {
+                    showToast("YOU WON! 🎉");
+                    actions.dance(); // Victory dance
+                    Game.state.fun = 100;
+                } else {
+                    showToast("Oops! Try again.");
+                    Game.refs.body.classList.add('shake');
+                    setTimeout(() => Game.refs.body.classList.remove('shake'), 500);
+                }
+            }
+        };
 
         // Game Loop (Stats Decay)
         setInterval(() => {
@@ -463,11 +753,40 @@
             Game.state.energy = Math.min(100, Math.max(0, Game.state.energy));
             Game.state.hunger = Math.min(100, Math.max(0, Game.state.hunger));
             Game.state.fun = Math.min(100, Math.max(0, Game.state.fun));
+            Game.state.hygiene = Math.min(100, Math.max(0, Game.state.hygiene));
+
+            // Digestion
+            if (Game.state.digestiveTrack > 0) {
+                Game.state.digestiveTrack -= 0.5;
+                if (Game.state.digestiveTrack <= 0 && Game.state.poops.length < 5) {
+                    spawnPoop();
+                    // Reset track randomly so it doesn't loop instantly if we overfed
+                    Game.state.digestiveTrack = -Math.random() * 50;
+                }
+            }
+
+            // Auto-Sleep
+            if (!Game.state.isSleeping && Game.state.energy <= 0) {
+                actions.sleep();
+                showToast("Too tired... Passed out! 😴");
+            }
+
+            // Random Blinking
+            if (!Game.state.isSleeping && Math.random() < 0.05) {
+                blink();
+            }
+
+            // Hygiene Decay
+            if (Game.state.poops.length > 0) {
+                Game.state.hygiene -= 0.5 * Game.state.poops.length;
+                Game.state.fun -= 0.2;
+            }
 
             // Update UI
             document.getElementById('bar-hunger').style.width = Game.state.hunger + '%';
             document.getElementById('bar-energy').style.width = Game.state.energy + '%';
             document.getElementById('bar-fun').style.width = Game.state.fun + '%';
+            document.getElementById('bar-hygiene').style.width = Game.state.hygiene + '%';
 
             // Mood Check (Mouth updates)
             if (!Game.state.isSleeping) {
