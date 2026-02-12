@@ -1,84 +1,192 @@
-class MazeGame {
-    constructor() {
-        this.canvas = document.getElementById('mazeCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        this.scoreElement = document.getElementById('score');
-        this.timerElement = document.getElementById('timer');
-
-        this.cellSize = 20;
-        this.cols = Math.floor(this.canvas.width / this.cellSize);
-        this.rows = Math.floor(this.canvas.height / this.cellSize);
-
-        this.maze = [];
-        this.player = { x: 1, y: 1 };
+class Chunk {
+    constructor(x, y, size) {
+        this.x = x;
+        this.y = y;
+        this.size = size;
+        this.grid = []; // 2D array: 1 = wall, 0 = path
         this.collectibles = [];
-        this.explored = new Set();
 
-        this.score = 0;
-        this.startTime = Date.now();
-        this.gameLoop = null;
-        this.lastMoveTime = 0;
-        this.moveDelay = 150; // milliseconds between moves
-        this.autoMode = false;
-        this.autoMoveDelay = 100; // faster for auto mode
-
-        // AI memory to prevent getting stuck
-        this.recentMoves = [];
-        this.maxRecentMoves = 25; // Increased from 8 to prevent loops
-        this.stuckCounter = 0;
-        this.lastDirection = null;
-        this.moveHistory = []; // Track position history
-        this.maxHistory = 80; // Increased from 20 to prevent revisiting positions
-        this.consecutiveSameDirection = 0;
-
-        this.keys = {};
-        this.init();
-    }
-
-    init() {
-        this.generateMaze();
-        this.placeCollectibles();
-        this.setupEventListeners();
-        this.startGameLoop();
-        this.generateAmbientSound();
-    }
-
-    generateMaze() {
-        // Initialize maze with walls
-        for (let y = 0; y < this.rows; y++) {
-            this.maze[y] = [];
-            for (let x = 0; x < this.cols; x++) {
-                this.maze[y][x] = 1; // 1 = wall, 0 = path
+        // Initialize with walls
+        for (let ry = 0; ry < this.size; ry++) {
+            this.grid[ry] = [];
+            for (let rx = 0; rx < this.size; rx++) {
+                this.grid[ry][rx] = 1;
             }
         }
+    }
 
-        // Depth-first search maze generation
+    getKey() {
+        return `${this.x},${this.y}`;
+    }
+
+    toWorld(localX, localY) {
+        return {
+            x: this.x * this.size + localX,
+            y: this.y * this.size + localY
+        };
+    }
+
+    toLocal(worldX, worldY) {
+        return {
+            x: worldX - this.x * this.size,
+            y: worldY - this.y * this.size
+        };
+    }
+}
+
+class MazeWorld {
+    constructor(chunkSize = 20) {
+        this.chunkSize = chunkSize;
+        this.chunks = new Map();
+        // Start with initial chunk
+        this.generateChunk(0, 0);
+    }
+
+    getChunk(cx, cy) {
+        const key = `${cx},${cy}`;
+        if (this.chunks.has(key)) {
+            return this.chunks.get(key);
+        }
+        return this.generateChunk(cx, cy);
+    }
+
+    getTile(wx, wy) {
+        const cx = Math.floor(wx / this.chunkSize);
+        const cy = Math.floor(wy / this.chunkSize);
+        const chunk = this.getChunk(cx, cy);
+
+        // Modular arithmetic in JS for negative numbers: ((a % n) + n) % n
+        const lx = ((wx % this.chunkSize) + this.chunkSize) % this.chunkSize;
+        const ly = ((wy % this.chunkSize) + this.chunkSize) % this.chunkSize;
+
+        return chunk.grid[ly][lx];
+    }
+
+    // Check if a tile is a wall (blocks movement)
+    isWall(wx, wy) {
+        return this.getTile(wx, wy) === 1;
+    }
+
+    generateChunk(cx, cy) {
+        const newChunk = new Chunk(cx, cy, this.chunkSize);
+        this.chunks.set(newChunk.getKey(), newChunk);
+
+        // Generation Algorithm: Recursive Backtracker with Neighbor Awareness
         const stack = [];
         const visited = new Set();
-        const startX = 1;
-        const startY = 1;
 
-        this.maze[startY][startX] = 0;
+        // Find entrances from neighbors
+        const entrances = this.findEntrances(cx, cy);
+
+        let startX = 1;
+        let startY = 1;
+
+        if (entrances.length > 0) {
+            // Pick a random entrance to start from
+            const ent = entrances[Math.floor(Math.random() * entrances.length)];
+            startX = ent.x;
+            startY = ent.y;
+        } else if (cx === 0 && cy === 0) {
+            // Force center start for first chunk (if desired, or just use 1,1)
+            startX = Math.floor(this.chunkSize / 2);
+            startY = Math.floor(this.chunkSize / 2);
+        }
+
+        // Carve start
+        newChunk.grid[startY][startX] = 0;
         visited.add(`${startX},${startY}`);
         stack.push({ x: startX, y: startY });
 
+        // Force connection to all entrances (make sure they are open)
+        for (const ent of entrances) {
+            newChunk.grid[ent.y][ent.x] = 0;
+            // Add to stack to ensure we branch from them too if we want fully connected
+            // But main loop usually handles it if we just carve them.
+            // Let's rely on random walk eventually hitting them or starting from one.
+        }
+
         while (stack.length > 0) {
-            const current = stack[stack.length - 1];
-            const neighbors = this.getUnvisitedNeighbors(current.x, current.y, visited);
+            const current = stack[stack.length - 1]; // Peak
+            const neighbors = this.getUnvisitedNeighbors(current.x, current.y, newChunk, visited);
 
             if (neighbors.length > 0) {
                 const next = neighbors[Math.floor(Math.random() * neighbors.length)];
-                this.removeWall(current.x, current.y, next.x, next.y);
-                this.maze[next.y][next.x] = 0;
+
+                // Carve wall between
+                const wallX = (current.x + next.x) / 2;
+                const wallY = (current.y + next.y) / 2;
+                newChunk.grid[wallY][wallX] = 0;
+                newChunk.grid[next.y][next.x] = 0;
+
                 visited.add(`${next.x},${next.y}`);
                 stack.push(next);
             } else {
                 stack.pop();
             }
         }
+
+        // Ensure connectivity to future neighbors (Exits)
+        // We randomly punch 1 hole on each edge if there wasn't an entrance there?
+        // Actually, just punching holes on edges is enough. The next chunk will see them as entrances.
+        this.createExits(newChunk);
+
+        // Add collectibles
+        this.spawnCollectibles(newChunk);
+
+        return newChunk;
     }
 
-    getUnvisitedNeighbors(x, y, visited) {
+    findEntrances(cx, cy) {
+        const entrances = [];
+
+        // Check Top (0, -1) -> Neighbor Bottom Row (y=size-1)
+        const topKey = `${cx},${cy - 1}`;
+        if (this.chunks.has(topKey)) {
+            const topChunk = this.chunks.get(topKey);
+            for (let x = 1; x < this.chunkSize; x += 2) {
+                if (topChunk.grid[this.chunkSize - 1][x] === 0) {
+                    entrances.push({ x: x, y: 0 });
+                }
+            }
+        }
+
+        // Check Bottom (0, 1) -> Neighbor Top Row (y=0)
+        const bottomKey = `${cx},${cy + 1}`;
+        if (this.chunks.has(bottomKey)) {
+            const bottomChunk = this.chunks.get(bottomKey);
+            for (let x = 1; x < this.chunkSize; x += 2) {
+                if (bottomChunk.grid[0][x] === 0) {
+                    entrances.push({ x: x, y: this.chunkSize - 1 });
+                }
+            }
+        }
+
+        // Check Left (-1, 0) -> Neighbor Right Row (x=size-1)
+        const leftKey = `${cx - 1},${cy}`;
+        if (this.chunks.has(leftKey)) {
+            const leftChunk = this.chunks.get(leftKey);
+            for (let y = 1; y < this.chunkSize; y += 2) {
+                if (leftChunk.grid[y][this.chunkSize - 1] === 0) {
+                    entrances.push({ x: 0, y: y });
+                }
+            }
+        }
+
+        // Check Right (1, 0) -> Neighbor Left Row (x=0)
+        const rightKey = `${cx + 1},${cy}`;
+        if (this.chunks.has(rightKey)) {
+            const rightChunk = this.chunks.get(rightKey);
+            for (let y = 1; y < this.chunkSize; y += 2) {
+                if (rightChunk.grid[y][0] === 0) {
+                    entrances.push({ x: this.chunkSize - 1, y: y });
+                }
+            }
+        }
+
+        return entrances;
+    }
+
+    getUnvisitedNeighbors(x, y, chunk, visited) {
         const neighbors = [];
         const directions = [
             { x: 0, y: -2 }, // up
@@ -90,47 +198,131 @@ class MazeGame {
         for (const dir of directions) {
             const nx = x + dir.x;
             const ny = y + dir.y;
-            if (nx > 0 && nx < this.cols - 1 && ny > 0 && ny < this.rows - 1 &&
-                !visited.has(`${nx},${ny}`)) {
-                neighbors.push({ x: nx, y: ny });
+
+            // Stay within chunk bounds (padding of 1 usually kept for walls, but we might carve edges)
+            // We want to keep edges as walls UNLESS we specifically carve an exit.
+            // So standard generation keeps 1 cell buffer.
+            if (nx > 0 && nx < this.chunkSize - 1 && ny > 0 && ny < this.chunkSize - 1) {
+                if (!visited.has(`${nx},${ny}`)) {
+                    neighbors.push({ x: nx, y: ny });
+                }
             }
         }
-
         return neighbors;
     }
 
-    removeWall(x1, y1, x2, y2) {
-        const wallX = (x1 + x2) / 2;
-        const wallY = (y1 + y2) / 2;
-        this.maze[wallY][wallX] = 0;
+    createExits(chunk) {
+        // Randomly add exits on edges to ensure infinite growth
+        // Top
+        if (!this.chunks.has(`${chunk.x},${chunk.y - 1}`)) {
+            const x = 1 + 2 * Math.floor(Math.random() * ((this.chunkSize - 2) / 2));
+            chunk.grid[0][x] = 0;
+            chunk.grid[1][x] = 0; // ensure connection to inner maze
+        }
+        // Bottom
+        if (!this.chunks.has(`${chunk.x},${chunk.y + 1}`)) {
+            const x = 1 + 2 * Math.floor(Math.random() * ((this.chunkSize - 2) / 2));
+            chunk.grid[this.chunkSize - 1][x] = 0;
+            chunk.grid[this.chunkSize - 2][x] = 0;
+        }
+        // Left
+        if (!this.chunks.has(`${chunk.x - 1},${chunk.y}`)) {
+            const y = 1 + 2 * Math.floor(Math.random() * ((this.chunkSize - 2) / 2));
+            chunk.grid[y][0] = 0;
+            chunk.grid[y][1] = 0;
+        }
+        // Right
+        if (!this.chunks.has(`${chunk.x + 1},${chunk.y}`)) {
+            const y = 1 + 2 * Math.floor(Math.random() * ((this.chunkSize - 2) / 2));
+            chunk.grid[y][this.chunkSize - 1] = 0;
+            chunk.grid[y][this.chunkSize - 2] = 0;
+        }
     }
 
-    placeCollectibles() {
-        this.collectibles = [];
-        for (let y = 1; y < this.rows - 1; y += 2) {
-            for (let x = 1; x < this.cols - 1; x += 2) {
-                if (this.maze[y][x] === 0 && !(x === this.player.x && y === this.player.y)) {
-                    if (Math.random() < 0.1) { // 10% chance
-                        this.collectibles.push({ x, y });
+    spawnCollectibles(chunk) {
+        for (let y = 1; y < this.chunkSize - 1; y++) {
+            for (let x = 1; x < this.chunkSize - 1; x++) {
+                if (chunk.grid[y][x] === 0) {
+                    if (Math.random() < 0.05) { // 5% chance
+                        chunk.collectibles.push({
+                            // Store world coords for easier collision
+                            ...chunk.toWorld(x, y),
+                            // Also store local mainly for rendering if needed, 
+                            // but world is better for game logic
+                            localX: x, localY: y
+                        });
                     }
                 }
             }
         }
     }
+}
+
+class MazeGame {
+    constructor() {
+        this.canvas = document.getElementById('mazeCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.scoreElement = document.getElementById('score');
+        this.timerElement = document.getElementById('timer');
+
+        this.cellSize = 25; // Visual size in pixels
+        this.world = new MazeWorld(21); // Size 21 makes (2n+1) logic easier for walls
+
+        // Player starts in middle of first chunk
+        const startVal = Math.floor(this.world.chunkSize / 2);
+        this.player = { x: startVal, y: startVal }; // World Coordinates (Grid Units)
+
+        this.camera = {
+            x: 0,
+            y: 0
+        };
+
+        this.score = 0;
+        this.startTime = Date.now();
+        this.explored = new Set(); // Stores "x,y" of world visited
+
+        this.keys = {};
+
+        // Audio context
+        this.audioCtx = null;
+
+        this.particles = [];
+
+        this.init();
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.startGameLoop();
+        this.initAudio();
+    }
+
+    initAudio() {
+        // Init on first interaction usually, but let's try
+        try {
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.audioCtx = new AudioContext();
+        } catch (e) {
+            console.log('Web Audio API not supported');
+        }
+    }
 
     setupEventListeners() {
         document.addEventListener('keydown', (e) => {
-            this.keys[e.key] = true;
+            if (!this.keys[e.key]) {
+                this.keys[e.key] = true;
+                this.handleInput(e.key);
+            }
         });
 
         document.addEventListener('keyup', (e) => {
             this.keys[e.key] = false;
         });
 
-        // Auto explore button
         const autoButton = document.getElementById('autoButton');
         autoButton.addEventListener('click', () => {
-            this.toggleAutoMode();
+            // Toggle Auto Mode (TODO: Re-implement for infinite)
+            alert("Auto-mode currently disabled for infinite upgrade! Use ARROW KEYS.");
         });
 
         // Touch controls
@@ -138,180 +330,95 @@ class MazeGame {
     }
 
     setupTouchControls() {
-        const upBtn = document.getElementById('upBtn');
-        const downBtn = document.getElementById('downBtn');
-        const leftBtn = document.getElementById('leftBtn');
-        const rightBtn = document.getElementById('rightBtn');
-
-        // Touch and mouse events for better mobile support
-        const handleTouchStart = (key) => {
-            this.keys[key] = true;
+        // Reuse existing button logic but call handleInput directly
+        const bindBtn = (id, key) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            const trigger = (e) => {
+                e.preventDefault();
+                this.handleInput(key);
+            };
+            btn.addEventListener('touchstart', trigger, { passive: false });
+            btn.addEventListener('mousedown', trigger);
         };
 
-        const handleTouchEnd = (key) => {
-            this.keys[key] = false;
-        };
-
-        // Up button
-        upBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleTouchStart('ArrowUp');
-        });
-        upBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            handleTouchEnd('ArrowUp');
-        });
-        upBtn.addEventListener('mousedown', () => handleTouchStart('ArrowUp'));
-        upBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowUp'));
-        upBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowUp'));
-
-        // Down button
-        downBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleTouchStart('ArrowDown');
-        });
-        downBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            handleTouchEnd('ArrowDown');
-        });
-        downBtn.addEventListener('mousedown', () => handleTouchStart('ArrowDown'));
-        downBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowDown'));
-        downBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowDown'));
-
-        // Left button
-        leftBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleTouchStart('ArrowLeft');
-        });
-        leftBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            handleTouchEnd('ArrowLeft');
-        });
-        leftBtn.addEventListener('mousedown', () => handleTouchStart('ArrowLeft'));
-        leftBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowLeft'));
-        leftBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowLeft'));
-
-        // Right button
-        rightBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleTouchStart('ArrowRight');
-        });
-        rightBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            handleTouchEnd('ArrowRight');
-        });
-        rightBtn.addEventListener('mousedown', () => handleTouchStart('ArrowRight'));
-        rightBtn.addEventListener('mouseup', () => handleTouchEnd('ArrowRight'));
-        rightBtn.addEventListener('mouseleave', () => handleTouchEnd('ArrowRight'));
+        bindBtn('upBtn', 'ArrowUp');
+        bindBtn('downBtn', 'ArrowDown');
+        bindBtn('leftBtn', 'ArrowLeft');
+        bindBtn('rightBtn', 'ArrowRight');
     }
 
-    toggleAutoMode() {
-        this.autoMode = !this.autoMode;
-        const autoButton = document.getElementById('autoButton');
-
-        if (this.autoMode) {
-            autoButton.textContent = 'Stop Auto';
-            autoButton.classList.add('auto-active');
-        } else {
-            autoButton.textContent = 'Auto Explore';
-            autoButton.classList.remove('auto-active');
-        }
-    }
-
-    update() {
-        this.handleInput();
-        this.updateTimer();
-        this.checkCollectibleCollision();
-    }
-
-    handleInput() {
-        const currentTime = Date.now();
-        const currentDelay = this.autoMode ? this.autoMoveDelay : this.moveDelay;
-
-        if (currentTime - this.lastMoveTime < currentDelay) {
-            return; // Too soon since last move
+    handleInput(key) {
+        // Resume audio if suspended (browser policy)
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
         }
 
         let newX = this.player.x;
         let newY = this.player.y;
 
-        if (this.autoMode) {
-            // Auto mode: find best direction
-            const direction = this.findBestDirection();
-            if (direction) {
-                newX += direction.x;
-                newY += direction.y;
-            }
-        } else {
-            // Manual mode: check keyboard input
-            if (this.keys['ArrowUp'] || this.keys['w'] || this.keys['W']) {
-                newY -= 1;
-            }
-            if (this.keys['ArrowDown'] || this.keys['s'] || this.keys['S']) {
-                newY += 1;
-            }
-            if (this.keys['ArrowLeft'] || this.keys['a'] || this.keys['A']) {
-                newX -= 1;
-            }
-            if (this.keys['ArrowRight'] || this.keys['d'] || this.keys['D']) {
-                newX += 1;
-            }
-        }
+        if (key === 'ArrowUp' || key === 'w' || key === 'W') newY--;
+        if (key === 'ArrowDown' || key === 's' || key === 'S') newY++;
+        if (key === 'ArrowLeft' || key === 'a' || key === 'A') newX--;
+        if (key === 'ArrowRight' || key === 'd' || key === 'D') newX++;
 
-        if (newX >= 0 && newX < this.cols && newY >= 0 && newY < this.rows &&
-            this.maze[newY][newX] === 0) {
-            // Track recent moves and position history to prevent getting stuck
-            if (this.autoMode) {
-                const moveKey = `${newX - this.player.x},${newY - this.player.y}`;
-
-                // Track consecutive same direction
-                if (this.lastDirection && moveKey === this.lastDirection) {
-                    this.consecutiveSameDirection++;
-                } else {
-                    this.consecutiveSameDirection = 1;
-                }
-                this.lastDirection = moveKey;
-
-                this.recentMoves.push(moveKey);
-                if (this.recentMoves.length > this.maxRecentMoves) {
-                    this.recentMoves.shift();
-                }
-
-                // Track position history
-                this.moveHistory.push({ x: this.player.x, y: this.player.y });
-                if (this.moveHistory.length > this.maxHistory) {
-                    this.moveHistory.shift();
-                }
-
-                // Simple stuck detection: if we've made the same move 4+ times in a row
-                if (this.recentMoves.length >= 4) {
-                    const lastFour = this.recentMoves.slice(-4);
-                    if (lastFour.every(move => move === lastFour[0])) {
-                        this.stuckCounter++;
-                    } else {
-                        this.stuckCounter = 0; // Reset if pattern broken
-                    }
-                }
-            }
-
+        // Collision Check
+        if (!this.world.isWall(newX, newY)) {
             this.player.x = newX;
             this.player.y = newY;
             this.explored.add(`${newX},${newY}`);
+            this.checkCollectibles();
             this.playMoveSound();
-            this.lastMoveTime = currentTime;
         }
     }
 
-    checkCollectibleCollision() {
-        this.collectibles = this.collectibles.filter(collectible => {
-            if (collectible.x === this.player.x && collectible.y === this.player.y) {
-                this.score += 10;
-                this.scoreElement.textContent = this.score;
-                this.playCollectSound();
-                return false;
-            }
-            return true;
+    checkCollectibles() {
+        // Find which chunk we are in
+        const cx = Math.floor(this.player.x / this.world.chunkSize);
+        const cy = Math.floor(this.player.y / this.world.chunkSize);
+        const chunk = this.world.getChunk(cx, cy);
+
+        // Filter out collected
+        const originalLen = chunk.collectibles.length;
+        chunk.collectibles = chunk.collectibles.filter(c => {
+            return !(c.x === this.player.x && c.y === this.player.y);
         });
+
+        if (chunk.collectibles.length < originalLen) {
+            this.score += 10;
+            this.scoreElement.textContent = this.score;
+            this.playCollectSound();
+
+            // Spawn particles
+            for (let i = 0; i < 10; i++) {
+                this.particles.push(new Particle(
+                    this.player.x * this.cellSize + this.cellSize / 2,
+                    this.player.y * this.cellSize + this.cellSize / 2,
+                    '#ffd700'
+                ));
+            }
+        }
+    }
+
+    update() {
+        // Update Camera to follow player smoothly or locked
+        // Target camera position (centered on player)
+        const targetCamX = this.player.x * this.cellSize - this.canvas.width / 2 + this.cellSize / 2;
+        const targetCamY = this.player.y * this.cellSize - this.canvas.height / 2 + this.cellSize / 2;
+
+        // Simple lerp for smoothness
+        this.camera.x += (targetCamX - this.camera.x) * 0.1;
+        this.camera.y += (targetCamY - this.camera.y) * 0.1;
+
+        // Update Particles
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            this.particles[i].update();
+            if (this.particles[i].life <= 0) {
+                this.particles.splice(i, 1);
+            }
+        }
+
+        this.updateTimer();
     }
 
     updateTimer() {
@@ -322,224 +429,120 @@ class MazeGame {
     }
 
     render() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // clear with dark background
+        this.ctx.fillStyle = '#0f3460';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw maze with fog-of-war
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                const isExplored = this.explored.has(`${x},${y}`);
-                const isVisible = this.isInVisionRange(x, y);
+        // Determine visible world bounds
+        const startWX = Math.floor(this.camera.x / this.cellSize);
+        const startWY = Math.floor(this.camera.y / this.cellSize);
+        // Add a bit of buffer
+        const numCols = Math.ceil(this.canvas.width / this.cellSize) + 1;
+        const numRows = Math.ceil(this.canvas.height / this.cellSize) + 1;
 
-                if (this.maze[y][x] === 1) {
-                    if (isExplored || isVisible) {
-                        this.ctx.fillStyle = '#333';
-                        this.ctx.fillRect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
+        for (let wy = startWY; wy <= startWY + numRows; wy++) {
+            for (let wx = startWX; wx <= startWX + numCols; wx++) {
+                // Determine chunk
+                const isWall = this.world.isWall(wx, wy);
+
+                // Screen coordinates
+                const sx = Math.floor(wx * this.cellSize - this.camera.x);
+                const sy = Math.floor(wy * this.cellSize - this.camera.y);
+
+                // Check visibility (fog of war) or just render all? 
+                // Let's implement Fog of War: only visible if in explored set OR within radius
+                const isExplored = this.explored.has(`${wx},${wy}`);
+                const dist = Math.sqrt(Math.pow(wx - this.player.x, 2) + Math.pow(wy - this.player.y, 2));
+                const isVisible = dist < 8; // Vision radius
+
+                if (isVisible || isExplored) {
+                    if (isWall) {
+                        this.ctx.fillStyle = isVisible ? '#16213e' : '#050510'; // Darker if not currently visible
+                        this.ctx.fillRect(sx, sy, this.cellSize, this.cellSize);
+                        // Add 3D effect / highlight
+                        if (isVisible) {
+                            this.ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                            this.ctx.fillRect(sx, sy, this.cellSize, 2); // Top highlight
+                        }
                     } else {
-                        this.ctx.fillStyle = '#000';
-                        this.ctx.fillRect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
+                        // Path
+                        this.ctx.fillStyle = isVisible ? '#444' : '#222';
+                        // Floor texture? Simple rect for now
+                        this.ctx.fillRect(sx, sy, this.cellSize, this.cellSize);
                     }
                 } else {
-                    if (isExplored || isVisible) {
-                        this.ctx.fillStyle = '#1a1a1a';
-                        this.ctx.fillRect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
-                    } else {
-                        this.ctx.fillStyle = '#000';
-                        this.ctx.fillRect(x * this.cellSize, y * this.cellSize, this.cellSize, this.cellSize);
+                    // Unexplored area (black)
+                    // Do nothing
+                }
+
+                // Render collectible if present at this location
+                if (isVisible) { // Only show collectibles if currently visible
+                    // We need to check if this tile has a collectible. 
+                    // Accessing efficiently directly from world? 
+                    // Iterating chunks might be faster if we have many tiles.
+                    // Let's do a quick lookup helper or just iterate chunks in view?
+                    // Given the loop structure, let's optimize:
+                    // Actually, let's render collectibles separately by iterating visible CHUNKS to avoid per-tile check.
+                }
+            }
+        }
+
+        // Render Collectibles (Pass 2)
+        // Find visible chunks based on view
+        const startCX = Math.floor(startWX / this.world.chunkSize);
+        const startCY = Math.floor(startWY / this.world.chunkSize);
+        const endCX = Math.floor((startWX + numCols) / this.world.chunkSize);
+        const endCY = Math.floor((startWY + numRows) / this.world.chunkSize);
+
+        for (let cy = startCY; cy <= endCY; cy++) {
+            for (let cx = startCX; cx <= endCX; cx++) {
+                const chunk = this.world.getChunk(cx, cy);
+                for (const c of chunk.collectibles) {
+                    // Check vision
+                    const dist = Math.sqrt(Math.pow(c.x - this.player.x, 2) + Math.pow(c.y - this.player.y, 2));
+                    if (dist < 8) {
+                        const sx = c.x * this.cellSize - this.camera.x;
+                        const sy = c.y * this.cellSize - this.camera.y;
+
+                        // Draw Coin
+                        this.ctx.beginPath();
+                        this.ctx.arc(sx + this.cellSize / 2, sy + this.cellSize / 2, this.cellSize / 4, 0, Math.PI * 2);
+                        this.ctx.fillStyle = '#ffd700';
+                        this.ctx.fill();
+                        this.ctx.strokeStyle = '#eca500';
+                        this.ctx.lineWidth = 2;
+                        this.ctx.stroke();
+
+                        // Sparkle (random)
+                        if (Math.random() < 0.1) {
+                            this.ctx.fillStyle = '#fff';
+                            this.ctx.fillRect(sx + Math.random() * this.cellSize, sy + Math.random() * this.cellSize, 2, 2);
+                        }
                     }
                 }
             }
         }
 
-        // Draw collectibles
-        this.collectibles.forEach(collectible => {
-            if (this.isInVisionRange(collectible.x, collectible.y)) {
-                this.ctx.fillStyle = '#ffd700';
-                this.ctx.fillRect(
-                    collectible.x * this.cellSize + 5,
-                    collectible.y * this.cellSize + 5,
-                    this.cellSize - 10,
-                    this.cellSize - 10
-                );
-            }
-        });
+        // Render Player
+        const pSx = this.player.x * this.cellSize - this.camera.x;
+        const pSy = this.player.y * this.cellSize - this.camera.y;
 
-        // Draw player
-        this.ctx.fillStyle = '#e94560';
-        this.ctx.fillRect(
-            this.player.x * this.cellSize + 2,
-            this.player.y * this.cellSize + 2,
-            this.cellSize - 4,
-            this.cellSize - 4
+        // Glow
+        const grad = this.ctx.createRadialGradient(
+            pSx + this.cellSize / 2, pSy + this.cellSize / 2, this.cellSize / 4,
+            pSx + this.cellSize / 2, pSy + this.cellSize / 2, this.cellSize * 2
         );
-    }
+        grad.addColorStop(0, 'rgba(233, 69, 96, 0.4)');
+        grad.addColorStop(1, 'rgba(233, 69, 96, 0)');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(pSx - this.cellSize, pSy - this.cellSize, this.cellSize * 3, this.cellSize * 3);
 
-    findBestDirection() {
-        const directions = [
-            { x: 0, y: -1, name: 'up' },    // up
-            { x: 1, y: 0, name: 'right' },  // right
-            { x: 0, y: 1, name: 'down' },  // down
-            { x: -1, y: 0, name: 'left' }  // left
-        ];
+        this.ctx.fillStyle = '#e94560';
+        // Draw square player for now
+        this.ctx.fillRect(pSx + 4, pSy + 4, this.cellSize - 8, this.cellSize - 8);
 
-        // Calculate scores for all adjacent traversable squares
-        let bestDirection = null;
-        let bestScore = -Infinity;
-
-        for (const dir of directions) {
-            const newX = this.player.x + dir.x;
-            const newY = this.player.y + dir.y;
-
-            // Skip if not traversable
-            if (newX < 0 || newX >= this.cols || newY < 0 || newY >= this.rows ||
-                this.maze[newY][newX] !== 0) {
-                continue;
-            }
-
-            let score = 0;
-
-            // Base score for being traversable
-            score += 1;
-
-            // Penalty for each time this position has been visited
-            const posKey = `${newX},${newY}`;
-            const visitCount = this.moveHistory.filter(pos => pos.x === newX && pos.y === newY).length;
-            score -= visitCount;
-
-            // Bonus for continuing in the same direction
-            if (this.lastDirection) {
-                const [lastDx, lastDy] = this.lastDirection.split(',').map(Number);
-                if (dir.x === lastDx && dir.y === lastDy) {
-                    score += 2; // Same direction bonus
-                }
-
-            // Bonus for turning left (relative to current direction)
-            const currentDirIndex = this.getDirectionIndex(lastDx, lastDy);
-            const newDirIndex = this.getDirectionIndex(dir.x, dir.y);
-            const leftTurnIndex = (currentDirIndex - 1 + 4) % 4;
-
-            if (newDirIndex === leftTurnIndex) {
-                score += 1; // Left turn bonus
-            }
-
-            // Bonus for food (collectibles) visible in this direction
-            if (this.hasCollectibleInDirection(dir.x, dir.y)) {
-                score += 5; // Food bonus
-            }
-            }
-
-            // Choose the highest scoring direction
-            if (score > bestScore) {
-                bestScore = score;
-                bestDirection = dir;
-            }
-        }
-
-        return bestDirection;
-    }
-
-    getDirectionIndex(dx, dy) {
-        if (dx === 0 && dy === -1) return 0; // up
-        if (dx === 1 && dy === 0) return 1;  // right
-        if (dx === 0 && dy === 1) return 2;  // down
-        if (dx === -1 && dy === 0) return 3; // left
-        return -1;
-    }
-
-    hasCollectibleInDirection(dirX, dirY) {
-        // Check if there are any collectibles visible in this direction
-        for (const collectible of this.collectibles) {
-            if (this.isInVisionRange(collectible.x, collectible.y)) {
-                // Check if the collectible is in the same direction
-                const dx = collectible.x - this.player.x;
-                const dy = collectible.y - this.player.y;
-
-                // Normalize the direction vectors for comparison
-                const collectibleDirX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
-                const collectibleDirY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
-
-                // If the collectible is in the same direction (or same axis), return true
-                if (collectibleDirX === dirX && collectibleDirY === dirY) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    isInVisionRange(x, y) {
-        const dx = Math.abs(x - this.player.x);
-        const dy = Math.abs(y - this.player.y);
-        return dx <= 3 && dy <= 3; // Vision range of 3 cells
-    }
-
-    generateAmbientSound() {
-        // Generate eerie ambient sound using Web Audio API
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-            oscillator.type = 'sawtooth';
-
-            gainNode.gain.setValueAtTime(0.01, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + 10);
-
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 10);
-        } catch (e) {
-            console.log('Web Audio API not supported');
-        }
-    }
-
-    playMoveSound() {
-        this.playTone(400, 0.1);
-    }
-
-    playCollectSound() {
-        this.playTone(800, 0.2);
-    }
-
-    playTone(frequency, duration) {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            oscillator.type = 'square';
-
-            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
-
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + duration);
-        } catch (e) {
-            console.log('Web Audio API not supported');
-        }
-    }
-
-    resetStuckState() {
-        // Intelligent reset: keep some useful information but clear problematic patterns
-        this.stuckCounter = 0;
-        this.consecutiveSameDirection = 0;
-
-        // Clear recent moves to break patterns, but keep some position history
-        this.recentMoves = [];
-
-        // Keep the last 10 positions for context, but clear the most recent ones that might be causing loops
-        if (this.moveHistory.length > 10) {
-            this.moveHistory = this.moveHistory.slice(0, 10);
-        }
-
-        // Reset direction tracking
-        this.lastDirection = null;
+        // 4. Render Particles
+        this.particles.forEach(p => p.draw(this.ctx, this.camera.x, this.camera.y));
     }
 
     startGameLoop() {
@@ -550,9 +553,60 @@ class MazeGame {
         };
         loop();
     }
+
+    // Audio Helpers
+    playMoveSound() {
+        this.playTone(300, 'square', 0.05);
+    }
+
+    playCollectSound() {
+        this.playTone(600, 'sine', 0.1);
+        setTimeout(() => this.playTone(900, 'sine', 0.2), 100);
+    }
+
+    playTone(freq, type, duration) {
+        if (!this.audioCtx) return;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.frequency.value = freq;
+        osc.type = type;
+        gain.gain.setValueAtTime(0.1, this.audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.audioCtx.currentTime + duration);
+        osc.start();
+        osc.stop(this.audioCtx.currentTime + duration);
+    }
 }
 
-// Start the game when the page loads
+// Basic Particle System
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 3 + 1;
+        this.speedX = (Math.random() - 0.5) * 2;
+        this.speedY = (Math.random() - 0.5) * 2;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.05 + 0.02;
+    }
+
+    update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        this.life -= this.decay;
+    }
+
+    draw(ctx, camX, camY) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - camX, this.y - camY, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// Start
 document.addEventListener('DOMContentLoaded', () => {
     new MazeGame();
 });
