@@ -510,6 +510,10 @@
                 h('div', {
                     className: 'node-header',
                     style: node.color ? { backgroundColor: `${node.color}1a`, borderBottomColor: node.color } : {},
+                    onMouseDown: (e) => {
+                        e.stopPropagation();
+                        onSelect(e, true);
+                    }
                 },
                     h('input', {
                         className: 'node-title-input',
