@@ -75,10 +75,60 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(React.createElement(Container));
 ```
 
-## 3. Rules & Gotchas
+## 3. Standalone & Script Order (Critical)
 
-- **No `import` / `export`**: Unless you use `<script type="module">` (which we generally avoid for compatibility/simplicity in this pattern), everything is global.
+When running via `file://` protocol or as a simple HTML file:
+
+1.  **NO Modules**: Do not use `<script type="module">`. It causes CORS issues with `file://` and requires a server. Use standard `<script>` tags.
+2.  **Global Scope**: Since there are no modules, everything in your scripts becomes global.
+    -   Tip: Wrap your app code in an IIFE `(() => { ... })();` if you want to avoid polluting the global scope, OR just embrace it for simple tools.
+3.  **Execution Order**:
+    -   Libraries MUST come first (React, ReactDOM, etc.).
+    -   Domain/Logic scripts next.
+    -   UI Components next.
+    -   Main/Mount script last (often at the bottom of `<body>`).
+
+**Example Structure:**
+
+```html
+<head>
+    <!-- 1. Libraries -->
+    <script src="react.js"></script>
+    <script src="react-dom.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <!-- 2. Logic (if separated) -->
+    <script src="domain-logic.js"></script>
+
+    <!-- 3. Components (depend on React) -->
+    <script src="components.js"></script>
+
+    <!-- 4. Main (Mounts the app) -->
+    <script src="main.js"></script>
+</body>
+```
+
+## 4. Rules & Gotchas
+
+- **No `import` / `export`**: Standard JS only.
 - **ClassName**: Remember to use `className` instead of `class`.
 - **Style Objects**: Styles must be passed as objects: `style: { display: 'flex' }` not strings.
 - **Event Handlers**: Use camelCase events: `onClick`, `onChange`.
 - **Keys**: Don't forget `key` props when mapping arrays.
+
+## 5. Common Integrations
+
+### Markdown Rendering
+To render Markdown without a build step, use a library like `marked` from a CDN.
+
+1.  **Include Script**: `<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>`
+2.  **Render**: Use `marked.parse(content)` combined with `dangerouslySetInnerHTML`.
+
+```javascript
+h('div', {
+    dangerouslySetInnerHTML: { __html: marked.parse(markdownContent) }
+})
+```
+

@@ -8,6 +8,8 @@
     <!-- React & ReactDOM (No Babel) -->
     <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <!-- Marked for Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <style>
         :root {
@@ -266,6 +268,45 @@
             color: #888;
             pointer-events: none;
         }
+
+        .node-content-edit {
+            width: 100%;
+            min-height: 60px;
+            background: rgba(0, 0, 0, 0.2);
+            border: none;
+            color: inherit;
+            font-family: inherit;
+            font-size: inherit;
+            resize: vertical;
+            outline: none;
+            padding: 4px;
+            display: block;
+        }
+
+        .node-content-markdown h1,
+        .node-content-markdown h2,
+        .node-content-markdown h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.1em;
+            color: #fff;
+        }
+
+        .node-content-markdown p {
+            margin: 0 0 8px 0;
+        }
+
+        .node-content-markdown ul,
+        .node-content-markdown ol {
+            margin: 0 0 8px 0;
+            padding-left: 20px;
+        }
+
+        .node-content-markdown code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
     </style>
 </head>
 
@@ -313,6 +354,20 @@
 
         const Node = ({ node, isSelected, onUpdate, onSelect, onDelete, onStartConnect }) => {
             const nodeRef = useRef(null);
+            const [isEditing, setIsEditing] = useState(false);
+            const [tempContent, setTempContent] = useState(node.content);
+
+            // Sync content if changed externally
+            useEffect(() => {
+                setTempContent(node.content);
+            }, [node.content]);
+
+            const handleBlur = () => {
+                setIsEditing(false);
+                if (tempContent !== node.content) {
+                    onUpdate(node.id, { content: tempContent });
+                }
+            };
 
             return h('div', {
                 ref: nodeRef,
@@ -346,15 +401,22 @@
                 // Content
                 h('div', {
                     className: 'node-content',
-                    contentEditable: true,
-                    suppressContentEditableWarning: true,
-                    onBlur: (e) => onUpdate(node.id, { content: e.target.innerText }),
-                    onFocus: () => onSelect(),
-                    // Initial content logic (simple approach)
-                    ref: (el) => {
-                        if (el && el.innerText !== node.content) el.innerText = node.content;
-                    }
-                }),
+                    onDoubleClick: () => setIsEditing(true)
+                },
+                    isEditing
+                        ? h('textarea', {
+                            className: 'node-content-edit',
+                            value: tempContent,
+                            onChange: (e) => setTempContent(e.target.value),
+                            onBlur: handleBlur,
+                            autoFocus: true,
+                            onMouseDown: (e) => e.stopPropagation()
+                        })
+                        : h('div', {
+                            className: 'node-content-markdown',
+                            dangerouslySetInnerHTML: { __html: typeof marked !== 'undefined' ? marked.parse(node.content) : node.content }
+                        })
+                ),
                 // Ports
                 h('div', {
                     className: 'handle handle-in',
