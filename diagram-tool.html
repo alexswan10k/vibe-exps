@@ -5,6 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VibeFlow Query Diagram</title>
+    <!-- React & ReactDOM (No Babel) -->
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+
     <style>
         :root {
             --bg-color: #1e1e24;
@@ -35,14 +39,14 @@
             color: var(--node-text);
         }
 
-        #app {
+        #root {
             position: relative;
             width: 100vw;
             height: 100vh;
         }
 
         /* Toolbar */
-        #toolbar {
+        .toolbar {
             position: absolute;
             top: 20px;
             left: 20px;
@@ -84,25 +88,23 @@
         }
 
         /* Canvas Layers */
-        #svg-layer {
+        .svg-layer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             pointer-events: none;
-            /* Let clicks pass through to nodes/canvas */
             z-index: 1;
         }
 
-        #node-layer {
+        .node-layer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             z-index: 2;
-            /* Allow clicking on empty space to pan/deselect */
         }
 
         /* Nodes */
@@ -145,13 +147,21 @@
             cursor: grabbing;
         }
 
-        .node-title {
+        .node-title-input {
+            background: transparent;
+            border: none;
+            color: #aaa;
             font-size: 12px;
             font-weight: 600;
-            color: #aaa;
             text-transform: uppercase;
             letter-spacing: 0.5px;
-            pointer-events: none;
+            width: 100%;
+            outline: none;
+            cursor: text;
+        }
+
+        .node-title-input:focus {
+            color: white;
         }
 
         .delete-btn {
@@ -168,6 +178,7 @@
             font-size: 10px;
             line-height: 1;
             color: white;
+            margin-left: 8px;
         }
 
         .node:hover .delete-btn {
@@ -182,10 +193,11 @@
             outline: none;
             cursor: text;
             min-height: 1em;
-            /* Adaptive sizing hack */
             width: fit-content;
             max-width: 300px;
             min-width: 120px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         /* Handles (Ports) */
@@ -224,6 +236,11 @@
             stroke-linecap: round;
         }
 
+        path.connection.selected {
+            stroke: var(--selection-color);
+            stroke-width: 3;
+        }
+
         path.connection:hover {
             stroke: var(--selection-color);
             cursor: pointer;
@@ -238,7 +255,6 @@
             pointer-events: none;
         }
 
-        /* Context Menu for simple usage hint */
         #hint {
             position: absolute;
             bottom: 20px;
@@ -255,536 +271,340 @@
 
 <body>
 
-    <div id="app">
-        <div id="toolbar">
-            <button class="primary" id="btn-add">Add Node</button>
-            <button id="btn-export">Export JSON</button>
-            <button id="btn-import">Import JSON</button>
-            <button id="btn-clear" style="background:#ff5252;">Clear</button>
-            <button id="btn-share">Copy Link</button>
-        </div>
-
-        <svg id="svg-layer"></svg>
-        <div id="node-layer"></div>
-
-        <div id="hint">
-            Double-click to edit text • Drag handles to connect • Drag header to move • Delete key to remove
-        </div>
-    </div>
+    <div id="root"></div>
 
     <script>
-        /**
-         * VibeFlow Diagram Tool
-         * A standalone, dependency-free diagramming tool using Vanilla JS.
-         */
+        // --- No-Build React Setup ---
+        const { useState, useEffect, useCallback, useRef } = React;
+        const h = React.createElement;
 
-        // --- State Management ---
-        const state = {
-            nodes: [],
-            connections: [],
-            nextNodeId: 1,
-            draggingNode: null,
-            dragOffset: { x: 0, y: 0 },
-            connecting: {
-                active: false,
-                sourceNodeId: null,
-                startX: 0,
-                startY: 0,
-                currentX: 0,
-                currentY: 0
-            },
-            selectedNodeId: null,
-            selectedConnectionId: null
+        // --- Helpers ---
+        const generateId = (prefix) => prefix + '-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+        const calculateSimplePath = (x1, y1, x2, y2) => {
+            const dist = Math.abs(x2 - x1);
+            const controlOffset = Math.max(dist * 0.5, 50);
+            return `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
         };
 
-        // --- DOM Elements ---
-        const svgLayer = document.getElementById('svg-layer');
-        const nodeLayer = document.getElementById('node-layer');
-        const app = document.getElementById('app');
+        // --- Components ---
 
-        // --- Core Logic ---
+        const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare }) => {
+            return h('div', { className: 'toolbar' },
+                h('button', { className: 'primary', onClick: onAdd }, 'Add Node'),
+                h('button', { onClick: onExport }, 'Export JSON'),
+                h('button', { onClick: onImport }, 'Import JSON'),
+                h('button', { style: { background: '#ff5252' }, onClick: onClear }, 'Clear'),
+                h('button', { onClick: onShare }, 'Copy Link')
+            );
+        };
 
-        class DiagramApp {
-            constructor() {
-                this.bindEvents();
-                this.loadFromUrl();
-                if (state.nodes.length === 0) {
-                    this.addNode(100, 100, "Welcome to VibeFlow!\nDrag me around.");
-                    this.addNode(400, 100, "Adaptive sizing:\nType more text and I grow!");
-                    this.addConnection(state.nodes[0].id, state.nodes[1].id);
+        const Connection = ({ id, x1, y1, x2, y2, isSelected, onSelect }) => {
+            const d = calculateSimplePath(x1, y1, x2, y2);
+            return h('path', {
+                d: d,
+                className: 'connection' + (isSelected ? ' selected' : ''),
+                onClick: (e) => {
+                    e.stopPropagation();
+                    onSelect();
                 }
-                this.render();
-            }
+            });
+        };
 
-            bindEvents() {
-                // Toolbar
-                document.getElementById('btn-add').addEventListener('click', () => {
-                    this.addNode(100 + Math.random() * 50, 100 + Math.random() * 50);
-                    this.render();
-                });
+        const Node = ({ node, isSelected, onUpdate, onSelect, onDelete, onStartConnect }) => {
+            const nodeRef = useRef(null);
 
-                document.getElementById('btn-clear').addEventListener('click', () => {
-                    if (confirm('Clear all?')) {
-                        state.nodes = [];
-                        state.connections = [];
-                        this.render();
-                        this.updateUrl();
+            return h('div', {
+                ref: nodeRef,
+                className: 'node' + (isSelected ? ' selected' : ''),
+                style: { left: node.x, top: node.y },
+                onMouseDown: (e) => {
+                    e.stopPropagation();
+                }
+            },
+                // Header
+                h('div', {
+                    className: 'node-header',
+                    onMouseDown: (e) => {
+                        onSelect(e, true);
                     }
-                });
-
-                document.getElementById('btn-export').addEventListener('click', () => this.exportJson());
-                document.getElementById('btn-import').addEventListener('click', () => this.importJson());
-                document.getElementById('btn-share').addEventListener('click', () => this.shareLink());
-
-                // Global Mouse Events for Dragging & Connecting
-                document.addEventListener('mousemove', (e) => this.onMouseMove(e));
-                document.addEventListener('mouseup', (e) => this.onMouseUp(e));
-
-                // Background click to deselect
-                app.addEventListener('mousedown', (e) => {
-                    if (e.target === app || e.target === nodeLayer || e.target === svgLayer) {
-                        this.deselectAll();
-                    }
-                });
-
-                // Keyboard
-                document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Delete' || e.key === 'Backspace') {
-                        // Start editing text doesn't trigger delete
-                        if (document.activeElement.isContentEditable) return;
-
-                        if (state.selectedNodeId) {
-                            this.deleteNode(state.selectedNodeId);
-                            this.deselectAll();
-                            this.render();
+                },
+                    h('input', {
+                        className: 'node-title-input',
+                        value: node.title,
+                        onChange: (e) => onUpdate(node.id, { title: e.target.value }),
+                        onMouseDown: (e) => e.stopPropagation()
+                    }),
+                    h('div', {
+                        className: 'delete-btn',
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            onDelete(node.id);
                         }
-                        if (state.selectedConnectionId) {
-                            this.deleteConnection(state.selectedConnectionId);
-                            state.selectedConnectionId = null;
-                            this.renderConnections();
-                            this.updateUrl();
-                        }
+                    }, '×')
+                ),
+                // Content
+                h('div', {
+                    className: 'node-content',
+                    contentEditable: true,
+                    suppressContentEditableWarning: true,
+                    onBlur: (e) => onUpdate(node.id, { content: e.target.innerText }),
+                    onFocus: () => onSelect(),
+                    // Initial content logic (simple approach)
+                    ref: (el) => {
+                        if (el && el.innerText !== node.content) el.innerText = node.content;
                     }
-                });
-            }
-
-            // --- Nodes ---
-
-            addNode(x, y, content = "New Node") {
-                const id = 'node-' + state.nextNodeId++;
-                const node = {
-                    id,
-                    x,
-                    y,
-                    content,
-                    width: 0, // Calculated by DOM
-                    height: 0
-                };
-                state.nodes.push(node);
-
-                // Create DOM element
-                const el = document.createElement('div');
-                el.className = 'node';
-                el.id = id;
-                el.style.left = x + 'px';
-                el.style.top = y + 'px';
-
-                el.innerHTML = `
-                <div class="node-header">
-                    <span class="node-title">Node</span>
-                    <div class="delete-btn">×</div>
-                </div>
-                <div class="node-content" contenteditable="true" spellcheck="false">${content}</div>
-                <div class="handle handle-in" data-id="${id}" data-type="in"></div>
-                <div class="handle handle-out" data-id="${id}" data-type="out"></div>
-            `;
-
-                // Node Events
-                const header = el.querySelector('.node-header');
-                header.addEventListener('mousedown', (e) => {
-                    state.draggingNode = id;
-                    state.dragOffset.x = e.clientX - node.x;
-                    state.dragOffset.y = e.clientY - node.y;
-                    this.selectNode(id);
-                    e.stopPropagation(); // Prevent canvas drag
-                });
-
-                const contentEl = el.querySelector('.node-content');
-                contentEl.addEventListener('input', (e) => {
-                    node.content = e.target.innerText;
-                    // Force connection update as sizes change
-                    this.renderConnections();
-                    this.updateUrl();
-                });
-                contentEl.addEventListener('focus', () => {
-                    this.selectNode(id);
-                });
-
-                const delBtn = el.querySelector('.delete-btn');
-                delBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.deleteNode(id);
-                    this.render();
-                });
-
-                // Handles
-                const outHandle = el.querySelector('.handle-out');
-                outHandle.addEventListener('mousedown', (e) => {
-                    e.stopPropagation();
-                    e.preventDefault(); // Prevent text selection
-                    const rect = outHandle.getBoundingClientRect();
-                    state.connecting = {
-                        active: true,
-                        sourceNodeId: id,
-                        startX: rect.left + rect.width / 2,
-                        startY: rect.top + rect.height / 2,
-                        currentX: e.clientX,
-                        currentY: e.clientY
-                    };
-                });
-
-                const inHandle = el.querySelector('.handle-in');
-                inHandle.addEventListener('mouseup', (e) => {
-                    if (state.connecting.active && state.connecting.sourceNodeId !== id) {
+                }),
+                // Ports
+                h('div', {
+                    className: 'handle handle-in',
+                    id: 'handle-in-' + node.id,
+                    onMouseUp: (e) => {
                         e.stopPropagation();
-                        this.addConnection(state.connecting.sourceNodeId, id);
-                        this.stopConnecting();
+                        onStartConnect(node.id, 'in', e);
                     }
-                });
-
-                nodeLayer.appendChild(el);
-                this.updateUrl();
-                return node;
-            }
-
-            render() {
-                // Check for missing DOM elements (e.g. from load)
-                state.nodes.forEach(node => {
-                    if (!document.getElementById(node.id)) {
-                        // This is a partial re-render or initial load logic could go here
-                        // For now, simpler to clear and rebuild if deep changes, 
-                        // but let's try to be efficient: only add if missing.
-                        // Actually, easiest is just to wipe nodeLayer if we do a full render.
-                    }
-                });
-
-                // Re-render connections
-                this.renderConnections();
-            }
-
-            deleteNode(id) {
-                state.nodes = state.nodes.filter(n => n.id !== id);
-                state.connections = state.connections.filter(c => c.from !== id && c.to !== id);
-                const el = document.getElementById(id);
-                if (el) el.remove();
-                this.updateUrl();
-            }
-
-            selectNode(id) {
-                state.selectedNodeId = id;
-                state.selectedConnectionId = null;
-                document.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
-                document.querySelectorAll('.connection').forEach(el => el.setAttribute('stroke', '#a0a0b0')); // Reset connections
-
-                const el = document.getElementById(id);
-                if (el) el.classList.add('selected');
-            }
-
-            deselectAll() {
-                state.selectedNodeId = null;
-                state.selectedConnectionId = null;
-                document.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
-                document.querySelectorAll('.connection').forEach(el => el.setAttribute('stroke', '#a0a0b0'));
-            }
-
-            // --- Connections ---
-
-            addConnection(from, to) {
-                // Check duplicate
-                if (state.connections.find(c => c.from === from && c.to === to)) return;
-
-                const id = 'conn-' + Date.now() + Math.random();
-                state.connections.push({ id, from, to });
-                this.renderConnections();
-                this.updateUrl();
-            }
-
-            deleteConnection(id) {
-                state.connections = state.connections.filter(c => c.id !== id);
-            }
-
-            renderConnections() {
-                // Clear SVG
-                svgLayer.innerHTML = '';
-
-                // Draw confirmed connections
-                state.connections.forEach(conn => {
-                    const fromEl = document.getElementById(conn.from);
-                    const toEl = document.getElementById(conn.to);
-                    if (!fromEl || !toEl) return;
-
-                    const fromRect = fromEl.querySelector('.handle-out').getBoundingClientRect();
-                    const toRect = toEl.querySelector('.handle-in').getBoundingClientRect();
-
-                    // Convert to local coords (relative to body/viewport, since SVG is fullscreen fixed/absolute)
-                    // Actually my SVG is absolute 0,0. clientRect provides viewport coords.
-                    const startX = fromRect.left + fromRect.width / 2;
-                    const startY = fromRect.top + fromRect.height / 2;
-                    const endX = toRect.left + toRect.width / 2;
-                    const endY = toRect.top + toRect.height / 2;
-
-                    const d = this.calculatePath(startX, startY, endX, endY);
-
-                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    path.setAttribute('d', d);
-                    path.setAttribute('class', 'connection');
-                    path.setAttribute('id', conn.id);
-
-                    if (state.selectedConnectionId === conn.id) {
-                        path.setAttribute('stroke', '#ffab40');
-                    }
-
-                    path.addEventListener('click', (e) => {
+                }),
+                h('div', {
+                    className: 'handle handle-out',
+                    onMouseDown: (e) => {
                         e.stopPropagation();
-                        state.selectedConnectionId = conn.id;
-                        state.selectedNodeId = null;
-                        this.renderConnections(); // Re-render to show selection state (lazy way)
-                        // Or just set attribute directly for perf
-                    });
-
-                    svgLayer.appendChild(path);
-                });
-
-                // Draw temp connection if dragging
-                if (state.connecting.active) {
-                    const d = this.calculatePath(
-                        state.connecting.startX,
-                        state.connecting.startY,
-                        state.connecting.currentX,
-                        state.connecting.currentY
-                    );
-                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    path.setAttribute('d', d);
-                    path.setAttribute('class', 'temp-connection');
-                    svgLayer.appendChild(path);
-                }
-            }
-
-            calculatePath(x1, y1, x2, y2) {
-                // Bezier Curve
-                const dist = Math.abs(x2 - x1);
-                const controlOffset = Math.max(dist * 0.5, 50);
-                return `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
-            }
-
-            // --- Interaction Handlers ---
-
-            onMouseMove(e) {
-                if (state.draggingNode) {
-                    const node = state.nodes.find(n => n.id === state.draggingNode);
-                    if (node) {
-                        node.x = e.clientX - state.dragOffset.x;
-                        node.y = e.clientY - state.dragOffset.y;
-
-                        const el = document.getElementById(node.id);
-                        el.style.left = node.x + 'px';
-                        el.style.top = node.y + 'px';
-
-                        this.renderConnections();
+                        e.preventDefault();
+                        onStartConnect(node.id, 'out', e);
                     }
-                }
+                })
+            );
+        };
 
-                if (state.connecting.active) {
-                    state.connecting.currentX = e.clientX;
-                    state.connecting.currentY = e.clientY;
-                    this.renderConnections();
-                }
-            }
+        const App = () => {
+            const [nodes, setNodes] = useState([]);
+            const [connections, setConnections] = useState([]);
+            const [selection, setSelection] = useState({ type: null, id: null });
 
-            onMouseUp(e) {
-                if (state.draggingNode) {
-                    state.draggingNode = null;
-                    this.updateUrl();
-                }
-                if (state.connecting.active) {
-                    // If we didn't hit a handle (handled in handle-in mouseup), cancel
-                    this.stopConnecting();
-                }
-            }
+            // Interaction State
+            const [dragging, setDragging] = useState(null);
+            const [connecting, setConnecting] = useState(null);
 
-            stopConnecting() {
-                state.connecting.active = false;
-                this.renderConnections();
-            }
+            // --- Persistence ---
 
-            // --- Persistence (URL & JSON) ---
-
-            exportJson() {
-                const data = JSON.stringify({ nodes: state.nodes, connections: state.connections }, null, 2);
-                // Prompt download
-                const blob = new Blob([data], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'vibeflow-diagram.json';
-                a.click();
-                URL.revokeObjectURL(url);
-            }
-
-            importJson() {
-                // Simple file input trigger
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'application/json';
-                input.onchange = (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = (re) => {
-                        try {
-                            const data = JSON.parse(re.target.result);
-                            if (data.nodes && data.connections) {
-                                this.loadData(data);
-                            } else {
-                                alert('Invalid JSON format');
-                            }
-                        } catch (err) {
-                            alert('Error parsing JSON');
-                        }
-                    };
-                    reader.readAsText(file);
-                };
-                input.click();
-            }
-
-            loadData(data) {
-                // Clear current
-                nodeLayer.innerHTML = '';
-                state.nodes = data.nodes || [];
-                state.connections = data.connections || [];
-
-                // Determine next ID
-                let maxId = 0;
-                state.nodes.forEach(n => {
-                    const num = parseInt(n.id.replace('node-', ''));
-                    if (!isNaN(num) && num > maxId) maxId = num;
-
-                    // Re-create DOM
-                    this.recreateNodeDOM(n);
-                });
-                state.nextNodeId = maxId + 1;
-
-                this.renderConnections();
-                this.updateUrl();
-            }
-
-            recreateNodeDOM(n) {
-                // Logic duplicated from addNode purely for DOM creation
-                // Refactor: make createNodeDOM(node) function.
-                // For now, I'll essentially inline a "restore" function.
-                const el = document.createElement('div');
-                el.className = 'node';
-                el.id = n.id;
-                el.style.left = n.x + 'px';
-                el.style.top = n.y + 'px';
-
-                el.innerHTML = `
-                <div class="node-header">
-                    <span class="node-title">Node</span>
-                    <div class="delete-btn">×</div>
-                </div>
-                <div class="node-content" contenteditable="true" spellcheck="false">${n.content}</div>
-                <div class="handle handle-in" data-id="${n.id}" data-type="in"></div>
-                <div class="handle handle-out" data-id="${n.id}" data-type="out"></div>
-            `;
-
-                const header = el.querySelector('.node-header');
-                header.addEventListener('mousedown', (e) => {
-                    state.draggingNode = n.id;
-                    state.dragOffset.x = e.clientX - n.x;
-                    state.dragOffset.y = e.clientY - n.y;
-                    this.selectNode(n.id);
-                    e.stopPropagation();
-                });
-
-                const contentEl = el.querySelector('.node-content');
-                contentEl.addEventListener('input', (e) => {
-                    n.content = e.target.innerText;
-                    this.renderConnections();
-                    this.updateUrl();
-                });
-                contentEl.addEventListener('focus', () => {
-                    this.selectNode(n.id);
-                });
-
-                const delBtn = el.querySelector('.delete-btn');
-                delBtn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    this.deleteNode(n.id);
-                    this.render();
-                });
-
-                const outHandle = el.querySelector('.handle-out');
-                outHandle.addEventListener('mousedown', (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    const rect = outHandle.getBoundingClientRect();
-                    state.connecting = {
-                        active: true,
-                        sourceNodeId: n.id,
-                        startX: rect.left + rect.width / 2,
-                        startY: rect.top + rect.height / 2,
-                        currentX: e.clientX,
-                        currentY: e.clientY
-                    };
-                });
-
-                const inHandle = el.querySelector('.handle-in');
-                inHandle.addEventListener('mouseup', (e) => {
-                    if (state.connecting.active && state.connecting.sourceNodeId !== n.id) {
-                        e.stopPropagation();
-                        this.addConnection(state.connecting.sourceNodeId, n.id);
-                        this.stopConnecting();
-                    }
-                });
-
-                nodeLayer.appendChild(el);
-            }
-
-            // --- URL Encoded State ---
-
-            updateUrl() {
-                const data = { nodes: state.nodes, connections: state.connections };
-                const json = JSON.stringify(data);
-                const b64 = btoa(encodeURIComponent(json)); // Simple encoding
-                window.history.replaceState(null, '', '#' + b64);
-            }
-
-            loadFromUrl() {
+            useEffect(() => {
                 const hash = window.location.hash.substring(1);
                 if (hash) {
                     try {
-                        const json = decodeURIComponent(atob(hash));
-                        const data = JSON.parse(json);
-                        this.loadData(data);
+                        const data = JSON.parse(decodeURIComponent(atob(hash)));
+                        if (data.nodes) setNodes(data.nodes);
+                        if (data.connections) setConnections(data.connections);
                     } catch (e) {
-                        console.error('Failed to load from URL', e);
+                        console.error("Failed to load from URL", e);
+                    }
+                } else {
+                    const id1 = generateId('node');
+                    const id2 = generateId('node');
+                    setNodes([
+                        { id: id1, x: 100, y: 100, title: 'START', content: 'Welcome to React Flow' },
+                        { id: id2, x: 450, y: 150, title: 'END', content: 'Editable Titles & Content!' }
+                    ]);
+                    setConnections([
+                        { id: generateId('conn'), from: id1, to: id2 }
+                    ]);
+                }
+            }, []);
+
+            useEffect(() => {
+                const data = { nodes, connections };
+                const b64 = btoa(encodeURIComponent(JSON.stringify(data)));
+                window.history.replaceState(null, '', '#' + b64);
+            }, [nodes, connections]);
+
+            // --- Actions ---
+
+            const addNode = () => {
+                const newNode = {
+                    id: generateId('node'),
+                    x: 100 + Math.random() * 50,
+                    y: 100 + Math.random() * 50,
+                    title: 'NODE',
+                    content: 'New Node'
+                };
+                setNodes(prev => [...prev, newNode]);
+            };
+
+            const deleteSelected = useCallback(() => {
+                if (selection.type === 'node') {
+                    setNodes(prev => prev.filter(n => n.id !== selection.id));
+                    setConnections(prev => prev.filter(c => c.from !== selection.id && c.to !== selection.id));
+                    setSelection({ type: null, id: null });
+                } else if (selection.type === 'conn') {
+                    setConnections(prev => prev.filter(c => c.id !== selection.id));
+                    setSelection({ type: null, id: null });
+                }
+            }, [selection]);
+
+            // --- Event Handlers ---
+
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
+                        deleteSelected();
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [deleteSelected]);
+
+            const handleMouseMove = (e) => {
+                if (dragging) {
+                    const dx = e.clientX - dragging.startX;
+                    const dy = e.clientY - dragging.startY;
+                    setNodes(prev => prev.map(n =>
+                        n.id === dragging.id
+                            ? { ...n, x: dragging.nodeStartX + dx, y: dragging.nodeStartY + dy }
+                            : n
+                    ));
+                }
+                if (connecting) {
+                    setConnecting(prev => ({ ...prev, currentX: e.clientX, currentY: e.clientY }));
+                }
+            };
+
+            const handleMouseUp = () => {
+                setDragging(null);
+                if (connecting) {
+                    setConnecting(null);
+                }
+            };
+
+            const onNodeSelect = (nodeId, e, startDrag = false) => {
+                setSelection({ type: 'node', id: nodeId });
+                if (startDrag && e) {
+                    const node = nodes.find(n => n.id === nodeId);
+                    setDragging({
+                        id: nodeId,
+                        startX: e.clientX,
+                        startY: e.clientY,
+                        nodeStartX: node.x,
+                        nodeStartY: node.y
+                    });
+                }
+            };
+
+            const onStartConnect = (nodeId, type, e) => {
+                if (type === 'out') {
+                    setConnecting({
+                        sourceNodeId: nodeId,
+                        startX: e.clientX,
+                        startY: e.clientY,
+                        currentX: e.clientX,
+                        currentY: e.clientY
+                    });
+                } else if (type === 'in') {
+                    if (connecting && connecting.sourceNodeId !== nodeId) {
+                        if (!connections.find(c => c.from === connecting.sourceNodeId && c.to === nodeId)) {
+                            setConnections(prev => [...prev, {
+                                id: generateId('conn'),
+                                from: connecting.sourceNodeId,
+                                to: nodeId
+                            }]);
+                        }
+                        setConnecting(null);
                     }
                 }
-            }
+            };
 
-            shareLink() {
-                this.updateUrl();
-                navigator.clipboard.writeText(window.location.href).then(() => {
-                    alert('Link copied to clipboard!');
-                });
-            }
-        }
+            const getConnectionCoords = (conn) => {
+                const fromNode = nodes.find(n => n.id === conn.from);
+                const toNode = nodes.find(n => n.id === conn.to);
+                if (!fromNode || !toNode) return null;
 
-        // Initialize
-        window.onload = () => {
-            new DiagramApp();
+                const fromEl = document.getElementById('handle-in-' + fromNode.id)?.parentNode?.querySelector('.handle-out');
+                const toEl = document.getElementById('handle-in-' + toNode.id);
+
+                if (fromEl && toEl) {
+                    const fR = fromEl.getBoundingClientRect();
+                    const tR = toEl.getBoundingClientRect();
+                    return {
+                        x1: fR.left + fR.width / 2,
+                        y1: fR.top + fR.height / 2,
+                        x2: tR.left + tR.width / 2,
+                        y2: tR.top + tR.height / 2
+                    };
+                }
+
+                return {
+                    x1: fromNode.x + 100,
+                    y1: fromNode.y + 30,
+                    x2: toNode.x,
+                    y2: toNode.y + 30
+                };
+            };
+
+            return h('div', {
+                style: { width: '100vw', height: '100vh' },
+                onMouseMove: handleMouseMove,
+                onMouseUp: handleMouseUp,
+                onMouseDown: () => setSelection({ type: null, id: null })
+            },
+                h(Toolbar, {
+                    onAdd: addNode,
+                    onClear: () => { if (confirm('Clear?')) { setNodes([]); setConnections([]); } },
+                    onExport: () => {
+                        const blob = new Blob([JSON.stringify({ nodes, connections }, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a'); a.href = url; a.download = 'diagram.json'; a.click();
+                    },
+                    onImport: () => {
+                        const input = document.createElement('input'); input.type = 'file';
+                        input.onchange = (e) => {
+                            const reader = new FileReader();
+                            reader.onload = (re) => {
+                                const d = JSON.parse(re.target.result);
+                                setNodes(d.nodes || []);
+                                setConnections(d.connections || []);
+                            };
+                            reader.readAsText(e.target.files[0]);
+                        };
+                        input.click();
+                    },
+                    onShare: () => {
+                        navigator.clipboard.writeText(window.location.href);
+                        alert('Copied to clipboard');
+                    }
+                }),
+                h('svg', { className: 'svg-layer' },
+                    connections.map(conn => {
+                        const coords = getConnectionCoords(conn);
+                        if (!coords) return null;
+                        return h(Connection, {
+                            key: conn.id,
+                            ...conn,
+                            ...coords,
+                            isSelected: selection.id === conn.id,
+                            onSelect: () => setSelection({ type: 'conn', id: conn.id })
+                        });
+                    }),
+                    connecting && h('path', {
+                        d: calculateSimplePath(connecting.startX, connecting.startY, connecting.currentX, connecting.currentY),
+                        className: 'temp-connection'
+                    })
+                ),
+                h('div', { className: 'node-layer' },
+                    nodes.map(node => h(Node, {
+                        key: node.id,
+                        node: node,
+                        isSelected: selection.id === node.id,
+                        onUpdate: (id, updates) => setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n)),
+                        onSelect: (e, drag) => onNodeSelect(node.id, e, drag),
+                        onDelete: (id) => {
+                            setNodes(prev => prev.filter(n => n.id !== id));
+                            setConnections(prev => prev.filter(c => c.from !== id && c.to !== id));
+                        },
+                        onStartConnect: onStartConnect
+                    }))
+                ),
+                h('div', { id: 'hint' }, 'Double-click to edit text • Drag handles to connect • Drag header to move • Delete key to remove')
+            );
         };
+
+        ReactDOM.render(h(App), document.getElementById('root'));
 
     </script>
 </body>
