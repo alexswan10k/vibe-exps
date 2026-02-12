@@ -397,12 +397,14 @@
 
         // --- Components ---
 
-        const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare, onUndo, onRedo, canUndo, canRedo, onZoomIn, onZoomOut, onResetView }) => {
+        const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare, onUndo, onRedo, canUndo, canRedo, onZoomIn, onZoomOut, onResetView, onDuplicate }) => {
             return h('div', { className: 'toolbar' },
                 h('button', { className: 'primary', onClick: onAdd }, 'Add Node'),
                 h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
                 h('button', { onClick: onUndo, disabled: !canUndo, style: { opacity: canUndo ? 1 : 0.5 } }, 'Undo'),
                 h('button', { onClick: onRedo, disabled: !canRedo, style: { opacity: canRedo ? 1 : 0.5 } }, 'Redo'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onDuplicate, title: 'Duplicate Selection (Ctrl+D)' }, 'Duplicate'),
                 h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
                 h('button', { onClick: onZoomIn }, '+'),
                 h('button', { onClick: onZoomOut }, '-'),
@@ -742,6 +744,10 @@
             // Snapping State
             const [snapLines, setSnapLines] = useState([]);
 
+            // Clipboard State
+            const clipboardRef = useRef(null);
+
+
             // --- Persistence ---
 
             useEffect(() => {
@@ -802,6 +808,8 @@
 
             // --- Actions ---
 
+            // --- Actions ---
+
             const addNode = () => {
                 const cx = (window.innerWidth / 2 - viewport.x) / viewport.zoom;
                 const cy = (window.innerHeight / 2 - viewport.y) / viewport.zoom;
@@ -829,6 +837,71 @@
                 setSelection(new Set());
             }, [selection, nodes, connections, state]);
 
+            const copySelection = useCallback(() => {
+                if (selection.size === 0) return;
+
+                const selectedNodes = nodes.filter(n => selection.has(n.id));
+                const selectedConnections = connections.filter(c =>
+                    selection.has(c.id) || (selection.has(c.from) && selection.has(c.to))
+                );
+
+                clipboardRef.current = {
+                    nodes: selectedNodes,
+                    connections: selectedConnections
+                };
+                console.log('Copied to clipboard:', clipboardRef.current);
+            }, [selection, nodes, connections]);
+
+            const pasteClipboard = useCallback(() => {
+                if (!clipboardRef.current) return;
+
+                const { nodes: copiedNodes, connections: copiedConnections } = clipboardRef.current;
+
+                // Mapping old IDs to new IDs
+                const idMap = {};
+                const newNodes = copiedNodes.map(n => {
+                    const newId = generateId('node');
+                    idMap[n.id] = newId;
+                    return {
+                        ...n,
+                        id: newId,
+                        x: n.x + 20, // Offset for visibility
+                        y: n.y + 20
+                    };
+                });
+
+                const newConnections = copiedConnections.map(c => {
+                    // Only copy connections if both endpoints are in the pasted set
+                    if (idMap[c.from] && idMap[c.to]) {
+                        return {
+                            ...c,
+                            id: generateId('conn'),
+                            from: idMap[c.from],
+                            to: idMap[c.to]
+                        };
+                    }
+                    return null;
+                }).filter(Boolean);
+
+                setState({
+                    nodes: [...nodes, ...newNodes],
+                    connections: [...connections, ...newConnections]
+                });
+
+                // Select the newly pasted items
+                const newSelection = new Set();
+                newNodes.forEach(n => newSelection.add(n.id));
+                newConnections.forEach(c => newSelection.add(c.id));
+                setSelection(newSelection);
+
+            }, [nodes, connections, state]);
+
+            const duplicateSelection = useCallback(() => {
+                copySelection();
+                pasteClipboard();
+            }, [copySelection, pasteClipboard]);
+
+
             // --- Event Handlers ---
 
             useEffect(() => {
@@ -852,13 +925,36 @@
                         return;
                     }
 
+                    // Copy
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+                        e.preventDefault();
+                        copySelection();
+                        return;
+                    }
+
+                    // Paste
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+                        e.preventDefault();
+                        pasteClipboard();
+                        return;
+                    }
+
+                    // Duplicate
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+                        e.preventDefault();
+                        duplicateSelection();
+                        return;
+                    }
+
+
                     if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
                         deleteSelected();
                     }
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [deleteSelected, undo, redo, nodes, connections]);
+            }, [deleteSelected, undo, redo, nodes, connections, copySelection, pasteClipboard, duplicateSelection]);
+
 
             const handleWheel = (e) => {
                 e.preventDefault();
@@ -1096,6 +1192,7 @@
                     onRedo: redo,
                     canUndo: canUndo,
                     canRedo: canRedo,
+                    onDuplicate: duplicateSelection,
                     onZoomIn: () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 5) })),
                     onZoomOut: () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom / 1.2, 0.1) })),
                     onResetView: () => setViewport({ x: 0, y: 0, zoom: 1 }),
