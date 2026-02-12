@@ -288,6 +288,12 @@ class MazeGame {
 
         this.particles = [];
 
+        this.moveHistory = [];
+        this.autoMode = false;
+        this.lastMoveTime = 0;
+        this.moveDelay = 100;
+        this.lastDirection = null;
+
         this.init();
     }
 
@@ -321,12 +327,95 @@ class MazeGame {
 
         const autoButton = document.getElementById('autoButton');
         autoButton.addEventListener('click', () => {
-            // Toggle Auto Mode (TODO: Re-implement for infinite)
-            alert("Auto-mode currently disabled for infinite upgrade! Use ARROW KEYS.");
+            this.toggleAutoMode();
         });
 
         // Touch controls
         this.setupTouchControls();
+    }
+
+    toggleAutoMode() {
+        this.autoMode = !this.autoMode;
+        const autoButton = document.getElementById('autoButton');
+
+        if (this.autoMode) {
+            autoButton.textContent = 'Stop Auto';
+            autoButton.classList.add('auto-active');
+        } else {
+            autoButton.textContent = 'Auto Explore';
+            autoButton.classList.remove('auto-active');
+        }
+    }
+
+    findBestDirection() {
+        const directions = [
+            { x: 0, y: -1, name: 'up' },    // up
+            { x: 1, y: 0, name: 'right' },  // right
+            { x: 0, y: 1, name: 'down' },  // down
+            { x: -1, y: 0, name: 'left' }  // left
+        ];
+
+        let bestDirection = null;
+        let bestScore = -Infinity;
+
+        for (const dir of directions) {
+            const newX = this.player.x + dir.x;
+            const newY = this.player.y + dir.y;
+
+            // Check walls using World coordinates
+            if (this.world.isWall(newX, newY)) {
+                continue;
+            }
+
+            let score = 0;
+
+            // Base score (valid move)
+            score += 10;
+
+            // 1. Prefer unvisited nodes (Exploration)
+            if (!this.explored.has(`${newX},${newY}`)) {
+                score += 50;
+            }
+
+            // 2. Penalize recently visited (Anti-loop)
+            // We need a history structure. Let's add it if missing or reuse 'explored' carefully?
+            // "explored" is permanent. We need "recentMoves".
+            // Let's check this.moveHistory
+            if (this.moveHistory) {
+                const recentVisits = this.moveHistory.filter(m => m.x === newX && m.y === newY).length;
+                score -= recentVisits * 20;
+            }
+
+            // 3. Momentum (keep going same way)
+            if (this.lastDirection) {
+                if (dir.x === this.lastDirection.x && dir.y === this.lastDirection.y) {
+                    score += 5;
+                }
+            }
+
+            // 4. Collectibles Helper
+            // Check if any collectible is visible in this direction
+            // (Simplified: just check immediate surroundings or chunks?)
+            // For now, simple greedy: if next tile has coin, HUGE bonus
+            // We'd need to check chunk for specific coin at newX, newY
+            if (this.hasCollectibleAt(newX, newY)) {
+                score += 100;
+            }
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestDirection = dir;
+            }
+        }
+
+        return bestDirection;
+    }
+
+    hasCollectibleAt(x, y) {
+        const cx = Math.floor(x / this.world.chunkSize);
+        const cy = Math.floor(y / this.world.chunkSize);
+        const chunk = this.world.getChunk(cx, cy);
+        return chunk.collectibles.some(c => c.x === x && c.y === y);
     }
 
     setupTouchControls() {
@@ -364,9 +453,17 @@ class MazeGame {
 
         // Collision Check
         if (!this.world.isWall(newX, newY)) {
+            // Track direction for momentum
+            this.lastDirection = { x: newX - this.player.x, y: newY - this.player.y };
+
             this.player.x = newX;
             this.player.y = newY;
             this.explored.add(`${newX},${newY}`);
+
+            // Track history (keep last 50 moves)
+            this.moveHistory.push({ x: newX, y: newY });
+            if (this.moveHistory.length > 50) this.moveHistory.shift();
+
             this.checkCollectibles();
             this.playMoveSound();
         }
@@ -401,6 +498,18 @@ class MazeGame {
     }
 
     update() {
+        // Auto Explore Logic
+        if (this.autoMode) {
+            const now = Date.now();
+            if (now - this.lastMoveTime > this.moveDelay) {
+                const bestDir = this.findBestDirection();
+                if (bestDir) {
+                    this.handleInput(bestDir.name);
+                    this.lastMoveTime = now;
+                }
+            }
+        }
+
         // Update Camera to follow player smoothly or locked
         // Target camera position (centered on player)
         const targetCamX = this.player.x * this.cellSize - this.canvas.width / 2 + this.cellSize / 2;
