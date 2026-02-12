@@ -353,6 +353,27 @@
         const { useState, useEffect, useCallback, useRef } = React;
         const h = React.createElement;
 
+        // --- Hooks ---
+        const useHistory = (initialState) => {
+            const [index, setIndex] = useState(0);
+            const [history, setHistory] = useState([initialState]);
+
+            const setState = (newState) => {
+                const current = history[index];
+                if (JSON.stringify(current) === JSON.stringify(newState)) return;
+
+                const next = history.slice(0, index + 1);
+                next.push(newState);
+                setHistory(next);
+                setIndex(next.length - 1);
+            };
+
+            const undo = () => index > 0 && setIndex(index - 1);
+            const redo = () => index < history.length - 1 && setIndex(index + 1);
+
+            return [history[index], setState, undo, redo, index > 0, index < history.length - 1];
+        };
+
         // --- Helpers ---
         const generateId = (prefix) => prefix + '-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
 
@@ -362,15 +383,26 @@
             return `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
         };
 
+        const GRID_SIZE = 20;
+        const snapToGrid = (val) => Math.round(val / GRID_SIZE) * GRID_SIZE;
+
         // --- Components ---
 
-        const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare }) => {
+        const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare, onUndo, onRedo, canUndo, canRedo, onZoomIn, onZoomOut, onResetView }) => {
             return h('div', { className: 'toolbar' },
                 h('button', { className: 'primary', onClick: onAdd }, 'Add Node'),
-                h('button', { onClick: onExport }, 'Export JSON'),
-                h('button', { onClick: onImport }, 'Import JSON'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onUndo, disabled: !canUndo, style: { opacity: canUndo ? 1 : 0.5 } }, 'Undo'),
+                h('button', { onClick: onRedo, disabled: !canRedo, style: { opacity: canRedo ? 1 : 0.5 } }, 'Redo'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onZoomIn }, '+'),
+                h('button', { onClick: onZoomOut }, '-'),
+                h('button', { onClick: onResetView }, 'Reset'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onExport }, 'Export'),
+                h('button', { onClick: onImport }, 'Import'),
                 h('button', { style: { background: '#ff5252' }, onClick: onClear }, 'Clear'),
-                h('button', { onClick: onShare }, 'Copy Link')
+                h('button', { onClick: onShare }, 'Share')
             );
         };
 
@@ -430,7 +462,7 @@
                     id: handleId,
                     onMouseDown: (e) => {
                         e.stopPropagation();
-                        e.preventDefault();
+                        e.preventDefault(); // Prevent text selection
                         onStartConnect(node.id, position, e);
                     },
                     onMouseUp: (e) => {
@@ -440,10 +472,23 @@
                 });
             };
 
+            // Generate style based on node color (if present)
+            const style = {
+                left: node.x,
+                top: node.y,
+            };
+
+            if (node.color) {
+                style.borderColor = node.color;
+                style.boxShadow = isSelected
+                    ? `0 0 0 2px ${node.color}4d, 0 4px 12px rgba(0, 0, 0, 0.5)`
+                    : `0 4px 12px rgba(0, 0, 0, 0.4)`;
+            }
+
             return h('div', {
                 ref: nodeRef,
                 className: 'node' + (isSelected ? ' selected' : ''),
-                style: { left: node.x, top: node.y },
+                style: style,
                 onMouseDown: (e) => {
                     e.stopPropagation();
                 }
@@ -451,6 +496,7 @@
                 // Header
                 h('div', {
                     className: 'node-header',
+                    style: node.color ? { backgroundColor: `${node.color}1a`, borderBottomColor: node.color } : {},
                     onMouseDown: (e) => {
                         onSelect(e, true);
                     }
@@ -461,13 +507,29 @@
                         onChange: (e) => onUpdate(node.id, { title: e.target.value }),
                         onMouseDown: (e) => e.stopPropagation()
                     }),
-                    h('div', {
-                        className: 'delete-btn',
-                        onClick: (e) => {
-                            e.stopPropagation();
-                            onDelete(node.id);
-                        }
-                    }, '×')
+                    h('div', { style: { display: 'flex', gap: '4px' } },
+                        // Simple color picker
+                        ['#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4'].map(c =>
+                            h('div', {
+                                key: c,
+                                style: {
+                                    width: 10, height: 10, borderRadius: '50%', background: c, cursor: 'pointer',
+                                    border: node.color === c ? '1px solid white' : 'none'
+                                },
+                                onMouseDown: (e) => {
+                                    e.stopPropagation();
+                                    onUpdate(node.id, { color: c });
+                                }
+                            })
+                        ),
+                        h('div', {
+                            className: 'delete-btn',
+                            onClick: (e) => {
+                                e.stopPropagation();
+                                onDelete(node.id);
+                            }
+                        }, '×')
+                    )
                 ),
                 // Content
                 h('div', {
@@ -497,9 +559,14 @@
         };
 
         const App = () => {
-            const [nodes, setNodes] = useState([]);
-            const [connections, setConnections] = useState([]);
+            const [state, setState, undo, redo, canUndo, canRedo] = useHistory({ nodes: [], connections: [] });
+            const { nodes, connections } = state;
+
             const [selection, setSelection] = useState({ type: null, id: null });
+
+            // Viewport State
+            const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+            const [isPanning, setIsPanning] = useState(false);
 
             // Interaction State
             const [dragging, setDragging] = useState(null);
@@ -512,23 +579,29 @@
                 if (hash) {
                     try {
                         const data = JSON.parse(decodeURIComponent(atob(hash)));
-                        if (data.nodes) setNodes(data.nodes);
-                        if (data.connections) setConnections(data.connections);
+                        // Initialize history with loaded data
+                        setState({
+                            nodes: data.nodes || [],
+                            connections: data.connections || []
+                        });
                     } catch (e) {
                         console.error("Failed to load from URL", e);
                     }
                 } else {
                     const id1 = generateId('node');
                     const id2 = generateId('node');
-                    setNodes([
-                        { id: id1, x: 100, y: 100, title: 'START', content: 'Welcome to React Flow' },
-                        { id: id2, x: 450, y: 150, title: 'END', content: 'Editable Titles & Content!' }
-                    ]);
-                    setConnections([
-                        { id: generateId('conn'), from: id1, to: id2 }
-                    ]);
+                    // Initialize default history
+                    setState({
+                        nodes: [
+                            { id: id1, x: 100, y: 100, title: 'START', content: 'Welcome to React Flow' },
+                            { id: id2, x: 450, y: 150, title: 'END', content: 'Editable Titles & Content!' }
+                        ],
+                        connections: [
+                            { id: generateId('conn'), from: id1, to: id2 }
+                        ]
+                    });
                 }
-            }, []);
+            }, []); // Run once on mount
 
             useEffect(() => {
                 const data = { nodes, connections };
@@ -536,59 +609,148 @@
                 window.history.replaceState(null, '', '#' + b64);
             }, [nodes, connections]);
 
+            // --- Helpers ---
+
+            const screenToWorld = (screenX, screenY) => {
+                return {
+                    x: (screenX - viewport.x) / viewport.zoom,
+                    y: (screenY - viewport.y) / viewport.zoom
+                };
+            };
+
+            const setNodes = (newNodesOrFn) => {
+                const newNodes = typeof newNodesOrFn === 'function' ? newNodesOrFn(nodes) : newNodesOrFn;
+                setState({ nodes: newNodes, connections });
+            };
+
+            const setConnections = (newConnsOrFn) => {
+                const newConns = typeof newConnsOrFn === 'function' ? newConnsOrFn(connections) : newConnsOrFn;
+                setState({ nodes, connections: newConns });
+            };
+
+            const updateState = (updates) => {
+                setState({ ...state, ...updates });
+            };
+
             // --- Actions ---
 
             const addNode = () => {
+                // Center new node in viewport
+                const cx = (window.innerWidth / 2 - viewport.x) / viewport.zoom;
+                const cy = (window.innerHeight / 2 - viewport.y) / viewport.zoom;
+
                 const newNode = {
                     id: generateId('node'),
-                    x: 100 + Math.random() * 50,
-                    y: 100 + Math.random() * 50,
+                    x: snapToGrid(cx - 50),
+                    y: snapToGrid(cy - 30),
                     title: 'NODE',
                     content: 'New Node'
                 };
-                setNodes(prev => [...prev, newNode]);
+                setNodes([...nodes, newNode]);
             };
 
             const deleteSelected = useCallback(() => {
                 if (selection.type === 'node') {
-                    setNodes(prev => prev.filter(n => n.id !== selection.id));
-                    setConnections(prev => prev.filter(c => c.from !== selection.id && c.to !== selection.id));
+                    updateState({
+                        nodes: nodes.filter(n => n.id !== selection.id),
+                        connections: connections.filter(c => c.from !== selection.id && c.to !== selection.id)
+                    });
                     setSelection({ type: null, id: null });
                 } else if (selection.type === 'conn') {
-                    setConnections(prev => prev.filter(c => c.id !== selection.id));
+                    setConnections(connections.filter(c => c.id !== selection.id));
                     setSelection({ type: null, id: null });
                 }
-            }, [selection]);
+            }, [selection, nodes, connections, state]);
 
             // --- Event Handlers ---
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
+                    // Undo/Redo
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+                        e.preventDefault();
+                        if (e.shiftKey) redo();
+                        else undo();
+                        return;
+                    }
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+                        e.preventDefault();
+                        redo();
+                        return;
+                    }
+
                     if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
                         deleteSelected();
                     }
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [deleteSelected]);
+            }, [deleteSelected, undo, redo]);
+
+            const handleWheel = (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    const scale = e.deltaY > 0 ? 0.9 : 1.1;
+                    setViewport(prev => ({
+                        ...prev,
+                        zoom: Math.min(Math.max(0.1, prev.zoom * scale), 5)
+                    }));
+                } else {
+                    setViewport(prev => ({
+                        ...prev,
+                        x: prev.x - e.deltaX,
+                        y: prev.y - e.deltaY
+                    }));
+                }
+            };
+
+            const handleMouseDown = (e) => {
+                // Middle mouse or space+click to pan usually, but here we can just use click on bg
+                if (e.button === 0 || e.button === 1) { // Left or Middle click
+                    setIsPanning(true);
+                    setSelection({ type: null, id: null });
+                }
+            };
 
             const handleMouseMove = (e) => {
+                if (isPanning) {
+                    setViewport(prev => ({
+                        ...prev,
+                        x: prev.x + e.movementX,
+                        y: prev.y + e.movementY
+                    }));
+                }
+
                 if (dragging) {
-                    const dx = e.clientX - dragging.startX;
-                    const dy = e.clientY - dragging.startY;
-                    setNodes(prev => prev.map(n =>
-                        n.id === dragging.id
-                            ? { ...n, x: dragging.nodeStartX + dx, y: dragging.nodeStartY + dy }
-                            : n
-                    ));
+                    const worldPos = screenToWorld(e.clientX, e.clientY);
+                    // Calculate delta in world coordinates
+                    // Actually better: calculate new position based on offset
+                    const dx = (e.clientX - dragging.startX) / viewport.zoom;
+                    const dy = (e.clientY - dragging.startY) / viewport.zoom;
+
+                    const newX = snapToGrid(dragging.nodeStartX + dx);
+                    const newY = snapToGrid(dragging.nodeStartY + dy);
+
+                    // Optimization: Don't update state if not changed (snap)
+                    const targetNode = nodes.find(n => n.id === dragging.id);
+                    if (targetNode && (targetNode.x !== newX || targetNode.y !== newY)) {
+                        setNodes(prev => prev.map(n =>
+                            n.id === dragging.id
+                                ? { ...n, x: newX, y: newY }
+                                : n
+                        ));
+                    }
                 }
                 if (connecting) {
-                    setConnecting(prev => ({ ...prev, currentX: e.clientX, currentY: e.clientY }));
+                    // connecting.currentX/Y needs to be in WORLD coordinates for drawing
+                    const worldPos = screenToWorld(e.clientX, e.clientY);
+                    setConnecting(prev => ({ ...prev, currentX: worldPos.x, currentY: worldPos.y }));
                 }
             };
 
             const handleMouseUp = () => {
-                setDragging(null);
+                setIsPanning(false);
+                setDragging(null); // This captures the final position in history because setNodes triggers setState
                 if (connecting) {
                     setConnecting(null);
                 }
@@ -609,13 +771,20 @@
             };
 
             const onStartConnect = (nodeId, handlePosition, e) => {
+                const worldPos = screenToWorld(e.clientX, e.clientY);
                 setConnecting({
                     sourceNodeId: nodeId,
                     sourceHandle: handlePosition,
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    currentX: e.clientX,
-                    currentY: e.clientY
+                    startX: worldPos.x, // Already world relative? No, handle click is screen. 
+                    // Wait, SVG lines need world coords.
+                    // The handle positions are usually calculate relative to node.
+                    // Let's recalculate startX/Y based on Node position + handle offset
+                    // But simpler: just use the converted mouse position for the temp line start
+
+                    startX: worldPos.x,
+                    startY: worldPos.y,
+                    currentX: worldPos.x,
+                    currentY: worldPos.y
                 });
             };
 
@@ -623,7 +792,11 @@
                 if (connecting && connecting.sourceNodeId !== targetNodeId) {
                     // Determine directionality
                     const sourceHandleType = connecting.sourceHandle === 'left' || connecting.sourceHandle === 'top' ? 'in' : 'out';
-                    const targetHandleType = targetHandle === 'left' || targetHandle === 'top' ? 'in' : 'out';
+                    const targetHandleType = targetHandle === 'inner' || targetHandle === 'left' || targetHandle === 'top' ? 'in' : 'out';
+                    // Re-check logic: left/top are inputs? Based on renders:
+                    // renderHandle('in', 'left'), renderHandle('in', 'top'), renderHandle('out', 'right'), ...
+
+                    // Correct.
 
                     let fromId, toId, srcHandle, tgtHandle;
 
@@ -639,8 +812,8 @@
                         srcHandle = targetHandle;
                         tgtHandle = connecting.sourceHandle;
                     } else {
-                        // Invalid connection (In->In or Out->Out)
-                        console.warn("Invalid connection: " + sourceHandleType + " to " + targetHandleType);
+                        // Invalid connection
+                        console.warn("Invalid connection type");
                         setConnecting(null);
                         return;
                     }
@@ -653,7 +826,7 @@
                     );
 
                     if (!exists) {
-                        setConnections(prev => [...prev, {
+                        setConnections([...connections, {
                             id: generateId('conn'),
                             from: fromId,
                             to: toId,
@@ -665,33 +838,42 @@
                 }
             };
 
+            // Calculate connection coords in WORLD space
             const getConnectionCoords = (conn) => {
                 const fromNode = nodes.find(n => n.id === conn.from);
                 const toNode = nodes.find(n => n.id === conn.to);
                 if (!fromNode || !toNode) return null;
 
-                // Default legacy connections to right -> left
-                const sourceHandle = conn.sourceHandle || 'right';
-                const targetHandle = conn.targetHandle || 'left';
+                // Handle offsets roughly or by DOM?
+                // Using DOM getBoundingClientRect gives SCREEN coords.
+                // We must convert SCREEN to WORLD to draw inside the scaled SVG.
+                // OR, since handles are relative to nodes, and nodes are relative to world...
+                // formatting: Node is at (x,y). Handle is at specific offsets.
+                // It's cleaner to calculate based on Node state + offsets rather than DOM.
 
-                const fromId = `handle-${fromNode.id}-${sourceHandle}`;
-                const toId = `handle-${toNode.id}-${targetHandle}`;
+                const getHandleOffset = (pos, width, height) => {
+                    // Node min dimensions: 100x60. But they expand.
+                    // Helper: lookup the actual DOM element width/height if possible?
+                    // React refs are hard to map to IDs here without lookup.
+                    // Fallback: use DOM lookup but convert coords.
 
-                const fromEl = document.getElementById(fromId);
-                const toEl = document.getElementById(toId);
+                    const elId = `handle-${pos === 'source' ? conn.from : conn.to}-${pos === 'source' ? conn.sourceHandle : conn.targetHandle}`;
+                    const el = document.getElementById(elId);
+                    if (el) {
+                        const rect = el.getBoundingClientRect();
+                        const world = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
+                        return { x: world.x, y: world.y };
+                    }
+                    return null;
+                };
 
-                if (fromEl && toEl) {
-                    const fR = fromEl.getBoundingClientRect();
-                    const tR = toEl.getBoundingClientRect();
-                    return {
-                        x1: fR.left + fR.width / 2,
-                        y1: fR.top + fR.height / 2,
-                        x2: tR.left + tR.width / 2,
-                        y2: tR.top + tR.height / 2
-                    };
+                const src = getHandleOffset('source');
+                const tgt = getHandleOffset('target');
+
+                if (src && tgt) {
+                    return { x1: src.x, y1: src.y, x2: tgt.x, y2: tgt.y };
                 }
 
-                // Fallback estimate
                 return {
                     x1: fromNode.x + 100,
                     y1: fromNode.y + 30,
@@ -701,14 +883,20 @@
             };
 
             return h('div', {
-                style: { width: '100vw', height: '100vh' },
+                style: {
+                    width: '100vw',
+                    height: '100vh',
+                    overflow: 'hidden',
+                    cursor: isPanning ? 'grabbing' : 'default'
+                },
+                onWheel: handleWheel,
                 onMouseMove: handleMouseMove,
                 onMouseUp: handleMouseUp,
-                onMouseDown: () => setSelection({ type: null, id: null })
+                onMouseDown: handleMouseDown
             },
                 h(Toolbar, {
                     onAdd: addNode,
-                    onClear: () => { if (confirm('Clear?')) { setNodes([]); setConnections([]); } },
+                    onClear: () => { if (confirm('Clear?')) { setState({ nodes: [], connections: [] }); } },
                     onExport: () => {
                         const blob = new Blob([JSON.stringify({ nodes, connections }, null, 2)], { type: 'application/json' });
                         const url = URL.createObjectURL(blob);
@@ -720,8 +908,7 @@
                             const reader = new FileReader();
                             reader.onload = (re) => {
                                 const d = JSON.parse(re.target.result);
-                                setNodes(d.nodes || []);
-                                setConnections(d.connections || []);
+                                setState({ nodes: d.nodes || [], connections: d.connections || [] });
                             };
                             reader.readAsText(e.target.files[0]);
                         };
@@ -730,41 +917,67 @@
                     onShare: () => {
                         navigator.clipboard.writeText(window.location.href);
                         alert('Copied to clipboard');
-                    }
+                    },
+                    onUndo: undo,
+                    onRedo: redo,
+                    canUndo: canUndo,
+                    canRedo: canRedo,
+                    onZoomIn: () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 5) })),
+                    onZoomOut: () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom / 1.2, 0.1) })),
+                    onResetView: () => setViewport({ x: 0, y: 0, zoom: 1 })
                 }),
-                h('svg', { className: 'svg-layer' },
-                    connections.map(conn => {
-                        const coords = getConnectionCoords(conn);
-                        if (!coords) return null;
-                        return h(Connection, {
-                            key: conn.id,
-                            ...conn,
-                            ...coords,
-                            isSelected: selection.id === conn.id,
-                            onSelect: () => setSelection({ type: 'conn', id: conn.id })
-                        });
-                    }),
-                    connecting && h('path', {
-                        d: calculateSimplePath(connecting.startX, connecting.startY, connecting.currentX, connecting.currentY),
-                        className: 'temp-connection'
-                    })
+
+                // Infinite Canvas Container
+                h('div', {
+                    style: {
+                        transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+                        transformOrigin: '0 0',
+                        width: '100%',
+                        height: '100%',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0
+                    }
+                },
+                    h('svg', {
+                        className: 'svg-layer',
+                        style: { overflow: 'visible' } // Crucial for seeing lines outside bounds if any
+                    },
+                        connections.map(conn => {
+                            const coords = getConnectionCoords(conn);
+                            if (!coords) return null;
+                            return h(Connection, {
+                                key: conn.id,
+                                ...conn,
+                                ...coords,
+                                isSelected: selection.id === conn.id,
+                                onSelect: () => setSelection({ type: 'conn', id: conn.id })
+                            });
+                        }),
+                        connecting && h('path', {
+                            d: calculateSimplePath(connecting.startX, connecting.startY, connecting.currentX, connecting.currentY),
+                            className: 'temp-connection'
+                        })
+                    ),
+                    h('div', { className: 'node-layer' },
+                        nodes.map(node => h(Node, {
+                            key: node.id,
+                            node: node,
+                            isSelected: selection.id === node.id,
+                            onUpdate: (id, updates) => setNodes(nodes.map(n => n.id === id ? { ...n, ...updates } : n)),
+                            onSelect: (e, drag) => onNodeSelect(node.id, e, drag),
+                            onDelete: (id) => {
+                                updateState({
+                                    nodes: nodes.filter(n => n.id !== id),
+                                    connections: connections.filter(c => c.from !== id && c.to !== id)
+                                });
+                            },
+                            onStartConnect: onStartConnect,
+                            onConnect: onConnect
+                        }))
+                    )
                 ),
-                h('div', { className: 'node-layer' },
-                    nodes.map(node => h(Node, {
-                        key: node.id,
-                        node: node,
-                        isSelected: selection.id === node.id,
-                        onUpdate: (id, updates) => setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n)),
-                        onSelect: (e, drag) => onNodeSelect(node.id, e, drag),
-                        onDelete: (id) => {
-                            setNodes(prev => prev.filter(n => n.id !== id));
-                            setConnections(prev => prev.filter(c => c.from !== id && c.to !== id));
-                        },
-                        onStartConnect: onStartConnect,
-                        onConnect: onConnect
-                    }))
-                ),
-                h('div', { id: 'hint' }, 'Double-click to edit text • Drag handles to connect • Drag header to move • Delete key to remove')
+                h('div', { id: 'hint' }, 'Zoom: Ctrl+Scroll • Pan: Drag BG • Undo: Ctrl+Z')
             );
         };
 
