@@ -417,6 +417,8 @@
 
         const Connection = ({ id, x1, y1, x2, y2, isSelected, onSelect }) => {
             const d = calculateSimplePath(x1, y1, x2, y2);
+            const markerId = isSelected ? 'arrowhead-selected' : 'arrowhead-normal';
+
             return h('g', {
                 className: 'connection-wrapper',
                 onClick: (e) => {
@@ -436,7 +438,8 @@
                 h('path', {
                     d: d,
                     className: 'connection' + (isSelected ? ' selected' : ''),
-                    style: { pointerEvents: 'stroke' }
+                    style: { pointerEvents: 'stroke' },
+                    markerEnd: `url(#${markerId})`
                 })
             );
         };
@@ -1003,6 +1006,14 @@
                 },
                     // Connection Layer
                     h('svg', { className: 'svg-layer', style: { overflow: 'visible' } },
+                        h('defs', {},
+                            h('marker', { id: 'arrowhead-normal', markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto' },
+                                h('polygon', { points: '0 0, 10 3.5, 0 7', fill: '#a0a0b0' })
+                            ),
+                            h('marker', { id: 'arrowhead-selected', markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto' },
+                                h('polygon', { points: '0 0, 10 3.5, 0 7', fill: '#ffab40' })
+                            )
+                        ),
                         connections.map(c => {
                             const fromNode = nodes.find(n => n.id === c.from);
                             const toNode = nodes.find(n => n.id === c.to);
