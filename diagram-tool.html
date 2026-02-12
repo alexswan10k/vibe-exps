@@ -450,6 +450,30 @@
             },
                 h('div', { style: { fontWeight: 'bold', borderBottom: '1px solid #4a4a5a', paddingBottom: '8px', marginBottom: '4px' } }, 'Connection Style'),
 
+                // Direction Presets
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px' } },
+                    h('button', {
+                        title: 'Forward',
+                        style: { flex: 1, marginRight: '4px', fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'none', markerEnd: 'arrow' })
+                    }, '→'),
+                    h('button', {
+                        title: 'Reverse',
+                        style: { flex: 1, marginRight: '4px', fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'arrow', markerEnd: 'none' })
+                    }, '←'),
+                    h('button', {
+                        title: 'Both',
+                        style: { flex: 1, marginRight: '4px', fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'arrow', markerEnd: 'arrow' })
+                    }, '↔'),
+                    h('button', {
+                        title: 'None',
+                        style: { flex: 1, fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'none', markerEnd: 'none' })
+                    }, '-')
+                ),
+
                 // Start Marker
                 h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
                     h('span', { style: { fontSize: '12px' } }, 'Start:'),
@@ -506,13 +530,14 @@
 
             // Clean color for ID (remove #)
             const colorId = color.replace('#', '');
-            const getMarkerId = (type) => {
+            const getMarkerId = (type, position) => {
                 if (!type || type === 'none') return null;
+                if (type === 'arrow') return `marker-arrow-${position}-${colorId}`;
                 return `marker-${type}-${colorId}`;
             };
 
-            const startMarkerId = getMarkerId(markerStart);
-            const endMarkerId = getMarkerId(markerEnd);
+            const startMarkerId = getMarkerId(markerStart, 'start');
+            const endMarkerId = getMarkerId(markerEnd, 'end');
 
             let strokeDasharray = '';
             if (lineStyle === 'dashed') strokeDasharray = '5, 5';
@@ -1137,9 +1162,15 @@
                             palette.flatMap(c => {
                                 const cId = c.replace('#', '');
                                 return [
-                                    h('marker', { key: `arrow-${cId}`, id: `marker-arrow-${cId}`, markerWidth: 10, markerHeight: 7, refX: 9, refY: 3.5, orient: 'auto' },
+                                    // End Arrow (Standard)
+                                    h('marker', { key: `arrow-end-${cId}`, id: `marker-arrow-end-${cId}`, markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto' },
                                         h('polygon', { points: '0 0, 10 3.5, 0 7', fill: c })
                                     ),
+                                    // Start Arrow (Reversed)
+                                    h('marker', { key: `arrow-start-${cId}`, id: `marker-arrow-start-${cId}`, markerWidth: 10, markerHeight: 7, refX: 0, refY: 3.5, orient: 'auto' },
+                                        h('polygon', { points: '10 0, 0 3.5, 10 7', fill: c })
+                                    ),
+                                    // Circle (Symmetric)
                                     h('marker', { key: `circle-${cId}`, id: `marker-circle-${cId}`, markerWidth: 8, markerHeight: 8, refX: 4, refY: 4, orient: 'auto' },
                                         h('circle', { cx: 4, cy: 4, r: 3, fill: c })
                                     )
