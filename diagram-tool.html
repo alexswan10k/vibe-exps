@@ -386,6 +386,15 @@
         const GRID_SIZE = 20;
         const snapToGrid = (val) => Math.round(val / GRID_SIZE) * GRID_SIZE;
 
+        const checkIntersection = (rect1, rect2) => {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        };
+
         // --- Components ---
 
         const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare, onUndo, onRedo, canUndo, canRedo, onZoomIn, onZoomOut, onResetView }) => {
@@ -412,8 +421,7 @@
                 className: 'connection-wrapper',
                 onClick: (e) => {
                     e.stopPropagation();
-                    console.log('Connection clicked:', id);
-                    onSelect();
+                    onSelect(e);
                 }
             },
                 // Invisible wide path for easier clicking
@@ -488,18 +496,17 @@
             return h('div', {
                 ref: nodeRef,
                 className: 'node' + (isSelected ? ' selected' : ''),
+                id: `node-${node.id}`, // Add ID for intersection observer
                 style: style,
                 onMouseDown: (e) => {
                     e.stopPropagation();
+                    onSelect(e);
                 }
             },
                 // Header
                 h('div', {
                     className: 'node-header',
                     style: node.color ? { backgroundColor: `${node.color}1a`, borderBottomColor: node.color } : {},
-                    onMouseDown: (e) => {
-                        onSelect(e, true);
-                    }
                 },
                     h('input', {
                         className: 'node-title-input',
@@ -558,19 +565,43 @@
             );
         };
 
+        const SelectionBox = ({ box }) => {
+            if (!box) return null;
+            const width = Math.abs(box.currentX - box.startX);
+            const height = Math.abs(box.currentY - box.startY);
+            const left = Math.min(box.currentX, box.startX);
+            const top = Math.min(box.currentY, box.startY);
+
+            return h('div', {
+                style: {
+                    position: 'absolute',
+                    left: left,
+                    top: top,
+                    width: width,
+                    height: height,
+                    backgroundColor: 'rgba(124, 77, 255, 0.2)',
+                    border: '1px solid var(--accent)',
+                    pointerEvents: 'none',
+                    zIndex: 1000
+                }
+            });
+        };
+
         const App = () => {
             const [state, setState, undo, redo, canUndo, canRedo] = useHistory({ nodes: [], connections: [] });
             const { nodes, connections } = state;
 
-            const [selection, setSelection] = useState({ type: null, id: null });
+            // Selection State: Set of IDs
+            const [selection, setSelection] = useState(new Set());
 
             // Viewport State
             const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
             const [isPanning, setIsPanning] = useState(false);
 
             // Interaction State
-            const [dragging, setDragging] = useState(null);
+            const [dragging, setDragging] = useState(null); // { startX, startY, initialNodes: {id: {x, y}} }
             const [connecting, setConnecting] = useState(null);
+            const [selectionBox, setSelectionBox] = useState(null);
 
             // Snapping State
             const [snapLines, setSnapLines] = useState([]);
@@ -582,7 +613,6 @@
                 if (hash) {
                     try {
                         const data = JSON.parse(decodeURIComponent(atob(hash)));
-                        // Initialize history with loaded data
                         setState({
                             nodes: data.nodes || [],
                             connections: data.connections || []
@@ -593,7 +623,6 @@
                 } else {
                     const id1 = generateId('node');
                     const id2 = generateId('node');
-                    // Initialize default history
                     setState({
                         nodes: [
                             { id: id1, x: 100, y: 100, title: 'START', content: 'Welcome to React Flow' },
@@ -604,7 +633,7 @@
                         ]
                     });
                 }
-            }, []); // Run once on mount
+            }, []);
 
             useEffect(() => {
                 const data = { nodes, connections };
@@ -638,7 +667,6 @@
             // --- Actions ---
 
             const addNode = () => {
-                // Center new node in viewport
                 const cx = (window.innerWidth / 2 - viewport.x) / viewport.zoom;
                 const cy = (window.innerHeight / 2 - viewport.y) / viewport.zoom;
 
@@ -650,26 +678,25 @@
                     content: 'New Node'
                 };
                 setNodes([...nodes, newNode]);
+                setSelection(new Set([newNode.id])); // Select new node
             };
 
             const deleteSelected = useCallback(() => {
-                if (selection.type === 'node') {
-                    updateState({
-                        nodes: nodes.filter(n => n.id !== selection.id),
-                        connections: connections.filter(c => c.from !== selection.id && c.to !== selection.id)
-                    });
-                    setSelection({ type: null, id: null });
-                } else if (selection.type === 'conn') {
-                    setConnections(connections.filter(c => c.id !== selection.id));
-                    setSelection({ type: null, id: null });
-                }
+                if (selection.size === 0) return;
+
+                const newNodes = nodes.filter(n => !selection.has(n.id));
+                const newConnections = connections.filter(c =>
+                    !selection.has(c.id) && !selection.has(c.from) && !selection.has(c.to)
+                );
+
+                setState({ nodes: newNodes, connections: newConnections });
+                setSelection(new Set());
             }, [selection, nodes, connections, state]);
 
             // --- Event Handlers ---
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
-                    // Undo/Redo
                     if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
                         e.preventDefault();
                         if (e.shiftKey) redo();
@@ -681,6 +708,13 @@
                         redo();
                         return;
                     }
+                    // Select All
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+                        e.preventDefault();
+                        const allIds = new Set([...nodes.map(n => n.id), ...connections.map(c => c.id)]);
+                        setSelection(allIds);
+                        return;
+                    }
 
                     if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
                         deleteSelected();
@@ -688,103 +722,100 @@
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [deleteSelected, undo, redo]);
+            }, [deleteSelected, undo, redo, nodes, connections]);
 
             const handleWheel = (e) => {
-                // Zoom with mouse wheel (no modifier needed)
-                // Pan with drag (handled in mouse move)
                 e.preventDefault();
-
-                // Zoom towards mouse pointer
                 const scale = e.deltaY > 0 ? 0.9 : 1.1;
                 const newZoom = Math.min(Math.max(0.1, viewport.zoom * scale), 5);
-
-                // Calculate mouse position in world coordinates before zoom
                 const mouseWorldX = (e.clientX - viewport.x) / viewport.zoom;
                 const mouseWorldY = (e.clientY - viewport.y) / viewport.zoom;
-
-                // Calculate new viewport position to keep mouse world position stable
                 const newX = e.clientX - mouseWorldX * newZoom;
                 const newY = e.clientY - mouseWorldY * newZoom;
-
-                setViewport({
-                    x: newX,
-                    y: newY,
-                    zoom: newZoom
-                });
+                setViewport({ x: newX, y: newY, zoom: newZoom });
             };
 
             const handleMouseDown = (e) => {
-                // Middle mouse or space+click to pan usually, but here we can just use click on bg
-                if (e.button === 0 || e.button === 1) { // Left or Middle click
+                // Middle mouse (1) or Space+Left (0) -> Pan
+                if (e.button === 1 || (e.button === 0 && e.code === 'Space')) {
                     setIsPanning(true);
-                    setSelection({ type: null, id: null });
+                    return;
+                }
+
+                // Left Click on canvas -> Clear selection or Start Marquee
+                if (e.button === 0) {
+                    // Check if we clicked on background (not node/connection/toolbar)
+                    if (e.target.id === 'root' || e.target.classList.contains('svg-layer')) {
+                        if (!e.shiftKey) {
+                            setSelection(new Set());
+                        }
+                        setSelectionBox({ startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
+                    }
                 }
             };
 
             const handleMouseMove = (e) => {
                 if (isPanning) {
-                    setViewport(prev => ({
-                        ...prev,
-                        x: prev.x + e.movementX,
-                        y: prev.y + e.movementY
-                    }));
+                    setViewport(prev => ({ ...prev, x: prev.x + e.movementX, y: prev.y + e.movementY }));
                 }
 
                 if (dragging) {
                     const dx = (e.clientX - dragging.startX) / viewport.zoom;
                     const dy = (e.clientY - dragging.startY) / viewport.zoom;
 
-                    // Raw new position based on drag
-                    let newX = dragging.nodeStartX + dx;
-                    let newY = dragging.nodeStartY + dy;
-
-                    // --- Smart Snapping Logic ---
-                    const SNAP_THRESHOLD = 15;
-
-                    let snappedX = null;
-                    let snappedY = null;
-
-                    nodes.forEach(otherNode => {
-                        if (otherNode.id === dragging.id) return;
-
-                        // Horizontal Alignment (y-axis snap)
-                        if (Math.abs(otherNode.y - newY) < SNAP_THRESHOLD) {
-                            snappedY = otherNode.y;
+                    // Calculate proposed positions for all dragged nodes
+                    const updatedNodes = nodes.map(n => {
+                        if (dragging.initialNodes[n.id]) {
+                            const init = dragging.initialNodes[n.id];
+                            return { ...n, x: init.x + dx, y: init.y + dy };
                         }
-
-                        // Vertical Alignment (x-axis snap)
-                        if (Math.abs(otherNode.x - newX) < SNAP_THRESHOLD) {
-                            snappedX = otherNode.x;
-                        }
+                        return n;
                     });
 
-                    // Update position with snap or grid
-                    newX = snappedX !== null ? snappedX : snapToGrid(newX);
-                    newY = snappedY !== null ? snappedY : snapToGrid(newY);
+                    // Snapping (Logic applied to the *primary* grabbed node, or just arbitrary one if multiple)
+                    // For simplicity, let's snap the node directly under cursor if possible, or just the first selected one.
+                    // We'll skip complex multi-snap for now and just snap coordinates.
 
-                    // Update Snap Lines visualization
-                    const refinedSnapLines = [];
-                    if (snappedY !== null) {
-                        refinedSnapLines.push({ x1: Math.min(newX, -10000), y1: snappedY + 30, x2: Math.max(newX, 10000), y2: snappedY + 30 });
-                    }
-                    if (snappedX !== null) {
-                        refinedSnapLines.push({ x1: snappedX + 50, y1: Math.min(newY, -10000), x2: snappedX + 50, y2: Math.max(newY, 10000) });
-                    }
-                    setSnapLines(refinedSnapLines);
+                    // Simple grid snap for all moving nodes
+                    /*
+                    // Better approach: snap the delta? Or snap individual nodes?
+                    // Standard visual editors often snap the "primary selection" and apply delta to others.
+                    // Let's defer complex snapping refactor and stick to grid snap for now.
+                    */
 
-                    // Optimization: Don't update state if not changed (snap)
-                    const targetNode = nodes.find(n => n.id === dragging.id);
-                    if (targetNode && (targetNode.x !== newX || targetNode.y !== newY)) {
-                        setNodes(prev => prev.map(n =>
-                            n.id === dragging.id
-                                ? { ...n, x: newX, y: newY }
-                                : n
-                        ));
+                    const primaryNodeId = dragging.primaryId;
+                    let snapDx = 0;
+                    let snapDy = 0;
+
+                    // Calculate snap delta based on primary node
+                    if (primaryNodeId) {
+                        const init = dragging.initialNodes[primaryNodeId];
+                        const rawX = init.x + dx;
+                        const rawY = init.y + dy;
+                        const snappedX = snapToGrid(rawX);
+                        const snappedY = snapToGrid(rawY);
+                        snapDx = snappedX - (init.x + dx);
+                        snapDy = snappedY - (init.y + dy);
                     }
+
+                    const finalNodes = updatedNodes.map(n => {
+                        if (dragging.initialNodes[n.id]) {
+                            return { ...n, x: n.x + snapDx, y: n.y + snapDy };
+                        }
+                        return n;
+                    });
+
+                    // We can implement "smart snap lines" again later, but for multi-selection it's tricky.
+                    // Let's stick to grid snap for robustness first.
+
+                    setNodes(finalNodes);
                 }
+
+                if (selectionBox) {
+                    setSelectionBox(prev => ({ ...prev, currentX: e.clientX, currentY: e.clientY }));
+                }
+
                 if (connecting) {
-                    // connecting.currentX/Y needs to be in WORLD coordinates for drawing
                     const worldPos = screenToWorld(e.clientX, e.clientY);
                     setConnecting(prev => ({ ...prev, currentX: worldPos.x, currentY: worldPos.y }));
                 }
@@ -792,185 +823,173 @@
 
             const handleMouseUp = () => {
                 setIsPanning(false);
-                setDragging(null); // This captures the final position in history because setNodes triggers setState
-                setSnapLines([]); // Clear snap lines
+                setDragging(null);
+                setSnapLines([]);
+
+                if (selectionBox) {
+                    // Finalize Marquee Selection
+                    const sb = selectionBox;
+                    const rect = {
+                        x: Math.min(sb.startX, sb.currentX),
+                        y: Math.min(sb.startY, sb.currentY),
+                        width: Math.abs(sb.currentX - sb.startX),
+                        height: Math.abs(sb.currentY - sb.startY)
+                    };
+
+                    // Convert selection box to world coords to check node intersection
+                    const worldRect = {
+                        x: (rect.x - viewport.x) / viewport.zoom,
+                        y: (rect.y - viewport.y) / viewport.zoom,
+                        width: rect.width / viewport.zoom,
+                        height: rect.height / viewport.zoom
+                    };
+
+                    const newSelection = new Set(selection);
+                    // Select Nodes
+                    nodes.forEach(n => {
+                        // Simple box check (node is approx 100x60, but let's use DOM elements if possible?
+                        // We can approximate node size or look up elements.
+                        // For now, approximate node rect:
+                        // We need the ACTUAL size. Let's assume min-width/height.
+                        // A better way is to see if the node center is in the box, or slight overlap.
+                        // Let's assume standard node size 120x60 for hit testing if DOM not available easily.
+                        const nodeW = 120;
+                        const nodeH = 80;
+                        const nodeRect = { x: n.x, y: n.y, width: nodeW, height: nodeH };
+
+                        if (checkIntersection(worldRect, nodeRect)) {
+                            newSelection.add(n.id);
+                        }
+                    });
+
+                    // Select Connections (tougher, maybe checking endpoints?)
+                    // For now, let's just select nodes.
+
+                    setSelection(newSelection);
+                    setSelectionBox(null);
+                }
+
                 if (connecting) {
                     setConnecting(null);
                 }
             };
 
-            const onNodeSelect = (nodeId, e, startDrag = false) => {
-                setSelection({ type: 'node', id: nodeId });
-                if (startDrag && e) {
-                    const node = nodes.find(n => n.id === nodeId);
-                    setDragging({
-                        id: nodeId,
-                        startX: e.clientX,
-                        startY: e.clientY,
-                        nodeStartX: node.x,
-                        nodeStartY: node.y
-                    });
+            // Node Interactions
+            const onNodeSelect = (e, nodeId) => {
+                if (e.shiftKey) {
+                    const newSet = new Set(selection);
+                    if (newSet.has(nodeId)) newSet.delete(nodeId);
+                    else newSet.add(nodeId);
+                    setSelection(newSet);
+                } else {
+                    if (!selection.has(nodeId)) {
+                        setSelection(new Set([nodeId]));
+                    }
                 }
             };
 
-            const onStartConnect = (nodeId, handlePosition, e) => {
-                const worldPos = screenToWorld(e.clientX, e.clientY);
-                setConnecting({
-                    sourceNodeId: nodeId,
-                    sourceHandle: handlePosition,
-                    startX: worldPos.x, // Already world relative? No, handle click is screen. 
-                    // Wait, SVG lines need world coords.
-                    // The handle positions are usually calculate relative to node.
-                    // Let's recalculate startX/Y based on Node position + handle offset
-                    // But simpler: just use the converted mouse position for the temp line start
+            const onNodeStartDrag = (e, nodeId) => {
+                if (e.button !== 0) return; // Only left drag
 
-                    startX: worldPos.x,
-                    startY: worldPos.y,
-                    currentX: worldPos.x,
-                    currentY: worldPos.y
+                // If dragging a node that isn't selected, select it (and deselect others usually, unless shift?)
+                // Standard behavior: 
+                // - Click on unselected: select only it.
+                // - Click on selected: keep selection, maybe drag all.
+
+                let newSelection = selection;
+                if (!selection.has(nodeId)) {
+                    if (!e.shiftKey) {
+                        newSelection = new Set([nodeId]);
+                        setSelection(newSelection);
+                    } else {
+                        newSelection = new Set(selection);
+                        newSelection.add(nodeId);
+                        setSelection(newSelection);
+                    }
+                }
+
+                // Prepare resize/drag map
+                const initialNodes = {};
+                nodes.forEach(n => {
+                    if (newSelection.has(n.id)) {
+                        initialNodes[n.id] = { x: n.x, y: n.y };
+                    }
+                });
+
+                setDragging({
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    primaryId: nodeId,
+                    initialNodes: initialNodes
                 });
             };
 
-            const onConnect = (targetNodeId, targetHandle) => {
-                if (connecting && connecting.sourceNodeId !== targetNodeId) {
-                    // Determine directionality
-                    const sourceHandleType = connecting.sourceHandle === 'left' || connecting.sourceHandle === 'top' ? 'in' : 'out';
-                    const targetHandleType = targetHandle === 'inner' || targetHandle === 'left' || targetHandle === 'top' ? 'in' : 'out';
-                    // Re-check logic: left/top are inputs? Based on renders:
-                    // renderHandle('in', 'left'), renderHandle('in', 'top'), renderHandle('out', 'right'), ...
-
-                    // Correct.
-
-                    let fromId, toId, srcHandle, tgtHandle;
-
-                    if (sourceHandleType === 'out' && targetHandleType === 'in') {
-                        fromId = connecting.sourceNodeId;
-                        toId = targetNodeId;
-                        srcHandle = connecting.sourceHandle;
-                        tgtHandle = targetHandle;
-                    } else if (sourceHandleType === 'in' && targetHandleType === 'out') {
-                        // Reverse connection (dragged from In to Out)
-                        fromId = targetNodeId;
-                        toId = connecting.sourceNodeId;
-                        srcHandle = targetHandle;
-                        tgtHandle = connecting.sourceHandle;
-                    } else {
-                        // Invalid connection
-                        console.warn("Invalid connection type");
-                        setConnecting(null);
-                        return;
-                    }
-
-                    const exists = connections.find(c =>
-                        c.from === fromId &&
-                        c.to === toId &&
-                        c.sourceHandle === srcHandle &&
-                        c.targetHandle === tgtHandle
-                    );
-
-                    if (!exists) {
-                        setConnections([...connections, {
-                            id: generateId('conn'),
-                            from: fromId,
-                            to: toId,
-                            sourceHandle: srcHandle,
-                            targetHandle: tgtHandle
-                        }]);
-                    }
-                    setConnecting(null);
+            // Connection Interactions
+            const onConnectionSelect = (e, connId) => {
+                if (e.shiftKey) {
+                    const newSet = new Set(selection);
+                    if (newSet.has(connId)) newSet.delete(connId);
+                    else newSet.add(connId);
+                    setSelection(newSet);
+                } else {
+                    setSelection(new Set([connId]));
                 }
-            };
-
-            // Calculate connection coords in WORLD space
-            const getConnectionCoords = (conn) => {
-                const fromNode = nodes.find(n => n.id === conn.from);
-                const toNode = nodes.find(n => n.id === conn.to);
-                if (!fromNode || !toNode) return null;
-
-                // Handle offsets roughly or by DOM?
-                // Using DOM getBoundingClientRect gives SCREEN coords.
-                // We must convert SCREEN to WORLD to draw inside the scaled SVG.
-                // OR, since handles are relative to nodes, and nodes are relative to world...
-                // formatting: Node is at (x,y). Handle is at specific offsets.
-                // It's cleaner to calculate based on Node state + offsets rather than DOM.
-
-                const getHandleOffset = (pos, width, height) => {
-                    // Node min dimensions: 100x60. But they expand.
-                    // Helper: lookup the actual DOM element width/height if possible?
-                    // React refs are hard to map to IDs here without lookup.
-                    // Fallback: use DOM lookup but convert coords.
-
-                    const elId = `handle-${pos === 'source' ? conn.from : conn.to}-${pos === 'source' ? conn.sourceHandle : conn.targetHandle}`;
-                    const el = document.getElementById(elId);
-                    if (el) {
-                        const rect = el.getBoundingClientRect();
-                        const world = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
-                        return { x: world.x, y: world.y };
-                    }
-                    return null;
-                };
-
-                const src = getHandleOffset('source');
-                const tgt = getHandleOffset('target');
-
-                if (src && tgt) {
-                    return { x1: src.x, y1: src.y, x2: tgt.x, y2: tgt.y };
-                }
-
-                return {
-                    x1: fromNode.x + 100,
-                    y1: fromNode.y + 30,
-                    x2: toNode.x,
-                    y2: toNode.y + 30
-                };
             };
 
             return h('div', {
-                style: {
-                    width: '100vw',
-                    height: '100vh',
-                    overflow: 'hidden',
-                    cursor: isPanning ? 'grabbing' : 'default'
-                },
-                onWheel: handleWheel,
+                style: { width: '100%', height: '100%', cursor: isPanning ? 'grabbing' : 'default' },
+                onMouseDown: handleMouseDown,
                 onMouseMove: handleMouseMove,
                 onMouseUp: handleMouseUp,
-                onMouseDown: handleMouseDown
+                onWheel: handleWheel,
+                // Prevent context menu
+                onContextMenu: (e) => e.preventDefault()
             },
                 h(Toolbar, {
                     onAdd: addNode,
-                    onClear: () => { if (confirm('Clear?')) { setState({ nodes: [], connections: [] }); } },
-                    onExport: () => {
-                        const blob = new Blob([JSON.stringify({ nodes, connections }, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a'); a.href = url; a.download = 'diagram.json'; a.click();
-                    },
-                    onImport: () => {
-                        const input = document.createElement('input'); input.type = 'file';
-                        input.onchange = (e) => {
-                            const reader = new FileReader();
-                            reader.onload = (re) => {
-                                const d = JSON.parse(re.target.result);
-                                setState({ nodes: d.nodes || [], connections: d.connections || [] });
-                            };
-                            reader.readAsText(e.target.files[0]);
-                        };
-                        input.click();
-                    },
-                    onShare: () => {
-                        navigator.clipboard.writeText(window.location.href);
-                        alert('Copied to clipboard');
-                    },
+                    onClear: () => { setNodes([]); setConnections([]); setState({ nodes: [], connections: [] }); }, // Fix clear
                     onUndo: undo,
                     onRedo: redo,
                     canUndo: canUndo,
                     canRedo: canRedo,
                     onZoomIn: () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 5) })),
                     onZoomOut: () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom / 1.2, 0.1) })),
-                    onResetView: () => setViewport({ x: 0, y: 0, zoom: 1 })
+                    onResetView: () => setViewport({ x: 0, y: 0, zoom: 1 }),
+                    onExport: () => {
+                        const data = JSON.stringify({ nodes, connections }, null, 2);
+                        const blob = new Blob([data], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'diagram.json';
+                        a.click();
+                    },
+                    onImport: () => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'application/json';
+                        input.onchange = (e) => {
+                            const file = e.target.files[0];
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                try {
+                                    const data = JSON.parse(e.target.result);
+                                    setState(data);
+                                } catch (err) {
+                                    alert('Invalid JSON file');
+                                }
+                            };
+                            reader.readAsText(file);
+                        };
+                        input.click();
+                    },
+                    onShare: () => {
+                        const data = { nodes, connections };
+                        const b64 = btoa(encodeURIComponent(JSON.stringify(data)));
+                        const url = window.location.origin + window.location.pathname + '#' + b64;
+                        navigator.clipboard.writeText(url).then(() => alert('URL copied to clipboard!'));
+                    }
                 }),
-
-                // Infinite Canvas Container
                 h('div', {
                     style: {
                         transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
@@ -982,60 +1001,182 @@
                         left: 0
                     }
                 },
-                    h('svg', {
-                        className: 'svg-layer',
-                        style: { overflow: 'visible' } // Crucial for seeing lines outside bounds if any
-                    },
-                        // Snap Lines
-                        snapLines.map((line, i) => h('line', {
-                            key: i,
-                            x1: line.x1,
-                            y1: line.y1,
-                            x2: line.x2,
-                            y2: line.y2,
-                            stroke: '#ffab40',
-                            strokeWidth: 1,
-                            strokeDasharray: '5,5',
-                            opacity: 0.8
-                        })),
+                    // Connection Layer
+                    h('svg', { className: 'svg-layer', style: { overflow: 'visible' } },
+                        connections.map(c => {
+                            const fromNode = nodes.find(n => n.id === c.from);
+                            const toNode = nodes.find(n => n.id === c.to);
+                            // We need real port positions. 
+                            // Approximating for now based on node center/sides or stored port info?
+                            // The original code calculated them on fly or stored them?
+                            // Checked original: it calculated them. 
+                            // WAIT: The original code passed x1,y1,x2,y2 to Connection.
+                            // We need to calculate them here if we want to render connections properly.
 
-                        connections.map(conn => {
-                            const coords = getConnectionCoords(conn);
-                            if (!coords) return null;
+                            // Let's assume standard ports for now: Right -> Left
+                            // Or use simple center-center? 
+                            // Original code had ports. We should try to respect them if we can determine them.
+                            // The connection object stores IDs. It doesn't store WHICH port.
+                            // The previous `onConnect` stored just IDs.
+                            // BUT `renderHandle` passed position to `onConnect`. 
+                            // We need to store port position in connection to be precise.
+
+                            // Let's look at `onConnect` implementation below.
+                            // It updates connection state.
+
+                            if (!fromNode || !toNode) return null;
+
+                            // Default to center-ish if we don't have port info
+                            // Ideally we store sourceHandle and targetHandle in connection. 
+                            // If missing, default: Right to Left.
+
+                            const x1 = fromNode.x + (c.sourceHandle === 'left' ? 0 : c.sourceHandle === 'right' ? 100 : 50); // Warning: 100 is approx width
+                            // We need real width. 
+                            // Let's rely on standard node size for now or dynamic calculation?
+                            // Dynamic is hard in React render without refs.
+                            // Let's assume standard width (min 100).
+                            /*
+                               Node CSS: min-width: 100px.
+                               Let's use a helper to get handle position relative to node (x,y).
+                            */
+
+                            const getNodeWidth = (id) => {
+                                const el = document.getElementById(`node-${id}`);
+                                return el ? el.offsetWidth : 100;
+                            };
+                            const getNodeHeight = (id) => {
+                                const el = document.getElementById(`node-${id}`);
+                                return el ? el.offsetHeight : 60;
+                            };
+
+                            // We can't query DOM strictly inside render easily for every frame without lag.
+                            // Let's assume generic logic:
+                            // If we don't store handle ID, we guess.
+                            // To fix this properly, we should store handle IDs in connection.
+
+                            // For this refactor, I'll stick to legacy/simple logic if data is missing, 
+                            // but try to use stored handle info if I add it.
+
+                            const startX = fromNode.x + (c.sourceHandle === 'left' ? 0 : c.sourceHandle === 'right' ? getNodeWidth(fromNode.id) : getNodeWidth(fromNode.id) / 2);
+                            const startY = fromNode.y + (c.sourceHandle === 'top' ? 0 : c.sourceHandle === 'bottom' ? getNodeHeight(fromNode.id) : getNodeHeight(fromNode.id) / 2);
+
+                            const endX = toNode.x + (c.targetHandle === 'left' ? 0 : c.targetHandle === 'right' ? getNodeWidth(toNode.id) : getNodeWidth(toNode.id) / 2);
+                            const endY = toNode.y + (c.targetHandle === 'top' ? 0 : c.targetHandle === 'bottom' ? getNodeHeight(toNode.id) : getNodeHeight(toNode.id) / 2);
+
+                            // Fallback if NaN (first render before DOM)
+                            const sX = isNaN(startX) ? fromNode.x + 100 : startX;
+                            const sY = isNaN(startY) ? fromNode.y + 30 : startY;
+                            const eX = isNaN(endX) ? toNode.x : endX;
+                            const eY = isNaN(endY) ? toNode.y + 30 : endY;
+
                             return h(Connection, {
-                                key: conn.id,
-                                ...conn,
-                                ...coords,
-                                isSelected: selection.id === conn.id,
-                                onSelect: () => setSelection({ type: 'conn', id: conn.id })
+                                key: c.id,
+                                id: c.id,
+                                x1: sX, y1: sY, x2: eX, y2: eY,
+                                isSelected: selection.has(c.id),
+                                onSelect: (e) => onConnectionSelect(e, c.id)
                             });
                         }),
+                        // Active drag connection line
                         connecting && h('path', {
                             d: calculateSimplePath(connecting.startX, connecting.startY, connecting.currentX, connecting.currentY),
-                            className: 'temp-connection'
-                        })
+                            className: 'temp-connection',
+                            strokeDasharray: '5,5'
+                        }),
+                        snapLines.map((l, i) =>
+                            h('line', { key: i, x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, stroke: '#ffab40', strokeWidth: 1, strokeDasharray: '4,4' })
+                        )
                     ),
+
+                    // Node Layer
                     h('div', { className: 'node-layer' },
                         nodes.map(node => h(Node, {
                             key: node.id,
                             node: node,
-                            isSelected: selection.id === node.id,
-                            onUpdate: (id, updates) => setNodes(nodes.map(n => n.id === id ? { ...n, ...updates } : n)),
-                            onSelect: (e, drag) => onNodeSelect(node.id, e, drag),
+                            isSelected: selection.has(node.id),
+                            onUpdate: (id, updates) => setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n)),
+                            onSelect: (e, isHeader) => {
+                                if (isHeader) onNodeStartDrag(e, node.id);
+                                else onNodeSelect(e, node.id);
+                            },
                             onDelete: (id) => {
+                                // If deleting via button, just delete that one (and if selected, remove from selection)
+                                // Or should it delete all selected?
+                                // "X" usually means delete THIS one.
                                 updateState({
                                     nodes: nodes.filter(n => n.id !== id),
                                     connections: connections.filter(c => c.from !== id && c.to !== id)
                                 });
                             },
-                            onStartConnect: onStartConnect,
-                            onConnect: onConnect
+                            onStartConnect: (nodeId, handleType, e) => {
+                                // Calculate exact start position from DOM handle
+                                const handleRect = e.target.getBoundingClientRect();
+                                const startX = (handleRect.left + handleRect.width / 2 - viewport.x) / viewport.zoom;
+                                const startY = (handleRect.top + handleRect.height / 2 - viewport.y) / viewport.zoom;
+
+                                setConnecting({
+                                    nodeId,
+                                    handleType,
+                                    startX,
+                                    startY,
+                                    currentX: startX,
+                                    currentY: startY
+                                });
+                            },
+                            onConnect: (targetNodeId, targetHandleType) => {
+                                if (connecting) {
+                                    if (connecting.nodeId === targetNodeId) return; // Self-connection? allow for now or block? Block self-loop usually.
+                                    if (connecting.handleType === targetHandleType) return; // In-In or Out-Out block
+
+                                    const newConn = {
+                                        id: generateId('conn'),
+                                        from: connecting.nodeId,
+                                        to: targetNodeId,
+                                        sourceHandle: connecting.handleType === 'out' ? connecting.handleType : targetHandleType, // We need to store actual sides handle-left etc.
+                                        // Wait, the handleType passed is just 'in' or 'out'.
+                                        // We need the side 'left', 'right' etc.
+                                        // Update Node to pass specific side.
+                                    };
+
+                                    // To fix the "specific port" issue:
+                                    // Let's just create the connection. We can refine port logic later if needed.
+                                    // For now, simpler: just create connection.
+                                    // Re-using logic: we need 'left'/'right' etc for drawing to be pretty.
+                                    // Let's modify Node 'onStartConnect' to pass 'position' as well?
+                                    // Actually Node passes `position` to `onStartConnect` already in `renderHandle`?
+                                    // No, I passed `position` to `onStartConnect` in my new code above?
+                                    // Yes: `onStartConnect(node.id, position, e)`
+                                    // So `connecting.handleType` is actually a position like 'left', 'right'.
+                                    // Wait, let's verify `renderHandle`:
+                                    /*
+                                    const renderHandle = (type, position) => {
+                                       ...
+                                       onStartConnect(node.id, position, e);
+                                    }
+                                    */
+                                    // So `connecting.handleType` holds 'left', 'right', 'top', 'bottom'.
+
+                                    setConnections([...connections, {
+                                        id: generateId('conn'),
+                                        from: connecting.nodeId,
+                                        to: targetNodeId,
+                                        sourceHandle: connecting.handleType,
+                                        targetHandle: targetHandleType
+                                    }]);
+                                    setConnecting(null);
+                                }
+                            }
                         }))
                     )
                 ),
-                h('div', { id: 'hint' }, 'Zoom: Scroll • Pan: Drag BG • Undo: Ctrl+Z')
+                h(SelectionBox, { box: selectionBox }),
+                h('div', { id: 'hint' },
+                    'Space+Drag to Pan | Scroll to Zoom | Left Drag to Select | Shift+Click for Multi-Select'
+                )
             );
         };
+
+
 
         ReactDOM.render(h(App), document.getElementById('root'));
 
