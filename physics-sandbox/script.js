@@ -119,11 +119,11 @@ const CRAWLER_JUMP_CHANCE = 0.01;
 function addCrawler(spawnX, spawnY) {
     const x = spawnX !== undefined ? spawnX : Math.random() * (canvas.width - 100) + 50;
     const y = spawnY !== undefined ? spawnY : 50;
-    
+
     // Create a simple capsule shape for the crawler
     const width = 40;
     const height = 20;
-    
+
     // We use a Chamfered rectangle to look like a bug
     const crawler = Matter.Bodies.rectangle(x, y, width, height, {
         chamfer: { radius: 10 },
@@ -135,12 +135,12 @@ function addCrawler(spawnX, spawnY) {
             fillStyle: '#76FF03' // Bright green
         }
     });
-    
+
     // Initial random direction (-1 or 1)
     crawler.crawlerDir = Math.random() > 0.5 ? 1 : -1;
     crawler.isDead = false;
     crawler.spawnTime = Date.now();
-    
+
     crawlers.add(crawler);
     Matter.World.add(world, crawler);
     return crawler;
@@ -150,10 +150,10 @@ function killCrawler(crawler) {
     if (crawler.isDead) return;
     crawler.isDead = true;
     crawler.render.fillStyle = '#444444'; // Dark Grey (Dead goo)
-    
+
     // Splat effect: Flatten and widen
     Matter.Body.scale(crawler, 1.4, 0.4);
-    
+
     crawlers.delete(crawler);
 }
 
@@ -172,7 +172,7 @@ function handleGlobalMouseMove(event) {
 
     const dx = event.clientX - dragCrawlerStart.x;
     const dy = event.clientY - dragCrawlerStart.y;
-    
+
     // If moved more than 5px, start dragging
     if (!isDraggingCrawler && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
         isDraggingCrawler = true;
@@ -220,36 +220,36 @@ function handleGlobalMouseUp(event) {
     isDraggingCrawler = false;
 }
 
-Matter.Events.on(engine, 'beforeUpdate', function(event) {
+Matter.Events.on(engine, 'beforeUpdate', function (event) {
     crawlers.forEach(crawler => {
         if (crawler.isDead) return;
 
         // Simple movement: Apply force in facing direction
         const force = { x: CRAWLER_SPEED * crawler.crawlerDir, y: 0 };
-        
+
         // Randomly change direction
         if (Math.random() < 0.02) {
             crawler.crawlerDir *= -1;
         }
-        
+
         // Jump occasionally
         if (Math.random() < CRAWLER_JUMP_CHANCE) {
-             Matter.Body.applyForce(crawler, crawler.position, { x: 0, y: -0.015 });
+            Matter.Body.applyForce(crawler, crawler.position, { x: 0, y: -0.015 });
         } else {
-             Matter.Body.applyForce(crawler, crawler.position, force);
+            Matter.Body.applyForce(crawler, crawler.position, force);
         }
     });
 });
 
-Matter.Events.on(engine, 'collisionStart', function(event) {
+Matter.Events.on(engine, 'collisionStart', function (event) {
     const pairs = event.pairs;
     const now = Date.now();
-    
+
     for (let i = 0; i < pairs.length; i++) {
         const pair = pairs[i];
         const bodyA = pair.bodyA;
         const bodyB = pair.bodyB;
-        
+
         // Check invulnerability (1 second grace period)
         if (bodyA.label === 'crawler' && bodyA.spawnTime && now - bodyA.spawnTime < 1000) continue;
         if (bodyB.label === 'crawler' && bodyB.spawnTime && now - bodyB.spawnTime < 1000) continue;
@@ -259,17 +259,17 @@ Matter.Events.on(engine, 'collisionStart', function(event) {
         const velocityB = bodyB.velocity;
         const relativeVelocity = Matter.Vector.sub(velocityA, velocityB);
         const speed = Matter.Vector.magnitude(relativeVelocity);
-        
+
         // Death Logic
         // 1. High Speed Impact (Explosions, very fast objects)
         if (speed > 15 && (!bodyA.isStatic && !bodyB.isStatic)) {
-             if (bodyA.label === 'crawler') killCrawler(bodyA);
-             if (bodyB.label === 'crawler') killCrawler(bodyB);
+            if (bodyA.label === 'crawler') killCrawler(bodyA);
+            if (bodyB.label === 'crawler') killCrawler(bodyB);
         }
         // 2. Heavy Crush (Hit by something much heavier)
         else if (speed > 5) {
-             if (bodyA.label === 'crawler' && !bodyB.isStatic && bodyB.mass > bodyA.mass * 2) killCrawler(bodyA);
-             if (bodyB.label === 'crawler' && !bodyA.isStatic && bodyA.mass > bodyB.mass * 2) killCrawler(bodyB);
+            if (bodyA.label === 'crawler' && !bodyB.isStatic && bodyB.mass > bodyA.mass * 2) killCrawler(bodyA);
+            if (bodyB.label === 'crawler' && !bodyA.isStatic && bodyA.mass > bodyB.mass * 2) killCrawler(bodyB);
         }
     }
 });
@@ -319,6 +319,169 @@ function addWater() {
     }
 }
 
+// --- Car Implementation ---
+function addCar(spawnX, spawnY) {
+    const x = spawnX || Math.random() * (canvas.width - 200) + 100;
+    const y = spawnY || 100;
+    const width = 150;
+    const height = 30;
+    const wheelSize = 25;
+
+    const group = Matter.Body.nextGroup(true);
+
+    carBody = Matter.Bodies.rectangle(x, y, width, height, {
+        collisionFilter: { group: group },
+        chamfer: { radius: height * 0.5 },
+        density: 0.0002,
+        render: { fillStyle: '#FF5722' }
+    });
+
+    carWheelBack = Matter.Bodies.circle(x - width * 0.35, y + height / 2 + wheelSize / 2, wheelSize, {
+        collisionFilter: { group: group },
+        friction: 0.8,
+        render: { fillStyle: '#333' }
+    });
+
+    carWheelFront = Matter.Bodies.circle(x + width * 0.35, y + height / 2 + wheelSize / 2, wheelSize, {
+        collisionFilter: { group: group },
+        friction: 0.8,
+        render: { fillStyle: '#333' }
+    });
+
+    const axelBack = Matter.Constraint.create({
+        bodyA: carBody,
+        bodyB: carWheelBack,
+        pointA: { x: -width * 0.35, y: height / 2 },
+        stiffness: 0.3,
+        length: wheelSize
+    });
+
+    const axelFront = Matter.Constraint.create({
+        bodyA: carBody,
+        bodyB: carWheelFront,
+        pointA: { x: width * 0.35, y: height / 2 },
+        stiffness: 0.3,
+        length: wheelSize
+    });
+
+    Matter.World.add(world, [carBody, carWheelBack, carWheelFront, axelBack, axelFront]);
+}
+
+document.addEventListener('keydown', (event) => {
+    if (!carBody) return;
+    const force = 0.05;
+    if (event.key === 'ArrowRight') {
+        Matter.Body.setAngularVelocity(carWheelBack, force);
+        Matter.Body.setAngularVelocity(carWheelFront, force);
+    } else if (event.key === 'ArrowLeft') {
+        Matter.Body.setAngularVelocity(carWheelBack, -force);
+        Matter.Body.setAngularVelocity(carWheelFront, -force);
+    }
+});
+
+// --- Bridge Implementation ---
+function addBridge() {
+    const group = Matter.Body.nextGroup(true);
+    const bridge = Matter.Composites.stack(100, 200, 15, 1, 0, 0, function (x, y) {
+        return Matter.Bodies.rectangle(x - 20, y, 50, 20, {
+            collisionFilter: { group: group },
+            chamfer: 5,
+            density: 0.005,
+            frictionAir: 0.05,
+            render: { fillStyle: '#8D6E63' }
+        });
+    });
+
+    Matter.Composites.chain(bridge, 0.3, 0, -0.3, 0, {
+        stiffness: 0.8,
+        length: 2,
+        render: { visible: false }
+    });
+
+    // Anchor the ends
+    const firstBody = bridge.bodies[0];
+    const lastBody = bridge.bodies[bridge.bodies.length - 1];
+
+    const constraintStart = Matter.Constraint.create({
+        pointA: { x: firstBody.position.x, y: firstBody.position.y },
+        bodyB: firstBody,
+        pointB: { x: -25, y: 0 },
+        stiffness: 0.5
+    });
+
+    const constraintEnd = Matter.Constraint.create({
+        pointA: { x: lastBody.position.x, y: lastBody.position.y },
+        bodyB: lastBody,
+        pointB: { x: 25, y: 0 },
+        stiffness: 0.5
+    });
+
+    Matter.World.add(world, [bridge, constraintStart, constraintEnd]);
+}
+
+// --- Draw Wall Implementation ---
+function toggleDrawMode() {
+    isDrawMode = !isDrawMode;
+    const btn = document.getElementById('btn-draw');
+    btn.innerText = isDrawMode ? "Draw Wall: ON (Drag)" : "Draw Wall: OFF";
+    btn.style.background = isDrawMode ? "rgba(118, 255, 3, 0.3)" : "";
+}
+
+function startDrawingWall(x, y) {
+    drawStart = { x, y };
+
+    // Create preview line
+    drawPreview = document.createElement('div');
+    drawPreview.style.position = 'absolute';
+    drawPreview.style.left = x + 'px';
+    drawPreview.style.top = y + 'px';
+    drawPreview.style.width = '0px';
+    drawPreview.style.height = '2px';
+    drawPreview.style.backgroundColor = 'white';
+    drawPreview.style.transformOrigin = '0 50%';
+    drawPreview.style.pointerEvents = 'none'; // Don't block mouse
+    document.body.appendChild(drawPreview);
+}
+
+function updateDrawingWall(x, y) {
+    if (!drawStart || !drawPreview) return;
+
+    const dx = x - drawStart.x;
+    const dy = y - drawStart.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+
+    drawPreview.style.width = length + 'px';
+    drawPreview.style.transform = `rotate(${angle}rad)`;
+}
+
+function finishDrawingWall(x, y) {
+    if (!drawStart) return;
+
+    const dx = x - drawStart.x;
+    const dy = y - drawStart.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx);
+    const midX = (drawStart.x + x) / 2;
+    const midY = (drawStart.y + y) / 2;
+
+    if (length > 10) { // Min length
+        const wall = Matter.Bodies.rectangle(midX, midY, length, 20, {
+            isStatic: true,
+            angle: angle,
+            render: { fillStyle: '#CFD8DC' }
+        });
+        Matter.World.add(world, wall);
+    }
+
+    // Cleanup
+    if (drawPreview) {
+        drawPreview.remove();
+        drawPreview = null;
+    }
+    drawStart = null;
+}
+
 // Function to clear all bodies
 function clearAll() {
     crawlers.clear();
@@ -362,6 +525,16 @@ let currentMousePos = { x: 0, y: 0 };
 let isUsingDeviceGravity = false;
 let lastMotionTimestamp = 0;
 
+// Car Variables
+let carBody = null;
+let carWheelBack = null;
+let carWheelFront = null;
+
+// Draw Mode Variables
+let isDrawMode = false;
+let drawStart = null;
+let drawPreview = null;
+
 // Event listeners for wind and vacuum
 canvas.addEventListener('mousedown', handleMouseDown);
 canvas.addEventListener('mouseup', handleMouseUp);
@@ -373,6 +546,11 @@ function handleMouseDown(event) {
     const rect = canvas.getBoundingClientRect();
     currentMousePos.x = event.clientX - rect.left;
     currentMousePos.y = event.clientY - rect.top;
+
+    if (isDrawMode && event.button === 0) {
+        startDrawingWall(currentMousePos.x, currentMousePos.y);
+        return;
+    }
 
     if (event.button === 0) { // Left button for wind
         startWind();
@@ -386,6 +564,11 @@ function handleMouseDown(event) {
 
 // Handle mouse up to stop
 function handleMouseUp(event) {
+    if (isDrawMode && drawStart) {
+        finishDrawingWall(currentMousePos.x, currentMousePos.y);
+        return;
+    }
+
     if (event.button === 0) {
         stopWind();
     } else if (event.button === 2) {
@@ -398,6 +581,10 @@ function handleMouseMove(event) {
     const rect = canvas.getBoundingClientRect();
     currentMousePos.x = event.clientX - rect.left;
     currentMousePos.y = event.clientY - rect.top;
+
+    if (isDrawMode && drawStart) {
+        updateDrawingWall(currentMousePos.x, currentMousePos.y);
+    }
 }
 
 // Start continuous wind
