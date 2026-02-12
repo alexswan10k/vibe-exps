@@ -106,6 +106,7 @@
             left: 0;
             width: 100%;
             height: 100%;
+            pointer-events: none;
             z-index: 2;
         }
 
@@ -123,6 +124,7 @@
             flex-direction: column;
             transition: box-shadow 0.2s, border-color 0.2s;
             user-select: none;
+            pointer-events: auto;
         }
 
         .node:hover {
@@ -267,6 +269,7 @@
             stroke: var(--connection-color);
             stroke-width: 2;
             stroke-linecap: round;
+            pointer-events: stroke;
         }
 
         path.connection.selected {
@@ -373,14 +376,29 @@
 
         const Connection = ({ id, x1, y1, x2, y2, isSelected, onSelect }) => {
             const d = calculateSimplePath(x1, y1, x2, y2);
-            return h('path', {
-                d: d,
-                className: 'connection' + (isSelected ? ' selected' : ''),
+            return h('g', {
+                className: 'connection-wrapper',
                 onClick: (e) => {
                     e.stopPropagation();
+                    console.log('Connection clicked:', id);
                     onSelect();
                 }
-            });
+            },
+                // Invisible wide path for easier clicking
+                h('path', {
+                    d: d,
+                    stroke: 'transparent',
+                    strokeWidth: 20,
+                    fill: 'none',
+                    style: { cursor: 'pointer', pointerEvents: 'stroke' }
+                }),
+                // Visible path
+                h('path', {
+                    d: d,
+                    className: 'connection' + (isSelected ? ' selected' : ''),
+                    style: { pointerEvents: 'stroke' }
+                })
+            );
         };
 
         const Node = ({ node, isSelected, onUpdate, onSelect, onDelete, onStartConnect, onConnect }) => {
@@ -411,17 +429,13 @@
                     className: className,
                     id: handleId,
                     onMouseDown: (e) => {
-                        if (type === 'out') {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onStartConnect(node.id, position, e);
-                        }
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onStartConnect(node.id, position, e);
                     },
                     onMouseUp: (e) => {
-                        if (type === 'in') {
-                            e.stopPropagation();
-                            onConnect(node.id, position);
-                        }
+                        e.stopPropagation();
+                        onConnect(node.id, position);
                     }
                 });
             };
@@ -607,20 +621,44 @@
 
             const onConnect = (targetNodeId, targetHandle) => {
                 if (connecting && connecting.sourceNodeId !== targetNodeId) {
+                    // Determine directionality
+                    const sourceHandleType = connecting.sourceHandle === 'left' || connecting.sourceHandle === 'top' ? 'in' : 'out';
+                    const targetHandleType = targetHandle === 'left' || targetHandle === 'top' ? 'in' : 'out';
+
+                    let fromId, toId, srcHandle, tgtHandle;
+
+                    if (sourceHandleType === 'out' && targetHandleType === 'in') {
+                        fromId = connecting.sourceNodeId;
+                        toId = targetNodeId;
+                        srcHandle = connecting.sourceHandle;
+                        tgtHandle = targetHandle;
+                    } else if (sourceHandleType === 'in' && targetHandleType === 'out') {
+                        // Reverse connection (dragged from In to Out)
+                        fromId = targetNodeId;
+                        toId = connecting.sourceNodeId;
+                        srcHandle = targetHandle;
+                        tgtHandle = connecting.sourceHandle;
+                    } else {
+                        // Invalid connection (In->In or Out->Out)
+                        console.warn("Invalid connection: " + sourceHandleType + " to " + targetHandleType);
+                        setConnecting(null);
+                        return;
+                    }
+
                     const exists = connections.find(c =>
-                        c.from === connecting.sourceNodeId &&
-                        c.to === targetNodeId &&
-                        c.sourceHandle === connecting.sourceHandle &&
-                        c.targetHandle === targetHandle
+                        c.from === fromId &&
+                        c.to === toId &&
+                        c.sourceHandle === srcHandle &&
+                        c.targetHandle === tgtHandle
                     );
 
                     if (!exists) {
                         setConnections(prev => [...prev, {
                             id: generateId('conn'),
-                            from: connecting.sourceNodeId,
-                            to: targetNodeId,
-                            sourceHandle: connecting.sourceHandle,
-                            targetHandle: targetHandle
+                            from: fromId,
+                            to: toId,
+                            sourceHandle: srcHandle,
+                            targetHandle: tgtHandle
                         }]);
                     }
                     setConnecting(null);
