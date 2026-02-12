@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VibeFlow Query Diagram</title>
+    <title>Interactive Diagram Tool</title>
     <!-- React & ReactDOM (No Babel) -->
     <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
@@ -572,6 +572,9 @@
             const [dragging, setDragging] = useState(null);
             const [connecting, setConnecting] = useState(null);
 
+            // Snapping State
+            const [snapLines, setSnapLines] = useState([]);
+
             // --- Persistence ---
 
             useEffect(() => {
@@ -688,20 +691,27 @@
             }, [deleteSelected, undo, redo]);
 
             const handleWheel = (e) => {
-                if (e.ctrlKey || e.metaKey) {
-                    e.preventDefault();
-                    const scale = e.deltaY > 0 ? 0.9 : 1.1;
-                    setViewport(prev => ({
-                        ...prev,
-                        zoom: Math.min(Math.max(0.1, prev.zoom * scale), 5)
-                    }));
-                } else {
-                    setViewport(prev => ({
-                        ...prev,
-                        x: prev.x - e.deltaX,
-                        y: prev.y - e.deltaY
-                    }));
-                }
+                // Zoom with mouse wheel (no modifier needed)
+                // Pan with drag (handled in mouse move)
+                e.preventDefault();
+
+                // Zoom towards mouse pointer
+                const scale = e.deltaY > 0 ? 0.9 : 1.1;
+                const newZoom = Math.min(Math.max(0.1, viewport.zoom * scale), 5);
+
+                // Calculate mouse position in world coordinates before zoom
+                const mouseWorldX = (e.clientX - viewport.x) / viewport.zoom;
+                const mouseWorldY = (e.clientY - viewport.y) / viewport.zoom;
+
+                // Calculate new viewport position to keep mouse world position stable
+                const newX = e.clientX - mouseWorldX * newZoom;
+                const newY = e.clientY - mouseWorldY * newZoom;
+
+                setViewport({
+                    x: newX,
+                    y: newY,
+                    zoom: newZoom
+                });
             };
 
             const handleMouseDown = (e) => {
@@ -722,14 +732,46 @@
                 }
 
                 if (dragging) {
-                    const worldPos = screenToWorld(e.clientX, e.clientY);
-                    // Calculate delta in world coordinates
-                    // Actually better: calculate new position based on offset
                     const dx = (e.clientX - dragging.startX) / viewport.zoom;
                     const dy = (e.clientY - dragging.startY) / viewport.zoom;
 
-                    const newX = snapToGrid(dragging.nodeStartX + dx);
-                    const newY = snapToGrid(dragging.nodeStartY + dy);
+                    // Raw new position based on drag
+                    let newX = dragging.nodeStartX + dx;
+                    let newY = dragging.nodeStartY + dy;
+
+                    // --- Smart Snapping Logic ---
+                    const SNAP_THRESHOLD = 15;
+
+                    let snappedX = null;
+                    let snappedY = null;
+
+                    nodes.forEach(otherNode => {
+                        if (otherNode.id === dragging.id) return;
+
+                        // Horizontal Alignment (y-axis snap)
+                        if (Math.abs(otherNode.y - newY) < SNAP_THRESHOLD) {
+                            snappedY = otherNode.y;
+                        }
+
+                        // Vertical Alignment (x-axis snap)
+                        if (Math.abs(otherNode.x - newX) < SNAP_THRESHOLD) {
+                            snappedX = otherNode.x;
+                        }
+                    });
+
+                    // Update position with snap or grid
+                    newX = snappedX !== null ? snappedX : snapToGrid(newX);
+                    newY = snappedY !== null ? snappedY : snapToGrid(newY);
+
+                    // Update Snap Lines visualization
+                    const refinedSnapLines = [];
+                    if (snappedY !== null) {
+                        refinedSnapLines.push({ x1: Math.min(newX, -10000), y1: snappedY + 30, x2: Math.max(newX, 10000), y2: snappedY + 30 });
+                    }
+                    if (snappedX !== null) {
+                        refinedSnapLines.push({ x1: snappedX + 50, y1: Math.min(newY, -10000), x2: snappedX + 50, y2: Math.max(newY, 10000) });
+                    }
+                    setSnapLines(refinedSnapLines);
 
                     // Optimization: Don't update state if not changed (snap)
                     const targetNode = nodes.find(n => n.id === dragging.id);
@@ -751,6 +793,7 @@
             const handleMouseUp = () => {
                 setIsPanning(false);
                 setDragging(null); // This captures the final position in history because setNodes triggers setState
+                setSnapLines([]); // Clear snap lines
                 if (connecting) {
                     setConnecting(null);
                 }
@@ -943,6 +986,19 @@
                         className: 'svg-layer',
                         style: { overflow: 'visible' } // Crucial for seeing lines outside bounds if any
                     },
+                        // Snap Lines
+                        snapLines.map((line, i) => h('line', {
+                            key: i,
+                            x1: line.x1,
+                            y1: line.y1,
+                            x2: line.x2,
+                            y2: line.y2,
+                            stroke: '#ffab40',
+                            strokeWidth: 1,
+                            strokeDasharray: '5,5',
+                            opacity: 0.8
+                        })),
+
                         connections.map(conn => {
                             const coords = getConnectionCoords(conn);
                             if (!coords) return null;
@@ -977,7 +1033,7 @@
                         }))
                     )
                 ),
-                h('div', { id: 'hint' }, 'Zoom: Ctrl+Scroll • Pan: Drag BG • Undo: Ctrl+Z')
+                h('div', { id: 'hint' }, 'Zoom: Scroll • Pan: Drag BG • Undo: Ctrl+Z')
             );
         };
 
