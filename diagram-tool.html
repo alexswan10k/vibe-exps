@@ -415,9 +415,108 @@
             );
         };
 
-        const Connection = ({ id, x1, y1, x2, y2, isSelected, onSelect }) => {
+        const ConnectionPopup = ({ connection, onDelete, onUpdate }) => {
+            if (!connection) return null;
+
+            const colors = ['#a0a0b0', '#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4'];
+            const markers = [
+                { id: 'none', label: 'None' },
+                { id: 'arrow', label: 'Arrow' },
+                { id: 'circle', label: 'Circle' }
+            ];
+            const styles = [
+                { id: 'solid', label: 'Solid' },
+                { id: 'dashed', label: 'Dashed' },
+                { id: 'dotted', label: 'Dotted' }
+            ];
+
+            return h('div', {
+                style: {
+                    position: 'absolute',
+                    top: 80, // Below toolbar
+                    left: 20,
+                    zIndex: 101,
+                    background: 'var(--toolbar-bg)',
+                    border: '1px solid var(--toolbar-border)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    minWidth: '200px'
+                },
+                onMouseDown: (e) => e.stopPropagation()
+            },
+                h('div', { style: { fontWeight: 'bold', borderBottom: '1px solid #4a4a5a', paddingBottom: '8px', marginBottom: '4px' } }, 'Connection Style'),
+
+                // Start Marker
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('span', { style: { fontSize: '12px' } }, 'Start:'),
+                    h('select', {
+                        value: connection.markerStart || 'none',
+                        onChange: (e) => onUpdate({ markerStart: e.target.value }),
+                        style: { background: '#3f3f4e', color: 'white', border: 'none', padding: '4px', borderRadius: '4px' }
+                    }, markers.map(m => h('option', { key: m.id, value: m.id }, m.label)))
+                ),
+
+                // End Marker
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('span', { style: { fontSize: '12px' } }, 'End:'),
+                    h('select', {
+                        value: connection.markerEnd || 'arrow',
+                        onChange: (e) => onUpdate({ markerEnd: e.target.value }),
+                        style: { background: '#3f3f4e', color: 'white', border: 'none', padding: '4px', borderRadius: '4px' }
+                    }, markers.map(m => h('option', { key: m.id, value: m.id }, m.label)))
+                ),
+
+                // Line Style
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('span', { style: { fontSize: '12px' } }, 'Style:'),
+                    h('select', {
+                        value: connection.lineStyle || 'solid',
+                        onChange: (e) => onUpdate({ lineStyle: e.target.value }),
+                        style: { background: '#3f3f4e', color: 'white', border: 'none', padding: '4px', borderRadius: '4px' }
+                    }, styles.map(s => h('option', { key: s.id, value: s.id }, s.label)))
+                ),
+
+                // Color
+                h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' } },
+                    colors.map(c =>
+                        h('div', {
+                            key: c,
+                            style: {
+                                width: 16, height: 16, borderRadius: '50%', background: c, cursor: 'pointer',
+                                border: (connection.color || '#a0a0b0') === c ? '2px solid white' : '1px solid transparent'
+                            },
+                            onClick: () => onUpdate({ color: c })
+                        })
+                    )
+                ),
+
+                h('button', {
+                    style: { marginTop: '8px', background: '#ff5252', width: '100%' },
+                    onClick: onDelete
+                }, 'Delete Connection')
+            );
+        };
+
+        const Connection = ({ id, x1, y1, x2, y2, isSelected, onSelect, markerStart = 'none', markerEnd = 'arrow', color = '#a0a0b0', lineStyle = 'solid' }) => {
             const d = calculateSimplePath(x1, y1, x2, y2);
-            const markerId = isSelected ? 'arrowhead-selected' : 'arrowhead-normal';
+
+            // Clean color for ID (remove #)
+            const colorId = color.replace('#', '');
+            const getMarkerId = (type) => {
+                if (!type || type === 'none') return null;
+                return `marker-${type}-${colorId}`;
+            };
+
+            const startMarkerId = getMarkerId(markerStart);
+            const endMarkerId = getMarkerId(markerEnd);
+
+            let strokeDasharray = '';
+            if (lineStyle === 'dashed') strokeDasharray = '5, 5';
+            if (lineStyle === 'dotted') strokeDasharray = '2, 4';
 
             return h('g', {
                 className: 'connection-wrapper',
@@ -438,8 +537,13 @@
                 h('path', {
                     d: d,
                     className: 'connection' + (isSelected ? ' selected' : ''),
-                    style: { pointerEvents: 'stroke' },
-                    markerEnd: `url(#${markerId})`
+                    style: {
+                        pointerEvents: 'stroke',
+                        stroke: isSelected ? 'var(--selection-color)' : color,
+                        strokeDasharray: strokeDasharray
+                    },
+                    markerStart: startMarkerId ? `url(#${startMarkerId})` : undefined,
+                    markerEnd: endMarkerId ? `url(#${endMarkerId})` : undefined
                 })
             );
         };
@@ -943,6 +1047,14 @@
                 }
             };
 
+            // Markers definition
+            const markerColors = ['a0a0b0', '7c4dff', 'ff5252', '4caf50', 'ffab40', '03a9f4'];
+            // We need to match the colors array in popup: ['#a0a0b0', '#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4']
+            const palette = ['#a0a0b0', '#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4'];
+
+            const selectedConnectionId = selection.size === 1 ? Array.from(selection)[0] : null;
+            const selectedConnection = selectedConnectionId ? connections.find(c => c.id === selectedConnectionId) : null;
+
             return h('div', {
                 style: { width: '100%', height: '100%', cursor: isPanning ? 'grabbing' : 'default' },
                 onMouseDown: handleMouseDown,
@@ -954,7 +1066,7 @@
             },
                 h(Toolbar, {
                     onAdd: addNode,
-                    onClear: () => { setNodes([]); setConnections([]); setState({ nodes: [], connections: [] }); }, // Fix clear
+                    onClear: () => { setNodes([]); setConnections([]); setState({ nodes: [], connections: [] }); },
                     onUndo: undo,
                     onRedo: redo,
                     canUndo: canUndo,
@@ -997,6 +1109,16 @@
                         navigator.clipboard.writeText(url).then(() => alert('URL copied to clipboard!'));
                     }
                 }),
+
+                // Connection Popup
+                selectedConnection && h(ConnectionPopup, {
+                    connection: selectedConnection,
+                    onDelete: deleteSelected,
+                    onUpdate: (updates) => {
+                        setConnections(prev => prev.map(c => c.id === selectedConnection.id ? { ...c, ...updates } : c));
+                    }
+                }),
+
                 h('div', {
                     style: {
                         transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
@@ -1011,49 +1133,24 @@
                     // Connection Layer
                     h('svg', { className: 'svg-layer', style: { overflow: 'visible' } },
                         h('defs', {},
-                            h('marker', { id: 'arrowhead-normal', markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto' },
-                                h('polygon', { points: '0 0, 10 3.5, 0 7', fill: '#a0a0b0' })
-                            ),
-                            h('marker', { id: 'arrowhead-selected', markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto' },
-                                h('polygon', { points: '0 0, 10 3.5, 0 7', fill: '#ffab40' })
-                            )
+                            // Generate markers for each color
+                            palette.flatMap(c => {
+                                const cId = c.replace('#', '');
+                                return [
+                                    h('marker', { key: `arrow-${cId}`, id: `marker-arrow-${cId}`, markerWidth: 10, markerHeight: 7, refX: 9, refY: 3.5, orient: 'auto' },
+                                        h('polygon', { points: '0 0, 10 3.5, 0 7', fill: c })
+                                    ),
+                                    h('marker', { key: `circle-${cId}`, id: `marker-circle-${cId}`, markerWidth: 8, markerHeight: 8, refX: 4, refY: 4, orient: 'auto' },
+                                        h('circle', { cx: 4, cy: 4, r: 3, fill: c })
+                                    )
+                                ];
+                            })
                         ),
                         connections.map(c => {
                             const fromNode = nodes.find(n => n.id === c.from);
                             const toNode = nodes.find(n => n.id === c.to);
-                            // We need real port positions. 
-                            // Approximating for now based on node center/sides or stored port info?
-                            // The original code calculated them on fly or stored them?
-                            // Checked original: it calculated them. 
-                            // WAIT: The original code passed x1,y1,x2,y2 to Connection.
-                            // We need to calculate them here if we want to render connections properly.
-
-                            // Let's assume standard ports for now: Right -> Left
-                            // Or use simple center-center? 
-                            // Original code had ports. We should try to respect them if we can determine them.
-                            // The connection object stores IDs. It doesn't store WHICH port.
-                            // The previous `onConnect` stored just IDs.
-                            // BUT `renderHandle` passed position to `onConnect`. 
-                            // We need to store port position in connection to be precise.
-
-                            // Let's look at `onConnect` implementation below.
-                            // It updates connection state.
 
                             if (!fromNode || !toNode) return null;
-
-                            // Default to center-ish if we don't have port info
-                            // Ideally we store sourceHandle and targetHandle in connection. 
-                            // If missing, default: Right to Left.
-
-                            const x1 = fromNode.x + (c.sourceHandle === 'left' ? 0 : c.sourceHandle === 'right' ? 100 : 50); // Warning: 100 is approx width
-                            // We need real width. 
-                            // Let's rely on standard node size for now or dynamic calculation?
-                            // Dynamic is hard in React render without refs.
-                            // Let's assume standard width (min 100).
-                            /*
-                               Node CSS: min-width: 100px.
-                               Let's use a helper to get handle position relative to node (x,y).
-                            */
 
                             const getNodeWidth = (id) => {
                                 const el = document.getElementById(`node-${id}`);
@@ -1064,21 +1161,11 @@
                                 return el ? el.offsetHeight : 60;
                             };
 
-                            // We can't query DOM strictly inside render easily for every frame without lag.
-                            // Let's assume generic logic:
-                            // If we don't store handle ID, we guess.
-                            // To fix this properly, we should store handle IDs in connection.
-
-                            // For this refactor, I'll stick to legacy/simple logic if data is missing, 
-                            // but try to use stored handle info if I add it.
-
                             const startX = fromNode.x + (c.sourceHandle === 'left' ? 0 : c.sourceHandle === 'right' ? getNodeWidth(fromNode.id) : getNodeWidth(fromNode.id) / 2);
                             const startY = fromNode.y + (c.sourceHandle === 'top' ? 0 : c.sourceHandle === 'bottom' ? getNodeHeight(fromNode.id) : getNodeHeight(fromNode.id) / 2);
-
                             const endX = toNode.x + (c.targetHandle === 'left' ? 0 : c.targetHandle === 'right' ? getNodeWidth(toNode.id) : getNodeWidth(toNode.id) / 2);
                             const endY = toNode.y + (c.targetHandle === 'top' ? 0 : c.targetHandle === 'bottom' ? getNodeHeight(toNode.id) : getNodeHeight(toNode.id) / 2);
 
-                            // Fallback if NaN (first render before DOM)
                             const sX = isNaN(startX) ? fromNode.x + 100 : startX;
                             const sY = isNaN(startY) ? fromNode.y + 30 : startY;
                             const eX = isNaN(endX) ? toNode.x : endX;
@@ -1089,7 +1176,11 @@
                                 id: c.id,
                                 x1: sX, y1: sY, x2: eX, y2: eY,
                                 isSelected: selection.has(c.id),
-                                onSelect: (e) => onConnectionSelect(e, c.id)
+                                onSelect: (e) => onConnectionSelect(e, c.id),
+                                markerStart: c.markerStart,
+                                markerEnd: c.markerEnd,
+                                color: c.color,
+                                lineStyle: c.lineStyle
                             });
                         }),
                         // Active drag connection line
@@ -1102,7 +1193,6 @@
                             h('line', { key: i, x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, stroke: '#ffab40', strokeWidth: 1, strokeDasharray: '4,4' })
                         )
                     ),
-
                     // Node Layer
                     h('div', { className: 'node-layer' },
                         nodes.map(node => h(Node, {
@@ -1115,20 +1205,15 @@
                                 else onNodeSelect(e, node.id);
                             },
                             onDelete: (id) => {
-                                // If deleting via button, just delete that one (and if selected, remove from selection)
-                                // Or should it delete all selected?
-                                // "X" usually means delete THIS one.
                                 updateState({
                                     nodes: nodes.filter(n => n.id !== id),
                                     connections: connections.filter(c => c.from !== id && c.to !== id)
                                 });
                             },
                             onStartConnect: (nodeId, handleType, e) => {
-                                // Calculate exact start position from DOM handle
                                 const handleRect = e.target.getBoundingClientRect();
                                 const startX = (handleRect.left + handleRect.width / 2 - viewport.x) / viewport.zoom;
                                 const startY = (handleRect.top + handleRect.height / 2 - viewport.y) / viewport.zoom;
-
                                 setConnecting({
                                     nodeId,
                                     handleType,
@@ -1140,36 +1225,8 @@
                             },
                             onConnect: (targetNodeId, targetHandleType) => {
                                 if (connecting) {
-                                    if (connecting.nodeId === targetNodeId) return; // Self-connection? allow for now or block? Block self-loop usually.
-                                    if (connecting.handleType === targetHandleType) return; // In-In or Out-Out block
-
-                                    const newConn = {
-                                        id: generateId('conn'),
-                                        from: connecting.nodeId,
-                                        to: targetNodeId,
-                                        sourceHandle: connecting.handleType === 'out' ? connecting.handleType : targetHandleType, // We need to store actual sides handle-left etc.
-                                        // Wait, the handleType passed is just 'in' or 'out'.
-                                        // We need the side 'left', 'right' etc.
-                                        // Update Node to pass specific side.
-                                    };
-
-                                    // To fix the "specific port" issue:
-                                    // Let's just create the connection. We can refine port logic later if needed.
-                                    // For now, simpler: just create connection.
-                                    // Re-using logic: we need 'left'/'right' etc for drawing to be pretty.
-                                    // Let's modify Node 'onStartConnect' to pass 'position' as well?
-                                    // Actually Node passes `position` to `onStartConnect` already in `renderHandle`?
-                                    // No, I passed `position` to `onStartConnect` in my new code above?
-                                    // Yes: `onStartConnect(node.id, position, e)`
-                                    // So `connecting.handleType` is actually a position like 'left', 'right'.
-                                    // Wait, let's verify `renderHandle`:
-                                    /*
-                                    const renderHandle = (type, position) => {
-                                       ...
-                                       onStartConnect(node.id, position, e);
-                                    }
-                                    */
-                                    // So `connecting.handleType` holds 'left', 'right', 'top', 'bottom'.
+                                    if (connecting.nodeId === targetNodeId) return;
+                                    if (connecting.handleType === targetHandleType) return;
 
                                     setConnections([...connections, {
                                         id: generateId('conn'),
