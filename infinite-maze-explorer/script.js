@@ -349,10 +349,10 @@ class MazeGame {
 
     findBestDirection() {
         const directions = [
-            { x: 0, y: -1, name: 'up' },    // up
-            { x: 1, y: 0, name: 'right' },  // right
-            { x: 0, y: 1, name: 'down' },  // down
-            { x: -1, y: 0, name: 'left' }  // left
+            { x: 0, y: -1, name: 'ArrowUp' },    // up
+            { x: 1, y: 0, name: 'ArrowRight' },  // right
+            { x: 0, y: 1, name: 'ArrowDown' },  // down
+            { x: -1, y: 0, name: 'ArrowLeft' }  // left
         ];
 
         let bestDirection = null;
