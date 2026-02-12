@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VibeFlow Query Diagram</title>
+    <style>
+        :root {
+            --bg-color: #1e1e24;
+            --dots-color: #383842;
+            --node-bg: #2b2b36;
+            --node-border: #4a4a5a;
+            --node-text: #e0e0e6;
+            --accent: #7c4dff;
+            --accent-glow: rgba(124, 77, 255, 0.4);
+            --connection-color: #a0a0b0;
+            --handle-color: #7c4dff;
+            --toolbar-bg: #2b2b36;
+            --toolbar-border: #4a4a5a;
+            --selection-color: #ffab40;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(var(--dots-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: var(--node-text);
+        }
+
+        #app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Toolbar */
+        #toolbar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: var(--toolbar-bg);
+            border: 1px solid var(--toolbar-border);
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        button {
+            background: #3f3f4e;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background: #505060;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.primary {
+            background: var(--accent);
+        }
+
+        button.primary:hover {
+            background: #8e65ff;
+        }
+
+        /* Canvas Layers */
+        #svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            /* Let clicks pass through to nodes/canvas */
+            z-index: 1;
+        }
+
+        #node-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            /* Allow clicking on empty space to pan/deselect */
+        }
+
+        /* Nodes */
+        .node {
+            position: absolute;
+            background: var(--node-bg);
+            border: 1px solid var(--node-border);
+            border-radius: 8px;
+            min-width: 100px;
+            min-height: 60px;
+            padding: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.2s, border-color 0.2s;
+            user-select: none;
+        }
+
+        .node:hover {
+            border-color: #6a6a7a;
+        }
+
+        .node.selected {
+            border-color: var(--selection-color);
+            box-shadow: 0 0 0 2px rgba(255, 171, 64, 0.3), 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .node-header {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid var(--node-border);
+            border-radius: 8px 8px 0 0;
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .node-header:active {
+            cursor: grabbing;
+        }
+
+        .node-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            pointer-events: none;
+        }
+
+        .delete-btn {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ff5252;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            line-height: 1;
+            color: white;
+        }
+
+        .node:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .node-content {
+            padding: 12px;
+            color: var(--node-text);
+            font-size: 14px;
+            line-height: 1.5;
+            outline: none;
+            cursor: text;
+            min-height: 1em;
+            /* Adaptive sizing hack */
+            width: fit-content;
+            max-width: 300px;
+            min-width: 120px;
+        }
+
+        /* Handles (Ports) */
+        .handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--node-border);
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: crosshair;
+            transition: background 0.2s, transform 0.2s;
+            z-index: 10;
+        }
+
+        .handle:hover {
+            background: var(--handle-color);
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        .handle-in {
+            left: -6px;
+        }
+
+        .handle-out {
+            right: -6px;
+            background: var(--accent);
+        }
+
+        /* Connections */
+        path.connection {
+            fill: none;
+            stroke: var(--connection-color);
+            stroke-width: 2;
+            stroke-linecap: round;
+        }
+
+        path.connection:hover {
+            stroke: var(--selection-color);
+            cursor: pointer;
+            stroke-width: 3;
+        }
+
+        path.temp-connection {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+            stroke-dasharray: 5, 5;
+            pointer-events: none;
+        }
+
+        /* Context Menu for simple usage hint */
+        #hint {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #888;
+            pointer-events: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="app">
+        <div id="toolbar">
+            <button class="primary" id="btn-add">Add Node</button>
+            <button id="btn-export">Export JSON</button>
+            <button id="btn-import">Import JSON</button>
+            <button id="btn-clear" style="background:#ff5252;">Clear</button>
+            <button id="btn-share">Copy Link</button>
+        </div>
+
+        <svg id="svg-layer"></svg>
+        <div id="node-layer"></div>
+
+        <div id="hint">
+            Double-click to edit text • Drag handles to connect • Drag header to move • Delete key to remove
+        </div>
+    </div>
+
+    <script>
+        /**
+         * VibeFlow Diagram Tool
+         * A standalone, dependency-free diagramming tool using Vanilla JS.
+         */
+
+        // --- State Management ---
+        const state = {
+            nodes: [],
+            connections: [],
+            nextNodeId: 1,
+            draggingNode: null,
+            dragOffset: { x: 0, y: 0 },
+            connecting: {
+                active: false,
+                sourceNodeId: null,
+                startX: 0,
+                startY: 0,
+                currentX: 0,
+                currentY: 0
+            },
+            selectedNodeId: null,
+            selectedConnectionId: null
+        };
+
+        // --- DOM Elements ---
+        const svgLayer = document.getElementById('svg-layer');
+        const nodeLayer = document.getElementById('node-layer');
+        const app = document.getElementById('app');
+
+        // --- Core Logic ---
+
+        class DiagramApp {
+            constructor() {
+                this.bindEvents();
+                this.loadFromUrl();
+                if (state.nodes.length === 0) {
+                    this.addNode(100, 100, "Welcome to VibeFlow!\nDrag me around.");
+                    this.addNode(400, 100, "Adaptive sizing:\nType more text and I grow!");
+                    this.addConnection(state.nodes[0].id, state.nodes[1].id);
+                }
+                this.render();
+            }
+
+            bindEvents() {
+                // Toolbar
+                document.getElementById('btn-add').addEventListener('click', () => {
+                    this.addNode(100 + Math.random() * 50, 100 + Math.random() * 50);
+                    this.render();
+                });
+
+                document.getElementById('btn-clear').addEventListener('click', () => {
+                    if (confirm('Clear all?')) {
+                        state.nodes = [];
+                        state.connections = [];
+                        this.render();
+                        this.updateUrl();
+                    }
+                });
+
+                document.getElementById('btn-export').addEventListener('click', () => this.exportJson());
+                document.getElementById('btn-import').addEventListener('click', () => this.importJson());
+                document.getElementById('btn-share').addEventListener('click', () => this.shareLink());
+
+                // Global Mouse Events for Dragging & Connecting
+                document.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                document.addEventListener('mouseup', (e) => this.onMouseUp(e));
+
+                // Background click to deselect
+                app.addEventListener('mousedown', (e) => {
+                    if (e.target === app || e.target === nodeLayer || e.target === svgLayer) {
+                        this.deselectAll();
+                    }
+                });
+
+                // Keyboard
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                        // Start editing text doesn't trigger delete
+                        if (document.activeElement.isContentEditable) return;
+
+                        if (state.selectedNodeId) {
+                            this.deleteNode(state.selectedNodeId);
+                            this.deselectAll();
+                            this.render();
+                        }
+                        if (state.selectedConnectionId) {
+                            this.deleteConnection(state.selectedConnectionId);
+                            state.selectedConnectionId = null;
+                            this.renderConnections();
+                            this.updateUrl();
+                        }
+                    }
+                });
+            }
+
+            // --- Nodes ---
+
+            addNode(x, y, content = "New Node") {
+                const id = 'node-' + state.nextNodeId++;
+                const node = {
+                    id,
+                    x,
+                    y,
+                    content,
+                    width: 0, // Calculated by DOM
+                    height: 0
+                };
+                state.nodes.push(node);
+
+                // Create DOM element
+                const el = document.createElement('div');
+                el.className = 'node';
+                el.id = id;
+                el.style.left = x + 'px';
+                el.style.top = y + 'px';
+
+                el.innerHTML = `
+                <div class="node-header">
+                    <span class="node-title">Node</span>
+                    <div class="delete-btn">×</div>
+                </div>
+                <div class="node-content" contenteditable="true" spellcheck="false">${content}</div>
+                <div class="handle handle-in" data-id="${id}" data-type="in"></div>
+                <div class="handle handle-out" data-id="${id}" data-type="out"></div>
+            `;
+
+                // Node Events
+                const header = el.querySelector('.node-header');
+                header.addEventListener('mousedown', (e) => {
+                    state.draggingNode = id;
+                    state.dragOffset.x = e.clientX - node.x;
+                    state.dragOffset.y = e.clientY - node.y;
+                    this.selectNode(id);
+                    e.stopPropagation(); // Prevent canvas drag
+                });
+
+                const contentEl = el.querySelector('.node-content');
+                contentEl.addEventListener('input', (e) => {
+                    node.content = e.target.innerText;
+                    // Force connection update as sizes change
+                    this.renderConnections();
+                    this.updateUrl();
+                });
+                contentEl.addEventListener('focus', () => {
+                    this.selectNode(id);
+                });
+
+                const delBtn = el.querySelector('.delete-btn');
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteNode(id);
+                    this.render();
+                });
+
+                // Handles
+                const outHandle = el.querySelector('.handle-out');
+                outHandle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault(); // Prevent text selection
+                    const rect = outHandle.getBoundingClientRect();
+                    state.connecting = {
+                        active: true,
+                        sourceNodeId: id,
+                        startX: rect.left + rect.width / 2,
+                        startY: rect.top + rect.height / 2,
+                        currentX: e.clientX,
+                        currentY: e.clientY
+                    };
+                });
+
+                const inHandle = el.querySelector('.handle-in');
+                inHandle.addEventListener('mouseup', (e) => {
+                    if (state.connecting.active && state.connecting.sourceNodeId !== id) {
+                        e.stopPropagation();
+                        this.addConnection(state.connecting.sourceNodeId, id);
+                        this.stopConnecting();
+                    }
+                });
+
+                nodeLayer.appendChild(el);
+                this.updateUrl();
+                return node;
+            }
+
+            render() {
+                // Check for missing DOM elements (e.g. from load)
+                state.nodes.forEach(node => {
+                    if (!document.getElementById(node.id)) {
+                        // This is a partial re-render or initial load logic could go here
+                        // For now, simpler to clear and rebuild if deep changes, 
+                        // but let's try to be efficient: only add if missing.
+                        // Actually, easiest is just to wipe nodeLayer if we do a full render.
+                    }
+                });
+
+                // Re-render connections
+                this.renderConnections();
+            }
+
+            deleteNode(id) {
+                state.nodes = state.nodes.filter(n => n.id !== id);
+                state.connections = state.connections.filter(c => c.from !== id && c.to !== id);
+                const el = document.getElementById(id);
+                if (el) el.remove();
+                this.updateUrl();
+            }
+
+            selectNode(id) {
+                state.selectedNodeId = id;
+                state.selectedConnectionId = null;
+                document.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
+                document.querySelectorAll('.connection').forEach(el => el.setAttribute('stroke', '#a0a0b0')); // Reset connections
+
+                const el = document.getElementById(id);
+                if (el) el.classList.add('selected');
+            }
+
+            deselectAll() {
+                state.selectedNodeId = null;
+                state.selectedConnectionId = null;
+                document.querySelectorAll('.node').forEach(el => el.classList.remove('selected'));
+                document.querySelectorAll('.connection').forEach(el => el.setAttribute('stroke', '#a0a0b0'));
+            }
+
+            // --- Connections ---
+
+            addConnection(from, to) {
+                // Check duplicate
+                if (state.connections.find(c => c.from === from && c.to === to)) return;
+
+                const id = 'conn-' + Date.now() + Math.random();
+                state.connections.push({ id, from, to });
+                this.renderConnections();
+                this.updateUrl();
+            }
+
+            deleteConnection(id) {
+                state.connections = state.connections.filter(c => c.id !== id);
+            }
+
+            renderConnections() {
+                // Clear SVG
+                svgLayer.innerHTML = '';
+
+                // Draw confirmed connections
+                state.connections.forEach(conn => {
+                    const fromEl = document.getElementById(conn.from);
+                    const toEl = document.getElementById(conn.to);
+                    if (!fromEl || !toEl) return;
+
+                    const fromRect = fromEl.querySelector('.handle-out').getBoundingClientRect();
+                    const toRect = toEl.querySelector('.handle-in').getBoundingClientRect();
+
+                    // Convert to local coords (relative to body/viewport, since SVG is fullscreen fixed/absolute)
+                    // Actually my SVG is absolute 0,0. clientRect provides viewport coords.
+                    const startX = fromRect.left + fromRect.width / 2;
+                    const startY = fromRect.top + fromRect.height / 2;
+                    const endX = toRect.left + toRect.width / 2;
+                    const endY = toRect.top + toRect.height / 2;
+
+                    const d = this.calculatePath(startX, startY, endX, endY);
+
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', d);
+                    path.setAttribute('class', 'connection');
+                    path.setAttribute('id', conn.id);
+
+                    if (state.selectedConnectionId === conn.id) {
+                        path.setAttribute('stroke', '#ffab40');
+                    }
+
+                    path.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        state.selectedConnectionId = conn.id;
+                        state.selectedNodeId = null;
+                        this.renderConnections(); // Re-render to show selection state (lazy way)
+                        // Or just set attribute directly for perf
+                    });
+
+                    svgLayer.appendChild(path);
+                });
+
+                // Draw temp connection if dragging
+                if (state.connecting.active) {
+                    const d = this.calculatePath(
+                        state.connecting.startX,
+                        state.connecting.startY,
+                        state.connecting.currentX,
+                        state.connecting.currentY
+                    );
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', d);
+                    path.setAttribute('class', 'temp-connection');
+                    svgLayer.appendChild(path);
+                }
+            }
+
+            calculatePath(x1, y1, x2, y2) {
+                // Bezier Curve
+                const dist = Math.abs(x2 - x1);
+                const controlOffset = Math.max(dist * 0.5, 50);
+                return `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
+            }
+
+            // --- Interaction Handlers ---
+
+            onMouseMove(e) {
+                if (state.draggingNode) {
+                    const node = state.nodes.find(n => n.id === state.draggingNode);
+                    if (node) {
+                        node.x = e.clientX - state.dragOffset.x;
+                        node.y = e.clientY - state.dragOffset.y;
+
+                        const el = document.getElementById(node.id);
+                        el.style.left = node.x + 'px';
+                        el.style.top = node.y + 'px';
+
+                        this.renderConnections();
+                    }
+                }
+
+                if (state.connecting.active) {
+                    state.connecting.currentX = e.clientX;
+                    state.connecting.currentY = e.clientY;
+                    this.renderConnections();
+                }
+            }
+
+            onMouseUp(e) {
+                if (state.draggingNode) {
+                    state.draggingNode = null;
+                    this.updateUrl();
+                }
+                if (state.connecting.active) {
+                    // If we didn't hit a handle (handled in handle-in mouseup), cancel
+                    this.stopConnecting();
+                }
+            }
+
+            stopConnecting() {
+                state.connecting.active = false;
+                this.renderConnections();
+            }
+
+            // --- Persistence (URL & JSON) ---
+
+            exportJson() {
+                const data = JSON.stringify({ nodes: state.nodes, connections: state.connections }, null, 2);
+                // Prompt download
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'vibeflow-diagram.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            importJson() {
+                // Simple file input trigger
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/json';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (re) => {
+                        try {
+                            const data = JSON.parse(re.target.result);
+                            if (data.nodes && data.connections) {
+                                this.loadData(data);
+                            } else {
+                                alert('Invalid JSON format');
+                            }
+                        } catch (err) {
+                            alert('Error parsing JSON');
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            }
+
+            loadData(data) {
+                // Clear current
+                nodeLayer.innerHTML = '';
+                state.nodes = data.nodes || [];
+                state.connections = data.connections || [];
+
+                // Determine next ID
+                let maxId = 0;
+                state.nodes.forEach(n => {
+                    const num = parseInt(n.id.replace('node-', ''));
+                    if (!isNaN(num) && num > maxId) maxId = num;
+
+                    // Re-create DOM
+                    this.recreateNodeDOM(n);
+                });
+                state.nextNodeId = maxId + 1;
+
+                this.renderConnections();
+                this.updateUrl();
+            }
+
+            recreateNodeDOM(n) {
+                // Logic duplicated from addNode purely for DOM creation
+                // Refactor: make createNodeDOM(node) function.
+                // For now, I'll essentially inline a "restore" function.
+                const el = document.createElement('div');
+                el.className = 'node';
+                el.id = n.id;
+                el.style.left = n.x + 'px';
+                el.style.top = n.y + 'px';
+
+                el.innerHTML = `
+                <div class="node-header">
+                    <span class="node-title">Node</span>
+                    <div class="delete-btn">×</div>
+                </div>
+                <div class="node-content" contenteditable="true" spellcheck="false">${n.content}</div>
+                <div class="handle handle-in" data-id="${n.id}" data-type="in"></div>
+                <div class="handle handle-out" data-id="${n.id}" data-type="out"></div>
+            `;
+
+                const header = el.querySelector('.node-header');
+                header.addEventListener('mousedown', (e) => {
+                    state.draggingNode = n.id;
+                    state.dragOffset.x = e.clientX - n.x;
+                    state.dragOffset.y = e.clientY - n.y;
+                    this.selectNode(n.id);
+                    e.stopPropagation();
+                });
+
+                const contentEl = el.querySelector('.node-content');
+                contentEl.addEventListener('input', (e) => {
+                    n.content = e.target.innerText;
+                    this.renderConnections();
+                    this.updateUrl();
+                });
+                contentEl.addEventListener('focus', () => {
+                    this.selectNode(n.id);
+                });
+
+                const delBtn = el.querySelector('.delete-btn');
+                delBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteNode(n.id);
+                    this.render();
+                });
+
+                const outHandle = el.querySelector('.handle-out');
+                outHandle.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const rect = outHandle.getBoundingClientRect();
+                    state.connecting = {
+                        active: true,
+                        sourceNodeId: n.id,
+                        startX: rect.left + rect.width / 2,
+                        startY: rect.top + rect.height / 2,
+                        currentX: e.clientX,
+                        currentY: e.clientY
+                    };
+                });
+
+                const inHandle = el.querySelector('.handle-in');
+                inHandle.addEventListener('mouseup', (e) => {
+                    if (state.connecting.active && state.connecting.sourceNodeId !== n.id) {
+                        e.stopPropagation();
+                        this.addConnection(state.connecting.sourceNodeId, n.id);
+                        this.stopConnecting();
+                    }
+                });
+
+                nodeLayer.appendChild(el);
+            }
+
+            // --- URL Encoded State ---
+
+            updateUrl() {
+                const data = { nodes: state.nodes, connections: state.connections };
+                const json = JSON.stringify(data);
+                const b64 = btoa(encodeURIComponent(json)); // Simple encoding
+                window.history.replaceState(null, '', '#' + b64);
+            }
+
+            loadFromUrl() {
+                const hash = window.location.hash.substring(1);
+                if (hash) {
+                    try {
+                        const json = decodeURIComponent(atob(hash));
+                        const data = JSON.parse(json);
+                        this.loadData(data);
+                    } catch (e) {
+                        console.error('Failed to load from URL', e);
+                    }
+                }
+            }
+
+            shareLink() {
+                this.updateUrl();
+                navigator.clipboard.writeText(window.location.href).then(() => {
+                    alert('Link copied to clipboard!');
+                });
+            }
+        }
+
+        // Initialize
+        window.onload = () => {
+            new DiagramApp();
+        };
+
+    </script>
+</body>
+
+</html>
