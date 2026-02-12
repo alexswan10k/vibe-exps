@@ -209,8 +209,6 @@
             height: 12px;
             background: var(--node-border);
             border-radius: 50%;
-            top: 50%;
-            transform: translateY(-50%);
             cursor: crosshair;
             transition: background 0.2s, transform 0.2s;
             z-index: 10;
@@ -218,16 +216,49 @@
 
         .handle:hover {
             background: var(--handle-color);
+            transform: scale(1.2);
+        }
+
+        .handle-left {
+            top: 50%;
+            left: -6px;
+            transform: translateY(-50%);
+        }
+
+        .handle-left:hover {
             transform: translateY(-50%) scale(1.2);
         }
 
-        .handle-in {
-            left: -6px;
-        }
-
-        .handle-out {
+        .handle-right {
+            top: 50%;
             right: -6px;
             background: var(--accent);
+            transform: translateY(-50%);
+        }
+
+        .handle-right:hover {
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        .handle-top {
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .handle-top:hover {
+            transform: translateX(-50%) scale(1.2);
+        }
+
+        .handle-bottom {
+            bottom: -6px;
+            left: 50%;
+            background: var(--accent);
+            transform: translateX(-50%);
+        }
+
+        .handle-bottom:hover {
+            transform: translateX(-50%) scale(1.2);
         }
 
         /* Connections */
@@ -352,7 +383,7 @@
             });
         };
 
-        const Node = ({ node, isSelected, onUpdate, onSelect, onDelete, onStartConnect }) => {
+        const Node = ({ node, isSelected, onUpdate, onSelect, onDelete, onStartConnect, onConnect }) => {
             const nodeRef = useRef(null);
             const [isEditing, setIsEditing] = useState(false);
             const [tempContent, setTempContent] = useState(node.content);
@@ -367,6 +398,32 @@
                 if (tempContent !== node.content) {
                     onUpdate(node.id, { content: tempContent });
                 }
+            };
+
+            const renderHandle = (type, position) => {
+                // type: 'in' | 'out'
+                // position: 'left' | 'right' | 'top' | 'bottom'
+                const handleId = `handle-${node.id}-${position}`;
+                const className = `handle handle-${position}`;
+
+                return h('div', {
+                    key: position,
+                    className: className,
+                    id: handleId,
+                    onMouseDown: (e) => {
+                        if (type === 'out') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onStartConnect(node.id, position, e);
+                        }
+                    },
+                    onMouseUp: (e) => {
+                        if (type === 'in') {
+                            e.stopPropagation();
+                            onConnect(node.id, position);
+                        }
+                    }
+                });
             };
 
             return h('div', {
@@ -418,22 +475,10 @@
                         })
                 ),
                 // Ports
-                h('div', {
-                    className: 'handle handle-in',
-                    id: 'handle-in-' + node.id,
-                    onMouseUp: (e) => {
-                        e.stopPropagation();
-                        onStartConnect(node.id, 'in', e);
-                    }
-                }),
-                h('div', {
-                    className: 'handle handle-out',
-                    onMouseDown: (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onStartConnect(node.id, 'out', e);
-                    }
-                })
+                renderHandle('in', 'left'),
+                renderHandle('in', 'top'),
+                renderHandle('out', 'right'),
+                renderHandle('out', 'bottom')
             );
         };
 
@@ -549,26 +594,36 @@
                 }
             };
 
-            const onStartConnect = (nodeId, type, e) => {
-                if (type === 'out') {
-                    setConnecting({
-                        sourceNodeId: nodeId,
-                        startX: e.clientX,
-                        startY: e.clientY,
-                        currentX: e.clientX,
-                        currentY: e.clientY
-                    });
-                } else if (type === 'in') {
-                    if (connecting && connecting.sourceNodeId !== nodeId) {
-                        if (!connections.find(c => c.from === connecting.sourceNodeId && c.to === nodeId)) {
-                            setConnections(prev => [...prev, {
-                                id: generateId('conn'),
-                                from: connecting.sourceNodeId,
-                                to: nodeId
-                            }]);
-                        }
-                        setConnecting(null);
+            const onStartConnect = (nodeId, handlePosition, e) => {
+                setConnecting({
+                    sourceNodeId: nodeId,
+                    sourceHandle: handlePosition,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    currentX: e.clientX,
+                    currentY: e.clientY
+                });
+            };
+
+            const onConnect = (targetNodeId, targetHandle) => {
+                if (connecting && connecting.sourceNodeId !== targetNodeId) {
+                    const exists = connections.find(c =>
+                        c.from === connecting.sourceNodeId &&
+                        c.to === targetNodeId &&
+                        c.sourceHandle === connecting.sourceHandle &&
+                        c.targetHandle === targetHandle
+                    );
+
+                    if (!exists) {
+                        setConnections(prev => [...prev, {
+                            id: generateId('conn'),
+                            from: connecting.sourceNodeId,
+                            to: targetNodeId,
+                            sourceHandle: connecting.sourceHandle,
+                            targetHandle: targetHandle
+                        }]);
                     }
+                    setConnecting(null);
                 }
             };
 
@@ -577,8 +632,15 @@
                 const toNode = nodes.find(n => n.id === conn.to);
                 if (!fromNode || !toNode) return null;
 
-                const fromEl = document.getElementById('handle-in-' + fromNode.id)?.parentNode?.querySelector('.handle-out');
-                const toEl = document.getElementById('handle-in-' + toNode.id);
+                // Default legacy connections to right -> left
+                const sourceHandle = conn.sourceHandle || 'right';
+                const targetHandle = conn.targetHandle || 'left';
+
+                const fromId = `handle-${fromNode.id}-${sourceHandle}`;
+                const toId = `handle-${toNode.id}-${targetHandle}`;
+
+                const fromEl = document.getElementById(fromId);
+                const toEl = document.getElementById(toId);
 
                 if (fromEl && toEl) {
                     const fR = fromEl.getBoundingClientRect();
@@ -591,6 +653,7 @@
                     };
                 }
 
+                // Fallback estimate
                 return {
                     x1: fromNode.x + 100,
                     y1: fromNode.y + 30,
@@ -659,7 +722,8 @@
                             setNodes(prev => prev.filter(n => n.id !== id));
                             setConnections(prev => prev.filter(c => c.from !== id && c.to !== id));
                         },
-                        onStartConnect: onStartConnect
+                        onStartConnect: onStartConnect,
+                        onConnect: onConnect
                     }))
                 ),
                 h('div', { id: 'hint' }, 'Double-click to edit text • Drag handles to connect • Drag header to move • Delete key to remove')
