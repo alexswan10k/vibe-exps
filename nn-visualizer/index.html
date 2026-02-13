@@ -270,6 +270,60 @@
             margin-right: 8px;
             animation: pulse 1s infinite;
         }
+
+        /* Mobile Adjustments */
+        .mobile-toggle {
+            display: none;
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            z-index: 1000;
+            background: var(--accent);
+            color: white;
+            padding: 1rem;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            box-shadow: 0 4px 15px var(--accent-glow);
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        @media (max-width: 1100px) {
+            .main-layout {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr auto;
+            }
+
+            .sidebar,
+            .stats-panel {
+                width: 100%;
+                border: none;
+                border-bottom: 1px solid var(--border);
+                max-height: 40vh;
+            }
+
+            .sidebar.collapsed,
+            .stats-panel.collapsed {
+                display: none;
+            }
+
+            .mobile-toggle {
+                display: flex;
+            }
+
+            .canvas-container {
+                padding: 1rem;
+            }
+
+            #mainCanvas {
+                width: 100% !important;
+                height: auto !important;
+                aspect-ratio: 1 / 1;
+            }
+        }
     </style>
 </head>
 
@@ -277,13 +331,16 @@
     <header>
         <h1>NEURAL NEXUS <span style="font-weight: 300; font-size: 0.8rem; color: var(--text-muted)">// GRADIENT DESCENT
                 LAB</span></h1>
-        <div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="badge" id="badge-mode">3D Regression</span>
             <span class="badge">Standalone Prototype</span>
         </div>
     </header>
 
+    <div class="mobile-toggle" id="btnToggleSidebar">⚙️</div>
+
     <div class="main-layout">
-        <aside class="sidebar">
+        <aside class="sidebar collapsed" id="controlsSidebar">
             <div class="panel-section">
                 <span class="section-title">Execution</span>
                 <button id="btnStart">BEGIN TRAINING</button>
@@ -345,7 +402,7 @@
             <canvas id="mainCanvas" width="600" height="600"></canvas>
         </main>
 
-        <aside class="stats-panel">
+        <aside class="stats-panel collapsed" id="statsSidebar">
             <div class="stat-card">
                 <div class="stat-value" id="valLoss">0.0000</div>
                 <div class="stat-label">CURRENT LOSS</div>

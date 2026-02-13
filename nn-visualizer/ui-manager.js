@@ -80,6 +80,54 @@ class App {
 
         document.getElementById('btnAddLayer').onclick = () => this.addLayer();
         document.getElementById('btnRemoveLayer').onclick = () => this.removeLayer();
+
+        // Mobile Sidebar Toggles
+        const btnToggle = document.getElementById('btnToggleSidebar');
+        const controls = document.getElementById('controlsSidebar');
+        const stats = document.getElementById('statsSidebar');
+
+        btnToggle.onclick = () => {
+            const isCollapsed = controls.classList.contains('collapsed');
+            if (isCollapsed) {
+                controls.classList.remove('collapsed');
+                stats.classList.remove('collapsed');
+                btnToggle.innerText = '❌';
+            } else {
+                controls.classList.add('collapsed');
+                stats.classList.add('collapsed');
+                btnToggle.innerText = '⚙️';
+            }
+        };
+
+        // Touch Events for Mobile
+        canvas.ontouchstart = (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                lastX = e.touches[0].clientX;
+                lastY = e.touches[0].clientY;
+            }
+            // Prevent scrolling when interacting with canvas
+            if (this.datasetType !== 'XOR' && this.datasetType !== 'Circles' && this.datasetType !== 'Spiral') {
+                e.preventDefault();
+            }
+        };
+
+        window.ontouchend = () => isDragging = false;
+
+        window.ontouchmove = (e) => {
+            if (!isDragging || e.touches.length !== 1 || this.datasetType === 'XOR' || this.datasetType === 'Circles' || this.datasetType === 'Spiral') return;
+
+            const dx = e.touches[0].clientX - lastX;
+            const dy = e.touches[0].clientY - lastY;
+
+            this.renderer.camera.rotZ += dx * 0.01;
+            this.renderer.camera.rotX += dy * 0.01;
+
+            lastX = e.touches[0].clientX;
+            lastY = e.touches[0].clientY;
+
+            e.preventDefault();
+        };
     }
 
     renderTopologyUI() {
@@ -145,6 +193,11 @@ class App {
         document.getElementById('btnStart').innerText = 'BEGIN TRAINING';
         document.getElementById('valEpoch').innerText = '0';
         document.getElementById('valLoss').innerText = '0.0000';
+
+        const badge = document.getElementById('badge-mode');
+        if (badge) {
+            badge.innerText = is3D ? '3D Regression' : '2D Classification';
+        }
     }
 
     trainStep() {
