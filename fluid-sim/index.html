@@ -510,25 +510,33 @@
                 window.addEventListener('mouseup', () => interactionEnd('mouse'));
 
                 window.addEventListener('touchstart', e => {
+                    const isUI = e.target.closest('#ui-container') || e.target.closest('#toggle-ui');
+                    if (isUI) return;
+
                     for (let i = 0; i < e.changedTouches.length; i++) {
                         const t = e.changedTouches[i];
                         handleInteraction(t.identifier, t.clientX, t.clientY, true);
                     }
-                    e.preventDefault();
+                    if (e.cancelable) e.preventDefault();
                 }, { passive: false });
 
                 window.addEventListener('touchmove', e => {
+                    const isUI = e.target.closest('#ui-container') || e.target.closest('#toggle-ui');
+                    if (isUI) return;
+
                     for (let i = 0; i < e.changedTouches.length; i++) {
                         const t = e.changedTouches[i];
                         handleInteraction(t.identifier, t.clientX, t.clientY, false);
                     }
-                    e.preventDefault();
+                    if (e.cancelable) e.preventDefault();
                 }, { passive: false });
 
                 window.addEventListener('touchend', e => {
+                    const isUI = e.target.closest('#ui-container') || e.target.closest('#toggle-ui');
                     for (let i = 0; i < e.changedTouches.length; i++) {
                         interactionEnd(e.changedTouches[i].identifier);
                     }
+                    if (!isUI && e.cancelable) e.preventDefault();
                 });
 
                 window.addEventListener('resize', () => this.resize());
