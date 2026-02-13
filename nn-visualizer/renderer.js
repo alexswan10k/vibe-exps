@@ -52,6 +52,70 @@ class DataGenerator {
         }
         return data;
     }
+
+    static generateRipple(count) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            const r = Math.sqrt(x * x + y * y);
+            const z = Math.sin(r * 10) / (r * 10 + 0.1);
+            data.push({ x, y, label: z });
+        }
+        return data;
+    }
+
+    static generatePeaks(count) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            const z = 3 * Math.pow(1 - x, 2) * Math.exp(-(x * x) - Math.pow(y + 1, 2))
+                - 10 * (x / 5 - Math.pow(x, 3) - Math.pow(y, 5)) * Math.exp(-(x * x) - (y * y))
+                - 1 / 3 * Math.exp(-Math.pow(x + 1, 2) - (y * y));
+            // Normalize peaks for viz
+            data.push({ x, y, label: z / 8 });
+        }
+        return data;
+    }
+
+    static generateSaddle(count) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            const z = x * x - y * y;
+            data.push({ x, y, label: z });
+        }
+        return data;
+    }
+}
+
+class Camera {
+    constructor() {
+        this.rotX = -Math.PI / 6;
+        this.rotZ = Math.PI / 4;
+        this.zoom = 1.0;
+        this.panX = 0;
+        this.panY = 0;
+    }
+
+    project(x, y, z, width, height) {
+        // Simple 3D projection with rotation
+        // Rotate around Z
+        let rx = x * Math.cos(this.rotZ) - y * Math.sin(this.rotZ);
+        let ry = x * Math.sin(this.rotZ) + y * Math.cos(this.rotZ);
+
+        // Rotate around X
+        let rz = z * Math.cos(this.rotX) - ry * Math.sin(this.rotX);
+        ry = z * Math.sin(this.rotX) + ry * Math.cos(this.rotX);
+
+        const s = (width / 2.5) * this.zoom;
+        const px = width / 2 + rx * s + this.panX;
+        const py = height / 2 + ry * (s * 0.5) + this.panY; // Foreshortened Y
+
+        return { x: px, y: py, depth: rz };
+    }
 }
 
 class Renderer {
@@ -61,6 +125,7 @@ class Renderer {
         this.width = this.canvas.width;
         this.height = this.canvas.height;
         this.resolution = 12;
+        this.camera = new Camera();
     }
 
     drawHeatmap(nn, mode = 'classification') {
@@ -94,34 +159,29 @@ class Renderer {
         const ctx = this.ctx;
         const w = this.width;
         const h = this.height;
-        const res = 20; // Lower resolution for grid
+        const step = 0.1;
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
-
-        const project = (x, y, z) => {
-            // Isometric-ish projection
-            const px = w / 2 + (x - y) * (w / 2.5);
-            const py = h / 2 + (x + y) * (h / 5) - z * (h / 4);
-            return { x: px, y: py };
-        };
-
-        for (let i = -1; i <= 1; i += 0.1) {
+        // Draw grid lines with depth shading
+        for (let i = -1; i <= 1.01; i += step) {
             ctx.beginPath();
-            for (let j = -1; j <= 1; j += 0.1) {
+            for (let j = -1; j <= 1.01; j += step / 5) {
                 const z = nn.predict([i, j]);
-                const p = project(i, j, z);
+                const p = this.camera.project(i, j, z, w, h);
+                const alpha = Math.min(1, Math.max(0.1, (p.depth + 1) / 2));
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
                 if (j === -1) ctx.moveTo(p.x, p.y);
                 else ctx.lineTo(p.x, p.y);
             }
             ctx.stroke();
         }
 
-        for (let j = -1; j <= 1; j += 0.1) {
+        for (let j = -1; j <= 1.01; j += step) {
             ctx.beginPath();
-            for (let i = -1; i <= 1; i += 0.1) {
+            for (let i = -1; i <= 1.01; i += step / 5) {
                 const z = nn.predict([i, j]);
-                const p = project(i, j, z);
+                const p = this.camera.project(i, j, z, w, h);
+                const alpha = Math.min(1, Math.max(0.1, (p.depth + 1) / 2));
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
                 if (i === -1) ctx.moveTo(p.x, p.y);
                 else ctx.lineTo(p.x, p.y);
             }
@@ -130,18 +190,25 @@ class Renderer {
     }
 
     drawData(data, mode = 'classification') {
-        for (const pt of data) {
-            const px = (pt.x + 1) / 2 * this.width;
-            const py = (pt.y + 1) / 2 * this.height;
+        const w = this.width;
+        const h = this.height;
 
-            this.ctx.beginPath();
-            this.ctx.arc(px, py, mode === 'classification' ? 5 : 3, 0, Math.PI * 2);
+        for (const pt of data) {
+            let px, py;
             if (mode === 'classification') {
+                px = (pt.x + 1) / 2 * w;
+                py = (pt.y + 1) / 2 * h;
                 this.ctx.fillStyle = pt.label === 1 ? '#ff00ff' : '#00ffff';
             } else {
+                const p = this.camera.project(pt.x, pt.y, pt.label, w, h);
+                px = p.x;
+                py = p.y;
                 const val = (pt.label + 1) / 2;
                 this.ctx.fillStyle = `rgb(${Math.floor(val * 255)}, 255, ${Math.floor((1 - val) * 255)})`;
             }
+
+            this.ctx.beginPath();
+            this.ctx.arc(px, py, mode === 'classification' ? 5 : 2, 0, Math.PI * 2);
             this.ctx.strokeStyle = '#000';
             this.ctx.lineWidth = 0.5;
             this.ctx.fill();

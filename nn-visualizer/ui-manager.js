@@ -40,6 +40,44 @@ class App {
             if (this.nn) this.nn.learningRate = this.learningRate;
         };
 
+        const canvas = document.getElementById('mainCanvas');
+        let isDragging = false;
+        let lastX, lastY;
+
+        canvas.onmousedown = (e) => {
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+        };
+
+        window.onmouseup = () => isDragging = false;
+
+        window.onmousemove = (e) => {
+            if (!isDragging || this.datasetType === 'XOR' || this.datasetType === 'Circles' || this.datasetType === 'Spiral') return;
+
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+
+            if (e.buttons === 1) { // Left click: Rotation
+                this.renderer.camera.rotZ += dx * 0.01;
+                this.renderer.camera.rotX += dy * 0.01;
+            } else if (e.buttons === 2) { // Right click: Pan
+                this.renderer.camera.panX += dx;
+                this.renderer.camera.panY += dy;
+            }
+
+            lastX = e.clientX;
+            lastY = e.clientY;
+        };
+
+        canvas.onwheel = (e) => {
+            if (this.datasetType === 'XOR' || this.datasetType === 'Circles' || this.datasetType === 'Spiral') return;
+            e.preventDefault();
+            this.renderer.camera.zoom *= (e.deltaY > 0 ? 0.9 : 1.1);
+        };
+
+        canvas.oncontextmenu = (e) => e.preventDefault();
+
         document.getElementById('btnAddLayer').onclick = () => this.addLayer();
         document.getElementById('btnRemoveLayer').onclick = () => this.removeLayer();
     }
@@ -81,16 +119,21 @@ class App {
 
     reset() {
         const count = 300;
+        const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle'].includes(this.datasetType);
+
         if (this.datasetType === 'XOR') this.data = DataGenerator.generateXOR(count);
         else if (this.datasetType === 'Circles') this.data = DataGenerator.generateCircles(count);
         else if (this.datasetType === 'Spiral') this.data = DataGenerator.generateSpiral(count);
         else if (this.datasetType === 'Surface3D') this.data = DataGenerator.generateSurface(count);
+        else if (this.datasetType === 'Ripple') this.data = DataGenerator.generateRipple(count);
+        else if (this.datasetType === 'Peaks') this.data = DataGenerator.generatePeaks(count);
+        else if (this.datasetType === 'Saddle') this.data = DataGenerator.generateSaddle(count);
 
         this.nn = new NeuralNetwork({
             inputSize: 2,
             hiddenLayers: [...this.hiddenLayers],
-            activation: this.datasetType === 'Surface3D' ? 'tanh' : 'sigmoid',
-            outputType: this.datasetType === 'Surface3D' ? 'regression' : 'classification',
+            activation: is3D ? 'tanh' : 'sigmoid',
+            outputType: is3D ? 'regression' : 'classification',
             learningRate: this.learningRate
         });
 
@@ -122,7 +165,9 @@ class App {
         this.trainStep();
 
         this.renderer.clear();
-        if (this.datasetType === 'Surface3D') {
+        const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle'].includes(this.datasetType);
+
+        if (is3D) {
             this.renderer.drawHeatmap(this.nn, 'regression');
             this.renderer.draw3DSurface(this.nn);
             this.renderer.drawData(this.data, 'regression');
