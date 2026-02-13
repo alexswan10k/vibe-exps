@@ -17,7 +17,7 @@ class Activation {
     }
 
     static reluDeriv(y) {
-        return y > 0 ? 1 : 0;
+        return y > 0 ? 1 : 0.01; // Leaky ReLu for better training
     }
 
     static tanh(x) {
@@ -26,6 +26,14 @@ class Activation {
 
     static tanhDeriv(y) {
         return 1 - y * y;
+    }
+
+    static linear(x) {
+        return x;
+    }
+
+    static linearDeriv(y) {
+        return 1;
     }
 }
 
@@ -51,7 +59,6 @@ class Layer {
 
         // Cache for backprop
         this.lastInputs = null;
-        this.lastOutputsPreAtiv = null;
         this.lastOutputsAtiv = null;
     }
 
@@ -108,11 +115,14 @@ class NeuralNetwork {
         this.layers = [];
         let inputSize = config.inputSize;
         for (const layerSize of config.hiddenLayers) {
-            this.layers.push(new Layer(inputSize, layerSize, config.activation));
+            this.layers.push(new Layer(inputSize, layerSize, config.activation || 'tanh'));
             inputSize = layerSize;
         }
-        // Output layer (Binary Classification for now)
-        this.layers.push(new Layer(inputSize, 1, 'sigmoid'));
+        // Output layer: 'sigmoid' for classification, 'linear' for regression
+        this.outputType = config.outputType || 'classification';
+        const outActiv = this.outputType === 'classification' ? 'sigmoid' : 'linear';
+        this.layers.push(new Layer(inputSize, 1, outActiv));
+
         this.learningRate = config.learningRate || 0.1;
     }
 
@@ -130,16 +140,21 @@ class NeuralNetwork {
             const pred = this.predict(data[i]);
             const label = labels[i];
 
-            // Binary Cross Entropy Loss Gradient: (pred - label)
-            let error = [pred - label];
+            let error;
+            if (this.outputType === 'classification') {
+                // BCE Loss Gradient: pred - label
+                error = [pred - label];
+                totalLoss += - (label * Math.log(pred + 1e-15) + (1 - label) * Math.log(1 - pred + 1e-15));
+            } else {
+                // MSE Loss Gradient: 2 * (pred - label)
+                error = [2 * (pred - label)];
+                totalLoss += Math.pow(pred - label, 2);
+            }
 
             // Backprop through layers
             for (let j = this.layers.length - 1; j >= 0; j--) {
                 error = this.layers[j].backward(error);
             }
-
-            // Calculation of BCE Loss for monitoring
-            totalLoss += - (label * Math.log(pred + 1e-15) + (1 - label) * Math.log(1 - pred + 1e-15));
 
             if ((i + 1) % batchSize === 0 || i === data.length - 1) {
                 const currentBatchSize = (i % batchSize) + 1;

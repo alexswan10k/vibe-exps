@@ -263,6 +263,7 @@
                         <option value="XOR">XOR (Non-linear)</option>
                         <option value="Circles">Concentric Circles</option>
                         <option value="Spiral">Double Spiral</option>
+                        <option value="Surface3D">3D Wave (Regression)</option>
                     </select>
                 </div>
             </div>
@@ -276,10 +277,27 @@
                 <!-- Future extensions: Activation, Regularization, etc -->
             </div>
 
+            <div class="panel-section">
+                <span class="section-title">Network Topology</span>
+                <div class="control-group">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <label style="margin-bottom: 0;">HIDDEN LAYERS</label>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button id="btnRemoveLayer" class="small-btn">-</button>
+                            <button id="btnAddLayer" class="small-btn">+</button>
+                        </div>
+                    </div>
+                    <div id="layers-container" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <!-- Dynamic layer controls -->
+                    </div>
+                </div>
+            </div>
+
             <div style="flex: 1"></div>
 
             <div class="panel-section">
-                <span class="section-title">Network Architecture</span>
+                <span class="section-title">Architecture Visual</span>
                 <canvas id="graphCanvas"></canvas>
             </div>
         </aside>
@@ -291,22 +309,62 @@
         <aside class="stats-panel">
             <div class="stat-card">
                 <div class="stat-value" id="valLoss">0.0000</div>
-                <div class="stat-label">CURRENT LOSS (BCE)</div>
+                <div class="stat-label">CURRENT LOSS</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value" id="valEpoch">0</div>
                 <div class="stat-label">EPOCHS COMPLETED</div>
             </div>
 
+            <div class="stat-card" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="stat-label" style="margin-bottom: 1rem;">LOSS HISTORY</div>
+                <canvas id="lossCanvas"
+                    style="flex: 1; min-height: 150px; background: rgba(0,0,0,0.2); border-radius: 8px;"></canvas>
+            </div>
+
             <div style="padding: 1.5rem; color: var(--text-muted); font-size: 0.85rem; line-height: 1.6;">
-                <p>Observe how the network adapts its weights to carve out a decision boundary in 2D space.</p>
+                <p>Observe how the network topology affects the complexity of the decision boundary.</p>
                 <br>
-                <p>The <span style="color: var(--secondary)">Cyan</span> and <span
-                        style="color: var(--accent)">Pink</span> regions represent the network's confidence for each
-                    class.</p>
+                <p>In 3D mode, the network performs <b>Regression</b> to approximate a mathematical surface.</p>
             </div>
         </aside>
     </div>
+
+    <style>
+        .small-btn {
+            padding: 2px 8px !important;
+            border-radius: 4px !important;
+            font-size: 1rem !important;
+            background: var(--glass) !important;
+            border: 1px solid var(--border) !important;
+            color: var(--text) !important;
+        }
+
+        .small-btn:hover {
+            background: rgba(255, 255, 255, 0.1) !important;
+        }
+
+        .layer-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 0.4rem;
+            border-radius: 6px;
+        }
+
+        .layer-control span {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            flex: 1;
+        }
+
+        .layer-control input {
+            width: 60px !important;
+            padding: 2px 4px !important;
+            text-align: center;
+        }
+    </style>
 
     <!-- Scripts loaded sequentially as per GEMINI.md -->
     <script src="nn.js"></script>
