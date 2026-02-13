@@ -42,8 +42,41 @@
             border: 1px solid rgba(255, 120, 0, 0.2);
             box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
             width: 280px;
-            transition: transform 0.3s ease, opacity 0.3s ease;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
             z-index: 10;
+        }
+
+        #ui-container.minimized {
+            transform: translateX(-320px);
+            opacity: 0.5;
+        }
+
+        .toggle-ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 44px;
+            height: 44px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 120, 0, 0.3);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 11;
+            color: var(--accent-color);
+            font-size: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+
+        .toggle-ui:hover {
+            background: rgba(40, 30, 20, 0.9);
+        }
+
+        #ui-container.minimized+.toggle-ui {
+            transform: scale(1.1);
         }
 
         h1 {
@@ -129,27 +162,32 @@
         <h1><span>Λ</span> Lambda Fire</h1>
         <div class="control-group">
             <label>Fire Intensity</label>
-            <input type="range" id="intensity" min="0.1" max="1.2" step="0.05" value="0.4">
+            <input type="range" id="intensity" min="0.1" max="1.0" step="0.05" value="0.3">
         </div>
         <div class="control-group">
             <label>Fluidity</label>
-            <input type="range" id="fluidity" min="0.1" max="2.0" step="0.1" value="0.8">
+            <input type="range" id="fluidity" min="0.1" max="1.5" step="0.1" value="0.6">
         </div>
         <div class="control-group">
             <label>Symbol Scale</label>
-            <input type="range" id="scale" min="0.2" max="1.5" step="0.05" value="0.8">
+            <input type="range" id="scale" min="0.2" max="1.2" step="0.05" value="0.7">
         </div>
         <div class="control-group">
             <label>Color Palette</label>
             <select id="palette"
-                style="width: 100%; padding: 8px; border-radius: 4px; background: #222; color: white; border: 1px solid #444;">
+                style="width: 100%; padding: 10px; border-radius: 8px; background: #1a1510; color: white; border: 1px solid #443;">
                 <option value="0">Inferno (Orange)</option>
                 <option value="1">Plasma (Blue)</option>
                 <option value="2">Void (Purple)</option>
                 <option value="3">Solar (Yellow)</option>
             </select>
         </div>
+        <div style="font-size: 0.7rem; opacity: 0.6; margin-top: 10px;">
+            Touch / Hold to Pulse • Multi-touch enabled
+        </div>
     </div>
+
+    <div class="toggle-ui" id="toggle-ui">🔥</div>
 
     <div class="stats" id="fps-counter">FPS: 60</div>
 
@@ -171,8 +209,9 @@
         uniform float uFluidity;
         uniform float uScale;
         uniform int uPalette;
-        uniform vec2 uMouse;
-        uniform vec3 uClick; // x, y, time since click
+        uniform vec2 uTouchPoints[5];
+        uniform vec3 uClickPoints[5]; // x, y, time
+        uniform int uActiveTouches;
 
         // --- SDF Utilities ---
         float sdSegment(vec2 p, vec2 a, vec2 b) {
@@ -249,17 +288,26 @@
             
             vec2 distort = vec2(n1, n2) * 0.15 * uIntensity;
             
-            // Mouse Interaction: Warp towards cursor
-            float mouseDist = distance(uv, uMouse);
-            float mouseWarp = smoothstep(0.5, 0.0, mouseDist);
-            distort += normalize(uMouse - uv) * mouseWarp * 0.1 * uIntensity;
+            // Interaction points processing
+            float totalMouseWarp = 0.0;
+            for(int i = 0; i < 5; i++) {
+                if(i >= uActiveTouches) break;
 
-            // Click Ripple
-            float clickTime = uTime - uClick.z;
-            float rippleRadius = clickTime * 1.5;
-            float clickDist = distance(uv, uClick.xy);
-            float ripple = sin(clickDist * 15.0 - clickTime * 8.0) * exp(-clickTime * 3.0) * smoothstep(rippleRadius + 0.1, rippleRadius, clickDist) * smoothstep(rippleRadius - 0.1, rippleRadius, clickDist);
-            distort += normalize(uv - uClick.xy) * ripple * 0.25;
+                // Warp towards touch
+                float mouseDist = distance(uv, uTouchPoints[i]);
+                float mouseWarp = smoothstep(0.4, 0.0, mouseDist);
+                distort += normalize(uTouchPoints[i] - uv) * mouseWarp * 0.08 * uIntensity;
+                totalMouseWarp += mouseWarp;
+
+                // Click Ripple
+                float clickTime = uTime - uClickPoints[i].z;
+                if(clickTime > 0.0 && clickTime < 2.0) {
+                    float rippleRadius = clickTime * 1.5;
+                    float clickDist = distance(uv, uClickPoints[i].xy);
+                    float ripple = sin(clickDist * 12.0 - clickTime * 6.0) * exp(-clickTime * 3.0) * smoothstep(rippleRadius + 0.1, rippleRadius, clickDist) * smoothstep(rippleRadius - 0.1, rippleRadius, clickDist);
+                    distort += normalize(uv - uClickPoints[i].xy) * ripple * 0.2;
+                }
+            }
 
             // Symbols distance field
             float d = sdLambda(uv + distort);
@@ -267,8 +315,8 @@
             // Fire glow effect
             float glow = smoothstep(0.4, 0.0, d + n1 * 0.1);
             
-            // Hover Glow near cursor
-            glow += mouseWarp * 0.2 * uIntensity;
+            // Hover Glow
+            glow += totalMouseWarp * 0.15 * uIntensity;
             
             float inner = smoothstep(0.05, 0.0, d);
             
@@ -315,17 +363,14 @@
                 }
 
                 this.config = {
-                    intensity: 0.4,
-                    fluidity: 0.8,
-                    scale: 0.8,
+                    intensity: 0.3,
+                    fluidity: 0.6,
+                    scale: 0.7,
                     palette: 0
                 };
 
-                this.mouse = { x: 0, y: 0 };
-                this.click = { x: 0, y: 0, time: -10 };
-                this.isMouseDown = false;
-                this.lastPulseTime = 0;
-                this.pulseInterval = 0.4; // seconds
+                this.touches = []; // Array of { id, x, y, isDown, lastPulseTime }
+                this.MAX_TOUCHES = 5;
 
                 this.startTime = Date.now();
                 this.lastTime = performance.now();
@@ -395,47 +440,64 @@
                     });
                 });
 
-                window.addEventListener('mousemove', (e) => {
-                    this.mouse.x = (e.clientX / window.innerWidth - 0.5) * this.aspectRatio;
-                    this.mouse.y = (1.0 - e.clientY / window.innerHeight) - 0.5;
+                document.getElementById('toggle-ui').addEventListener('click', () => {
+                    document.getElementById('ui-container').classList.toggle('minimized');
                 });
 
-                window.addEventListener('mousedown', (e) => {
-                    this.isMouseDown = true;
-                    this.triggerClick(e.clientX, e.clientY);
+                const getUV = (x, y) => ({
+                    x: (x / window.innerWidth - 0.5) * this.aspectRatio,
+                    y: (1.0 - y / window.innerHeight) - 0.5
                 });
 
-                window.addEventListener('mouseup', () => {
-                    this.isMouseDown = false;
-                });
-
-                // Touch support
-                window.addEventListener('touchmove', (e) => {
-                    if (e.touches.length > 0) {
-                        this.mouse.x = (e.touches[0].clientX / window.innerWidth - 0.5) * this.aspectRatio;
-                        this.mouse.y = (1.0 - e.touches[0].clientY / window.innerHeight) - 0.5;
+                const handleInteraction = (id, x, y, isStart) => {
+                    const uv = getUV(x, y);
+                    let touch = this.touches.find(t => t.id === id);
+                    if (!touch) {
+                        if (this.touches.length >= this.MAX_TOUCHES) return;
+                        touch = { id, x: uv.x, y: uv.y, isDown: true, lastPulseTime: 0, clickTime: -10, clickX: 0, clickY: 0 };
+                        this.touches.push(touch);
                     }
-                    e.preventDefault();
-                }, { passive: false });
+                    touch.x = uv.x;
+                    touch.y = uv.y;
+                    if (isStart) {
+                        touch.isDown = true;
+                        touch.clickX = uv.x;
+                        touch.clickY = uv.y;
+                        touch.clickTime = (Date.now() - this.startTime) * 0.001;
+                        touch.lastPulseTime = touch.clickTime;
+                    }
+                };
+
+                const interactionEnd = (id) => {
+                    this.touches = this.touches.filter(t => t.id !== id);
+                };
+
+                window.addEventListener('mousedown', (e) => handleInteraction('mouse', e.clientX, e.clientY, true));
+                window.addEventListener('mousemove', (e) => handleInteraction('mouse', e.clientX, e.clientY, false));
+                window.addEventListener('mouseup', () => interactionEnd('mouse'));
 
                 window.addEventListener('touchstart', (e) => {
-                    if (e.touches.length > 0) {
-                        this.isMouseDown = true;
-                        this.triggerClick(e.touches[0].clientX, e.touches[0].clientY);
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        handleInteraction(t.identifier, t.clientX, t.clientY, true);
                     }
                     e.preventDefault();
                 }, { passive: false });
 
-                window.addEventListener('touchend', () => {
-                    this.isMouseDown = false;
-                });
-            }
+                window.addEventListener('touchmove', (e) => {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        handleInteraction(t.identifier, t.clientX, t.clientY, false);
+                    }
+                    e.preventDefault();
+                }, { passive: false });
 
-            triggerClick(clientX, clientY) {
-                this.click.x = (clientX / window.innerWidth - 0.5) * this.aspectRatio;
-                this.click.y = (1.0 - clientY / window.innerHeight) - 0.5;
-                this.click.time = (Date.now() - this.startTime) * 0.001;
-                this.lastPulseTime = this.click.time;
+                window.addEventListener('touchend', (e) => {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        interactionEnd(e.changedTouches[i].identifier);
+                    }
+                    e.preventDefault();
+                }, { passive: false });
             }
 
             resize() {
@@ -447,14 +509,16 @@
 
             animate() {
                 const time = (Date.now() - this.startTime) * 0.001;
+                const pulseInterval = 0.5;
 
-                if (this.isMouseDown && time - this.lastPulseTime > this.pulseInterval) {
-                    this.click.time = time;
-                    this.lastPulseTime = time;
-                    // Follow the mouse position if pulsing
-                    this.click.x = this.mouse.x;
-                    this.click.y = this.mouse.y;
-                }
+                this.touches.forEach(t => {
+                    if (t.isDown && time - t.lastPulseTime > pulseInterval) {
+                        t.clickTime = time;
+                        t.clickX = t.x;
+                        t.clickY = t.y;
+                        t.lastPulseTime = time;
+                    }
+                });
 
                 // Update FPS
                 this.frameCount++;
@@ -476,8 +540,9 @@
                 const uFluidity = this.gl.getUniformLocation(this.program, 'uFluidity');
                 const uScale = this.gl.getUniformLocation(this.program, 'uScale');
                 const uPalette = this.gl.getUniformLocation(this.program, 'uPalette');
-                const uMouse = this.gl.getUniformLocation(this.program, 'uMouse');
-                const uClick = this.gl.getUniformLocation(this.program, 'uClick');
+                const uTouchPoints = this.gl.getUniformLocation(this.program, 'uTouchPoints');
+                const uClickPoints = this.gl.getUniformLocation(this.program, 'uClickPoints');
+                const uActiveTouches = this.gl.getUniformLocation(this.program, 'uActiveTouches');
 
                 this.gl.uniform1f(uTime, time);
                 this.gl.uniform1f(uAspectRatio, this.aspectRatio);
@@ -485,8 +550,21 @@
                 this.gl.uniform1f(uFluidity, this.config.fluidity);
                 this.gl.uniform1f(uScale, this.config.scale);
                 this.gl.uniform1i(uPalette, parseInt(this.config.palette));
-                this.gl.uniform2f(uMouse, this.mouse.x, this.mouse.y);
-                this.gl.uniform3f(uClick, this.click.x, this.click.y, this.click.time);
+                this.gl.uniform1i(uActiveTouches, this.touches.length);
+
+                const touchPos = new Float32Array(10); // 5 points * 2
+                const clickData = new Float32Array(15); // 5 points * 3
+                this.touches.forEach((t, i) => {
+                    if (i < 5) {
+                        touchPos[i * 2] = t.x;
+                        touchPos[i * 2 + 1] = t.y;
+                        clickData[i * 3] = t.clickX;
+                        clickData[i * 3 + 1] = t.clickY;
+                        clickData[i * 3 + 2] = t.clickTime;
+                    }
+                });
+                this.gl.uniform2fv(uTouchPoints, touchPos);
+                this.gl.uniform3fv(uClickPoints, clickData);
 
                 this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 
