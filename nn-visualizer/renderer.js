@@ -163,7 +163,33 @@ class Renderer {
         this.camera = new Camera();
     }
 
+    getColor(v) {
+        // Topographic color ramp helper
+        // -1 (Sea) -> 0 (Coast/Land) -> 1 (Mountain)
+        const val = Math.min(1, Math.max(-1, v));
+        let r, g, b;
+        if (val < -0.2) { // Water (Deep Blue -> Cyan)
+            const t = (val + 1) / 0.8;
+            r = 20 * (1 - t) + 40 * t;
+            g = 30 * (1 - t) + 180 * t;
+            b = 120 * (1 - t) + 255 * t;
+        } else if (val < 0.4) { // Land (Green -> Yellow)
+            const t = (val + 0.2) / 0.6;
+            r = 40 * (1 - t) + 200 * t;
+            g = 150 * (1 - t) + 220 * t;
+            b = 40 * (1 - t) + 100 * t;
+        } else { // Mountain (Brown -> White)
+            const t = (val - 0.4) / 0.6;
+            r = 100 * (1 - t) + 255 * t;
+            g = 60 * (1 - t) + 255 * t;
+            b = 30 * (1 - t) + 255 * t;
+        }
+        return `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
+    }
+
     drawHeatmap(nn, mode = 'classification') {
+        if (mode !== 'classification') return; // 3D problems use the projected surface now
+
         const res = this.resolution;
         for (let x = 0; x < this.width; x += res) {
             for (let y = 0; y < this.height; y += res) {
@@ -172,31 +198,9 @@ class Renderer {
                 const pred = nn.predict([nx, ny]);
 
                 let r, g, b;
-                if (mode === 'classification') {
-                    r = Math.floor(255 * pred + 100 * (1 - pred));
-                    g = Math.floor(200 * (1 - pred) + 100 * pred);
-                    b = Math.floor(255 * (1 - pred) + 200 * pred);
-                } else {
-                    // Topographic color ramp
-                    // -1 (Sea) -> 0 (Coast/Land) -> 1 (Mountain)
-                    const v = Math.min(1, Math.max(-1, pred));
-                    if (v < -0.2) { // Water (Deep Blue -> Cyan)
-                        const t = (v + 1) / 0.8;
-                        r = 20 * (1 - t) + 40 * t;
-                        g = 30 * (1 - t) + 180 * t;
-                        b = 120 * (1 - t) + 255 * t;
-                    } else if (v < 0.4) { // Land (Green -> Yellow)
-                        const t = (v + 0.2) / 0.6;
-                        r = 40 * (1 - t) + 200 * t;
-                        g = 150 * (1 - t) + 220 * t;
-                        b = 40 * (1 - t) + 100 * t;
-                    } else { // Mountain (Brown -> White)
-                        const t = (v - 0.4) / 0.6;
-                        r = 100 * (1 - t) + 255 * t;
-                        g = 60 * (1 - t) + 255 * t;
-                        b = 30 * (1 - t) + 255 * t;
-                    }
-                }
+                r = Math.floor(255 * pred + 100 * (1 - pred));
+                g = Math.floor(200 * (1 - pred) + 100 * pred);
+                b = Math.floor(255 * (1 - pred) + 200 * pred);
 
                 this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
                 this.ctx.fillRect(x, y, res, res);
@@ -208,33 +212,41 @@ class Renderer {
         const ctx = this.ctx;
         const w = this.width;
         const h = this.height;
-        const step = 0.1;
+        const step = 0.08;
 
-        // Draw grid lines with depth shading
-        for (let i = -1; i <= 1.01; i += step) {
-            ctx.beginPath();
-            for (let j = -1; j <= 1.01; j += step / 5) {
-                const z = nn.predict([i, j]);
-                const p = this.camera.project(i, j, z, w, h);
-                const alpha = Math.min(1, Math.max(0.1, (p.depth + 1) / 2));
-                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
-                if (j === -1) ctx.moveTo(p.x, p.y);
-                else ctx.lineTo(p.x, p.y);
-            }
-            ctx.stroke();
-        }
+        // Draw background quads (Topographic Heatmap projected in 3D)
+        for (let i = -1; i < 1; i += step) {
+            for (let j = -1; j < 1; j += step) {
+                // Get 4 corners
+                const z00 = nn.predict([i, j]);
+                const z10 = nn.predict([i + step, j]);
+                const z01 = nn.predict([i, j + step]);
+                const z11 = nn.predict([i + step, j + step]);
 
-        for (let j = -1; j <= 1.01; j += step) {
-            ctx.beginPath();
-            for (let i = -1; i <= 1.01; i += step / 5) {
-                const z = nn.predict([i, j]);
-                const p = this.camera.project(i, j, z, w, h);
-                const alpha = Math.min(1, Math.max(0.1, (p.depth + 1) / 2));
-                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.3})`;
-                if (i === -1) ctx.moveTo(p.x, p.y);
-                else ctx.lineTo(p.x, p.y);
+                const p00 = this.camera.project(i, j, z00, w, h);
+                const p10 = this.camera.project(i + step, j, z10, w, h);
+                const p01 = this.camera.project(i, j + step, z01, w, h);
+                const p11 = this.camera.project(i + step, j + step, z11, w, h);
+
+                // Topographic color based on average height
+                const avgZ = (z00 + z10 + z01 + z11) / 4;
+                ctx.fillStyle = this.getColor(avgZ);
+
+                // Draw quad
+                ctx.beginPath();
+                ctx.moveTo(p00.x, p00.y);
+                ctx.lineTo(p10.x, p10.y);
+                ctx.lineTo(p11.x, p11.y);
+                ctx.lineTo(p01.x, p01.y);
+                ctx.closePath();
+                ctx.fill();
+
+                // Subtle grid line
+                const alpha = Math.min(1, Math.max(0.1, (p00.depth + 1) / 2));
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha * 0.1})`;
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
             }
-            ctx.stroke();
         }
     }
 
