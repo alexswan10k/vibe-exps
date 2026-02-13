@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Λ Lambda Fire</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --accent-color: #ff5e00;
+            --panel-bg: rgba(15, 10, 5, 0.85);
+            --text-color: #f0f0f0;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: var(--text-color);
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            padding: 24px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 120, 0, 0.2);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+            width: 280px;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 1.4rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: var(--accent-color);
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 span {
+            font-size: 1.8rem;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+            accent-color: var(--accent-color);
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--accent-color);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 94, 0, 0.5);
+        }
+
+        .stats {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            opacity: 0.6;
+            color: var(--accent-color);
+        }
+
+        button {
+            background: var(--accent-color);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: filter 0.2s;
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="fire-canvas"></canvas>
+
+    <div id="ui-container">
+        <h1><span>Λ</span> Lambda Fire</h1>
+        <div class="control-group">
+            <label>Fire Intensity</label>
+            <input type="range" id="intensity" min="0.1" max="1.2" step="0.05" value="0.4">
+        </div>
+        <div class="control-group">
+            <label>Fluidity</label>
+            <input type="range" id="fluidity" min="0.1" max="2.0" step="0.1" value="0.8">
+        </div>
+        <div class="control-group">
+            <label>Symbol Scale</label>
+            <input type="range" id="scale" min="0.2" max="1.5" step="0.05" value="0.8">
+        </div>
+        <div class="control-group">
+            <label>Color Palette</label>
+            <select id="palette"
+                style="width: 100%; padding: 8px; border-radius: 4px; background: #222; color: white; border: 1px solid #444;">
+                <option value="0">Inferno (Orange)</option>
+                <option value="1">Plasma (Blue)</option>
+                <option value="2">Void (Purple)</option>
+                <option value="3">Solar (Yellow)</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="stats" id="fps-counter">FPS: 60</div>
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        attribute vec2 aPosition;
+        varying vec2 vUv;
+        void main() {
+            vUv = aPosition * 0.5 + 0.5;
+            gl_Position = vec4(aPosition, 0.0, 1.0);
+        }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        precision highp float;
+        varying vec2 vUv;
+        uniform float uTime;
+        uniform float uAspectRatio;
+        uniform float uIntensity;
+        uniform float uFluidity;
+        uniform float uScale;
+        uniform int uPalette;
+
+        // --- SDF Utilities ---
+        float sdSegment(vec2 p, vec2 a, vec2 b) {
+            vec2 pa = p-a, ba = b-a;
+            float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+            return length( pa - ba*h );
+        }
+
+        // --- Lambda Symbol SDF ---
+        float sdLambda(vec2 p) {
+            p *= (1.0 / uScale);
+            // Center adjustments
+            p.y += 0.2;
+            
+            // Main diagonal
+            float d1 = sdSegment(p, vec2(-0.25, -0.4), vec2(0.25, 0.4));
+            // Secondary diagonal
+            float d2 = sdSegment(p, vec2(0.3, -0.4), vec2(0.0, 0.0));
+            
+            return min(d1, d2) - 0.04;
+        }
+
+        // --- Procedural Noise ---
+        vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+        vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
+
+        float snoise(vec2 v) {
+            const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
+            vec2 i  = floor(v + dot(v, C.yy) );
+            vec2 x0 = v -   i + dot(i, C.xx);
+            vec2 i1;
+            i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+            vec4 x12 = x0.xyxy + C.xxzz;
+            x12.xy -= i1;
+            i = mod289(i);
+            vec3 p = permute( permute( i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));
+            vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+            m = m*m ;
+            m = m*m ;
+            vec3 x = 2.0 * fract(p * C.www) - 1.0;
+            vec3 h = abs(x) - 0.5;
+            vec3 ox = floor(x + 0.5);
+            vec3 a0 = x - ox;
+            m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );
+            vec3 g;
+            g.x  = a0.x  * x0.x  + h.x  * x0.y;
+            g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+            return 130.0 * dot(m, g);
+        }
+
+        float fbm(vec2 uv) {
+            float v = 0.0;
+            float a = 0.5;
+            vec2 shift = vec2(100.0);
+            // Rotate to reduce axial bias
+            mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+            for (int i = 0; i < 5; ++i) {
+                v += a * snoise(uv);
+                uv = rot * uv * 2.0 + shift;
+                a *= 0.5;
+            }
+            return v;
+        }
+
+        void main() {
+            vec2 uv = vUv - 0.5;
+            uv.x *= uAspectRatio;
+            
+            // Fire distortion
+            vec2 noiseUv = uv * 2.0;
+            float n1 = fbm(noiseUv + vec2(uTime * 0.5, -uTime * 0.8 * uFluidity));
+            float n2 = fbm(noiseUv * 0.5 - vec2(uTime * 0.2, -uTime * 0.4 * uFluidity));
+            
+            vec2 distort = vec2(n1, n2) * 0.15 * uIntensity;
+            
+            // Symbols distance field
+            float d = sdLambda(uv + distort);
+            
+            // Fire glow effect
+            float glow = smoothstep(0.4, 0.0, d + n1 * 0.1);
+            float inner = smoothstep(0.05, 0.0, d);
+            
+            float fire = glow * 1.5 + inner * 0.5;
+            fire *= 1.0 - length(uv) * 0.5; // Vignette
+            
+            // Rising sparks
+            float sparks = snoise(uv * 10.0 + vec2(0.0, uTime * 3.0)) * 0.2;
+            sparks *= smoothstep(0.5, -0.5, uv.y);
+            fire += max(0.0, sparks * glow);
+
+            // Coloring
+            vec3 color;
+            if (uPalette == 0) { // Inferno
+                color = mix(vec3(0.1, 0.0, 0.0), vec3(1.0, 0.2, 0.0), fire);
+                color = mix(color, vec3(1.0, 0.8, 0.2), pow(fire, 2.0));
+                color = mix(color, vec3(1.0, 1.0, 0.8), pow(fire, 4.0));
+            } else if (uPalette == 1) { // Plasma
+                color = mix(vec3(0.0, 0.0, 0.2), vec3(0.0, 0.5, 1.0), fire);
+                color = mix(color, vec3(0.5, 0.8, 1.0), pow(fire, 2.0));
+                color = mix(color, vec3(0.9, 1.0, 1.0), pow(fire, 4.0));
+            } else if (uPalette == 2) { // Void
+                color = mix(vec3(0.1, 0.0, 0.2), vec3(0.6, 0.0, 1.0), fire);
+                color = mix(color, vec3(0.8, 0.4, 1.0), pow(fire, 2.0));
+                color = mix(color, vec3(1.0, 0.8, 1.0), pow(fire, 4.0));
+            } else { // Solar
+                color = mix(vec3(0.2, 0.1, 0.0), vec3(1.0, 0.8, 0.0), fire);
+                color = mix(color, vec3(1.0, 1.0, 0.5), pow(fire, 2.0));
+                color = mix(color, vec3(1.0, 1.0, 1.0), pow(fire, 4.0));
+            }
+            
+            gl_FragColor = vec4(color * fire, 1.0);
+        }
+    </script>
+
+    <script>
+        class FireSimulator {
+            constructor() {
+                this.canvas = document.getElementById('fire-canvas');
+                this.gl = this.canvas.getContext('webgl');
+                if (!this.gl) {
+                    alert('WebGL not supported');
+                    return;
+                }
+
+                this.config = {
+                    intensity: 0.4,
+                    fluidity: 0.8,
+                    scale: 0.8,
+                    palette: 0
+                };
+
+                this.startTime = Date.now();
+                this.lastTime = performance.now();
+                this.frameCount = 0;
+
+                this.init();
+                this.setupUI();
+                this.animate();
+            }
+
+            createShader(type, source) {
+                const shader = this.gl.createShader(type);
+                this.gl.shaderSource(shader, source);
+                this.gl.compileShader(shader);
+                if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
+                    console.error(this.gl.getShaderInfoLog(shader));
+                    this.gl.deleteShader(shader);
+                    return null;
+                }
+                return shader;
+            }
+
+            init() {
+                const vsSource = document.getElementById('vertex-shader').text;
+                const fsSource = document.getElementById('fragment-shader').text;
+
+                const vs = this.createShader(this.gl.VERTEX_SHADER, vsSource);
+                const fs = this.createShader(this.gl.FRAGMENT_SHADER, fsSource);
+
+                this.program = this.gl.createProgram();
+                this.gl.attachShader(this.program, vs);
+                this.gl.attachShader(this.program, fs);
+                this.gl.linkProgram(this.program);
+
+                if (!this.gl.getProgramParameter(this.program, this.gl.LINK_STATUS)) {
+                    console.error(this.gl.getProgramInfoLog(this.program));
+                    return;
+                }
+
+                this.gl.useProgram(this.program);
+
+                const positions = new Float32Array([
+                    -1, -1,
+                    1, -1,
+                    -1, 1,
+                    1, 1
+                ]);
+
+                const buffer = this.gl.createBuffer();
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, buffer);
+                this.gl.bufferData(this.gl.ARRAY_BUFFER, positions, this.gl.STATIC_DRAW);
+
+                const aPosition = this.gl.getAttribLocation(this.program, 'aPosition');
+                this.gl.enableVertexAttribArray(aPosition);
+                this.gl.vertexAttribPointer(aPosition, 2, this.gl.FLOAT, false, 0, 0);
+
+                window.addEventListener('resize', () => this.resize());
+                this.resize();
+            }
+
+            setupUI() {
+                const ids = ['intensity', 'fluidity', 'scale', 'palette'];
+                ids.forEach(id => {
+                    const el = document.getElementById(id);
+                    el.addEventListener('input', () => {
+                        this.config[id] = parseFloat(el.value);
+                    });
+                });
+            }
+
+            resize() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+                this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+                this.aspectRatio = this.canvas.width / this.canvas.height;
+            }
+
+            animate() {
+                const time = (Date.now() - this.startTime) * 0.001;
+
+                // Update FPS
+                this.frameCount++;
+                const now = performance.now();
+                if (now - this.lastTime >= 1000) {
+                    document.getElementById('fps-counter').textContent = `FPS: ${this.frameCount}`;
+                    this.frameCount = 0;
+                    this.lastTime = now;
+                }
+
+                this.gl.clearColor(0, 0, 0, 1);
+                this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+
+                this.gl.useProgram(this.program);
+
+                const uTime = this.gl.getUniformLocation(this.program, 'uTime');
+                const uAspectRatio = this.gl.getUniformLocation(this.program, 'uAspectRatio');
+                const uIntensity = this.gl.getUniformLocation(this.program, 'uIntensity');
+                const uFluidity = this.gl.getUniformLocation(this.program, 'uFluidity');
+                const uScale = this.gl.getUniformLocation(this.program, 'uScale');
+                const uPalette = this.gl.getUniformLocation(this.program, 'uPalette');
+
+                this.gl.uniform1f(uTime, time);
+                this.gl.uniform1f(uAspectRatio, this.aspectRatio);
+                this.gl.uniform1f(uIntensity, this.config.intensity);
+                this.gl.uniform1f(uFluidity, this.config.fluidity);
+                this.gl.uniform1f(uScale, this.config.scale);
+                this.gl.uniform1i(uPalette, parseInt(this.config.palette));
+
+                this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+
+        window.onload = () => new FireSimulator();
+    </script>
+</body>
+
+</html>
