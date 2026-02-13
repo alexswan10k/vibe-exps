@@ -171,6 +171,8 @@
         uniform float uFluidity;
         uniform float uScale;
         uniform int uPalette;
+        uniform vec2 uMouse;
+        uniform vec3 uClick; // x, y, time since click
 
         // --- SDF Utilities ---
         float sdSegment(vec2 p, vec2 a, vec2 b) {
@@ -247,11 +249,27 @@
             
             vec2 distort = vec2(n1, n2) * 0.15 * uIntensity;
             
+            // Mouse Interaction: Warp towards cursor
+            float mouseDist = distance(uv, uMouse);
+            float mouseWarp = smoothstep(0.5, 0.0, mouseDist);
+            distort += normalize(uMouse - uv) * mouseWarp * 0.1 * uIntensity;
+
+            // Click Ripple
+            float clickTime = uTime - uClick.z;
+            float rippleRadius = clickTime * 1.5;
+            float clickDist = distance(uv, uClick.xy);
+            float ripple = sin(clickDist * 15.0 - clickTime * 8.0) * exp(-clickTime * 3.0) * smoothstep(rippleRadius + 0.1, rippleRadius, clickDist) * smoothstep(rippleRadius - 0.1, rippleRadius, clickDist);
+            distort += normalize(uv - uClick.xy) * ripple * 0.25;
+
             // Symbols distance field
             float d = sdLambda(uv + distort);
             
             // Fire glow effect
             float glow = smoothstep(0.4, 0.0, d + n1 * 0.1);
+            
+            // Hover Glow near cursor
+            glow += mouseWarp * 0.2 * uIntensity;
+            
             float inner = smoothstep(0.05, 0.0, d);
             
             float fire = glow * 1.5 + inner * 0.5;
@@ -302,6 +320,12 @@
                     scale: 0.8,
                     palette: 0
                 };
+
+                this.mouse = { x: 0, y: 0 };
+                this.click = { x: 0, y: 0, time: -10 };
+                this.isMouseDown = false;
+                this.lastPulseTime = 0;
+                this.pulseInterval = 0.4; // seconds
 
                 this.startTime = Date.now();
                 this.lastTime = performance.now();
@@ -370,6 +394,48 @@
                         this.config[id] = parseFloat(el.value);
                     });
                 });
+
+                window.addEventListener('mousemove', (e) => {
+                    this.mouse.x = (e.clientX / window.innerWidth - 0.5) * this.aspectRatio;
+                    this.mouse.y = (1.0 - e.clientY / window.innerHeight) - 0.5;
+                });
+
+                window.addEventListener('mousedown', (e) => {
+                    this.isMouseDown = true;
+                    this.triggerClick(e.clientX, e.clientY);
+                });
+
+                window.addEventListener('mouseup', () => {
+                    this.isMouseDown = false;
+                });
+
+                // Touch support
+                window.addEventListener('touchmove', (e) => {
+                    if (e.touches.length > 0) {
+                        this.mouse.x = (e.touches[0].clientX / window.innerWidth - 0.5) * this.aspectRatio;
+                        this.mouse.y = (1.0 - e.touches[0].clientY / window.innerHeight) - 0.5;
+                    }
+                    e.preventDefault();
+                }, { passive: false });
+
+                window.addEventListener('touchstart', (e) => {
+                    if (e.touches.length > 0) {
+                        this.isMouseDown = true;
+                        this.triggerClick(e.touches[0].clientX, e.touches[0].clientY);
+                    }
+                    e.preventDefault();
+                }, { passive: false });
+
+                window.addEventListener('touchend', () => {
+                    this.isMouseDown = false;
+                });
+            }
+
+            triggerClick(clientX, clientY) {
+                this.click.x = (clientX / window.innerWidth - 0.5) * this.aspectRatio;
+                this.click.y = (1.0 - clientY / window.innerHeight) - 0.5;
+                this.click.time = (Date.now() - this.startTime) * 0.001;
+                this.lastPulseTime = this.click.time;
             }
 
             resize() {
@@ -381,6 +447,14 @@
 
             animate() {
                 const time = (Date.now() - this.startTime) * 0.001;
+
+                if (this.isMouseDown && time - this.lastPulseTime > this.pulseInterval) {
+                    this.click.time = time;
+                    this.lastPulseTime = time;
+                    // Follow the mouse position if pulsing
+                    this.click.x = this.mouse.x;
+                    this.click.y = this.mouse.y;
+                }
 
                 // Update FPS
                 this.frameCount++;
@@ -402,6 +476,8 @@
                 const uFluidity = this.gl.getUniformLocation(this.program, 'uFluidity');
                 const uScale = this.gl.getUniformLocation(this.program, 'uScale');
                 const uPalette = this.gl.getUniformLocation(this.program, 'uPalette');
+                const uMouse = this.gl.getUniformLocation(this.program, 'uMouse');
+                const uClick = this.gl.getUniformLocation(this.program, 'uClick');
 
                 this.gl.uniform1f(uTime, time);
                 this.gl.uniform1f(uAspectRatio, this.aspectRatio);
@@ -409,6 +485,8 @@
                 this.gl.uniform1f(uFluidity, this.config.fluidity);
                 this.gl.uniform1f(uScale, this.config.scale);
                 this.gl.uniform1i(uPalette, parseInt(this.config.palette));
+                this.gl.uniform2f(uMouse, this.mouse.x, this.mouse.y);
+                this.gl.uniform3f(uClick, this.click.x, this.click.y, this.click.time);
 
                 this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 
