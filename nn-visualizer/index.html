@@ -113,10 +113,14 @@
             padding: 0.5rem;
             border-radius: 6px;
             outline: none;
+            font-size: 16px;
+            /* Prevents iOS zoom */
         }
 
         button {
             padding: 0.8rem;
+            min-height: 48px;
+            /* Accessible touch target */
             border-radius: 12px;
             border: none;
             font-weight: 600;
@@ -196,6 +200,7 @@
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
             background: #000;
             border: 1px solid var(--border);
+            touch-action: none;
         }
 
         /* Stats Panel */
@@ -271,57 +276,115 @@
             animation: pulse 1s infinite;
         }
 
-        /* Mobile Adjustments */
-        .mobile-toggle {
+        /* Mobile Redesign */
+        .mobile-tab-bar {
             display: none;
             position: fixed;
-            bottom: 2rem;
-            right: 2rem;
-            z-index: 1000;
-            background: var(--accent);
-            color: white;
-            padding: 1rem;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            box-shadow: 0 4px 15px var(--accent-glow);
-            justify-content: center;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 70px;
+            background: rgba(21, 21, 32, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            z-index: 1100;
+            /* Flex on mobile */
+            justify-content: space-around;
             align-items: center;
-            font-size: 1.5rem;
+            padding: 0 1rem;
+        }
+
+        .tab-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+            padding: 10px 0;
+        }
+
+        .tab-item.active {
+            color: var(--accent);
+        }
+
+        .tab-icon {
+            font-size: 1.4rem;
         }
 
         @media (max-width: 1100px) {
-            .main-layout {
-                grid-template-columns: 1fr;
-                grid-template-rows: auto 1fr auto;
+            body {
+                overflow: hidden;
+                /* Prevent body scroll, handle inside components */
+                height: 100vh;
             }
 
-            .sidebar,
-            .stats-panel {
-                width: 100%;
-                border: none;
-                border-bottom: 1px solid var(--border);
-                max-height: 40vh;
+            header h1 {
+                font-size: 1.1rem;
             }
 
-            .sidebar.collapsed,
-            .stats-panel.collapsed {
+            header .badge {
                 display: none;
             }
 
-            .mobile-toggle {
-                display: flex;
+            .main-layout {
+                display: block;
+                height: calc(100vh - 70px - 60px);
+                /* header + tabbar */
+                position: relative;
             }
 
             .canvas-container {
-                padding: 1rem;
+                position: absolute;
+                inset: 0;
+                padding: 0;
+                display: flex;
+                z-index: 1;
             }
 
             #mainCanvas {
                 width: 100% !important;
-                height: auto !important;
-                aspect-ratio: 1 / 1;
+                height: 100% !important;
+                border-radius: 0;
+                border: none;
+            }
+
+            .sidebar,
+            .stats-panel {
+                position: fixed;
+                bottom: 70px;
+                /* Above tab bar */
+                left: 0;
+                width: 100%;
+                height: calc(100vh - 70px - 60px);
+                background: var(--bg);
+                z-index: 1050;
+                border: none;
+                border-radius: 0;
+                display: none;
+                /* Toggle via active class */
+                flex-direction: column;
+                padding: 1.5rem;
+                overflow-y: auto;
+            }
+
+            .sidebar.active,
+            .stats-panel.active {
+                display: flex;
+            }
+
+            .mobile-tab-bar {
+                display: flex;
+            }
+
+            /* Unused old mobile toggle */
+            .mobile-toggle {
+                display: none !important;
             }
         }
     </style>
@@ -337,10 +400,8 @@
         </div>
     </header>
 
-    <div class="mobile-toggle" id="btnToggleSidebar">⚙️</div>
-
     <div class="main-layout">
-        <aside class="sidebar collapsed" id="controlsSidebar">
+        <aside class="sidebar" id="controlsSidebar">
             <div class="panel-section">
                 <span class="section-title">Execution</span>
                 <button id="btnStart">BEGIN TRAINING</button>
@@ -402,7 +463,7 @@
             <canvas id="mainCanvas" width="600" height="600"></canvas>
         </main>
 
-        <aside class="stats-panel collapsed" id="statsSidebar">
+        <aside class="stats-panel" id="statsSidebar">
             <div class="stat-card">
                 <div class="stat-value" id="valLoss">0.0000</div>
                 <div class="stat-label">CURRENT LOSS</div>
@@ -433,6 +494,21 @@
                 <p>In 3D mode, the network performs <b>Regression</b> to approximate a mathematical surface.</p>
             </div>
         </aside>
+    </div>
+
+    <div class="mobile-tab-bar">
+        <div class="tab-item active" data-tab="simulation">
+            <span class="tab-icon">✨</span>
+            <span>Vibe</span>
+        </div>
+        <div class="tab-item" data-tab="settings">
+            <span class="tab-icon">⚙️</span>
+            <span>Settings</span>
+        </div>
+        <div class="tab-item" data-tab="stats">
+            <span class="tab-icon">📊</span>
+            <span>Stats</span>
+        </div>
     </div>
 
     <!-- Scripts loaded sequentially as per GEMINI.md -->

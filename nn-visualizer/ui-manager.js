@@ -78,56 +78,73 @@ class App {
 
         canvas.oncontextmenu = (e) => e.preventDefault();
 
-        document.getElementById('btnAddLayer').onclick = () => this.addLayer();
-        document.getElementById('btnRemoveLayer').onclick = () => this.removeLayer();
-
-        // Mobile Sidebar Toggles
-        const btnToggle = document.getElementById('btnToggleSidebar');
+        // Mobile Redesign: Tab Bar Navigation
+        const tabs = document.querySelectorAll('.tab-item');
         const controls = document.getElementById('controlsSidebar');
         const stats = document.getElementById('statsSidebar');
 
-        btnToggle.onclick = () => {
-            const isCollapsed = controls.classList.contains('collapsed');
-            if (isCollapsed) {
-                controls.classList.remove('collapsed');
-                stats.classList.remove('collapsed');
-                btnToggle.innerText = '❌';
-            } else {
-                controls.classList.add('collapsed');
-                stats.classList.add('collapsed');
-                btnToggle.innerText = '⚙️';
-            }
-        };
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                const target = tab.dataset.tab;
 
-        // Touch Events for Mobile
-        canvas.ontouchstart = (e) => {
+                // Update tab UI
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update Panel UI
+                controls.classList.remove('active');
+                stats.classList.remove('active');
+
+                if (target === 'settings') {
+                    controls.classList.add('active');
+                } else if (target === 'stats') {
+                    stats.classList.add('active');
+                }
+                // 'simulation' tab just hides everything, showing the canvas
+            };
+        });
+
+        document.getElementById('btnAddLayer').onclick = () => this.addLayer();
+        document.getElementById('btnRemoveLayer').onclick = () => this.removeLayer();
+
+        // Touch Events for Mobile (Refined & Fixed)
+        canvas.addEventListener('touchstart', (e) => {
             if (e.touches.length === 1) {
                 isDragging = true;
-                lastX = e.touches[0].clientX;
-                lastY = e.touches[0].clientY;
+                const touch = e.touches[0];
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+
+                // For 3D rotation we want to capture the gesture
+                const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle', 'Terrain', 'Fractal'].includes(this.datasetType);
+                if (is3D) {
+                    e.preventDefault();
+                }
             }
-            // Prevent scrolling when interacting with canvas
-            if (this.datasetType !== 'XOR' && this.datasetType !== 'Circles' && this.datasetType !== 'Spiral') {
-                e.preventDefault();
-            }
-        };
+        }, { passive: false });
 
-        window.ontouchend = () => isDragging = false;
+        window.addEventListener('touchend', () => isDragging = false);
+        window.addEventListener('touchcancel', () => isDragging = false);
 
-        window.ontouchmove = (e) => {
-            if (!isDragging || e.touches.length !== 1 || this.datasetType === 'XOR' || this.datasetType === 'Circles' || this.datasetType === 'Spiral') return;
+        window.addEventListener('touchmove', (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
 
-            const dx = e.touches[0].clientX - lastX;
-            const dy = e.touches[0].clientY - lastY;
+            const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle', 'Terrain', 'Fractal'].includes(this.datasetType);
+            if (!is3D) return;
+
+            const touch = e.touches[0];
+            const dx = touch.clientX - lastX;
+            const dy = touch.clientY - lastY;
 
             this.renderer.camera.rotZ += dx * 0.01;
             this.renderer.camera.rotX += dy * 0.01;
 
-            lastX = e.touches[0].clientX;
-            lastY = e.touches[0].clientY;
+            lastX = touch.clientX;
+            lastY = touch.clientY;
 
+            // Allow control via prevent-default for non-passive listeners
             e.preventDefault();
-        };
+        }, { passive: false });
     }
 
     renderTopologyUI() {
