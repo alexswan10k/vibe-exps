@@ -124,6 +124,10 @@
             <label>Velocity Scale</label>
             <input type="range" id="velocity-scale" min="0.1" max="2.0" step="0.1" value="1.0">
         </div>
+        <div class="control-group">
+            <label>Gravity</label>
+            <input type="range" id="gravity" min="0" max="0.1" step="0.001" value="0.01">
+        </div>
     </div>
 
     <div class="stats" id="fps-counter">FPS: 60</div>
@@ -160,6 +164,20 @@
                 vT = vUv + vec2(0.0, texelSize.y);
                 vB = vUv - vec2(0.0, texelSize.y);
                 gl_Position = vec4(aPosition, 0.0, 1.0);
+            }
+        `;
+
+        const externalForceShader = `
+            precision highp float;
+            varying vec2 vUv;
+            uniform sampler2D uVelocity;
+            uniform vec2 uForce;
+            uniform float dt;
+
+            void main () {
+                vec2 vel = texture2D(uVelocity, vUv).xy;
+                vel += uForce * dt;
+                gl_FragColor = vec4(vel, 0.0, 1.0);
             }
         `;
 
@@ -239,6 +257,29 @@
                 float div = texture2D(uDivergence, vUv).x;
                 float p = (L + R + B + T - div) * 0.25;
                 gl_FragColor = vec4(p, 0.0, 0.0, 1.0);
+            }
+        `;
+
+        const boundaryShader = `
+            precision highp float;
+            varying vec2 vUv;
+            uniform sampler2D uTarget;
+            uniform vec2 texelSize;
+            uniform float edge; // 1: bottom, 2: top, 3: left, 4: right
+            uniform float isVelocity;
+
+            void main () {
+                vec2 uv = vUv;
+                vec4 val = texture2D(uTarget, uv);
+                
+                if (isVelocity > 0.5) {
+                    if (edge == 1.0 && uv.y < texelSize.y) val.y = max(val.y, 0.0); // Floor: prevent downward
+                    if (edge == 2.0 && uv.y > 1.0 - texelSize.y) val.y = min(val.y, 0.0); // Ceiling: prevent upward
+                    if (edge == 3.0 && uv.x < texelSize.x) val.x = max(val.x, 0.0); // Left wall: prevent leftward
+                    if (edge == 4.0 && uv.x > 1.0 - texelSize.x) val.x = min(val.x, 0.0); // Right wall: prevent rightward
+                }
+                
+                gl_FragColor = val;
             }
         `;
 
@@ -373,7 +414,9 @@
                     pressure: createProgram(gl, baseVertexShader, pressureShader),
                     gradientSubtract: createProgram(gl, baseVertexShader, gradientSubtractShader),
                     splat: createProgram(gl, baseVertexShader, splatShader),
-                    display: createProgram(gl, baseVertexShader, displayShader)
+                    display: createProgram(gl, baseVertexShader, displayShader),
+                    externalForce: createProgram(gl, baseVertexShader, externalForceShader),
+                    boundary: createProgram(gl, baseVertexShader, boundaryShader)
                 };
 
                 this.quadBuffer = gl.createBuffer();
@@ -389,8 +432,9 @@
                     diffusion: 0.0002,
                     colorShift: 0.2,
                     velocityScale: 1.0,
-                    dissipation: 0.98,
-                    velocityDissipation: 0.99
+                    dissipation: 0.99,
+                    velocityDissipation: 0.99,
+                    gravity: 0.05 // Increased default gravity
                 };
 
                 this.setupInputs();
@@ -400,7 +444,7 @@
             }
 
             setupUI() {
-                const controls = ['viscosity', 'diffusion', 'color-shift', 'velocity-scale'];
+                const controls = ['viscosity', 'diffusion', 'color-shift', 'velocity-scale', 'gravity'];
                 controls.forEach(id => {
                     const el = document.getElementById(id);
                     el.addEventListener('input', () => {
@@ -415,21 +459,27 @@
             }
 
             setupInputs() {
-                window.addEventListener('mousemove', e => {
+                const handleMove = (x, y) => {
                     this.mouse.px = this.mouse.x;
                     this.mouse.py = this.mouse.y;
-                    this.mouse.x = e.clientX / window.innerWidth;
-                    this.mouse.y = 1.0 - e.clientY / window.innerHeight;
+                    this.mouse.x = x / window.innerWidth;
+                    this.mouse.y = 1.0 - y / window.innerHeight;
+                };
 
-                    if (this.mouse.px !== 0) {
-                        const dx = (this.mouse.x - this.mouse.px) * 5.0;
-                        const dy = (this.mouse.y - this.mouse.py) * 5.0;
-                        this.splat(this.mouse.x, this.mouse.y, dx, dy, true);
-                    }
-                });
-
+                window.addEventListener('mousemove', e => handleMove(e.clientX, e.clientY));
                 window.addEventListener('mousedown', () => this.mouse.down = true);
                 window.addEventListener('mouseup', () => this.mouse.down = false);
+
+                window.addEventListener('touchstart', e => {
+                    this.mouse.down = true;
+                    handleMove(e.touches[0].clientX, e.touches[0].clientY);
+                });
+                window.addEventListener('touchmove', e => {
+                    handleMove(e.touches[0].clientX, e.touches[0].clientY);
+                    e.preventDefault();
+                }, { passive: false });
+                window.addEventListener('touchend', () => this.mouse.down = false);
+
                 window.addEventListener('resize', () => this.resize());
             }
 
@@ -477,6 +527,24 @@
                 target.swap();
             }
 
+            applyBoundary(target, isVelocity) {
+                gl.viewport(0, 0, this.simWidth, this.simHeight);
+                const program = this.programs.boundary;
+                gl.useProgram(program);
+                gl.uniform1i(gl.getUniformLocation(program, 'uTarget'), 0);
+                gl.uniform2f(gl.getUniformLocation(program, 'texelSize'), 1.0 / this.simWidth, 1.0 / this.simHeight);
+                gl.uniform1f(gl.getUniformLocation(program, 'isVelocity'), isVelocity ? 1.0 : 0.0);
+
+                for (let i = 1; i <= 4; i++) {
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, target.write.fbo);
+                    gl.activeTexture(gl.TEXTURE0);
+                    gl.bindTexture(gl.TEXTURE_2D, target.read.texture);
+                    gl.uniform1f(gl.getUniformLocation(program, 'edge'), i);
+                    this.drawQuad();
+                    target.swap();
+                }
+            }
+
             advect(target, velocity, dissipation) {
                 gl.viewport(0, 0, this.simWidth, this.simHeight);
                 const program = this.programs.advection;
@@ -499,10 +567,27 @@
                 target.swap();
             }
 
+            applyGravity() {
+                gl.viewport(0, 0, this.simWidth, this.simHeight);
+                const program = this.programs.externalForce;
+                gl.useProgram(program);
+                gl.bindFramebuffer(gl.FRAMEBUFFER, this.velocity.write.fbo);
+                gl.uniform1i(gl.getUniformLocation(program, 'uVelocity'), 0);
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, this.velocity.read.texture);
+                gl.uniform2f(gl.getUniformLocation(program, 'uForce'), 0, -this.config.gravity);
+                gl.uniform1f(gl.getUniformLocation(program, 'dt'), 0.016);
+                this.drawQuad();
+                this.velocity.swap();
+            }
+
             step(time) {
                 // Advection
                 this.advect(this.velocity, this.velocity, this.config.velocityDissipation);
                 this.advect(this.density, this.velocity, this.config.dissipation);
+
+                // Gravity
+                this.applyGravity();
 
                 // Background perturbations
                 const t = Date.now() * 0.001;
@@ -563,6 +648,10 @@
                 gl.bindTexture(gl.TEXTURE_2D, this.velocity.read.texture);
                 this.drawQuad();
                 this.velocity.swap();
+
+                // 4. Solid boundaries
+                this.applyBoundary(this.velocity, true);
+                this.applyBoundary(this.density, false);
 
                 // Display
                 gl.viewport(0, 0, canvas.width, canvas.height);
