@@ -98,11 +98,19 @@ class Layer {
         return errorAtInput;
     }
 
-    update(learningRate, batchSize) {
+    update(learningRate, batchSize, regularizationRate = 0) {
         for (let i = 0; i < this.outputSize; i++) {
+            // Apply regularization to bias? Usually not, but can be. Let's stick to weights only for standard L2.
             this.biases[i] -= (learningRate * this.biasGradients[i]) / batchSize;
+
             for (let j = 0; j < this.inputSize; j++) {
-                this.weights[i][j] -= (learningRate * this.weightGradients[i][j]) / batchSize;
+                // L2 Regularization Gradient: lambda * weight
+                // Update: w = w - lr * (gradient + lambda * w)
+                const regularization = regularizationRate * this.weights[i][j];
+                const gradient = this.weightGradients[i][j] / batchSize;
+
+                this.weights[i][j] -= learningRate * (gradient + regularization);
+
                 this.weightGradients[i][j] = 0; // Reset gradients
             }
             this.biasGradients[i] = 0;
@@ -124,6 +132,7 @@ class NeuralNetwork {
         this.layers.push(new Layer(inputSize, 1, outActiv));
 
         this.learningRate = config.learningRate || 0.1;
+        this.regularizationRate = config.regularizationRate || 0;
     }
 
     predict(inputs) {
@@ -159,7 +168,7 @@ class NeuralNetwork {
             if ((i + 1) % batchSize === 0 || i === data.length - 1) {
                 const currentBatchSize = (i % batchSize) + 1;
                 for (const layer of this.layers) {
-                    layer.update(this.learningRate, currentBatchSize);
+                    layer.update(this.learningRate, currentBatchSize, this.regularizationRate);
                 }
             }
         }

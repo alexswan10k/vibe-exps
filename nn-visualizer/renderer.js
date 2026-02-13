@@ -4,95 +4,164 @@
  */
 
 class DataGenerator {
-    static generateXOR(count) {
+    static noise(val, amount) {
+        return val + (Math.random() - 0.5) * amount;
+    }
+
+    static generateXOR(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
-            const x = Math.random() * 2 - 1;
-            const y = Math.random() * 2 - 1;
+            let x = Math.random() * 2 - 1;
+            let y = Math.random() * 2 - 1;
             const label = (x > 0 && y > 0) || (x < 0 && y < 0) ? 1 : 0;
+            x = DataGenerator.noise(x, noiseLevel);
+            y = DataGenerator.noise(y, noiseLevel);
             data.push({ x, y, label });
         }
         return data;
     }
 
-    static generateCircles(count) {
+    static generateCircles(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
-            const r = Math.random() * 0.9;
+            let r = Math.random() * 0.9; // 0 to 0.9
             const theta = Math.random() * Math.PI * 2;
-            const x = r * Math.cos(theta);
-            const y = r * Math.sin(theta);
+            let x = r * Math.cos(theta);
+            let y = r * Math.sin(theta);
             const label = r > 0.5 ? 1 : 0;
+
+            x = DataGenerator.noise(x, noiseLevel);
+            y = DataGenerator.noise(y, noiseLevel);
             data.push({ x, y, label });
         }
         return data;
     }
 
-    static generateSpiral(count) {
+    static generateSpiral(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
             const label = i % 2;
             const r = (i / count) * 0.9;
             const theta = (i / count) * Math.PI * 4 + (label * Math.PI);
-            const x = r * Math.cos(theta) + (Math.random() - 0.5) * 0.05;
-            const y = r * Math.sin(theta) + (Math.random() - 0.5) * 0.05;
+            let x = r * Math.cos(theta);
+            let y = r * Math.sin(theta);
+
+            // Spiral intentionally has some jitter by default in original code, preserving it + adding new noise
+            x += (Math.random() - 0.5) * 0.05 + (Math.random() - 0.5) * noiseLevel;
+            y += (Math.random() - 0.5) * 0.05 + (Math.random() - 0.5) * noiseLevel;
+
             data.push({ x, y, label });
         }
         return data;
     }
 
-    static generateSurface(count) {
+    static generateTwoSpirals(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
-            const x = Math.random() * 2 - 1;
-            const y = Math.random() * 2 - 1;
-            // Target surface: sin(x*3) * cos(y*3)
-            const z = Math.sin(x * 3) * Math.cos(y * 3);
-            data.push({ x, y, label: z }); // Using label as target value
+            const n = i / count;
+            const r = n * 0.85;
+            const t = 1.75 * n * 2 * Math.PI;
+
+            // Alternating spirals
+            const label = i % 2;
+            const angle = t + (label * Math.PI);
+
+            let x = r * Math.sin(angle);
+            let y = r * Math.cos(angle);
+
+            x = DataGenerator.noise(x, noiseLevel);
+            y = DataGenerator.noise(y, noiseLevel);
+
+            data.push({ x, y, label });
         }
         return data;
     }
 
-    static generateRipple(count) {
+    static generateCheckerboard(count, noiseLevel = 0) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            const rawX = Math.random() * 2 - 1;
+            const rawY = Math.random() * 2 - 1;
+
+            // 4x4 Grid
+            const col = Math.floor((rawX + 1) * 2); // 0..3
+            const row = Math.floor((rawY + 1) * 2); // 0..3
+
+            const label = (col + row) % 2 === 0 ? 0 : 1;
+
+            const x = DataGenerator.noise(rawX, noiseLevel);
+            const y = DataGenerator.noise(rawY, noiseLevel);
+
+            data.push({ x, y, label });
+        }
+        return data;
+    }
+
+
+    static generateSurface(count, noiseLevel = 0) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            let x = Math.random() * 2 - 1;
+            let y = Math.random() * 2 - 1;
+            // Target surface: sin(x*3) * cos(y*3)
+            let z = Math.sin(x * 3) * Math.cos(y * 3);
+
+            // For regression, noise usually applies to the output (label) as well?
+            // Or just input noise? 
+            // Let's apply input noise to x,y before pushing, but Z is calculated from true x,y.
+            // Wait, if I simulate noisy sensors, Z should be calculated from True X,Y, but we only see Noisy X,Y.
+            // OR we see True X,Y but Z is noisy.
+            // Let's add noise to Z for regression tasks to simulate "measurement error".
+
+            z += (Math.random() - 0.5) * noiseLevel;
+
+            data.push({ x, y, label: z });
+        }
+        return data;
+    }
+
+    static generateRipple(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
             const x = Math.random() * 2 - 1;
             const y = Math.random() * 2 - 1;
             const r = Math.sqrt(x * x + y * y);
-            const z = Math.sin(r * 10) / (r * 10 + 0.1);
+            let z = Math.sin(r * 10) / (r * 10 + 0.1);
+            z += (Math.random() - 0.5) * noiseLevel;
             data.push({ x, y, label: z });
         }
         return data;
     }
 
-    static generatePeaks(count) {
+    static generatePeaks(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
             const x = Math.random() * 2 - 1;
             const y = Math.random() * 2 - 1;
-            const z = 3 * Math.pow(1 - x, 2) * Math.exp(-(x * x) - Math.pow(y + 1, 2))
+            let z = 3 * Math.pow(1 - x, 2) * Math.exp(-(x * x) - Math.pow(y + 1, 2))
                 - 10 * (x / 5 - Math.pow(x, 3) - Math.pow(y, 5)) * Math.exp(-(x * x) - (y * y))
                 - 1 / 3 * Math.exp(-Math.pow(x + 1, 2) - (y * y));
-            // Normalize peaks for viz
-            data.push({ x, y, label: z / 8 });
-        }
-        return data;
-    }
-
-    static generateSaddle(count) {
-        const data = [];
-        for (let i = 0; i < count; i++) {
-            const x = Math.random() * 2 - 1;
-            const y = Math.random() * 2 - 1;
-            const z = x * x - y * y;
+            z = z / 8;
+            z += (Math.random() - 0.5) * noiseLevel;
             data.push({ x, y, label: z });
         }
         return data;
     }
 
-    static generateTerrain(count) {
+    static generateSaddle(count, noiseLevel = 0) {
         const data = [];
-        // Fixed seed-like random for consistent terrain per session
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            let z = x * x - y * y;
+            z += (Math.random() - 0.5) * noiseLevel;
+            data.push({ x, y, label: z });
+        }
+        return data;
+    }
+
+    static generateTerrain(count, noiseLevel = 0) {
+        const data = [];
         const noise = (x, y) => {
             return Math.sin(x * 12.7) * Math.cos(y * 45.3) +
                 Math.sin(x * 4.1 + y * 2.3) * 0.5 +
@@ -101,13 +170,14 @@ class DataGenerator {
         for (let i = 0; i < count; i++) {
             const x = Math.random() * 2 - 1;
             const y = Math.random() * 2 - 1;
-            const z = noise(x, y) / 2;
+            let z = noise(x, y) / 2;
+            z += (Math.random() - 0.5) * noiseLevel;
             data.push({ x, y, label: z });
         }
         return data;
     }
 
-    static generateFractal(count) {
+    static generateFractal(count, noiseLevel = 0) {
         const data = [];
         for (let i = 0; i < count; i++) {
             const x = Math.random() * 2 - 1;
@@ -120,6 +190,7 @@ class DataGenerator {
                 freq *= 2;
                 amp *= 0.5;
             }
+            z += (Math.random() - 0.5) * noiseLevel;
             data.push({ x, y, label: z });
         }
         return data;

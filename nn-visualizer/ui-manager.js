@@ -13,6 +13,9 @@ class App {
         this.datasetType = 'Surface3D';
         this.hiddenLayers = [12, 12, 12];
         this.learningRate = 0.1;
+        this.regularization = 0.0;
+        this.noise = 0.0;
+        this.activation = 'tanh';
         this.batchSize = 32;
         this.training = false;
         this.epoch = 0;
@@ -38,6 +41,27 @@ class App {
             this.learningRate = parseFloat(e.target.value);
             document.getElementById('valLR').innerText = this.learningRate;
             if (this.nn) this.nn.learningRate = this.learningRate;
+        };
+
+        document.getElementById('sliderReg').oninput = (e) => {
+            this.regularization = parseFloat(e.target.value);
+            document.getElementById('valReg').innerText = this.regularization.toFixed(4);
+            if (this.nn) this.nn.regularizationRate = this.regularization;
+        };
+
+        document.getElementById('sliderNoise').onchange = (e) => {
+            this.noise = parseFloat(e.target.value);
+            document.getElementById('valNoise').innerText = this.noise.toFixed(2);
+            this.reset();
+        };
+        // Also update text on input without resetting
+        document.getElementById('sliderNoise').oninput = (e) => {
+            document.getElementById('valNoise').innerText = parseFloat(e.target.value).toFixed(2);
+        };
+
+        document.getElementById('selectActivation').onchange = (e) => {
+            this.activation = e.target.value;
+            this.reset();
         };
 
         const canvas = document.getElementById('mainCanvas');
@@ -183,25 +207,34 @@ class App {
     }
 
     reset() {
-        const count = 400;
+        const isHard = ['TwoSpirals', 'Checkerboard', 'Terrain', 'Fractal'].includes(this.datasetType);
+        const count = isHard ? 1000 : 400; // More data for complex patterns
         const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle', 'Terrain', 'Fractal'].includes(this.datasetType);
 
-        if (this.datasetType === 'XOR') this.data = DataGenerator.generateXOR(count);
-        else if (this.datasetType === 'Circles') this.data = DataGenerator.generateCircles(count);
-        else if (this.datasetType === 'Spiral') this.data = DataGenerator.generateSpiral(count);
-        else if (this.datasetType === 'Surface3D') this.data = DataGenerator.generateSurface(count);
-        else if (this.datasetType === 'Ripple') this.data = DataGenerator.generateRipple(count);
-        else if (this.datasetType === 'Peaks') this.data = DataGenerator.generatePeaks(count);
-        else if (this.datasetType === 'Saddle') this.data = DataGenerator.generateSaddle(count);
-        else if (this.datasetType === 'Terrain') this.data = DataGenerator.generateTerrain(count);
-        else if (this.datasetType === 'Fractal') this.data = DataGenerator.generateFractal(count);
+        if (this.datasetType === 'XOR') this.data = DataGenerator.generateXOR(count, this.noise);
+        else if (this.datasetType === 'Circles') this.data = DataGenerator.generateCircles(count, this.noise);
+        else if (this.datasetType === 'Spiral') this.data = DataGenerator.generateSpiral(count, this.noise);
+        else if (this.datasetType === 'TwoSpirals') this.data = DataGenerator.generateTwoSpirals(count, this.noise);
+        else if (this.datasetType === 'Checkerboard') this.data = DataGenerator.generateCheckerboard(count, this.noise);
+        else if (this.datasetType === 'Surface3D') this.data = DataGenerator.generateSurface(count, this.noise);
+        else if (this.datasetType === 'Ripple') this.data = DataGenerator.generateRipple(count, this.noise);
+        else if (this.datasetType === 'Peaks') this.data = DataGenerator.generatePeaks(count, this.noise);
+        else if (this.datasetType === 'Saddle') this.data = DataGenerator.generateSaddle(count, this.noise);
+        else if (this.datasetType === 'Terrain') this.data = DataGenerator.generateTerrain(count, this.noise);
+        else if (this.datasetType === 'Fractal') this.data = DataGenerator.generateFractal(count, this.noise);
+
+        // Determine activation: use user selection, but override for 3D if needed?
+        // Actually, user selection is fine for 2D. for 3D regression, tanh is usually best but relu can work.
+        // Let's trust the user, but maybe default to tanh in UI if they haven't touched it?
+        // The UI init value is 'tanh'.
 
         this.nn = new NeuralNetwork({
             inputSize: 2,
             hiddenLayers: [...this.hiddenLayers],
-            activation: is3D ? 'tanh' : 'sigmoid',
+            activation: this.activation,
             outputType: is3D ? 'regression' : 'classification',
-            learningRate: this.learningRate
+            learningRate: this.learningRate,
+            regularizationRate: this.regularization
         });
 
         this.epoch = 0;
