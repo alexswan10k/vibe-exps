@@ -10,12 +10,12 @@ class App {
         this.graphRenderer = new NetworkGraphRenderer('graphCanvas');
         this.lossPlotter = new LossPlotter('lossCanvas');
         this.data = [];
-        this.training = false;
+        this.datasetType = 'Surface3D';
+        this.hiddenLayers = [12, 12, 12];
         this.learningRate = 0.1;
-        this.batchSize = 20;
+        this.batchSize = 32;
+        this.training = false;
         this.epoch = 0;
-        this.datasetType = 'XOR';
-        this.hiddenLayers = [8, 8]; // Default topology
 
         this.initEventListeners();
         this.renderTopologyUI();
@@ -118,8 +118,8 @@ class App {
     }
 
     reset() {
-        const count = 300;
-        const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle'].includes(this.datasetType);
+        const count = 400;
+        const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle', 'Terrain', 'Fractal'].includes(this.datasetType);
 
         if (this.datasetType === 'XOR') this.data = DataGenerator.generateXOR(count);
         else if (this.datasetType === 'Circles') this.data = DataGenerator.generateCircles(count);
@@ -128,6 +128,8 @@ class App {
         else if (this.datasetType === 'Ripple') this.data = DataGenerator.generateRipple(count);
         else if (this.datasetType === 'Peaks') this.data = DataGenerator.generatePeaks(count);
         else if (this.datasetType === 'Saddle') this.data = DataGenerator.generateSaddle(count);
+        else if (this.datasetType === 'Terrain') this.data = DataGenerator.generateTerrain(count);
+        else if (this.datasetType === 'Fractal') this.data = DataGenerator.generateFractal(count);
 
         this.nn = new NeuralNetwork({
             inputSize: 2,
@@ -165,7 +167,7 @@ class App {
         this.trainStep();
 
         this.renderer.clear();
-        const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle'].includes(this.datasetType);
+        const is3D = ['Surface3D', 'Ripple', 'Peaks', 'Saddle', 'Terrain', 'Fractal'].includes(this.datasetType);
 
         if (is3D) {
             this.renderer.drawHeatmap(this.nn, 'regression');

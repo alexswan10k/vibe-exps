@@ -89,6 +89,41 @@ class DataGenerator {
         }
         return data;
     }
+
+    static generateTerrain(count) {
+        const data = [];
+        // Fixed seed-like random for consistent terrain per session
+        const noise = (x, y) => {
+            return Math.sin(x * 12.7) * Math.cos(y * 45.3) +
+                Math.sin(x * 4.1 + y * 2.3) * 0.5 +
+                Math.sin(x * 1.5 - y * 3.1) * 0.25;
+        };
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            const z = noise(x, y) / 2;
+            data.push({ x, y, label: z });
+        }
+        return data;
+    }
+
+    static generateFractal(count) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            const x = Math.random() * 2 - 1;
+            const y = Math.random() * 2 - 1;
+            let z = 0;
+            let freq = 2;
+            let amp = 0.5;
+            for (let f = 0; f < 4; f++) {
+                z += Math.sin(x * freq + y * freq) * amp;
+                freq *= 2;
+                amp *= 0.5;
+            }
+            data.push({ x, y, label: z });
+        }
+        return data;
+    }
 }
 
 class Camera {
@@ -142,11 +177,25 @@ class Renderer {
                     g = Math.floor(200 * (1 - pred) + 100 * pred);
                     b = Math.floor(255 * (1 - pred) + 200 * pred);
                 } else {
-                    // Regression color mapping: z from [-1, 1]
-                    const val = (pred + 1) / 2; // Map to [0, 1]
-                    r = Math.floor(100 + val * 155);
-                    g = Math.floor(50 + val * 100);
-                    b = Math.floor(200 - val * 150);
+                    // Topographic color ramp
+                    // -1 (Sea) -> 0 (Coast/Land) -> 1 (Mountain)
+                    const v = Math.min(1, Math.max(-1, pred));
+                    if (v < -0.2) { // Water (Deep Blue -> Cyan)
+                        const t = (v + 1) / 0.8;
+                        r = 20 * (1 - t) + 40 * t;
+                        g = 30 * (1 - t) + 180 * t;
+                        b = 120 * (1 - t) + 255 * t;
+                    } else if (v < 0.4) { // Land (Green -> Yellow)
+                        const t = (v + 0.2) / 0.6;
+                        r = 40 * (1 - t) + 200 * t;
+                        g = 150 * (1 - t) + 220 * t;
+                        b = 40 * (1 - t) + 100 * t;
+                    } else { // Mountain (Brown -> White)
+                        const t = (v - 0.4) / 0.6;
+                        r = 100 * (1 - t) + 255 * t;
+                        g = 60 * (1 - t) + 255 * t;
+                        b = 30 * (1 - t) + 255 * t;
+                    }
                 }
 
                 this.ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
