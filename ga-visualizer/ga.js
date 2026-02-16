@@ -64,24 +64,7 @@ class Vector {
 
 class DNA {
     constructor(genes) {
-        // Genes are vectors (forces) for each frame of the lifespan
-        if (genes) {
-            this.genes = genes;
-        } else {
-            this.genes = [];
-            // Default lifespan, managed by Simulation but we need a default here if created empty
-            // Will be populated by the Population or Rocket init
-        }
-    }
-
-    static createRandom(lifespan, maxForce) {
-        const genes = [];
-        for (let i = 0; i < lifespan; i++) {
-            const gene = Vector.random2D();
-            gene.mult(Math.random() * maxForce); // Random magnitude up to maxForce
-            genes.push(gene);
-        }
-        return new DNA(genes);
+        this.genes = genes;
     }
 
     crossover(partner) {
@@ -91,21 +74,28 @@ class DNA {
 
         for (let i = 0; i < this.genes.length; i++) {
             if (i > mid) {
-                newGenes[i] = this.genes[i].copy();
+                newGenes[i] = this.deepCopy(this.genes[i]);
             } else {
-                newGenes[i] = partner.genes[i].copy();
+                newGenes[i] = this.deepCopy(partner.genes[i]);
             }
         }
         return new DNA(newGenes);
     }
 
-    mutation(rate, maxForce) {
+    mutation(rate, mutateFn) {
+        if (!mutateFn) return;
         for (let i = 0; i < this.genes.length; i++) {
             if (Math.random() < rate) {
-                const gene = Vector.random2D();
-                gene.mult(Math.random() * maxForce);
-                this.genes[i] = gene;
+                this.genes[i] = mutateFn(this.genes[i]);
             }
         }
+    }
+
+    deepCopy(gene) {
+        // Helper to clone genes if they are objects (like Vectors)
+        if (gene instanceof Vector) {
+            return gene.copy();
+        }
+        return gene; // Primitives (numbers, chars) are passed by value
     }
 }

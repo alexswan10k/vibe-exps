@@ -14,13 +14,8 @@ class UIManager {
         this.lifespan = 400;
         this.speed = 5;
 
-        this.population = new Population(
-            this.popSize,
-            this.mutationRate,
-            this.lifespan,
-            this.renderer.width,
-            this.renderer.height
-        );
+        // Generic Simulation Wrapper
+        this.simulation = new Simulation(this.renderer.width, this.renderer.height);
 
         this.isRunning = false;
         this.animationId = null;
@@ -28,12 +23,26 @@ class UIManager {
         this.bindControls();
         this.updateStats();
 
+        // Initial Domain UI
+        this.updateUIForDomain('smart-rockets');
+
         // Initial Draw
-        this.renderer.drawObstacles(this.population.obstacles);
-        this.renderer.drawTarget(this.population.target);
+        if (this.simulation.activeManager.draw) {
+            this.simulation.activeManager.draw(this.renderer);
+        }
     }
 
     bindControls() {
+        // Domain Selector
+        const sDomain = document.getElementById('selectDomain');
+        if (sDomain) {
+            sDomain.addEventListener('change', (e) => {
+                this.simulation.setDomain(e.target.value);
+                this.reset();
+                this.updateUIForDomain(e.target.value);
+            });
+        }
+
         // Buttons
         document.getElementById('btnStart').addEventListener('click', () => {
             if (this.isRunning) {
@@ -49,29 +58,26 @@ class UIManager {
             this.reset();
         });
 
-        // Sliders
+        // Sliders - Update active manager params
         const sPop = document.getElementById('sliderPopSize');
         sPop.addEventListener('input', (e) => {
-            this.popSize = parseInt(e.target.value);
-            document.getElementById('valPopSize').textContent = this.popSize;
-            // Changing pop size requires reset usually, or we can adjust next gen?
-            // For sim simplicity, let's just update the param for next reset, 
-            // OR we can trigger a reset if the user drags it. 
-            // Let's just update the value for next reset to avoid jarring resets while dragging.
+            const val = parseInt(e.target.value);
+            document.getElementById('valPopSize').textContent = val;
+            if (this.simulation.activeManager) this.simulation.activeManager.popSize = val;
         });
 
         const sMut = document.getElementById('sliderMutation');
         sMut.addEventListener('input', (e) => {
-            this.mutationRate = parseFloat(e.target.value);
-            document.getElementById('valMutation').textContent = this.mutationRate;
-            this.population.mutationRate = this.mutationRate;
+            const val = parseFloat(e.target.value);
+            document.getElementById('valMutation').textContent = val;
+            if (this.simulation.activeManager) this.simulation.activeManager.mutationRate = val;
         });
 
         const sLife = document.getElementById('sliderLifespan');
         sLife.addEventListener('input', (e) => {
-            this.lifespan = parseInt(e.target.value);
-            document.getElementById('valLifespan').textContent = this.lifespan;
-            this.population.lifespan = this.lifespan;
+            const val = parseInt(e.target.value);
+            document.getElementById('valLifespan').textContent = val;
+            if (this.simulation.activeManager) this.simulation.activeManager.lifespan = val;
         });
 
         const sSpeed = document.getElementById('sliderSpeed');
@@ -80,11 +86,91 @@ class UIManager {
             document.getElementById('valSpeed').textContent = this.speed;
         });
 
-        const sObstacle = document.getElementById('selectObstacle');
-        sObstacle.addEventListener('change', (e) => {
-            this.population.setupObstacles(e.target.value);
-            this.reset(); // Force reset on map change
+        // Preset Selector
+        const sPreset = document.getElementById('selectPreset');
+        sPreset.addEventListener('change', (e) => {
+            if (this.simulation.activeManager && this.simulation.activeManager.loadPreset) {
+                this.simulation.activeManager.loadPreset(e.target.value);
+                this.reset();
+            }
         });
+
+        // String Evo Control
+        const iTarget = document.getElementById('inputTargetPhrase');
+        iTarget.addEventListener('input', (e) => { // Click or Enter
+            // De-bounce or just wait for explicit "change" (enter/blur)
+            // "change" is better for string evo reset
+        });
+        iTarget.addEventListener('change', (e) => {
+            if (this.simulation.activeManager && this.simulation.activeManager.setTargetPhrase) {
+                this.simulation.activeManager.setTargetPhrase(e.target.value);
+                this.reset();
+            }
+        });
+
+        // TSP Control
+        const sCities = document.getElementById('sliderCityCount');
+        sCities.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            document.getElementById('valCityCount').textContent = val;
+            if (this.simulation.activeManager && this.simulation.activeManager.setTotalCities) {
+                this.simulation.activeManager.setTotalCities(val);
+                this.reset();
+            }
+        });
+    }
+
+    updateUIForDomain(domain) {
+        // Toggle controls
+        const sPresetDiv = document.getElementById('control-preset');
+        const sLifespan = document.getElementById('sliderLifespan').parentElement;
+
+        const cTarget = document.getElementById('control-target-phrase');
+        const cCities = document.getElementById('control-city-count');
+
+        // Reset visibility
+        sPresetDiv.style.display = 'block'; // Always show preset now
+        sLifespan.style.display = 'none';
+        cTarget.style.display = 'none';
+        cCities.style.display = 'none';
+
+        // Populate Presets
+        const sPreset = document.getElementById('selectPreset');
+        sPreset.innerHTML = ""; // Clear
+
+        const addOption = (val, text) => {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = text;
+            sPreset.appendChild(opt);
+        };
+
+        if (domain === 'smart-rockets') {
+            sLifespan.style.display = 'block';
+            addOption("simple", "Simple Barrier");
+            addOption("split", "Split Path");
+            addOption("maze", "Mini Maze");
+            addOption("complex", "Complex");
+
+        } else if (domain === 'string-evolution') {
+            cTarget.style.display = 'block';
+            addOption("shakespeare", "To Be Or Not To Be");
+            addOption("hello", "Hello World");
+            addOption("alphabet", "Alphabet");
+            addOption("data", "Genetic Algorithms");
+
+        } else if (domain === 'tsp') {
+            cCities.style.display = 'block';
+            addOption("random", "Random Scatter");
+            addOption("circle", "Perfect Circle");
+            addOption("grid", "Grid Layout");
+            addOption("clusters", "Cluster Groups");
+        }
+
+        // Trigger load of first preset
+        if (this.simulation.activeManager && this.simulation.activeManager.loadPreset) {
+            this.simulation.activeManager.loadPreset(sPreset.value);
+        }
     }
 
     start() {
@@ -101,22 +187,22 @@ class UIManager {
 
     reset() {
         this.pause();
-        this.population = new Population(
-            this.popSize,
-            this.mutationRate,
-            this.lifespan,
-            this.renderer.width,
-            this.renderer.height
-        );
-        this.population.setupObstacles(document.getElementById('selectObstacle').value);
+
+        // Restart the current simulation (preserves state like city count/target phrase)
+        this.simulation.restart();
+
+        // Sync params (only those that might have changed externally, though listeners handle this)
+        // We do this to ensure UI reflects internal state if needed, or vice-versa
+        // Actually listeners update manager directly. 
+        // We just need to restart.
 
         this.fitnessGraph.clear();
         this.updateStats();
 
         this.renderer.clear();
-        this.renderer.drawObstacles(this.population.obstacles);
-        this.renderer.drawTarget(this.population.target);
-        this.renderer.drawPopulation(this.population);
+        if (this.simulation.activeManager.draw) {
+            this.simulation.activeManager.draw(this.renderer);
+        }
 
         document.getElementById('btnStart').textContent = "START EVOLUTION";
     }
@@ -126,34 +212,31 @@ class UIManager {
 
         // Speed loop
         for (let n = 0; n < this.speed; n++) {
-            this.population.run();
+            this.simulation.run();
         }
 
-        // Draw every frame (or skip if super fast? nah draw every frame for smoothness)
+        // Draw
         this.renderer.clear();
-        this.renderer.drawObstacles(this.population.obstacles);
-        this.renderer.drawTarget(this.population.target);
-        this.renderer.drawPopulation(this.population);
-        this.renderer.drawStats(this.population.generation, this.population.count, this.population.lifespan);
+        if (this.simulation.activeManager.draw) {
+            this.simulation.activeManager.draw(this.renderer);
+        }
+        const lifespan = this.simulation.activeManager.lifespan || 1;
+        this.renderer.drawStats(this.simulation.generation, this.simulation.count, lifespan);
 
-        // Update stats UI if gen changed (simplification: check if count is 0)
-        if (this.population.count === 0) {
+        // Update stats UI if gen changed
+        if (this.simulation.count === 0) {
             this.updateStats();
-            // Also update graph
-            // We need to capture the fitness stats from the *previous* generation strictly speaking,
-            // but we can check if we just reset count.
-            // Actually `evaluate` returns stats.
         }
 
         this.animationId = requestAnimationFrame(() => this.animate());
     }
 
     updateStats() {
-        document.getElementById('valGeneration').textContent = this.population.generation;
+        document.getElementById('valGeneration').textContent = this.simulation.generation;
 
-        if (this.population.stats) {
-            const max = this.population.stats.maxFit;
-            const avg = this.population.stats.avgFit;
+        if (this.simulation.stats) {
+            const max = this.simulation.stats.maxFit || 0;
+            const avg = this.simulation.stats.avgFit || 0;
 
             document.getElementById('valMaxFitness').textContent = max.toFixed(4);
             document.getElementById('valAvgFitness').textContent = avg.toFixed(4);

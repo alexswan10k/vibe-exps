@@ -1,217 +1,74 @@
 /**
  * Genetic Algorithm Visualizer
- * Simulation Logic
+ * Simulation Router
  */
 
-class Rocket {
-    constructor(dna, startX, startY) {
-        this.pos = new Vector(startX, startY);
-        this.vel = new Vector(0, 0);
-        this.acc = new Vector(0, 0);
-        this.dna = dna;
-        this.fitness = 0;
-        this.completed = false;
-        this.crashed = false;
-        this.color = null; // Will be assigned based on fitness or random
-    }
-
-    applyForce(force) {
-        this.acc.add(force);
-    }
-
-    update(count, obstacles, target) {
-        if (this.completed || this.crashed) return;
-
-        const d = Vector.dist(this.pos, target);
-        if (d < 10) { // Hit target
-            this.completed = true;
-            this.pos = target.copy(); // Snap to center
-        }
-
-        // Obstacle collision
-        for (let obs of obstacles) {
-            if (obs.contains(this.pos)) {
-                this.crashed = true;
-            }
-        }
-
-        // Boundary collision (screen edges)
-        if (this.pos.x < 0 || this.pos.x > 800 || this.pos.y < 0 || this.pos.y > 600) {
-            this.crashed = true;
-        }
-
-        if (!this.completed && !this.crashed) {
-            this.applyForce(this.dna.genes[count]);
-            this.vel.add(this.acc);
-            this.pos.add(this.vel);
-            this.acc.mult(0); // Reset acc
-            this.vel.limit(4); // Max speed hard limit (can be parameterized)
-        }
-    }
-
-    calcFitness(target) {
-        const d = Vector.dist(this.pos, target);
-        // Map distance to fitness. Closer = Higher.
-        // If completed, huge bonus. If crashed, penalty.
-
-        // Base fitness: 1 / distance
-        this.fitness = 1 / (d + 1); // +1 to avoid Infinity
-
-        if (this.completed) {
-            this.fitness *= 10;
-        }
-        if (this.crashed) {
-            this.fitness /= 10;
-        }
-
-        // Enhance fitness with exponential function to separate top performers
-        this.fitness = Math.pow(this.fitness, 4);
-    }
-}
-
-class Obstacle {
-    constructor(x, y, w, h) {
-        this.x = x;
-        this.y = y;
-        this.w = w;
-        this.h = h;
-    }
-
-    contains(v) {
-        return (v.x > this.x && v.x < this.x + this.w && v.y > this.y && v.y < this.y + this.h);
-    }
-}
-
-class Population {
-    constructor(size, mutationRate, lifespan, width, height) {
-        this.rockets = [];
-        this.popSize = size;
-        this.matingPool = [];
-        this.generation = 1;
-        this.mutationRate = mutationRate;
-        this.lifespan = lifespan;
+// This class now acts as a wrapper for the specific domain managers
+class Simulation {
+    constructor(width, height) {
         this.width = width;
         this.height = height;
-        this.count = 0; // Current frame in the lifespan
-        this.running = false;
+        this.generation = 1;
+        this.count = 0;
+        this.activeManager = null;
 
-        this.target = new Vector(width / 2, 50);
-        this.startPos = new Vector(width / 2, height - 20);
-
-        this.obstacles = [];
-        this.setupObstacles('simple');
-
-        this.init();
+        this.setDomain('smart-rockets');
     }
 
-    setupObstacles(type) {
-        this.obstacles = [];
-        if (type === 'simple') {
-            this.obstacles.push(new Obstacle(this.width / 2 - 100, this.height / 2, 200, 20));
-        } else if (type === 'split') {
-            this.obstacles.push(new Obstacle(this.width / 2 - 150, 400, 300, 20));
-            this.obstacles.push(new Obstacle(this.width / 2 - 50, 200, 100, 20));
-        } else if (type === 'maze') {
-            this.obstacles.push(new Obstacle(0, 300, 500, 20));
-            this.obstacles.push(new Obstacle(this.width - 500, 150, 500, 20));
-        } else if (type === 'complex') {
-            const cx = this.width / 2;
-            const cy = this.height / 2;
-            this.obstacles.push(new Obstacle(cx - 200, cy + 100, 400, 20));
-            this.obstacles.push(new Obstacle(cx - 200, cy - 100, 20, 220));
-            this.obstacles.push(new Obstacle(cx + 180, cy - 100, 20, 220));
-            this.obstacles.push(new Obstacle(cx - 100, cy - 150, 200, 20));
+    setDomain(type) {
+        this.count = 0;
+        this.generation = 1;
+
+        if (type === 'smart-rockets') {
+            this.activeManager = new SmartRocketsManager(this.width, this.height);
+        } else if (type === 'string-evolution') {
+            this.activeManager = new StringEvolutionManager(this.width, this.height);
+        } else if (type === 'tsp') {
+            this.activeManager = new TSPManager(this.width, this.height);
         }
+
+        // Expose params to UI if needed
+        return this.activeManager;
     }
 
-    init() {
-        this.rockets = [];
-        for (let i = 0; i < this.popSize; i++) {
-            const dna = DNA.createRandom(this.lifespan, 0.2); // 0.2 max force
-            this.rockets.push(new Rocket(dna, this.startPos.x, this.startPos.y));
+    restart() {
+        if (this.activeManager && this.activeManager.init) {
+            this.activeManager.init();
         }
         this.count = 0;
-        this.running = true;
+        this.generation = 1;
     }
 
     run() {
-        if (!this.running) return;
+        if (!this.activeManager) return;
 
-        let allInactive = true;
-        for (let rocket of this.rockets) {
-            rocket.update(this.count, this.obstacles, this.target);
-            if (!rocket.crashed && !rocket.completed) {
-                allInactive = false;
-            }
-        }
-
+        const done = this.activeManager.update(this.count);
         this.count++;
 
-        if (this.count >= this.lifespan || allInactive) {
-            this.evaluate();
-            this.selection();
+        // Specific domains define their own "done" condition (lifespan end, or simple one-tick)
+        // If done, or generic lifespan
+        const lifespan = this.activeManager.lifespan || 1; // Default to 1 for instant sims
+
+        if (done || this.count >= lifespan) {
+            this.activeManager.evaluate();
+            this.activeManager.selection();
             this.count = 0;
             this.generation++;
+            // Sync generation back to manager if it tracks it independently
+            if (this.activeManager.generation) this.activeManager.generation = this.generation;
         }
     }
 
-    evaluate() {
-        let maxFit = 0;
-        let totalFit = 0;
+    get stats() {
+        // Return latest stats from evaluate
+        // Ideally evaluate returns it, or we store it. 
+        // We'll rely on the manager having run evaluate at least once.
+        // For visualizer smoothness, we probably want to cache the last stats.
+        // Let's grab them from the manager if exposed.
 
-        for (let rocket of this.rockets) {
-            rocket.calcFitness(this.target);
-            if (rocket.fitness > maxFit) maxFit = rocket.fitness;
-            totalFit += rocket.fitness;
-        }
-
-        // Store stats for UI
-        this.stats = {
-            maxFit: maxFit,
-            avgFit: totalFit / this.rockets.length
-        };
-
-        // Normalize fitness
-        for (let rocket of this.rockets) {
-            rocket.fitness /= maxFit;
-        }
-
-        this.matingPool = [];
-        // Take rockets with higher fitness and put them in the pool more times
-        // Improved: Rejection Sampling or simple weighted pool
-        // Simple weighted pool for now (careful with memory for huge pools)
-        // Let's use rejection sampling in selection() instead? No, standard array is easier for small scale.
-
-        for (let rocket of this.rockets) {
-            const n = Math.floor(rocket.fitness * 100);
-            for (let i = 0; i < n; i++) {
-                this.matingPool.push(rocket);
-            }
-        }
-
-        return { maxFit, avgFit: totalFit / this.rockets.length }; // Not normalized avg
+        // Hack: wrapper access
+        return this.activeManager.stats || {};
     }
 
-    selection() {
-        const newRockets = [];
-        for (let i = 0; i < this.rockets.length; i++) {
-            // Random parent 1
-            const parentA = this.matingPool[Math.floor(Math.random() * this.matingPool.length)];
-            // Random parent 2
-            const parentB = this.matingPool[Math.floor(Math.random() * this.matingPool.length)];
-
-            // Handle case where pool might be empty (all died horribly with 0 fitness)
-            let childDNA;
-            if (parentA && parentB) {
-                childDNA = parentA.dna.crossover(parentB.dna);
-                childDNA.mutation(this.mutationRate, 0.2);
-            } else {
-                // Restart random if fail
-                childDNA = DNA.createRandom(this.lifespan, 0.2);
-            }
-
-            newRockets.push(new Rocket(childDNA, this.startPos.x, this.startPos.y));
-        }
-        this.rockets = newRockets;
-    }
+    // Proxy property access for internal manager if needed, or UI can access simulation.activeManager
 }

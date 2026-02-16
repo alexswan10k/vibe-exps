@@ -223,6 +223,26 @@
     <div class="main-layout">
         <aside class="sidebar" id="controlsSidebar">
             <div class="panel-section">
+                <span class="section-title">Problem Domain</span>
+                <select id="selectDomain">
+                    <option value="smart-rockets">Smart Rockets</option>
+                    <option value="string-evolution">String Evolution</option>
+                    <option value="tsp">Traveling Salesperson</option>
+                </select>
+
+                <div class="control-group" id="control-target-phrase" style="display:none; margin-top: 10px;">
+                    <label>TARGET PHRASE</label>
+                    <input type="text" id="inputTargetPhrase" value="TO BE OR NOT TO BE"
+                        style="width: 100%; background: #222; border: 1px solid #444; color: #fff; padding: 5px;">
+                </div>
+
+                <div class="control-group" id="control-city-count" style="display:none; margin-top: 10px;">
+                    <label>CITIES: <span id="valCityCount">15</span></label>
+                    <input type="range" id="sliderCityCount" min="5" max="50" step="1" value="15">
+                </div>
+            </div>
+
+            <div class="panel-section" id="controls-rockets">
                 <span class="section-title">Simulation Control</span>
                 <button id="btnStart">START EVOLUTION</button>
                 <button id="btnReset">RESET POPULATION</button>
@@ -250,13 +270,10 @@
 
             <div class="panel-section">
                 <span class="section-title">Environment</span>
-                <div class="control-group">
-                    <label>OBSTACLE PRESET</label>
-                    <select id="selectObstacle">
-                        <option value="simple">Simple Barrier</option>
-                        <option value="split">Split Path</option>
-                        <option value="maze">Mini Maze</option>
-                        <option value="complex">Complex</option>
+                <div class="control-group" id="control-preset">
+                    <label>SCENARIO PRESET</label>
+                    <select id="selectPreset">
+                        <!-- Populated by JS -->
                     </select>
                 </div>
             </div>
@@ -297,6 +314,9 @@
     </div>
 
     <script src="ga.js"></script>
+    <script src="domains/smart-rockets.js"></script>
+    <script src="domains/str-evo.js"></script>
+    <script src="domains/tsp.js"></script>
     <script src="simulation.js"></script>
     <script src="renderer.js"></script>
     <script src="ui-manager.js"></script>
