@@ -126,7 +126,53 @@ class UIManager {
                 this.reset();
             }
         });
+
+        // Mobile Redesign: Tab Bar Navigation
+        const tabs = document.querySelectorAll('.tab-item');
+        const controls = document.getElementById('controlsSidebar');
+        const stats = document.getElementById('statsSidebar');
+
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                const target = tab.dataset.tab;
+
+                // Update tab UI
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update Panel UI
+                controls.classList.remove('active');
+                stats.classList.remove('active');
+
+                if (target === 'settings') {
+                    controls.classList.add('active');
+                } else if (target === 'stats') {
+                    stats.classList.add('active');
+                }
+            };
+        });
+
+        // Touch Interaction for Canvas
+        const canvas = this.renderer.canvas;
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+
+                if (this.simulation.activeManager && this.simulation.activeManager.handleInteraction) {
+                    this.simulation.activeManager.handleInteraction(x, y);
+                }
+
+                // If in Smart Rockets, we might want to prevent scrolling while interacting
+                if (this.simulation.domain === 'smart-rockets') {
+                    e.preventDefault();
+                }
+            }
+        }, { passive: false });
     }
+
 
     updateUIForDomain(domain) {
         // Toggle controls

@@ -193,7 +193,87 @@ class UIManager {
                 }
             }
         });
+
+        // Mobile Redesign: Tab Bar Navigation
+        const tabs = document.querySelectorAll('.tab-item');
+        const controls = document.getElementById('controlsSidebar');
+        const stats = document.getElementById('statsSidebar');
+
+        tabs.forEach(tab => {
+            tab.onclick = () => {
+                const target = tab.dataset.tab;
+
+                // Update tab UI
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // Update Panel UI
+                controls.classList.remove('active');
+                stats.classList.remove('active');
+
+                if (target === 'settings') {
+                    controls.classList.add('active');
+                } else if (target === 'stats') {
+                    stats.classList.add('active');
+                }
+            };
+        });
+
+        // Touch Interaction for Canvas
+        const canvas = this.renderer.canvas;
+        let isDragging = false;
+        let lastX, lastY;
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                const touch = e.touches[0];
+                lastX = touch.clientX;
+                lastY = touch.clientY;
+
+                if (this.simulation.swarm.currentScenario === 'target') {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = touch.clientX - rect.left;
+                    const y = touch.clientY - rect.top;
+                    this.simulation.setTarget(x, y);
+
+                    if (!this.isRunning) {
+                        this.renderer.clear();
+                        this.renderer.drawSwarm(this.simulation.swarm);
+                    }
+                } else {
+                    // Prevent scrolling when rotating in 3D
+                    e.preventDefault();
+                }
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => isDragging = false);
+        window.addEventListener('touchcancel', () => isDragging = false);
+
+        window.addEventListener('touchmove', (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            if (this.simulation.swarm.currentScenario === 'target') return;
+
+            const touch = e.touches[0];
+            const dx = touch.clientX - lastX;
+            const dy = touch.clientY - lastY;
+
+            this.renderer.camera.angle += dx * 0.01;
+            this.renderer.camera.pitch += dy * 0.01;
+
+            lastX = touch.clientX;
+            lastY = touch.clientY;
+
+            if (!this.isRunning) {
+                this.renderer.clear();
+                this.renderer.drawSwarm(this.simulation.swarm);
+            }
+
+            e.preventDefault();
+        }, { passive: false });
     }
+
 
     start() {
         if (!this.isRunning) {
