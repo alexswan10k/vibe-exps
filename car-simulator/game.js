@@ -33,6 +33,14 @@ class CarSimulator {
         this.isPaused = false;
         this.showDebug = false;
 
+        // Transmission properties
+        this.currentGear = 1;
+        this.gearRatios = [0, 3.5, 2.2, 1.5, 1.1, 0.9, 0.7]; // 1st to 6th gear ratios
+        this.maxRPM = 7000;
+        this.shiftRPM = 6500;
+        this.isShifting = false;
+        this.shiftTime = 0;
+
         this.init();
         this.createGround();
         this.createCar();
@@ -654,7 +662,7 @@ class CarSimulator {
         if (this.isPaused) return;
 
         const maxSteerVal = Math.PI / 8;
-        const maxForce = 5000; // Even more power
+        const maxForce = 5000;
         const brakeForce = 20;
 
         let steer = 0;
@@ -702,37 +710,71 @@ class CarSimulator {
             this.wheelMeshes[i].quaternion.copy(t.quaternion);
         }
 
-        // Speed and RPM
         const speed = this.carChassis.velocity.length() * 3.6;
-        const rpm = Math.max(800, speed * 60); // Simulate RPM based on speed (increased multiplier)
         this.speedDisplay.textContent = `Speed: ${speed.toFixed(1)} km/h`;
-        this.rpmDisplay.textContent = `RPM: ${rpm.toFixed(0)}`;
+
+        // Transmission logic
+        let targetGear = 1;
+        const speedKmh = Math.abs(speed);
+
+        if (speedKmh < 40) targetGear = 1;
+        else if (speedKmh < 80) targetGear = 2;
+        else if (speedKmh < 120) targetGear = 3;
+        else if (speedKmh < 160) targetGear = 4;
+        else if (speedKmh < 210) targetGear = 5;
+        else targetGear = 6;
+
+        if (this.currentGear !== targetGear && !this.isShifting) {
+            this.isShifting = true;
+            this.shiftTime = 0.2;
+            this.currentGear = targetGear;
+        }
+
+        if (this.isShifting) {
+            this.shiftTime -= 1 / 60;
+            if (this.shiftTime <= 0) this.isShifting = false;
+        }
+
+        // RPM simulation
+        const gearSpeeds = [0, 50, 95, 140, 185, 230, 280];
+        const minGearSpeed = gearSpeeds[this.currentGear - 1];
+        const maxGearSpeed = gearSpeeds[this.currentGear];
+        const idleRPM = 800;
+        let rpm = idleRPM;
+
+        if (speedKmh > 0) {
+            const gearRange = maxGearSpeed - minGearSpeed;
+            const gearProgress = (speedKmh - minGearSpeed) / gearRange;
+            rpm = THREE.MathUtils.lerp(idleRPM + 1000, 7000, Math.max(0, gearProgress));
+        }
+
+        if (this.isShifting) rpm *= 0.5;
+
+        this.rpm = Math.min(this.maxRPM, rpm);
+        this.rpmDisplay.textContent = `RPM: ${this.rpm.toFixed(0)}`;
+        this.gearDisplay.textContent = `Gear: ${this.currentGear}`;
 
         // Emit particles
         if (Math.abs(speed) > 10) {
-            // Exhaust (at -X)
             const exhaustPos = this.carMesh.position.clone().add(
                 new THREE.Vector3(-2.2, 0.3, 0.5).applyQuaternion(this.carMesh.quaternion)
             );
-            // Random puff
             if (Math.random() > 0.8) {
                 this.spawnParticle(
                     exhaustPos,
-                    new THREE.Vector3(-0.5, 0.05, 0), // Push back
+                    new THREE.Vector3(-0.5, 0.05, 0).applyQuaternion(this.carMesh.quaternion),
                     0.5 + Math.random() * 0.5,
                     0.2,
                     0x555555
                 );
             }
 
-            // Tire smoke (drifting)
-            // Lateral is now Z axis (Right)
             const lateralVel = this.carChassis.velocity.dot(
                 new THREE.Vector3(0, 0, 1).applyQuaternion(this.carChassis.quaternion)
             );
 
-            if (Math.abs(lateralVel) > 5) { // Drifting threshold
-                for (let i = 2; i < 4; i++) { // Rear wheels
+            if (Math.abs(lateralVel) > 5) {
+                for (let i = 2; i < 4; i++) {
                     const wheelPos = this.wheelMeshes[i].position.clone();
                     wheelPos.y = 0.1;
                     this.spawnParticle(
@@ -746,38 +788,25 @@ class CarSimulator {
             }
         }
 
-        // Gear
-        let gear = 'N';
-        if (this.keys.KeyW) gear = 'D';
-        else if (this.keys.KeyS) gear = 'R';
-        this.gearDisplay.textContent = `Gear: ${gear}`;
-
-        // Fuel consumption
         if (this.keys.KeyW || this.keys.KeyS) {
             this.fuel = Math.max(0, this.fuel - 0.02);
             this.fuelDisplay.textContent = `Fuel: ${this.fuel.toFixed(1)}%`;
         }
 
-        // Health system - damage from collisions
         const velocity = this.carChassis.velocity.length();
-        if (velocity > 50) { // High speed damage
+        if (velocity > 50) {
             this.carHealth = Math.max(0, this.carHealth - 0.01);
         }
 
-        // Update audio
         this.updateEngineSound(speed);
-
-        // Update traffic
         this.updateTraffic();
 
-        // Update game time and score
         this.gameTime += 1 / 60;
-        if (this.gameTime % 5 < 1 / 60) { // Every 5 seconds
+        if (this.gameTime % 5 < 1 / 60) {
             this.score += Math.floor(speed);
             this.scoreDisplay.textContent = `Score: ${this.score}`;
         }
 
-        // Update health display
         this.healthDisplay.textContent = `Health: ${this.carHealth.toFixed(1)}%`;
     }
 
@@ -806,12 +835,19 @@ class CarSimulator {
         if (!this.engineSound || !this.audioContext) return;
 
         const { oscillator, gainNode } = this.engineSound;
-        const normalizedSpeed = Math.min(speed / 100, 1); // Normalize speed
-        const frequency = 80 + normalizedSpeed * 200; // 80-280 Hz range
-        const volume = normalizedSpeed * 0.1; // Volume based on speed
 
-        oscillator.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
-        gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+        // Use RPM for frequency calculation
+        // Mapping 800-7000 RPM to 60-400 Hz
+        const normalizedRPM = (this.rpm - 800) / (7000 - 800);
+        const frequency = 60 + normalizedRPM * 340;
+
+        // Volume based on input and RPM
+        let volume = 0.05 + normalizedRPM * 0.15;
+        if (!this.keys.KeyW && !this.keys.KeyS) volume *= 0.5; // Quieter at idle/coast
+        if (this.isShifting) volume *= 0.2; // Significant dip during shift
+
+        oscillator.frequency.setTargetAtTime(frequency, this.audioContext.currentTime, 0.05);
+        gainNode.gain.setTargetAtTime(volume, this.audioContext.currentTime, 0.05);
     }
 
     updateTraffic() {
