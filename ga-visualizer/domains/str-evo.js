@@ -160,5 +160,34 @@ class StringEvolutionManager {
         for (let i = 0; i < Math.min(20, this.agents.length); i++) {
             ctx.fillText(this.agents[i].phrase, w / 2, h / 2 + 80 + i * 15);
         }
+
+        // --- Model Inspection ---
+        const vectorCanvas = document.getElementById('vectorCanvas');
+        const dnaCanvas = document.getElementById('dnaCanvas');
+
+        // Best DNA (Use current bestPhrase logic to find agent)
+        let bestAgent = this.agents[0];
+        let maxFit = -1;
+        // Evaluate tracks bestPhrase but doesn't store bestAgent ref explicitly in a persistent way for draw
+        // unless we scan. But we have this.agents.
+        // Let's just scan or use this.bestPhrase to reconstruct match?
+        // Better: Scan agents for best fit for visualization
+        for (let a of this.agents) {
+            if (a.fitness > maxFit) {
+                maxFit = a.fitness;
+                bestAgent = a;
+            }
+        }
+
+        // Calculate match % for stats
+        let matchCount = 0;
+        const genes = bestAgent.dna.genes;
+        for (let i = 0; i < this.targetPhrase.length; i++) {
+            if (genes[i] === this.targetPhrase[i]) matchCount++;
+        }
+        const matchPct = matchCount / this.targetPhrase.length;
+
+        if (vectorCanvas) renderer.drawStringStats(vectorCanvas, matchPct);
+        if (dnaCanvas) renderer.drawStringDNA(dnaCanvas, bestAgent.dna, this.targetPhrase);
     }
 }

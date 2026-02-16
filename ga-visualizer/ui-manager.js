@@ -144,6 +144,21 @@ class UIManager {
         cCities.style.display = 'none';
         if (cModel) cModel.style.display = 'none';
 
+        // Labels
+        const lblVector = document.querySelector('#controls-model label:nth-of-type(1)');
+        const lblDNA = document.querySelector('#controls-model label:nth-of-type(2)');
+        // Note: querySelector might pick up first label in control-group. 
+        // Structure is: 
+        // div (control-group) -> label, canvas
+        // div (control-group) -> label, canvas
+        // Let's select by structure or assume order.
+        const cGroups = document.querySelectorAll('#controls-model .control-group');
+        let lbl1, lbl2;
+        if (cGroups.length >= 2) {
+            lbl1 = cGroups[0].querySelector('label');
+            lbl2 = cGroups[1].querySelector('label');
+        }
+
         // Populate Presets
         const sPreset = document.getElementById('selectPreset');
         sPreset.innerHTML = ""; // Clear
@@ -158,6 +173,8 @@ class UIManager {
         if (domain === 'smart-rockets') {
             sLifespan.style.display = 'block';
             if (cModel) cModel.style.display = 'block'; // Show Model Inspection
+            if (lbl1) lbl1.textContent = "CURRENT FORCE";
+            if (lbl2) lbl2.textContent = "DNA SEQUENCE";
             addOption("simple", "Simple Barrier");
             addOption("split", "Split Path");
             addOption("maze", "Mini Maze");
@@ -165,6 +182,9 @@ class UIManager {
 
         } else if (domain === 'string-evolution') {
             cTarget.style.display = 'block';
+            if (cModel) cModel.style.display = 'block';
+            if (lbl1) lbl1.textContent = "MATCH %";
+            if (lbl2) lbl2.textContent = "BEST PHRASE";
             addOption("shakespeare", "To Be Or Not To Be");
             addOption("hello", "Hello World");
             addOption("alphabet", "Alphabet");
@@ -172,6 +192,9 @@ class UIManager {
 
         } else if (domain === 'tsp') {
             cCities.style.display = 'block';
+            if (cModel) cModel.style.display = 'block';
+            if (lbl1) lbl1.textContent = "TOTAL DISTANCE";
+            if (lbl2) lbl2.textContent = "CITY ORDER";
             addOption("random", "Random Scatter");
             addOption("circle", "Perfect Circle");
             addOption("grid", "Grid Layout");

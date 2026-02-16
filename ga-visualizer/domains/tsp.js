@@ -224,5 +224,14 @@ class TSPManager {
         ctx.fillStyle = "#8888aa";
         ctx.font = "14px JetBrains Mono";
         ctx.fillText(`Best Distance: ${Math.floor(this.bestDistance)}`, 20, 580);
+
+        // --- Model Inspection ---
+        const vectorCanvas = document.getElementById('vectorCanvas');
+        const dnaCanvas = document.getElementById('dnaCanvas');
+
+        if (vectorCanvas) renderer.drawTSPDistance(vectorCanvas, this.bestDistance);
+        if (dnaCanvas && this.bestEverOrder.length > 0) {
+            renderer.drawTSPOrder(dnaCanvas, this.bestEverOrder, this.totalCities);
+        }
     }
 }

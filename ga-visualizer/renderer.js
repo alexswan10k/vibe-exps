@@ -138,6 +138,106 @@ class Renderer {
         ctx.fillRect(cx - 1, 0, 2, h);
     }
 
+    drawStringDNA(canvas, dna, targetPhrase) {
+        if (!canvas || !dna) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, w, h);
+
+        const charW = w / dna.genes.length;
+
+        for (let i = 0; i < dna.genes.length; i++) {
+            const char = dna.genes[i]; // Char code or char? Assuming char from str-evo
+            const isMatch = (char === targetPhrase[i]);
+
+            ctx.fillStyle = isMatch ? 'rgba(0, 255, 157, 0.8)' : 'rgba(255, 0, 85, 0.5)';
+            ctx.fillRect(i * charW, 0, Math.ceil(charW), h);
+        }
+    }
+
+    drawStringStats(canvas, fitness) {
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // Circular generic stat
+        const cx = w / 2;
+        const cy = h / 2;
+        const r = Math.min(w, h) / 2 - 5;
+
+        // Background ring
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+
+        // Value ring
+        // fitness is 0..1 (normalized), but for string evo it's exponential, so we might want match count %?
+        // Let's assume passed fitness is 0..1 match percentage for visualization purposes
+        // Actually str-evo fitness is normalized. We should pass match % instead if possible.
+        // For now, let's just use it as a gauge.
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + (fitness * Math.PI * 2));
+        ctx.strokeStyle = '#00ff9d';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '16px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.floor(fitness * 100) + "%", cx, cy);
+    }
+
+    drawTSPOrder(canvas, order, totalCities) {
+        if (!canvas || !order) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, w, h);
+
+        const slotW = w / order.length;
+
+        for (let i = 0; i < order.length; i++) {
+            const cityIdx = order[i];
+            const val = cityIdx / totalCities; // 0..1
+
+            // Hue spectrum
+            const hue = val * 360;
+            ctx.fillStyle = `hsl(${hue}, 70%, 50%)`;
+            ctx.fillRect(i * slotW, 0, Math.ceil(slotW), h);
+        }
+    }
+
+    drawTSPDistance(canvas, distance) {
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+
+        ctx.clearRect(0, 0, w, h);
+
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px JetBrains Mono';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.fillText("DIST", w / 2, h / 2 - 10);
+        ctx.font = '20px JetBrains Mono';
+        ctx.fillStyle = '#00ff9d';
+        ctx.fillText(Math.floor(distance), w / 2, h / 2 + 10);
+    }
+
     drawPopulation(population) {
         for (let rocket of population.rockets) {
             this.drawRocket(rocket);
