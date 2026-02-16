@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Genetic Algorithm | Smart Rockets</title>
+    <title>Evolution Lab | Particle Swarm Optimization</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono&display=swap"
         rel="stylesheet">
     <style>
@@ -212,10 +212,10 @@
 
 <body>
     <header>
-        <h1>EVOLUTION LAB <span style="font-weight: 300; font-size: 0.8rem; color: var(--text-muted)">// GENETIC
-                ALGORITHM</span></h1>
+        <h1>EVOLUTION LAB <span style="font-weight: 300; font-size: 0.8rem; color: var(--text-muted)">// PARTICLE SWARM
+                OPTIMIZATION</span></h1>
         <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <span class="badge" id="badge-mode">Smart Rockets</span>
+            <span class="badge" id="badge-mode">Swarm Intelligence</span>
             <span class="badge">Standalone</span>
         </div>
     </header>
@@ -254,6 +254,14 @@
 
             <div class="panel-section">
                 <span class="section-title">Simulation Control</span>
+                <div class="control-group">
+                    <label>SPEED: <span id="valSpeed">1x</span></label>
+                    <input type="range" id="sliderSpeed" min="0.1" max="5" step="0.1" value="1">
+                </div>
+                <div class="control-group" style="display: flex; align-items: center; justify-content: space-between;">
+                    <label style="margin:0">AUTO-ROTATE</label>
+                    <input type="checkbox" id="checkAutoRotate" style="width: auto;">
+                </div>
                 <button id="btnStart">START SWARM</button>
                 <button id="btnReset">RESET PARTICLES</button>
             </div>

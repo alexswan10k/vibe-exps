@@ -54,20 +54,101 @@ class Renderer {
         return { x: sx, y: sy, depth: ry }; // depth for sorting if needed
     }
 
+    drawSwarm(swarm) {
+        if (!swarm) return;
+
+        const zScale = 50;
+
+        // Draw Terrain First
+        this.drawTerrain(swarm.currentScenario, swarm.width, swarm.height);
+
+        // Draw Target if in target mode
+        if (swarm.currentScenario === 'target') {
+            const pt = this.project(swarm.target.x, swarm.target.y, 0);
+
+            // Pulse effect for target
+            const time = Date.now() * 0.005;
+            const radius = 10 + Math.sin(time) * 2;
+
+            this.ctx.shadowBlur = 15;
+            this.ctx.shadowColor = '#ff0055';
+            this.drawCircle(pt.x, pt.y, radius, '#ff0055');
+            this.ctx.shadowBlur = 0;
+        }
+
+        // Draw Particles
+        this.ctx.globalCompositeOperation = 'lighter';
+
+        for (let p of swarm.particles) {
+            let z = 0;
+            // If we are in a 3D scenario, use particle's Z (fitness) for height
+            if (swarm.currentScenario !== 'target') {
+                // Re-calculate z in case it's not stored or needs scaling
+                // p.position.z should be set by evaluate
+                z = p.position.z * zScale;
+            }
+
+            const proj = this.project(p.position.x, p.position.y, z);
+
+            // Draw Trail
+            if (p.history.length > 1) {
+                this.ctx.beginPath();
+                this.ctx.lineWidth = 1;
+                for (let i = 0; i < p.history.length; i++) {
+                    let h = p.history[i];
+                    let hz = (swarm.currentScenario !== 'target') ? h.z * zScale : 0;
+                    let hp = this.project(h.x, h.y, hz);
+
+                    // Gradient opacity for trail
+                    const opacity = (i / p.history.length) * 0.5;
+                    this.ctx.strokeStyle = p.color;
+                    this.ctx.globalAlpha = opacity;
+
+                    if (i === 0) this.ctx.moveTo(hp.x, hp.y);
+                    else this.ctx.lineTo(hp.x, hp.y);
+                }
+                this.ctx.stroke();
+                this.ctx.globalAlpha = 1.0;
+            }
+
+            // Draw Particle with Glow
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = p.color;
+
+            this.ctx.beginPath();
+            this.ctx.arc(proj.x, proj.y, 4, 0, Math.PI * 2);
+            this.ctx.fillStyle = p.color;
+            this.ctx.fill();
+
+            this.ctx.shadowBlur = 0;
+        }
+
+        this.ctx.globalCompositeOperation = 'source-over';
+    }
+
     drawTerrain(scenario, width, height) {
         if (!Scenarios[scenario] || scenario === 'target') return;
 
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         this.ctx.lineWidth = 1;
 
-        const steps = 20;
+        const steps = 30; // Increased resolution
         const stepX = width / steps;
         const stepY = height / steps;
-
-        // Helper to get Z scale
-        // Benchmarks return varying Z ranges. Sphere ~0-8 for range -2..2. Rastrigin can be high.
-        // We need to scale Z for visual consistency (~0-200px?)
         const zScale = 50;
+
+        // Helper to map Value to Color
+        const getColor = (val) => {
+            // Normalize somewhat? 
+            // Sphere is 0-8. Rastrigin 0-80. Ackley 0-20.
+            // Let's just map based on generic 'height' visual
+            // Low (good) = Green/Blue, High (bad) = Red/Purple
+            // But usually we want cool wireframes.
+
+            // Let's use a simple gradient based on Z
+            // Z is typically positive for these minimization problems
+            let h = 180 + (val * 10);
+            return `hsla(${h % 360}, 70%, 50%, 0.2)`;
+        };
 
         // Draw Grid Lines X
         for (let i = 0; i <= steps; i++) {
@@ -79,15 +160,19 @@ class Renderer {
                 // Calculate Z
                 const nx = (x / width) * 4 - 2;
                 const ny = (y / height) * 4 - 2;
-                let z = Scenarios[scenario](nx, ny) * zScale;
+                let z = Scenarios[scenario](nx, ny);
 
-                // Clamp visual Z?
-                // z = Math.min(z, 200);
+                const col = getColor(z);
+                this.ctx.strokeStyle = col; // Dynamic color per line segment? simple strokeStyle won't work well for whole path
 
+                z *= zScale;
                 const p = this.project(x, y, z);
+
                 if (j === 0) this.ctx.moveTo(p.x, p.y);
                 else this.ctx.lineTo(p.x, p.y);
             }
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; // Fallback to uniform for performance/cleanliness, or use gradient logic
+            // For true gradient lines we'd need to stroke each segment. Let's stick to uniform but cleaner.
             this.ctx.stroke();
         }
 
@@ -108,59 +193,6 @@ class Renderer {
             }
             this.ctx.stroke();
         }
-    }
-
-    drawSwarm(swarm) {
-        if (!swarm) return;
-
-        const zScale = 50;
-
-        // Draw Terrain First
-        this.drawTerrain(swarm.currentScenario, swarm.width, swarm.height);
-
-        // Draw Target if in target mode
-        if (swarm.currentScenario === 'target') {
-            const pt = this.project(swarm.target.x, swarm.target.y, 0);
-            this.drawCircle(pt.x, pt.y, 10, '#ff0055');
-        }
-
-        // Draw Particles
-        this.ctx.globalCompositeOperation = 'lighter';
-
-        for (let p of swarm.particles) {
-            let z = 0;
-            // If we are in a 3D scenario, use particle's Z (fitness) for height
-            if (swarm.currentScenario !== 'target') {
-                // Re-calculate z in case it's not stored or needs scaling
-                // p.position.z should be set by evaluate
-                z = p.position.z * zScale;
-            }
-
-            const proj = this.project(p.position.x, p.position.y, z);
-
-            // Draw Trail
-            if (p.history.length > 1) {
-                this.ctx.beginPath();
-                this.ctx.strokeStyle = p.color;
-                this.ctx.lineWidth = 1;
-                for (let i = 0; i < p.history.length; i++) {
-                    let h = p.history[i];
-                    let hz = (swarm.currentScenario !== 'target') ? h.z * zScale : 0;
-                    let hp = this.project(h.x, h.y, hz);
-                    if (i === 0) this.ctx.moveTo(hp.x, hp.y);
-                    else this.ctx.lineTo(hp.x, hp.y);
-                }
-                this.ctx.stroke();
-            }
-
-            // Draw Particle
-            this.ctx.beginPath();
-            this.ctx.arc(proj.x, proj.y, 3, 0, Math.PI * 2);
-            this.ctx.fillStyle = p.color;
-            this.ctx.fill();
-        }
-
-        this.ctx.globalCompositeOperation = 'source-over';
     }
 
     drawCircle(x, y, r, color) {

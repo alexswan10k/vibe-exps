@@ -66,6 +66,8 @@ class UIManager {
 
         this.isRunning = false;
         this.animationId = null;
+        this.speed = 1;
+        this.autoRotate = false;
 
         this.bindControls();
         this.updateStats();
@@ -134,8 +136,29 @@ class UIManager {
         bindSlider('sliderInertia', 'inertia', 'valInertia');
         bindSlider('sliderCognitive', 'cognitive', 'valCognitive');
         bindSlider('sliderSocial', 'social', 'valSocial');
+        bindSlider('sliderInertia', 'inertia', 'valInertia');
+        bindSlider('sliderCognitive', 'cognitive', 'valCognitive');
+        bindSlider('sliderSocial', 'social', 'valSocial');
         // Use 'change' for population to avoid rapid restarts during drag
         bindSlider('sliderPopSize', 'population', 'valPopSize', 'change');
+
+        // Speed Slider
+        const speedSlider = document.getElementById('sliderSpeed');
+        if (speedSlider) {
+            speedSlider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('valSpeed').textContent = val + 'x';
+                this.speed = val;
+            });
+        }
+
+        // Auto Rotate Checkbox
+        const autoRotateCheck = document.getElementById('checkAutoRotate');
+        if (autoRotateCheck) {
+            autoRotateCheck.addEventListener('change', (e) => {
+                this.autoRotate = e.target.checked;
+            });
+        }
 
         // Canvas Interaction (Camera Rotate or Target)
         this.renderer.canvas.addEventListener('mousemove', (e) => {
@@ -210,7 +233,30 @@ class UIManager {
     animate() {
         if (!this.isRunning) return;
 
-        this.simulation.run();
+        // Speed Control Logic
+        // If speed > 1, run multiple steps per frame
+        // If speed < 1, skip frames
+
+        let steps = 1;
+
+        if (this.speed >= 1) {
+            steps = Math.round(this.speed);
+        } else {
+            // e.g. speed 0.1 -> run once every 10 frames
+            // speed 0.5 -> run once every 2 frames
+            if (Math.random() > this.speed) {
+                steps = 0;
+            }
+        }
+
+        for (let i = 0; i < steps; i++) {
+            this.simulation.run();
+        }
+
+        // Auto Rotate
+        if (this.autoRotate && this.simulation.swarm.currentScenario !== 'target') {
+            this.renderer.camera.angle += 0.005;
+        }
 
         // Draw
         this.renderer.clear();
