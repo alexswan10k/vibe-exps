@@ -91,6 +91,14 @@ class UIManager {
         sPreset.addEventListener('change', (e) => {
             if (this.simulation.activeManager && this.simulation.activeManager.loadPreset) {
                 this.simulation.activeManager.loadPreset(e.target.value);
+
+                // Sync UI if String Evo
+                // Check if we have the target phrase property exposed or just assume
+                if (this.simulation.activeManager.targetPhrase) {
+                    const el = document.getElementById('inputTargetPhrase');
+                    if (el) el.value = this.simulation.activeManager.targetPhrase;
+                }
+
                 this.reset();
             }
         });

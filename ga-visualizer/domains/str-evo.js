@@ -26,6 +26,13 @@ class StringEvolutionManager {
         this.init();
     }
 
+    loadPreset(type) {
+        if (type === 'shakespeare') this.setTargetPhrase("TO BE OR NOT TO BE THAT IS THE QUESTION");
+        else if (type === 'hello') this.setTargetPhrase("HELLO WORLD WELCOME TO GENETIC ALGORITHMS");
+        else if (type === 'alphabet') this.setTargetPhrase("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG");
+        else if (type === 'data') this.setTargetPhrase("SURVIVAL OF THE FITTEST IS THE LAW OF NATURE");
+    }
+
     setTargetPhrase(phrase) {
         this.targetPhrase = phrase.toUpperCase();
         this.init();
