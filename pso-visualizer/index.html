@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Genetic Algorithm | Smart Rockets</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #151520;
+            --accent: #00ff9d;
+            /* Green for Life/Evolution */
+            --accent-glow: rgba(0, 255, 157, 0.3);
+            --secondary: #00b8ff;
+            --secondary-glow: rgba(0, 184, 255, 0.3);
+            --text: #e0e0ff;
+            --text-muted: #8888aa;
+            --glass: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-weight: 600;
+            font-size: 1.5rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(45deg, var(--accent), var(--secondary));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .main-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr 350px;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar / Controls */
+        .sidebar {
+            background: var(--surface);
+            padding: 1.5rem;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .panel-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .control-group {
+            background: var(--glass);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        label {
+            display: block;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-muted);
+        }
+
+        select,
+        input[type="range"],
+        input[type="number"] {
+            width: 100%;
+            background: #222;
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 0.5rem;
+            border-radius: 6px;
+            outline: none;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 0.8rem;
+            min-height: 48px;
+            border-radius: 12px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            font-family: inherit;
+        }
+
+        #btnStart {
+            background: var(--accent);
+            color: #000;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        #btnStart:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px var(--accent-glow);
+        }
+
+        #btnReset {
+            background: var(--glass);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        #btnReset:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Canvas Area */
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            position: relative;
+        }
+
+        #mainCanvas {
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            background: #000;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            touch-action: none;
+        }
+
+        /* Stats Panel */
+        .stats-panel {
+            background: var(--surface);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-card {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.8rem;
+            color: var(--secondary);
+            text-shadow: 0 0 10px var(--secondary-glow);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            margin-left: 0.5rem;
+        }
+
+        input[type="range"] {
+            accent-color: var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>EVOLUTION LAB <span style="font-weight: 300; font-size: 0.8rem; color: var(--text-muted)">// GENETIC
+                ALGORITHM</span></h1>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="badge" id="badge-mode">Smart Rockets</span>
+            <span class="badge">Standalone</span>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        <aside class="sidebar" id="controlsSidebar">
+            <div class="panel-section">
+                <span class="section-title">Scenario</span>
+                <select id="selectScenario">
+                    <option value="target">Moving Target (2D)</option>
+                    <option value="sphere">Sphere (Bowl)</option>
+                    <option value="rastrigin">Rastrigin (Waves)</option>
+                    <option value="ackley">Ackley (Spikes)</option>
+                </select>
+            </div>
+
+            <div class="panel-section">
+                <span class="section-title">PSO Parameters</span>
+                <div class="control-group">
+                    <label>INERTIA (w): <span id="valInertia">0.9</span></label>
+                    <input type="range" id="sliderInertia" min="0" max="1.5" step="0.01" value="0.9">
+                </div>
+                <div class="control-group">
+                    <label>COGNITIVE (c1): <span id="valCognitive">1.5</span></label>
+                    <input type="range" id="sliderCognitive" min="0" max="4" step="0.1" value="1.5">
+                </div>
+                <div class="control-group">
+                    <label>SOCIAL (c2): <span id="valSocial">1.5</span></label>
+                    <input type="range" id="sliderSocial" min="0" max="4" step="0.1" value="1.5">
+                </div>
+                <div class="control-group">
+                    <label>POPULATION: <span id="valPopSize">50</span></label>
+                    <input type="range" id="sliderPopSize" min="10" max="200" step="1" value="50">
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <span class="section-title">Simulation Control</span>
+                <button id="btnStart">START SWARM</button>
+                <button id="btnReset">RESET PARTICLES</button>
+            </div>
+
+        </aside>
+
+        <main class="canvas-container">
+            <canvas id="mainCanvas" width="800" height="600"></canvas>
+        </main>
+
+        <aside class="stats-panel" id="statsSidebar">
+            <div class="stat-card">
+                <div class="stat-value" id="valIteration">0</div>
+                <div class="stat-label">ITERATION</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="valBestFitness">0.00</div>
+                <div class="stat-label">GLOBAL BEST ERROR</div>
+            </div>
+
+            <div class="stat-card" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="stat-label" style="margin-bottom: 1rem;">CONVERGENCE</div>
+                <canvas id="fitnessCanvas" width="300" height="150"
+                    style="width: 100%; height: 150px; background: rgba(0,0,0,0.2); border-radius: 8px;"></canvas>
+            </div>
+
+            <div style="padding: 1.5rem; color: var(--text-muted); font-size: 0.85rem; line-height: 1.6;">
+                <p><b>Goal:</b> Find the lowest point (min error).</p>
+                <p><b>Controls:</b> Drag to rotate camera (3D modes).</p>
+            </div>
+        </aside>
+    </div>
+
+    <script src="pso.js"></script>
+    <script src="simulation.js"></script>
+    <script src="renderer.js"></script>
+    <script src="ui-manager.js"></script>
+</body>
+
+</html>
