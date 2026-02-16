@@ -71,8 +71,22 @@ class UIManager {
         this.updateStats();
 
         // Initial Draw
+        // Set initial camera based on default scenario (target)
+        this.setCameraForScenario(this.simulation.swarm.currentScenario);
         this.renderer.clear();
         this.renderer.drawSwarm(this.simulation.swarm);
+    }
+
+    setCameraForScenario(scenario) {
+        if (scenario === 'target') {
+            this.renderer.camera.angle = 0;
+            this.renderer.camera.pitch = 0;
+            this.renderer.camera.zoom = 1.0;
+        } else {
+            this.renderer.camera.angle = Math.PI / 4;
+            this.renderer.camera.pitch = Math.PI / 3;
+            this.renderer.camera.zoom = 0.8; // Zoom out a bit for 3D
+        }
     }
 
     bindControls() {
@@ -95,16 +109,19 @@ class UIManager {
         const sScenario = document.getElementById('selectScenario');
         if (sScenario) {
             sScenario.addEventListener('change', (e) => {
-                this.simulation.swarm.setScenario(e.target.value);
+                const scenario = e.target.value;
+                this.simulation.swarm.setScenario(scenario);
+                this.setCameraForScenario(scenario);
                 this.reset();
             });
         }
 
         // Sliders
-        const bindSlider = (id, paramKey, valId) => {
+        // Sliders
+        const bindSlider = (id, paramKey, valId, eventType = 'input') => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.addEventListener('input', (e) => {
+            el.addEventListener(eventType, (e) => {
                 const val = parseFloat(e.target.value);
                 document.getElementById(valId).textContent = val;
 
@@ -117,14 +134,15 @@ class UIManager {
         bindSlider('sliderInertia', 'inertia', 'valInertia');
         bindSlider('sliderCognitive', 'cognitive', 'valCognitive');
         bindSlider('sliderSocial', 'social', 'valSocial');
-        bindSlider('sliderPopSize', 'population', 'valPopSize');
+        // Use 'change' for population to avoid rapid restarts during drag
+        bindSlider('sliderPopSize', 'population', 'valPopSize', 'change');
 
         // Canvas Interaction (Camera Rotate or Target)
         this.renderer.canvas.addEventListener('mousemove', (e) => {
             if (e.buttons === 1) { // Left click drag
                 if (this.simulation.swarm.currentScenario === 'target') {
-                    // For target mode, keep moving target logic? Or switch to 3D cam?
-                    // Let's use click for target, drag for camera?
+                    // In 2D mode, maybe drag to move target?
+                    // Or just ignore drag for visual stability
                 } else {
                     // Rotate camera
                     this.renderer.camera.angle += e.movementX * 0.01;
@@ -141,16 +159,15 @@ class UIManager {
         this.renderer.canvas.addEventListener('mousedown', (e) => {
             if (this.simulation.swarm.currentScenario === 'target') {
                 const rect = this.renderer.canvas.getBoundingClientRect();
-                // We need to unproject to get world coords... tricky without full 3D inverse
-                // But for 'target' mode we assume 2D flat view? 
-                // Let's assume target mode is flat for now, or just use mouse pos if we reset camera to top-down?
-                // Or simplified: Just set target at mouse screen pos (approx)
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
 
-                // For now, let's keep target mode as "2D" but rendered in 3D?
-                // Actually, let's just allow target setting on click if in 2D mode, 
-                // but this renderer is 3D default.
-                // Let's skip mouse target setting for now to avoid math complexity of raycasting.
-                // Or implementing a simple unproject for z=0 plane.
+                this.simulation.setTarget(x, y);
+
+                if (!this.isRunning) {
+                    this.renderer.clear();
+                    this.renderer.drawSwarm(this.simulation.swarm);
+                }
             }
         });
     }
