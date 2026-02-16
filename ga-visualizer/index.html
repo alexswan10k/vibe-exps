@@ -242,6 +242,20 @@
                 </div>
             </div>
 
+            <div class="panel-section" id="controls-model" style="display:none;">
+                <span class="section-title">Model Inspection</span>
+                <div class="control-group" style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+                    <label>CURRENT FORCE</label>
+                    <canvas id="vectorCanvas" width="100" height="100"
+                        style="background:#000; border-radius:8px; border:1px solid var(--border); box-shadow: 0 0 10px rgba(0,0,0,0.5);"></canvas>
+                </div>
+                <div class="control-group">
+                    <label>DNA SEQUENCE</label>
+                    <canvas id="dnaCanvas" width="280" height="40"
+                        style="background:#000; border:1px solid var(--border); width:100%; border-radius:4px;"></canvas>
+                </div>
+            </div>
+
             <div class="panel-section" id="controls-rockets">
                 <span class="section-title">Simulation Control</span>
                 <button id="btnStart">START EVOLUTION</button>

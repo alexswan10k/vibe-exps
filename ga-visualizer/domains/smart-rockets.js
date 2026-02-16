@@ -89,6 +89,7 @@ class SmartRocketsManager {
         this.obstacles = [];
         this.rockets = [];
         this.matingPool = [];
+        this.bestDNA = null; // Store best DNA of previous generation
 
         this.loadPreset('simple');
         this.init();
@@ -144,7 +145,10 @@ class SmartRocketsManager {
 
         for (let rocket of this.rockets) {
             rocket.calcFitness(this.target);
-            if (rocket.fitness > maxFit) maxFit = rocket.fitness;
+            if (rocket.fitness > maxFit) {
+                maxFit = rocket.fitness;
+                this.bestDNA = rocket.dna; // Save best
+            }
             totalFit += rocket.fitness;
         }
 
@@ -195,9 +199,46 @@ class SmartRocketsManager {
         this.rockets = newRockets;
     }
 
-    draw(renderer) {
+    getBestPath() {
+        if (!this.bestDNA) return [];
+
+        // Simulate a rocket with bestDNA
+        const simRocket = new Rocket(this.bestDNA, this.startPos.x, this.startPos.y);
+        const path = [{ x: simRocket.pos.x, y: simRocket.pos.y }];
+
+        for (let i = 0; i < this.lifespan; i++) {
+            simRocket.update(i, this.obstacles, this.target);
+            if (simRocket.completed || simRocket.crashed) break;
+            path.push({ x: simRocket.pos.x, y: simRocket.pos.y });
+        }
+        return path;
+    }
+
+    draw(renderer, count) {
         renderer.drawObstacles(this.obstacles);
         renderer.drawTarget(this.target);
+
+        // Draw best trajectory
+        if (this.bestDNA) {
+            renderer.drawTraj(this.getBestPath());
+        }
+
+        // Draw Model Inspection (Always, with fallback)
+        const vectorCanvas = document.getElementById('vectorCanvas');
+        const dnaCanvas = document.getElementById('dnaCanvas');
+
+        // Use bestDNA if available, otherwise use the first rocket's DNA (live candidate)
+        const displayDNA = this.bestDNA || (this.rockets.length > 0 ? this.rockets[0].dna : null);
+
+        if (displayDNA) {
+            // Current gene/force
+            const geneIdx = (count !== undefined && count < displayDNA.genes.length) ? count : 0;
+            const currentForce = displayDNA.genes[geneIdx];
+
+            renderer.drawVectorResult(vectorCanvas, currentForce);
+            renderer.drawDNATimeline(dnaCanvas, displayDNA, geneIdx, this.lifespan);
+        }
+
         renderer.drawPopulation({ rockets: this.rockets });
     }
 }

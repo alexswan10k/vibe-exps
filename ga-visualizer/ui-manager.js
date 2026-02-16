@@ -135,12 +135,14 @@ class UIManager {
 
         const cTarget = document.getElementById('control-target-phrase');
         const cCities = document.getElementById('control-city-count');
+        const cModel = document.getElementById('controls-model'); // Model Inspection
 
         // Reset visibility
         sPresetDiv.style.display = 'block'; // Always show preset now
         sLifespan.style.display = 'none';
         cTarget.style.display = 'none';
         cCities.style.display = 'none';
+        if (cModel) cModel.style.display = 'none';
 
         // Populate Presets
         const sPreset = document.getElementById('selectPreset');
@@ -155,6 +157,7 @@ class UIManager {
 
         if (domain === 'smart-rockets') {
             sLifespan.style.display = 'block';
+            if (cModel) cModel.style.display = 'block'; // Show Model Inspection
             addOption("simple", "Simple Barrier");
             addOption("split", "Split Path");
             addOption("maze", "Mini Maze");
@@ -209,7 +212,7 @@ class UIManager {
 
         this.renderer.clear();
         if (this.simulation.activeManager.draw) {
-            this.simulation.activeManager.draw(this.renderer);
+            this.simulation.activeManager.draw(this.renderer, this.simulation.count);
         }
 
         document.getElementById('btnStart').textContent = "START EVOLUTION";
@@ -226,7 +229,7 @@ class UIManager {
         // Draw
         this.renderer.clear();
         if (this.simulation.activeManager.draw) {
-            this.simulation.activeManager.draw(this.renderer);
+            this.simulation.activeManager.draw(this.renderer, this.simulation.count);
         }
         const lifespan = this.simulation.activeManager.lifespan || 1;
         this.renderer.drawStats(this.simulation.generation, this.simulation.count, lifespan);

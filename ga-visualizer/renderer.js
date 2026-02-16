@@ -45,6 +45,99 @@ class Renderer {
         }
     }
 
+    drawTraj(points) {
+        if (!points || points.length < 2) return;
+
+        this.ctx.beginPath();
+        this.ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            this.ctx.lineTo(points[i].x, points[i].y);
+        }
+
+        this.ctx.strokeStyle = 'rgba(0, 255, 157, 0.5)'; // Accent with transparency
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([5, 5]); // Dashed line
+        this.ctx.stroke();
+        this.ctx.setLineDash([]); // Reset
+        this.ctx.setLineDash([]); // Reset
+    }
+
+    drawVectorResult(canvas, vector) {
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+        const cx = w / 2;
+        const cy = h / 2;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // Grid
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+        ctx.moveTo(0, cy); ctx.lineTo(w, cy);
+        ctx.stroke();
+
+        if (!vector) return;
+
+        // Draw Vector
+        const scale = 200; // Force is small (0.2), so scale up
+        const vx = vector.x * scale;
+        const vy = vector.y * scale;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + vx, cy + vy);
+        ctx.strokeStyle = '#00ff9d';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Arrow head
+        const angle = Math.atan2(vy, vx);
+        const headLen = 8;
+        ctx.beginPath();
+        ctx.moveTo(cx + vx, cy + vy);
+        ctx.lineTo(cx + vx - headLen * Math.cos(angle - Math.PI / 6), cy + vy - headLen * Math.sin(angle - Math.PI / 6));
+        ctx.lineTo(cx + vx - headLen * Math.cos(angle + Math.PI / 6), cy + vy - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(cx + vx, cy + vy);
+        ctx.fillStyle = '#00ff9d';
+        ctx.fill();
+    }
+
+    drawDNATimeline(canvas, dna, currentFrame, totalFrames) {
+        if (!canvas || !dna) return;
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // Only redraw background if needed, but for simplicity clear all
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, w, h);
+
+        const geneW = w / totalFrames;
+
+        // Draw genes as vertical bars based on angle/magnitude?
+        // Let's just draw magnitude for now, or angle as hue?
+        // Hue is better for direction.
+
+        for (let i = 0; i < dna.genes.length; i++) {
+            // Optimize: skip if too small pixels, but canvas handles it okay
+            const vec = dna.genes[i];
+            const angle = Math.atan2(vec.y, vec.x) + Math.PI; // 0..2PI
+            const hue = (angle / (Math.PI * 2)) * 360;
+
+            ctx.fillStyle = `hsl(${hue}, 80%, 50%)`;
+            ctx.fillRect(i * geneW, 0, Math.ceil(geneW), h);
+        }
+
+        // Draw progress cursor
+        const cx = (currentFrame / totalFrames) * w;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - 1, 0, 2, h);
+    }
+
     drawPopulation(population) {
         for (let rocket of population.rockets) {
             this.drawRocket(rocket);
