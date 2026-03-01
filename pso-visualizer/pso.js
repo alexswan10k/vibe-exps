@@ -126,7 +126,9 @@ class Particle {
         this.bestFitness = Infinity; // Minimize
 
         this.history = [];
-        this.color = `hsl(${Math.random() * 60 + 180}, 100%, 50%)`;
+        // Palette from Cyan (180) to Purple (280)
+        const hue = 180 + Math.random() * 100;
+        this.color = `hsl(${hue}, 100%, 65%)`;
     }
 
     update(inertia, cognitive, social, globalBestPos) {
@@ -150,7 +152,7 @@ class Particle {
         this.acceleration.mult(0);
 
         this.history.push(this.position.copy());
-        if (this.history.length > 20) {
+        if (this.history.length > 35) { // Increased trail length
             this.history.shift();
         }
     }
@@ -248,5 +250,21 @@ class Swarm {
             this.globalBestFitness = Infinity;
             for (let p of this.particles) p.bestFitness = Infinity;
         }
+    }
+
+    repulse(x, y) {
+        const center = new Vector(x, y);
+        for (let p of this.particles) {
+            const diff = Vector.sub(p.position, center);
+            const dist = diff.mag();
+            if (dist < 200 && dist > 0.1) {
+                diff.normalize();
+                diff.mult(400 / dist); // Inverse distance repulsion
+                p.velocity.add(diff);
+                // reset local bests so they explore new areas instead of snapping straight back immediately
+                p.bestFitness = Infinity;
+            }
+        }
+        this.globalBestFitness = Infinity;
     }
 }

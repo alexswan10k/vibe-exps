@@ -22,8 +22,6 @@ class Renderer {
 
     clear() {
         this.ctx.clearRect(0, 0, this.width, this.height);
-        this.ctx.fillStyle = '#0a0a0f'; // BG color
-        this.ctx.fillRect(0, 0, this.width, this.height);
     }
 
     // Convert world (x,y,z) to screen (sx, sy)
@@ -68,39 +66,45 @@ class Renderer {
 
             // Pulse effect for target
             const time = Date.now() * 0.005;
-            const radius = 10 + Math.sin(time) * 2;
+            const radius = 12 + Math.sin(time) * 3;
 
-            this.ctx.shadowBlur = 15;
-            this.ctx.shadowColor = '#ff0055';
-            this.drawCircle(pt.x, pt.y, radius, '#ff0055');
+            this.ctx.shadowBlur = 20;
+            this.ctx.shadowColor = '#ff3366';
+            this.drawCircle(pt.x, pt.y, radius, '#ff3366');
             this.ctx.shadowBlur = 0;
+            // Target core
+            this.drawCircle(pt.x, pt.y, 4, '#ffffff');
         }
 
         // Draw Particles
-        this.ctx.globalCompositeOperation = 'lighter';
+        this.ctx.globalCompositeOperation = 'screen';
 
         for (let p of swarm.particles) {
             let z = 0;
-            // If we are in a 3D scenario, use particle's Z (fitness) for height
             if (swarm.currentScenario !== 'target') {
-                // Re-calculate z in case it's not stored or needs scaling
-                // p.position.z should be set by evaluate
                 z = p.position.z * zScale;
             }
 
             const proj = this.project(p.position.x, p.position.y, z);
 
+            // Determine opacity/size based on fitness (relative)
+            // if we have global best, we could scale. simpler: rely on predefined color blending.
+            // Let's make particles slightly larger if they are close to the best
+            const isBest = (p.bestFitness === swarm.globalBestFitness);
+            const radius = isBest ? 6 : 3.5;
+            const glow = isBest ? 25 : 12;
+
             // Draw Trail
             if (p.history.length > 1) {
                 this.ctx.beginPath();
-                this.ctx.lineWidth = 1;
+                this.ctx.lineWidth = isBest ? 2 : 1.5;
                 for (let i = 0; i < p.history.length; i++) {
                     let h = p.history[i];
                     let hz = (swarm.currentScenario !== 'target') ? h.z * zScale : 0;
                     let hp = this.project(h.x, h.y, hz);
 
                     // Gradient opacity for trail
-                    const opacity = (i / p.history.length) * 0.5;
+                    const opacity = Math.pow(i / p.history.length, 2) * 0.8;
                     this.ctx.strokeStyle = p.color;
                     this.ctx.globalAlpha = opacity;
 
@@ -112,15 +116,20 @@ class Renderer {
             }
 
             // Draw Particle with Glow
-            this.ctx.shadowBlur = 10;
+            this.ctx.shadowBlur = glow;
             this.ctx.shadowColor = p.color;
 
             this.ctx.beginPath();
-            this.ctx.arc(proj.x, proj.y, 4, 0, Math.PI * 2);
-            this.ctx.fillStyle = p.color;
+            this.ctx.arc(proj.x, proj.y, radius, 0, Math.PI * 2);
+            this.ctx.fillStyle = isBest ? '#ffffff' : p.color;
             this.ctx.fill();
 
+            // Inner core
             this.ctx.shadowBlur = 0;
+            this.ctx.fillStyle = '#ffffff';
+            this.ctx.beginPath();
+            this.ctx.arc(proj.x, proj.y, radius * 0.4, 0, Math.PI * 2);
+            this.ctx.fill();
         }
 
         this.ctx.globalCompositeOperation = 'source-over';
@@ -131,24 +140,21 @@ class Renderer {
 
         this.ctx.lineWidth = 1;
 
-        const steps = 30; // Increased resolution
+        const steps = 35; // slightly higher resolution
         const stepX = width / steps;
         const stepY = height / steps;
         const zScale = 50;
 
-        // Helper to map Value to Color
-        const getColor = (val) => {
-            // Normalize somewhat? 
-            // Sphere is 0-8. Rastrigin 0-80. Ackley 0-20.
-            // Let's just map based on generic 'height' visual
-            // Low (good) = Green/Blue, High (bad) = Red/Purple
-            // But usually we want cool wireframes.
-
-            // Let's use a simple gradient based on Z
-            // Z is typically positive for these minimization problems
-            let h = 180 + (val * 10);
-            return `hsla(${h % 360}, 70%, 50%, 0.2)`;
+        // Terrain color function based on scenario
+        const getColor = (val, maxZ) => {
+            // we map val to a smooth cool palette (purple -> cyan -> green)
+            // assume val is generally 0 to maxZ approx
+            const t = Math.max(0, Math.min(1, val / maxZ));
+            const hue = 280 - (t * 140); // 280 (purple) to 140 (green)
+            return `hsla(${hue}, 80%, 60%, 0.25)`;
         };
+
+        let maxZEstimate = scenario === 'rastrigin' ? 80 : (scenario === 'ackley' ? 22 : 10);
 
         // Draw Grid Lines X
         for (let i = 0; i <= steps; i++) {
@@ -157,22 +163,24 @@ class Renderer {
                 const x = i * stepX;
                 const y = j * stepY;
 
-                // Calculate Z
                 const nx = (x / width) * 4 - 2;
                 const ny = (y / height) * 4 - 2;
                 let z = Scenarios[scenario](nx, ny);
 
-                const col = getColor(z);
-                this.ctx.strokeStyle = col; // Dynamic color per line segment? simple strokeStyle won't work well for whole path
+                const col = getColor(z, maxZEstimate);
 
                 z *= zScale;
                 const p = this.project(x, y, z);
 
-                if (j === 0) this.ctx.moveTo(p.x, p.y);
-                else this.ctx.lineTo(p.x, p.y);
+                if (j === 0) {
+                    this.ctx.moveTo(p.x, p.y);
+                    this.ctx.strokeStyle = col; // start with first color
+                }
+                else {
+                    this.ctx.lineTo(p.x, p.y);
+                }
             }
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; // Fallback to uniform for performance/cleanliness, or use gradient logic
-            // For true gradient lines we'd need to stroke each segment. Let's stick to uniform but cleaner.
+            // To do true gradient lines per segment is slow, so we just use the average or let it be uniform per line
             this.ctx.stroke();
         }
 
@@ -185,9 +193,14 @@ class Renderer {
 
                 const nx = (x / width) * 4 - 2;
                 const ny = (y / height) * 4 - 2;
-                let z = Scenarios[scenario](nx, ny) * zScale;
+                let z = Scenarios[scenario](nx, ny);
 
+                const col = getColor(z, maxZEstimate);
+                if (i === 0) this.ctx.strokeStyle = col;
+
+                z *= zScale;
                 const p = this.project(x, y, z);
+
                 if (i === 0) this.ctx.moveTo(p.x, p.y);
                 else this.ctx.lineTo(p.x, p.y);
             }

@@ -194,6 +194,24 @@ class UIManager {
             }
         });
 
+        this.renderer.canvas.addEventListener('dblclick', (e) => {
+            const rect = this.renderer.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // Optional: map screen coords to world coords if in 3D, 
+            // but for simplicity we'll just use screen coords as approximation or just for target mode.
+            // Actually repulse requires world space, but in target mode world = screen.
+            // In 3D we'd need unproject, so let's just do it simple for now (assumes near center)
+            if (this.simulation.swarm.currentScenario === 'target') {
+                this.simulation.swarm.repulse(x, y);
+            }
+            // in 3D scenarios just repulsing from center is cool enough
+            else {
+                this.simulation.swarm.repulse(this.renderer.width / 2, this.renderer.height / 2);
+            }
+        });
+
         // Mobile Redesign: Tab Bar Navigation
         const tabs = document.querySelectorAll('.tab-item');
         const controls = document.getElementById('controlsSidebar');

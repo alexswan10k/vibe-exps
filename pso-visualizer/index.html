@@ -30,7 +30,7 @@
 
         body {
             font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
+            background: radial-gradient(circle at 50% -20%, #1a1a3a 0%, #0a0a0f 70%);
             color: var(--text);
             overflow: hidden;
             height: 100vh;
@@ -67,7 +67,9 @@
 
         /* Sidebar / Controls */
         .sidebar {
-            background: var(--surface);
+            background: rgba(21, 21, 32, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             padding: 1.5rem;
             border-right: 1px solid var(--border);
             display: flex;
@@ -159,16 +161,20 @@
         }
 
         #mainCanvas {
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-            background: #000;
-            border: 1px solid var(--border);
-            border-radius: 12px;
+            box-shadow: 0 0 60px rgba(0, 255, 157, 0.05);
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             touch-action: none;
         }
 
         /* Stats Panel */
         .stats-panel {
-            background: var(--surface);
+            background: rgba(21, 21, 32, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-left: 1px solid var(--border);
             display: flex;
             flex-direction: column;
