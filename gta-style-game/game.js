@@ -61,9 +61,29 @@ function init() {
     world = World.loadFromEmbedded();
     console.log(world.toString()); // Display the world map in console
 
-    // Create player
+    // Find a valid spawn point for player (nearest road to center)
     const worldSize = world.getWorldSize();
-    player = new Player(worldSize.width / 2, worldSize.height / 2, worldSize);
+    let centerX = worldSize.width / 2;
+    let centerY = worldSize.height / 2;
+    let spawnX = centerX;
+    let spawnY = centerY;
+
+    let allValidRoads = [...world.roads, ...world.horizontalRoads, ...world.verticalRoads, ...world.crossroads];
+    if (allValidRoads.length > 0) {
+        let bestRoad = allValidRoads[0];
+        let minDist = Infinity;
+        for (let r of allValidRoads) {
+            let dist = Math.pow(r.x + r.width / 2 - centerX, 2) + Math.pow(r.y + r.height / 2 - centerY, 2);
+            if (dist < minDist) {
+                minDist = dist;
+                bestRoad = r;
+            }
+        }
+        spawnX = bestRoad.x + bestRoad.width / 2;
+        spawnY = bestRoad.y + bestRoad.height / 2;
+    }
+
+    player = new Player(spawnX, spawnY, worldSize);
 
     // Create cars
     createCars();
@@ -109,21 +129,26 @@ function createCars() {
     ];
 
     // Create AI cars
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 45; i++) {
         let road = allRoads[Math.floor(Math.random() * allRoads.length)];
         let x, y, angle;
 
         // Determine if it's a horizontal or vertical road and position accordingly
-        if (road.width > road.height) {
+        if (road.type === 'horizontal' || road.width > road.height) {
             // Horizontal road
             x = road.x + Math.random() * road.width;
             y = road.y + road.height / 2 - 12;
             angle = Math.random() < 0.5 ? 0 : Math.PI; // Left or right
-        } else {
+        } else if (road.type === 'vertical' || road.height > road.width) {
             // Vertical road
             x = road.x + road.width / 2 - 22;
             y = road.y + Math.random() * road.height;
             angle = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2; // Up or down
+        } else {
+            // Crossroad
+            x = road.x + road.width / 2;
+            y = road.y + road.height / 2;
+            angle = 0;
         }
 
         cars.push(new Car(

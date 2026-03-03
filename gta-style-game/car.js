@@ -141,89 +141,108 @@ class Car {
     updateAICar(buildings, cars, roads, trafficLights, worldSize) {
         // Track position history for stuck detection
         this.positionHistory.push({ x: this.x, y: this.y });
-        if (this.positionHistory.length > 10) {
+        if (this.positionHistory.length > 20) {
             this.positionHistory.shift();
-        }
-
-        // Check if stuck (same position for too long)
-        if (this.positionHistory.length === 10) {
             const firstPos = this.positionHistory[0];
-            const lastPos = this.positionHistory[9];
             const distanceMoved = Math.sqrt((this.x - firstPos.x) ** 2 + (this.y - firstPos.y) ** 2);
-            if (distanceMoved < 5) {
+            if (distanceMoved < 10) {
                 this.stuckTimer++;
-                if (this.stuckTimer > 30) { // Stuck for 30 frames
+                if (this.stuckTimer > 30) {
                     this.handleStuckSituation(roads);
+                    return; // Skip standard update to allow unstucking
                 }
             } else {
                 this.stuckTimer = 0;
             }
         }
 
-        // Set destination if we don't have one
-        if (!this.destination) {
-            this.setNewDestination(roads, worldSize);
-        }
-
-        // Check if we've reached our destination
-        if (this.destination) {
-            const distanceToDest = Math.sqrt(
-                (this.x - this.destination.x) ** 2 +
-                (this.y - this.destination.y) ** 2
-            );
-            if (distanceToDest < 50) {
-                this.destination = null; // Find new destination
-            }
-        }
-
-        // Get current road and position
         let onRoad = this.isOnRoad(roads);
         let currentRoad = this.getCurrentRoad(roads);
 
-        if (onRoad && currentRoad) {
-            // On road - follow road and handle intersections
-            let atIntersection = this.isAtIntersection(currentRoad);
+        // Sensor logic (Obstacle Avoidance)
+        let hasObstacleAhead = this.detectObstacleAhead(buildings, cars);
 
-            if (atIntersection && !this.lastIntersection) {
-                // At intersection - choose direction towards destination
-                this.lastIntersection = { x: Math.floor(this.x / 300) * 300, y: Math.floor(this.y / 300) * 300 };
-                this.targetDirection = this.chooseSmartDirection(currentRoad, roads);
-            } else if (!atIntersection) {
-                this.lastIntersection = null;
+        let targetAccel = this.acceleration * 0.1;
+        let maxCruise = this.maxSpeed * 0.6; // AI drives a bit slower usually
+
+        if (this.isPolice && !this.exploded && typeof player !== 'undefined') {
+            // Police AI: aggressively pursue player
+            maxCruise = this.maxSpeed;
+            targetAccel = this.acceleration * 0.4;
+
+            let targetX = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+            let targetY = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+
+            // Aim slightly ahead of player if they are moving
+            if (player.inCar && player.car && Math.abs(player.car.speed) > 2) {
+                targetX += player.car.vx * 15;
+                targetY += player.car.vy * 15;
             }
 
-            // Check traffic lights
-            if (atIntersection) {
-                let light = trafficLights.find(l => Math.abs(l.x - (this.x + this.width / 2)) < 100 && Math.abs(l.y - (this.y + this.height / 2)) < 100);
-                if (light && light.state === 'red') {
-                    this.speed *= 0.85; // Gradual slowdown
-                } else if (light && light.state === 'green') {
-                    this.speed = Math.min(this.speed + this.acceleration * 0.2, this.maxSpeed * 0.8);
-                }
+            let dx = targetX - (this.x + this.width / 2);
+            let dy = targetY - (this.y + this.height / 2);
+            this.targetDirection = Math.atan2(dy, dx);
+
+            if (hasObstacleAhead) {
+                this.speed *= 0.85; // Brake, but police are aggressive
             } else {
-                // Normal road driving - stick to left side of road
-                this.stickToLeftSide(currentRoad);
-                this.speed = Math.min(this.speed + this.acceleration * 0.12, this.maxSpeed * 0.8);
-            }
-
-            // Steer towards target direction
-            let angleDiff = this.targetDirection - this.angle;
-            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-
-            if (Math.abs(angleDiff) > 0.03) {
-                this.angle += Math.sign(angleDiff) * this.turnSpeed * Math.min(this.speed / this.maxSpeed, 1);
+                this.speed = Math.min(this.speed + targetAccel, maxCruise);
             }
         } else {
-            // Not on road - navigate back to road system
-            this.navigateToNearestRoad(roads);
+            // Standard AI Logic
+            if (hasObstacleAhead) {
+                this.speed *= 0.8; // Brake for obstacle
+            } else {
+                this.speed = Math.min(this.speed + targetAccel, maxCruise);
+            }
+
+            if (onRoad && currentRoad) {
+                let atIntersection = this.isAtIntersection(currentRoad, roads);
+
+                if (atIntersection) {
+                    // Check traffic lights
+                    let light = trafficLights.find(l => Math.abs(l.x - (this.x + this.width / 2)) < 150 && Math.abs(l.y - (this.y + this.height / 2)) < 150);
+                    if (light && light.state === 'red') {
+                        // Very basic check to ensure light is generally in front of us
+                        let dx = light.x - this.x;
+                        let dy = light.y - this.y;
+                        let angleToLight = Math.atan2(dy, dx);
+                        let angleDiff = Math.abs(Math.atan2(Math.sin(this.angle - angleToLight), Math.cos(this.angle - angleToLight)));
+                        if (angleDiff < Math.PI / 3) {
+                            this.speed *= 0.7; // Brake for red light
+                        }
+                    }
+
+                    if (!this.lastIntersection) {
+                        this.lastIntersection = { x: Math.floor(this.x / 300) * 300, y: Math.floor(this.y / 300) * 300 };
+                        // Pick random valid direction
+                        this.targetDirection = this.chooseSmartDirection(currentRoad);
+                    }
+                } else {
+                    this.lastIntersection = null;
+                    this.stickToRightSide(currentRoad);
+                }
+            } else {
+                this.navigateToNearestRoad(roads);
+            }
         }
 
-        // Move car
-        let newX = this.x + Math.cos(this.angle) * this.speed;
-        let newY = this.y + Math.sin(this.angle) * this.speed;
+        // Steer towards target direction
+        if (Math.abs(this.speed) > 0.5) {
+            let angleDiff = Math.atan2(Math.sin(this.targetDirection - this.angle), Math.cos(this.targetDirection - this.angle));
+            if (Math.abs(angleDiff) > 0.05) {
+                this.angle += Math.sign(angleDiff) * this.turnSpeed * Math.min(this.speed / maxCruise, 1.0);
+            }
+        }
 
-        // Check collisions
+        // Apply velocity vectors
+        this.vx = Math.cos(this.angle) * this.speed;
+        this.vy = Math.sin(this.angle) * this.speed;
+
+        let newX = this.x + this.vx;
+        let newY = this.y + this.vy;
+
+        // Final physical collisions
         if (!this.isCollidingWithBuildings(newX, newY, buildings) &&
             !this.isCollidingWithCars(newX, newY, cars)) {
             this.x = newX;
@@ -232,109 +251,125 @@ class Car {
             this.handleSmartCollision(buildings, cars, roads);
         }
 
-        // Keep in world bounds with smart boundary handling
+        // Keep in world bounds
         if (this.x < 0 || this.x > worldSize.width - this.width ||
             this.y < 0 || this.y > worldSize.height - this.height) {
-            this.handleBoundaryCollision(roads);
+            this.handleBoundaryCollision(roads, worldSize); // pass worldSize properly here
         }
     }
 
-    stickToLeftSide(currentRoad) {
+    detectObstacleAhead(buildings, cars) {
+        let sensorDist = Math.max(this.speed * 12, 40); // Look ahead based on speed
+        let centerX = this.x + this.width / 2;
+        let centerY = this.y + this.height / 2;
+
+        let frontX = centerX + Math.cos(this.angle) * sensorDist;
+        let frontY = centerY + Math.sin(this.angle) * sensorDist;
+
+        let leftX = centerX + Math.cos(this.angle - 0.4) * sensorDist * 0.8;
+        let leftY = centerY + Math.sin(this.angle - 0.4) * sensorDist * 0.8;
+
+        let rightX = centerX + Math.cos(this.angle + 0.4) * sensorDist * 0.8;
+        let rightY = centerY + Math.sin(this.angle + 0.4) * sensorDist * 0.8;
+
+        let collisionFront = this.isPointColliding(frontX, frontY, buildings, cars);
+        let collisionLeft = this.isPointColliding(leftX, leftY, buildings, cars);
+        let collisionRight = this.isPointColliding(rightX, rightY, buildings, cars);
+
+        // Nudge steering slightly if hitting an obstacle as an evasive maneuver
+        if (collisionFront || collisionLeft || collisionRight) {
+            if (collisionLeft && !collisionRight) {
+                this.angle += 0.02;
+                this.targetDirection += 0.02;
+            } else if (collisionRight && !collisionLeft) {
+                this.angle -= 0.02;
+                this.targetDirection -= 0.02;
+            }
+        }
+
+        return collisionFront || collisionLeft || collisionRight;
+    }
+
+    isPointColliding(px, py, buildings, cars) {
+        for (let b of buildings) {
+            if (px > b.x && px < b.x + b.width && py > b.y && py < b.y + b.height) {
+                return true;
+            }
+        }
+        for (let car of cars) {
+            if (car === this) continue;
+            // Police ignore player's car as an "obstacle" so they can ram it
+            if (this.isPolice && car.isPlayerCar) continue;
+
+            if (px > car.x - 10 && px < car.x + car.width + 10 &&
+                py > car.y - 10 && py < car.y + car.height + 10) {
+
+                // Only treat as obstacle if we are generally moving towards it
+                let angleToCar = Math.atan2(car.y - this.y, car.x - this.x);
+                let angleDiff = Math.abs(Math.atan2(Math.sin(angleToCar - this.angle), Math.cos(angleToCar - this.angle)));
+                if (angleDiff < Math.PI / 2) return true;
+            }
+        }
+
+        if (typeof player !== 'undefined' && !player.inCar && !this.isPolice) {
+            if (px > player.x - 10 && px < player.x + player.width + 10 &&
+                py > player.y - 10 && py < player.y + player.height + 10) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    stickToRightSide(currentRoad) {
+        if (!currentRoad) return;
         const centerX = this.x + this.width / 2;
         const centerY = this.y + this.height / 2;
 
-        if (currentRoad.width > currentRoad.height) {
-            // Horizontal road - stick to left side (top of road)
-            const leftSideY = currentRoad.y + this.height / 2 + 5; // Left side of horizontal road
-            const distanceFromLeft = centerY - leftSideY;
+        let normAngle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
+        let isFacingEast = Math.abs(normAngle) < Math.PI / 4;
+        let isFacingWest = Math.abs(normAngle) > Math.PI * 0.75;
+        let isFacingSouth = Math.abs(normAngle - Math.PI / 2) < Math.PI / 4;
+        let isFacingNorth = Math.abs(normAngle + Math.PI / 2) < Math.PI / 4;
 
-            if (Math.abs(distanceFromLeft) > 3) {
-                // Steer towards left side
-                const steerDirection = distanceFromLeft > 0 ? -1 : 1;
-                this.angle += steerDirection * this.turnSpeed * 0.3;
+        if (currentRoad.type === 'horizontal' || currentRoad.width > currentRoad.height) {
+            // Horizontal
+            let targetY = currentRoad.y + currentRoad.height * 0.75; // Eastbound default
+            if (isFacingWest) targetY = currentRoad.y + currentRoad.height * 0.25;
+
+            const distY = centerY - targetY;
+            if (Math.abs(distY) > 5) {
+                const steer = distY > 0 ? -1 : 1;
+                this.angle += steer * this.turnSpeed * 0.2;
+            } else if (isFacingEast) {
+                this.targetDirection = 0;
+            } else if (isFacingWest) {
+                this.targetDirection = Math.PI;
             }
-        } else {
-            // Vertical road - stick to left side (left of road)
-            const leftSideX = currentRoad.x + this.width / 2 + 5; // Left side of vertical road
-            const distanceFromLeft = centerX - leftSideX;
+        } else if (currentRoad.type === 'vertical' || currentRoad.height > currentRoad.width) {
+            // Vertical
+            let targetX = currentRoad.x + currentRoad.width * 0.25; // Southbound default
+            if (isFacingNorth) targetX = currentRoad.x + currentRoad.width * 0.75;
 
-            if (Math.abs(distanceFromLeft) > 3) {
-                // Steer towards left side
-                const steerDirection = distanceFromLeft > 0 ? -1 : 1;
-                this.angle += steerDirection * this.turnSpeed * 0.3;
+            const distX = centerX - targetX;
+            if (Math.abs(distX) > 5) {
+                const steer = distX > 0 ? -1 : 1;
+                this.angle += steer * this.turnSpeed * 0.2;
+            } else if (isFacingSouth) {
+                this.targetDirection = Math.PI / 2;
+            } else if (isFacingNorth) {
+                this.targetDirection = -Math.PI / 2;
             }
         }
     }
 
-    setNewDestination(roads, worldSize) {
-        // Choose a random road intersection as destination
-        const intersections = [];
-        const gridSize = 300;
+    chooseSmartDirection(currentRoad) {
+        // Randomly pick a valid 90-degree turn
+        let normAngle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
+        let currentDir = Math.round(normAngle / (Math.PI / 2)) * (Math.PI / 2); // snaps to 0, PI/2, -PI/2, PI
 
-        for (let y = 0; y < worldSize.height; y += gridSize) {
-            for (let x = 0; x < worldSize.width; x += gridSize) {
-                // Check if this grid position has roads
-                let hasRoads = false;
-                for (let road of roads) {
-                    if (x >= road.x - 50 && x <= road.x + road.width + 50 &&
-                        y >= road.y - 50 && y <= road.y + road.height + 50) {
-                        hasRoads = true;
-                        break;
-                    }
-                }
-                if (hasRoads) {
-                    intersections.push({ x: x + gridSize / 2, y: y + gridSize / 2 });
-                }
-            }
-        }
-
-        if (intersections.length > 0) {
-            this.destination = intersections[Math.floor(Math.random() * intersections.length)];
-        }
-    }
-
-    chooseSmartDirection(currentRoad, roads) {
-        const directions = [];
-        const currentAngle = this.angle;
-
-        // Determine current direction
-        let currentDir = Math.abs(currentAngle) < Math.PI / 4 ? 0 : // East
-            Math.abs(currentAngle - Math.PI / 2) < Math.PI / 4 ? 1 : // North
-                Math.abs(currentAngle + Math.PI / 2) < Math.PI / 4 ? 3 : // South
-                    2; // West
-
-        // Add possible directions based on road type
-        if (currentRoad.width > currentRoad.height) {
-            // Horizontal road
-            directions.push(0, Math.PI); // Left and right
-        } else {
-            // Vertical road
-            directions.push(Math.PI / 2, -Math.PI / 2); // Up and down
-        }
-
-        // If we have a destination, choose direction towards it
-        if (this.destination) {
-            const centerX = this.x + this.width / 2;
-            const centerY = this.y + this.height / 2;
-
-            let bestDirection = directions[0];
-            let bestScore = Infinity;
-
-            for (let direction of directions) {
-                const testX = centerX + Math.cos(direction) * 100;
-                const testY = centerY + Math.sin(direction) * 100;
-                const distance = Math.sqrt((testX - this.destination.x) ** 2 + (testY - this.destination.y) ** 2);
-                if (distance < bestScore) {
-                    bestScore = distance;
-                    bestDirection = direction;
-                }
-            }
-
-            return bestDirection;
-        }
-
-        // No destination, choose randomly
-        return directions[Math.floor(Math.random() * directions.length)];
+        // Pick left, right, or straight. Don't U-turn.
+        let choices = [currentDir, currentDir + Math.PI / 2, currentDir - Math.PI / 2];
+        return choices[Math.floor(Math.random() * choices.length)];
     }
 
     navigateToNearestRoad(roads) {
@@ -342,17 +377,8 @@ class Car {
         if (nearestRoad) {
             let targetX = nearestRoad.x + nearestRoad.width / 2;
             let targetY = nearestRoad.y + nearestRoad.height / 2;
-
-            let dx = targetX - (this.x + this.width / 2);
-            let dy = targetY - (this.y + this.height / 2);
-            let targetAngle = Math.atan2(dy, dx);
-
-            let angleDiff = targetAngle - this.angle;
-            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-
-            this.angle += Math.sign(angleDiff) * this.turnSpeed * 0.4;
-            this.speed = Math.min(this.speed + this.acceleration * 0.08, this.maxSpeed * 0.6);
+            this.targetDirection = Math.atan2(targetY - (this.y + this.height / 2), targetX - (this.x + this.width / 2));
+            this.speed = Math.min(this.speed + this.acceleration * 0.1, this.maxSpeed * 0.5);
         }
     }
 
@@ -384,13 +410,19 @@ class Car {
         }
 
         this.angle = bestDirection;
-        this.speed *= 0.6; // Slow down on collision
+        this.targetDirection = bestDirection; // ACTUALLY REMEMBER THE NEW DIRECTION
+
+        // Move forward into the clear path, DO NOT reverse
+        this.speed = 1.0;
+        this.vx = Math.cos(this.angle) * this.speed;
+        this.vy = Math.sin(this.angle) * this.speed;
     }
 
     handleStuckSituation(roads) {
         // Try to get unstuck by finding a clear path
-        this.speed = 1.0;
-        this.angle += (Math.random() - 0.5) * Math.PI; // Random turn
+        this.speed = 1.5;
+        this.angle += (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2); // 90 degree turn
+        this.targetDirection = this.angle;
         this.stuckTimer = 0;
 
         // If still stuck, try to move to nearest road
@@ -404,35 +436,20 @@ class Car {
         }
     }
 
-    handleBoundaryCollision(roads) {
-        // Smart boundary handling - try to stay on roads
+    handleBoundaryCollision(roads, worldSize) {
         this.speed *= 0.5;
 
-        if (this.x < 0) {
-            this.x = 0;
-            this.angle = Math.PI - this.angle;
-        } else if (this.x > worldSize.width - this.width) {
-            this.x = worldSize.width - this.width;
-            this.angle = Math.PI - this.angle;
-        }
+        // Just reverse direction
+        this.targetDirection = Math.atan2(Math.sin((this.angle + Math.PI)), Math.cos(this.angle + Math.PI));
+        this.angle = this.targetDirection;
 
-        if (this.y < 0) {
-            this.y = 0;
-            this.angle = -this.angle;
-        } else if (this.y > worldSize.height - this.height) {
-            this.y = worldSize.height - this.height;
-            this.angle = -this.angle;
-        }
+        let halfWidth = this.width / 2;
+        let halfHeight = this.height / 2;
 
-        // If we're off-road, head towards nearest road
-        if (!this.isOnRoad(roads)) {
-            let nearestRoad = this.findNearestRoad(roads);
-            if (nearestRoad) {
-                let targetX = nearestRoad.x + nearestRoad.width / 2;
-                let targetY = nearestRoad.y + nearestRoad.height / 2;
-                this.angle = Math.atan2(targetY - this.y, targetX - this.x);
-            }
-        }
+        if (this.x < 0) this.x = 0;
+        if (this.x > worldSize.width - this.width) this.x = worldSize.width - this.width;
+        if (this.y < 0) this.y = 0;
+        if (this.y > worldSize.height - this.height) this.y = worldSize.height - this.height;
     }
 
     avoidNearbyCars(cars) {
@@ -465,19 +482,16 @@ class Car {
             this.takeDamage(impactSpeed * 3);
         }
 
-        // Simple collision handling - bounce away from buildings
-        this.speed *= 0.7; // Slow down on collision
+        // Simple collision handling - bounce away
+        this.speed = -1.5; // Back up
 
         // Try to steer away from buildings
         if (Math.random() > 0.5) {
-            this.angle += 0.3;
+            this.angle += 0.5;
+            this.targetDirection += 0.5;
         } else {
-            this.angle -= 0.3;
-        }
-
-        // If speed is very low, give it a small boost to get unstuck
-        if (Math.abs(this.speed) < 0.5) {
-            this.speed = 1.0;
+            this.angle -= 0.5;
+            this.targetDirection -= 0.5;
         }
     }
 
@@ -505,37 +519,23 @@ class Car {
         return null;
     }
 
-    isAtIntersection(currentRoad) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        let intersectionX = Math.round(centerX / 300) * 300;
-        let intersectionY = Math.round(centerY / 300) * 300;
+    isAtIntersection(currentRoad, roads) {
+        if (currentRoad && currentRoad.type === 'crossroad') return true;
 
-        // Check if we're close to an intersection point
-        return Math.abs(centerX - intersectionX) < 100 && Math.abs(centerY - intersectionY) < 100;
-    }
-
-    chooseDirection(currentRoad) {
-        let possibleDirections = [];
-
-        // Determine current direction
-        let currentDir = Math.abs(this.angle) < Math.PI / 4 ? 0 : // East
-            Math.abs(this.angle - Math.PI / 2) < Math.PI / 4 ? 1 : // North
-                Math.abs(this.angle + Math.PI / 2) < Math.PI / 4 ? 3 : // South
-                    2; // West
-
-        // Add possible turns
-        if (currentRoad.width > currentRoad.height) {
-            // On horizontal road - can go left, right, or straight
-            possibleDirections = [0, Math.PI]; // Left or right
-        } else {
-            // On vertical road - can go up, down, or straight
-            possibleDirections = [Math.PI / 2, -Math.PI / 2]; // Up or down
+        // An intersection is where multiple roads overlap (fallback for old layout).
+        let centerX = this.x + this.width / 2;
+        let centerY = this.y + this.height / 2;
+        let roadCount = 0;
+        for (let road of roads) {
+            if (centerX >= road.x && centerX <= road.x + road.width &&
+                centerY >= road.y && centerY <= road.y + road.height) {
+                roadCount++;
+            }
         }
-
-        // Randomly choose a direction
-        return possibleDirections[Math.floor(Math.random() * possibleDirections.length)];
+        return roadCount > 1;
     }
+
+
 
     findNearestRoad(roads) {
         const centerX = this.x + this.width / 2;
@@ -545,11 +545,11 @@ class Car {
 
         for (let road of roads) {
             let distance;
-            if (road.width > road.height) {
+            if (road.type === 'horizontal' || road.width > road.height) {
                 // Horizontal road
                 distance = Math.abs(centerY - (road.y + road.height / 2));
             } else {
-                // Vertical road
+                // Vertical road or crossroad
                 distance = Math.abs(centerX - (road.x + road.width / 2));
             }
 

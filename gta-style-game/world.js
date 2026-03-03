@@ -48,7 +48,8 @@ class World {
                             x: gameX,
                             y: gameY,
                             width: cellSize,
-                            height: cellSize
+                            height: cellSize,
+                            type: 'road'
                         });
                         break;
                     case 'H':
@@ -56,7 +57,8 @@ class World {
                             x: gameX,
                             y: gameY,
                             width: cellSize,
-                            height: cellSize
+                            height: cellSize,
+                            type: 'horizontal'
                         });
                         break;
                     case 'V':
@@ -64,7 +66,8 @@ class World {
                             x: gameX,
                             y: gameY,
                             width: cellSize,
-                            height: cellSize
+                            height: cellSize,
+                            type: 'vertical'
                         });
                         break;
                     case 'C':
@@ -72,7 +75,8 @@ class World {
                             x: gameX,
                             y: gameY,
                             width: cellSize,
-                            height: cellSize
+                            height: cellSize,
+                            type: 'crossroad'
                         });
                         break;
                     case 'B':
@@ -84,6 +88,13 @@ class World {
                         });
                         break;
                     case 'T':
+                        this.crossroads.push({
+                            x: gameX,
+                            y: gameY,
+                            width: cellSize,
+                            height: cellSize,
+                            type: 'crossroad'
+                        });
                         this.trafficLights.push({
                             x: gameX + cellSize / 2,
                             y: gameY + cellSize / 2,
