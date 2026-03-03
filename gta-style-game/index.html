@@ -1,31 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GTA Style Game</title>
     <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
-        <div id="ui">
-            <div id="controls">
-                <h3>Controls:</h3>
-                <p>WASD - Move (on foot) / Drive (in car)</p>
-                <p>E - Enter/Exit vehicle</p>
-                <p>Space - Brake (in car)</p>
+        <div id="hud">
+            <div id="top-right-hud">
+                <div id="wanted-level">
+                    <span class="star" id="star-1">★</span>
+                    <span class="star" id="star-2">★</span>
+                    <span class="star" id="star-3">★</span>
+                    <span class="star" id="star-4">★</span>
+                    <span class="star" id="star-5">★</span>
+                </div>
+                <div id="weapon-box">
+                    <div id="weapon-icon">🔫</div>
+                    <div id="ammo">∞</div>
+                </div>
+                <div id="money">$00000000</div>
             </div>
-            <div id="status">
-                <p id="player-status">On Foot</p>
-                <p id="speed">Speed: 0</p>
+
+            <div id="bottom-left-hud">
+                <div id="minimap-container">
+                    <canvas id="minimap-canvas"></canvas>
+                </div>
+                <div id="stats-bars">
+                    <div id="health-bar-container">
+                        <div id="health-bar"></div>
+                    </div>
+                    <div id="armor-bar-container">
+                        <div id="armor-bar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="controls-hint">
+                Controls: WASD (Move/Drive), Mouse (Aim), Left Click (Shoot), E (Enter/Exit), Space (Brake)
             </div>
         </div>
     </div>
     <script src="worldData.js"></script>
     <script src="world.js"></script>
+    <script src="particles.js"></script>
+    <script src="weapons.js"></script>
+    <script src="pedestrian.js"></script>
     <script src="player.js"></script>
     <script src="car.js"></script>
     <script src="game.js"></script>
 </body>
+
 </html>

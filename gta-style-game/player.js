@@ -11,6 +11,7 @@ class Player {
         this.car = null;
         this.worldWidth = worldSize.width;
         this.worldHeight = worldSize.height;
+        this.overrideAngle = null;
     }
 
     update(keys, buildings) {
@@ -87,6 +88,11 @@ class Player {
             this.inCar = true;
             this.car = car;
             car.isPlayerCar = true; // Take control of this car
+
+            // Initialize velocity for drifting
+            car.vx = Math.cos(car.angle) * car.speed;
+            car.vy = Math.sin(car.angle) * car.speed;
+
             return true;
         }
         return false;
@@ -104,6 +110,17 @@ class Player {
         if (!this.inCar) {
             ctx.save();
             ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+            // Apply rotation based on overrideAngle or facingDirection
+            if (this.overrideAngle !== undefined && this.overrideAngle !== null) {
+                ctx.rotate(this.overrideAngle + Math.PI / 2); // assuming down is looking forward in original art
+            } else {
+                let moveAngle = 0;
+                if (this.facingDirection === 'right') moveAngle = -Math.PI / 2;
+                if (this.facingDirection === 'left') moveAngle = Math.PI / 2;
+                if (this.facingDirection === 'up') moveAngle = Math.PI;
+                ctx.rotate(moveAngle);
+            }
 
             // Player shadow
             ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -153,6 +170,15 @@ class Player {
             ctx.fillStyle = '#000';
             ctx.fillRect(-this.width / 2 + 1, this.height / 2 + this.height / 2 - 3, 8, 3); // left shoe
             ctx.fillRect(this.width / 2 - 9, this.height / 2 + this.height / 2 - 3, 8, 3); // right shoe
+
+            // If aiming, draw a gun in the right hand
+            if (this.overrideAngle !== undefined && this.overrideAngle !== null) {
+                ctx.fillStyle = '#444'; // Gun color
+                // Draw pistol coming out of right hand, pointing "forward"
+                ctx.fillRect(this.width / 2, -this.height / 2 - 8, 4, 12);
+                ctx.fillStyle = '#222';
+                ctx.fillRect(this.width / 2 + 1, -this.height / 2 - 8, 2, 4);
+            }
 
             // Add some animation based on movement
             if (this.isMoving) {

@@ -13,8 +13,12 @@ let camera = {
     width: CANVAS_WIDTH,
     height: CANVAS_HEIGHT
 };
+let mouseX = 0;
+let mouseY = 0;
+let isMouseDown = false;
 let world;
 let player;
+let pedestrians = [];
 let cars = [];
 let lastTime = 0;
 let fps = 0;
@@ -28,12 +32,30 @@ let collisionCount = 0;
 let safeDrivingTime = 0;
 let allRoads = []; // Global roads array
 
+// UI & Minimap Variables
+let minimapCanvas, minimapCtx;
+const DAY_LENGTH = 60000; // 60 seconds per day cycle
+let timeOfDay = 0; // 0 = midnight, 0.5 = noon, 1.0 = midnight
+let lightLevel = 1;
+
+let playerHealth = 100;
+let playerArmor = 50;
+let wantedLevel = 0;
+let playerMoney = 500;
+
 // Initialize game
 function init() {
     canvas = document.getElementById('game-canvas');
     ctx = canvas.getContext('2d');
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
+
+    minimapCanvas = document.getElementById('minimap-canvas');
+    if (minimapCanvas) {
+        minimapCanvas.width = 200;
+        minimapCanvas.height = 200;
+        minimapCtx = minimapCanvas.getContext('2d');
+    }
 
     // Load world from embedded data
     world = World.loadFromEmbedded();
@@ -43,12 +65,31 @@ function init() {
     const worldSize = world.getWorldSize();
     player = new Player(worldSize.width / 2, worldSize.height / 2, worldSize);
 
-    // Create some cars
+    // Create cars
     createCars();
+
+    // Create pedestrians
+    for (let i = 0; i < 40; i++) {
+        pedestrians.push(new Pedestrian(Math.random() * worldSize.width, Math.random() * worldSize.height, worldSize));
+    }
 
     // Event listeners
     document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
     document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+
+    canvas.addEventListener('mousemove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = e.clientY - rect.top;
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+        isMouseDown = true;
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+        isMouseDown = false;
+    });
 
     // Start game loop
     gameLoop();
@@ -108,17 +149,27 @@ function gameLoop(currentTime = 0) {
     // Update game time
     gameTime += deltaTime;
 
+    // 0 = midnight, 0.5 = noon, 1.0 = midnight
+    timeOfDay = Math.abs((gameTime % DAY_LENGTH) / DAY_LENGTH);
+    // Light is max (1.0) around 0.5, and min (0.2) around 0 and 1.0
+    lightLevel = 0.2 + 0.8 * Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
+
     // Update game state
     update(deltaTime);
 
     // Draw everything
     draw();
+    drawMinimap();
 
     requestAnimationFrame(gameLoop);
 }
 
 // Update game state
 function update(deltaTime) {
+    if (typeof particleSystem !== 'undefined') {
+        particleSystem.update(deltaTime);
+    }
+
     // Store previous position for distance calculation
     const prevX = player.x;
     const prevY = player.y;
@@ -142,20 +193,85 @@ function update(deltaTime) {
         keys['e'] = false; // Prevent continuous triggering
     }
 
+    // Check if player is in an exploded car
+    if (player.inCar && player.car && player.car.exploded) {
+        player.exitCar();
+        playerHealth -= 20; // Player takes damage from explosion!
+        if (playerHealth < 0) playerHealth = 0;
+    }
+
     // Update player
     player.update(keys, world.buildings);
 
     // Update cars
     const worldSize = world.getWorldSize();
-    // Update global allRoads array
+    // Update Global AllRoads array
     allRoads = [
         ...world.roads,
         ...world.horizontalRoads,
         ...world.verticalRoads,
         ...world.crossroads
     ];
+
     for (let car of cars) {
         car.update(keys, world.buildings, cars, allRoads, world.trafficLights, worldSize);
+    }
+
+    // Weapons logic
+    if (typeof weaponSystem !== 'undefined') {
+        if (!player.inCar) {
+            // Only shoot / aim if mouse is down
+            if (isMouseDown) {
+                let targetWorldX = mouseX + camera.x;
+                let targetWorldY = mouseY + camera.y;
+
+                let dx = targetWorldX - (player.x + player.width / 2);
+                let dy = targetWorldY - (player.y + player.height / 2);
+                let angle = Math.atan2(dy, dx);
+
+                player.overrideAngle = angle;
+                weaponSystem.shoot(
+                    player.x + player.width / 2 + Math.cos(angle) * 15,
+                    player.y + player.height / 2 + Math.sin(angle) * 15,
+                    angle, 'player'
+                );
+            } else {
+                player.overrideAngle = null;
+            }
+        } else {
+            player.overrideAngle = null;
+        }
+
+        weaponSystem.update(deltaTime, world.buildings, cars, worldSize);
+    }
+
+    // Update pedestrians
+    for (let ped of pedestrians) {
+        ped.update(world.buildings, cars, player, allRoads);
+    }
+
+    // Wanted Level Police Logic
+    if (wantedLevel > 0) {
+        let policeCount = cars.filter(c => c.isPolice && !c.exploded).length;
+        if (policeCount < wantedLevel) {
+            // Spawn a police car near player
+            let spawnX = player.x + (Math.random() > 0.5 ? 800 : -800);
+            let spawnXClamped = Math.max(0, Math.min(worldSize.width, spawnX));
+            let spawnY = player.y + (Math.random() > 0.5 ? 800 : -800);
+            let spawnYClamped = Math.max(0, Math.min(worldSize.height, spawnY));
+
+            let newPolice = new Car(spawnXClamped, spawnYClamped, 0, false, '#222222');
+            newPolice.isPolice = true;
+            newPolice.maxSpeed = 6 + wantedLevel * 0.5; // Faster based on wanted level
+            cars.push(newPolice);
+        }
+
+        // Make police chase player
+        for (let car of cars) {
+            if (car.isPolice && !car.exploded) {
+                car.destination = { x: player.x, y: player.y }; // relentlessly pursue
+            }
+        }
     }
 
     // Update camera
@@ -221,167 +337,86 @@ function updateScoring(prevX, prevY, deltaTime) {
 
 // Update UI
 function updateUI() {
-    document.getElementById('player-status').textContent = player.inCar ? 'In Car' : 'On Foot';
-    document.getElementById('speed').textContent = player.inCar ? `Speed: ${Math.round(player.car.speed * 10)}` : 'Speed: 0';
-
-    // Add FPS display
-    const fpsElement = document.getElementById('fps') || createFPSElement();
-    fpsElement.textContent = `FPS: ${fps}`;
-
-    // Add position display
-    const posElement = document.getElementById('position') || createPositionElement();
-    posElement.textContent = `Pos: ${Math.round(player.x)}, ${Math.round(player.y)}`;
-
-    // Add car count
-    const carCountElement = document.getElementById('car-count') || createCarCountElement();
-    carCountElement.textContent = `Cars: ${cars.length}`;
-
-    // Add score display
-    const scoreElement = document.getElementById('score') || createScoreElement();
-    scoreElement.textContent = `Score: ${score.toLocaleString()}`;
-
-    // Add distance display
-    const distanceElement = document.getElementById('distance') || createDistanceElement();
-    distanceElement.textContent = `Distance: ${Math.round(distanceTraveled)}px`;
-
-    // Add controls display
-    const controlsElement = document.getElementById('controls') || createControlsElement();
-
     // Sync player position with car when in car
     if (player.inCar && player.car) {
         player.x = player.car.x + player.car.width / 2 - player.width / 2;
         player.y = player.car.y + player.car.height / 2 - player.height / 2;
     }
+
+    // Update HUD elements
+    const moneyEl = document.getElementById('money');
+    if (moneyEl) moneyEl.textContent = `$${playerMoney.toString().padStart(8, '0')}`;
+
+    const healthBar = document.getElementById('health-bar');
+    if (healthBar) {
+        healthBar.style.width = `${Math.max(0, playerHealth)}%`;
+        if (playerHealth <= 25) {
+            healthBar.classList.add('low-health');
+        } else {
+            healthBar.classList.remove('low-health');
+        }
+    }
+
+    const armorBar = document.getElementById('armor-bar');
+    if (armorBar) armorBar.style.width = `${Math.max(0, playerArmor)}%`;
+
+    // Update Wanted Level Stars
+    for (let i = 1; i <= 5; i++) {
+        const star = document.getElementById(`star-${i}`);
+        if (star) {
+            if (i <= wantedLevel) {
+                star.classList.add('active');
+            } else {
+                star.classList.remove('active');
+            }
+        }
+    }
 }
 
-function createFPSElement() {
-    const fpsDiv = document.createElement('div');
-    fpsDiv.id = 'fps';
-    fpsDiv.style.cssText = `
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        color: #00FF00;
-        background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6));
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-family: 'Courier New', monospace;
-        font-size: 12px;
-        font-weight: bold;
-        border: 1px solid rgba(0,255,0,0.3);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    `;
-    document.getElementById('game-container').appendChild(fpsDiv);
-    return fpsDiv;
-}
+function drawMinimap() {
+    if (!minimapCtx || !player) return;
 
-function createPositionElement() {
-    const posDiv = document.createElement('div');
-    posDiv.id = 'position';
-    posDiv.style.cssText = `
-        position: absolute;
-        top: 50px;
-        right: 10px;
-        color: #87CEEB;
-        background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6));
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-family: 'Courier New', monospace;
-        font-size: 11px;
-        border: 1px solid rgba(135,206,235,0.3);
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    `;
-    document.getElementById('game-container').appendChild(posDiv);
-    return posDiv;
-}
+    // Clear minimap
+    minimapCtx.fillStyle = '#228B22'; // Grass color
+    minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
 
-function createCarCountElement() {
-    const carCountDiv = document.createElement('div');
-    carCountDiv.id = 'car-count';
-    carCountDiv.style.cssText = `
-        position: absolute;
-        top: 85px;
-        right: 10px;
-        color: #FFA500;
-        background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6));
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-family: 'Courier New', monospace;
-        font-size: 11px;
-        border: 1px solid rgba(255,165,0,0.3);
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    `;
-    document.getElementById('game-container').appendChild(carCountDiv);
-    return carCountDiv;
-}
+    minimapCtx.save();
 
-function createScoreElement() {
-    const scoreDiv = document.createElement('div');
-    scoreDiv.id = 'score';
-    scoreDiv.style.cssText = `
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        color: #FFD700;
-        background: linear-gradient(135deg, rgba(0,0,0,0.9), rgba(0,0,0,0.7));
-        padding: 10px 15px;
-        border-radius: 10px;
-        font-family: 'Arial', sans-serif;
-        font-size: 18px;
-        font-weight: bold;
-        border: 2px solid rgba(255,215,0,0.5);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-    `;
-    document.getElementById('game-container').appendChild(scoreDiv);
-    return scoreDiv;
-}
+    // Center minimap on player
+    minimapCtx.translate(minimapCanvas.width / 2, minimapCanvas.height / 2);
 
-function createDistanceElement() {
-    const distanceDiv = document.createElement('div');
-    distanceDiv.id = 'distance';
-    distanceDiv.style.cssText = `
-        position: absolute;
-        top: 60px;
-        left: 10px;
-        color: #98FB98;
-        background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6));
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-family: 'Courier New', monospace;
-        font-size: 11px;
-        border: 1px solid rgba(152,251,152,0.3);
-        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    `;
-    document.getElementById('game-container').appendChild(distanceDiv);
-    return distanceDiv;
-}
+    // Scale down the world
+    const scale = 0.04;
+    minimapCtx.scale(scale, scale);
+    minimapCtx.translate(-player.x - player.width / 2, -player.y - player.height / 2);
 
-function createControlsElement() {
-    const controlsDiv = document.createElement('div');
-    controlsDiv.id = 'controls';
-    controlsDiv.style.cssText = `
-        position: absolute;
-        bottom: 10px;
-        left: 10px;
-        color: white;
-        background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6));
-        padding: 12px;
-        border-radius: 8px;
-        font-family: 'Arial', sans-serif;
-        font-size: 12px;
-        border: 1px solid rgba(255,255,255,0.2);
-        box-shadow: 0 3px 8px rgba(0,0,0,0.4);
-    `;
-    controlsDiv.innerHTML = `
-        <div style="margin-bottom: 5px; font-weight: bold; color: #FFD700;">Controls:</div>
-        <div>WASD / Arrow Keys - Move / Drive</div>
-        <div>E - Enter/Exit Vehicle</div>
-        <div>Space - Brake (in car)</div>
-        <div style="margin-top: 8px; font-size: 10px; color: #87CEEB;">Walk close to cars to see entry indicator</div>
-    `;
-    document.getElementById('game-container').appendChild(controlsDiv);
-    return controlsDiv;
+    // Draw roads
+    minimapCtx.fillStyle = '#444';
+    for (let road of allRoads) {
+        minimapCtx.fillRect(road.x, road.y, road.width, road.height);
+    }
+
+    // Draw buildings
+    minimapCtx.fillStyle = '#8B4513';
+    for (let b of world.buildings) {
+        minimapCtx.fillRect(b.x, b.y, b.width, b.height);
+    }
+
+    // Draw cars
+    minimapCtx.fillStyle = '#FF0000';
+    for (let car of cars) {
+        if (!car.isPlayerCar) {
+            minimapCtx.fillRect(car.x, car.y, car.width, car.height);
+        }
+    }
+
+    // Draw player
+    minimapCtx.fillStyle = '#00FFFF';
+    minimapCtx.beginPath();
+    minimapCtx.arc(player.x + player.width / 2, player.y + player.height / 2, 60, 0, Math.PI * 2);
+    minimapCtx.fill();
+
+    minimapCtx.restore();
 }
 
 function createGrassPattern() {
@@ -409,10 +444,15 @@ function createGrassPattern() {
 
 // Draw everything
 function draw() {
+    // Generate sky color interpolating based on lightLevel
+    const r = Math.floor(135 * lightLevel);
+    const g = Math.floor(206 * lightLevel);
+    const b = Math.floor(235 * lightLevel);
+
     // Draw sky gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    gradient.addColorStop(0, '#87CEEB'); // Sky blue
-    gradient.addColorStop(1, '#98FB98'); // Light green
+    gradient.addColorStop(0, `rgb(${r}, ${g}, ${b})`); // Sky blue scaled down
+    gradient.addColorStop(1, `rgb(${Math.floor(152 * lightLevel)}, ${Math.floor(251 * lightLevel)}, ${Math.floor(152 * lightLevel)})`); // Light green scaled
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -500,6 +540,10 @@ function draw() {
     }
     ctx.setLineDash([]);
 
+    if (typeof particleSystem !== 'undefined') {
+        particleSystem.drawSkidMarks(ctx);
+    }
+
     // Draw buildings with enhanced graphics
     for (let building of world.buildings) {
         // Building shadow
@@ -536,6 +580,13 @@ function draw() {
                 ctx.strokeRect(wx, wy, 8, 8);
 
                 ctx.fillStyle = '#FFFF99'; // Reset for next window
+            }
+        }
+
+        // Draw pedestrians
+        for (let ped of pedestrians) {
+            if (ped.state === 'dead' && ped.x > building.x && ped.x < building.x + building.width && ped.y > building.y && ped.y < building.y + building.height) {
+                // hide dead bodies under buildings? or just draw generally
             }
         }
 
@@ -594,7 +645,7 @@ function draw() {
         car.draw(ctx, camera.x, camera.y);
 
         // Draw car entry indicator when player is close
-        if (!player.inCar) {
+        if (!player.inCar && !car.exploded) {
             const playerCenterX = player.x + player.width / 2;
             const playerCenterY = player.y + player.height / 2;
             const carCenterX = car.x + car.width / 2;
@@ -613,6 +664,63 @@ function draw() {
 
     // Draw player
     player.draw(ctx, camera.x, camera.y);
+
+    // Draw living pedestrians
+    for (let ped of pedestrians) {
+        ped.draw(ctx);
+    }
+
+    // Draw Darkness overlay if night
+    const darkness = 1.0 - lightLevel;
+    if (darkness > 0.1) { // 0.1 threshold to not draw if full day
+        ctx.fillStyle = `rgba(5, 5, 20, ${darkness * 0.85})`;
+        // Huge rect to cover camera
+        ctx.fillRect(camera.x - CANVAS_WIDTH, camera.y - CANVAS_HEIGHT, CANVAS_WIDTH * 3, CANVAS_HEIGHT * 3);
+
+        // Draw headlights over the darkness using lighter composition
+        ctx.globalCompositeOperation = 'lighter';
+        for (let car of cars) {
+            // Check if car is on screen
+            if (car.x > camera.x - car.width * 2 && car.x < camera.x + CANVAS_WIDTH + car.width * 2 &&
+                car.y > camera.y - car.height * 2 && car.y < camera.y + CANVAS_HEIGHT + car.height * 2) {
+
+                // Headlight parameters
+                const lightLength = 300;
+                const lightWidth = 100;
+
+                ctx.save();
+                ctx.translate(car.x + car.width / 2, car.y + car.height / 2);
+                ctx.rotate(car.angle);
+
+                // Create gradient for headlight beam
+                const grad = ctx.createLinearGradient(car.width / 2, 0, car.width / 2 + lightLength, 0);
+                grad.addColorStop(0, `rgba(255, 255, 200, ${0.4 * darkness})`);
+                grad.addColorStop(1, 'rgba(255, 255, 200, 0)');
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(car.width / 2, -car.height / 2 + 5);
+                ctx.lineTo(car.width / 2 + lightLength, -lightWidth / 2);
+                ctx.lineTo(car.width / 2 + lightLength, lightWidth / 2);
+                ctx.lineTo(car.width / 2, car.height / 2 - 5);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+        ctx.globalCompositeOperation = 'source-over'; // reset
+    }
+
+    // Draw explosive/smoke effects OVER EVERYTHING else but under HUD
+    if (typeof particleSystem !== 'undefined') {
+        particleSystem.drawEffects(ctx);
+    }
+
+    // Draw bullets
+    if (typeof weaponSystem !== 'undefined') {
+        weaponSystem.draw(ctx);
+    }
 
     // Restore context
     ctx.restore();

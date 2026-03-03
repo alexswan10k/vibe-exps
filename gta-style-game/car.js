@@ -8,11 +8,18 @@ class Car {
         this.height = 22 + Math.random() * 6;
         this.angle = angle;
         this.speed = 0;
-        this.maxSpeed = 4;
+        this.vx = 0;
+        this.vy = 0;
+        this.maxSpeed = 6;
         this.acceleration = 0.15;
         this.turnSpeed = 0.08; // Increased for tighter turns
         this.color = color;
         this.isPlayerCar = isPlayerCar;
+
+        // Damage mechanics
+        this.health = 100;
+        this.exploded = false;
+
         this.targetDirection = angle;
         this.lastIntersection = null;
         this.destination = null;
@@ -22,6 +29,18 @@ class Car {
     }
 
     update(keys, buildings, cars, roads, trafficLights, worldSize) {
+        if (this.exploded) {
+            // Check if we need to spawn smoke
+            if (typeof particleSystem !== 'undefined' && Math.random() < 0.1) {
+                particleSystem.addSmoke(this.x + this.width / 2, this.y + this.height / 2);
+            }
+            return; // Don't move if exploded
+        }
+
+        if (this.health < 40 && typeof particleSystem !== 'undefined' && Math.random() < 0.2) {
+            particleSystem.addSmoke(this.x + this.width / 2, this.y + this.height / 2);
+        }
+
         if (this.isPlayerCar) {
             this.updatePlayerCar(keys, buildings, cars, worldSize);
         } else {
@@ -30,34 +49,87 @@ class Car {
     }
 
     updatePlayerCar(keys, buildings, cars, worldSize) {
+        let force = 0;
+        let isBraking = false;
+
         if (keys['w'] || keys['arrowup']) {
-            this.speed = Math.min(this.speed + this.acceleration, this.maxSpeed);
+            force = this.acceleration;
         } else if (keys['s'] || keys['arrowdown']) {
-            this.speed = Math.max(this.speed - this.acceleration * 2, -this.maxSpeed * 0.5);
+            force = -this.acceleration;
         } else {
-            this.speed *= 0.95; // Friction
+            // Apply slight natural deceleration
+            this.vx *= 0.98;
+            this.vy *= 0.98;
         }
 
         if (keys[' ']) {
-            this.speed *= 0.9;
+            force = -this.acceleration * 1.5;
+            isBraking = true;
         }
 
-        if (keys['a'] || keys['arrowleft']) {
-            this.angle -= this.turnSpeed * (this.speed / this.maxSpeed);
-        }
-        if (keys['d'] || keys['arrowright']) {
-            this.angle += this.turnSpeed * (this.speed / this.maxSpeed);
+        // Only turn if moving
+        if (Math.abs(this.speed) > 0.5) {
+            let speedRatio = Math.min(this.speed / (this.maxSpeed * 0.5), 1.0); // Make turning responsive at lower speeds too
+            if (keys['a'] || keys['arrowleft']) {
+                this.angle -= this.turnSpeed * Math.sign(this.speed);
+            }
+            if (keys['d'] || keys['arrowright']) {
+                this.angle += this.turnSpeed * Math.sign(this.speed);
+            }
         }
 
-        let newX = this.x + Math.cos(this.angle) * this.speed;
-        let newY = this.y + Math.sin(this.angle) * this.speed;
+        let forwardV = this.vx * Math.cos(this.angle) + this.vy * Math.sin(this.angle);
+        let lateralV = -this.vx * Math.sin(this.angle) + this.vy * Math.cos(this.angle);
+
+        forwardV += force;
+
+        // Forward friction
+        forwardV *= 0.98;
+
+        // Lateral friction (grip vs drifting)
+        let lateralGrip = isBraking ? 0.94 : 0.82; // Handbrake slides more
+        lateralV *= lateralGrip;
+
+        // Skid marks for drifting or braking
+        if (Math.abs(lateralV) > 1.2 || (isBraking && Math.abs(forwardV) > 1.5)) {
+            let backWheelX = this.x + this.width / 2 - Math.cos(this.angle) * this.width * 0.35;
+            let backWheelY = this.y + this.height / 2 - Math.sin(this.angle) * this.width * 0.35;
+
+            if (typeof particleSystem !== 'undefined') {
+                particleSystem.addSkidMark(backWheelX, backWheelY, this.angle, this.height * 0.7, 0.4);
+            }
+        }
+
+        // Convert back to global velocity
+        this.vx = forwardV * Math.cos(this.angle) - lateralV * Math.sin(this.angle);
+        this.vy = forwardV * Math.sin(this.angle) + lateralV * Math.cos(this.angle);
+
+        this.speed = Math.sign(forwardV) * Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+
+        // Cap max speed
+        if (Math.abs(this.speed) > this.maxSpeed) {
+            let ratio = this.maxSpeed / Math.abs(this.speed);
+            this.vx *= ratio;
+            this.vy *= ratio;
+            this.speed = Math.sign(this.speed) * this.maxSpeed;
+        }
+
+        let newX = this.x + this.vx;
+        let newY = this.y + this.vy;
 
         // Check collision with buildings only (not other cars for player)
-        if (!this.isCollidingWithBuildings(newX, newY, buildings)) {
+        if (!this.isCollidingWithBuildings(newX, newY, buildings)) { // Wait, player car should collide with cars too realistically, but kept to original logic for now
             this.x = newX;
             this.y = newY;
         } else {
             // Bounce back on collision with buildings
+            let impactSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+            if (impactSpeed > 2) {
+                this.takeDamage(impactSpeed * 5); // Take damage on crash
+            }
+
+            this.vx *= -0.5;
+            this.vy *= -0.5;
             this.speed *= -0.5;
         }
 
@@ -211,7 +283,7 @@ class Car {
                     }
                 }
                 if (hasRoads) {
-                    intersections.push({ x: x + gridSize/2, y: y + gridSize/2 });
+                    intersections.push({ x: x + gridSize / 2, y: y + gridSize / 2 });
                 }
             }
         }
@@ -227,9 +299,9 @@ class Car {
 
         // Determine current direction
         let currentDir = Math.abs(currentAngle) < Math.PI / 4 ? 0 : // East
-                         Math.abs(currentAngle - Math.PI / 2) < Math.PI / 4 ? 1 : // North
-                         Math.abs(currentAngle + Math.PI / 2) < Math.PI / 4 ? 3 : // South
-                         2; // West
+            Math.abs(currentAngle - Math.PI / 2) < Math.PI / 4 ? 1 : // North
+                Math.abs(currentAngle + Math.PI / 2) < Math.PI / 4 ? 3 : // South
+                    2; // West
 
         // Add possible directions based on road type
         if (currentRoad.width > currentRoad.height) {
@@ -285,6 +357,12 @@ class Car {
     }
 
     handleSmartCollision(buildings, cars, roads) {
+        // Did we hit another car or building?
+        let impactSpeed = Math.abs(this.speed);
+        if (impactSpeed > 2 && Math.random() > 0.8) {
+            this.takeDamage(impactSpeed * 2);
+        }
+
         // Try different directions to find a clear path
         const testDirections = [0, 0.2, -0.2, 0.4, -0.4, 0.6, -0.6];
         let bestDirection = this.angle;
@@ -382,6 +460,11 @@ class Car {
     }
 
     handleCollision(buildings) {
+        let impactSpeed = Math.abs(this.speed);
+        if (impactSpeed > 2) {
+            this.takeDamage(impactSpeed * 3);
+        }
+
         // Simple collision handling - bounce away from buildings
         this.speed *= 0.7; // Slow down on collision
 
@@ -437,9 +520,9 @@ class Car {
 
         // Determine current direction
         let currentDir = Math.abs(this.angle) < Math.PI / 4 ? 0 : // East
-                         Math.abs(this.angle - Math.PI / 2) < Math.PI / 4 ? 1 : // North
-                         Math.abs(this.angle + Math.PI / 2) < Math.PI / 4 ? 3 : // South
-                         2; // West
+            Math.abs(this.angle - Math.PI / 2) < Math.PI / 4 ? 1 : // North
+                Math.abs(this.angle + Math.PI / 2) < Math.PI / 4 ? 3 : // South
+                    2; // West
 
         // Add possible turns
         if (currentRoad.width > currentRoad.height) {
@@ -500,6 +583,21 @@ class Car {
         return false;
     }
 
+    takeDamage(amount) {
+        if (this.exploded) return;
+        this.health -= amount;
+        if (this.health <= 0) {
+            this.health = 0;
+            this.exploded = true;
+            this.speed = 0;
+            this.vx = 0;
+            this.vy = 0;
+            if (typeof particleSystem !== 'undefined') {
+                particleSystem.addExplosion(this.x + this.width / 2, this.y + this.height / 2);
+            }
+        }
+    }
+
     draw(ctx, cameraX, cameraY) {
         ctx.save();
         ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
@@ -514,10 +612,16 @@ class Car {
 
         // Car body with gradient (front to back)
         const bodyGradient = ctx.createLinearGradient(-halfWidth, -halfHeight, halfWidth, halfHeight);
-        bodyGradient.addColorStop(0, this.shadeColor(this.color, 30)); // Front - lighter
-        bodyGradient.addColorStop(0.3, this.color); // Middle
-        bodyGradient.addColorStop(0.7, this.shadeColor(this.color, -10)); // Rear
-        bodyGradient.addColorStop(1, this.shadeColor(this.color, -30)); // Back - darkest
+
+        let displayColor = this.color;
+        if (this.exploded) {
+            displayColor = '#222222'; // Burnt husk
+        }
+
+        bodyGradient.addColorStop(0, this.shadeColor(displayColor, 30)); // Front - lighter
+        bodyGradient.addColorStop(0.3, displayColor); // Middle
+        bodyGradient.addColorStop(0.7, this.shadeColor(displayColor, -10)); // Rear
+        bodyGradient.addColorStop(1, this.shadeColor(displayColor, -30)); // Back - darkest
         ctx.fillStyle = bodyGradient;
         ctx.fillRect(-halfWidth, -halfHeight, this.width, this.height);
 
@@ -551,28 +655,28 @@ class Car {
         ctx.fillStyle = '#1a1a1a';
         let wheelSize = Math.min(this.width * 0.15, this.height * 0.4);
         // Front wheels
-        ctx.fillRect(-halfWidth + wheelSize, -halfHeight - wheelSize/2, wheelSize, wheelSize);
-        ctx.fillRect(halfWidth - wheelSize * 2, -halfHeight - wheelSize/2, wheelSize, wheelSize);
+        ctx.fillRect(-halfWidth + wheelSize, -halfHeight - wheelSize / 2, wheelSize, wheelSize);
+        ctx.fillRect(halfWidth - wheelSize * 2, -halfHeight - wheelSize / 2, wheelSize, wheelSize);
         // Back wheels
-        ctx.fillRect(-halfWidth + wheelSize, halfHeight - wheelSize/2, wheelSize, wheelSize);
-        ctx.fillRect(halfWidth - wheelSize * 2, halfHeight - wheelSize/2, wheelSize, wheelSize);
+        ctx.fillRect(-halfWidth + wheelSize, halfHeight - wheelSize / 2, wheelSize, wheelSize);
+        ctx.fillRect(halfWidth - wheelSize * 2, halfHeight - wheelSize / 2, wheelSize, wheelSize);
 
         // Wheel rims (metallic)
         ctx.fillStyle = '#C0C0C0';
-        ctx.fillRect(-halfWidth + wheelSize + 2, -halfHeight - wheelSize/2 + 2, wheelSize - 4, wheelSize - 4);
-        ctx.fillRect(halfWidth - wheelSize * 2 + 2, -halfHeight - wheelSize/2 + 2, wheelSize - 4, wheelSize - 4);
-        ctx.fillRect(-halfWidth + wheelSize + 2, halfHeight - wheelSize/2 + 2, wheelSize - 4, wheelSize - 4);
-        ctx.fillRect(halfWidth - wheelSize * 2 + 2, halfHeight - wheelSize/2 + 2, wheelSize - 4, wheelSize - 4);
+        ctx.fillRect(-halfWidth + wheelSize + 2, -halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
+        ctx.fillRect(halfWidth - wheelSize * 2 + 2, -halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
+        ctx.fillRect(-halfWidth + wheelSize + 2, halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
+        ctx.fillRect(halfWidth - wheelSize * 2 + 2, halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
 
         // Wheel spokes
         ctx.strokeStyle = '#808080';
         ctx.lineWidth = 1;
         for (let i = 0; i < 5; i++) {
             const angle = (i * Math.PI * 2) / 5;
-            const x1 = -halfWidth + wheelSize + wheelSize/2 + Math.cos(angle) * (wheelSize/2 - 3);
-            const y1 = -halfHeight - wheelSize/2 + wheelSize/2 + Math.sin(angle) * (wheelSize/2 - 3);
-            const x2 = -halfWidth + wheelSize + wheelSize/2 + Math.cos(angle) * (wheelSize/2 - 6);
-            const y2 = -halfHeight - wheelSize/2 + wheelSize/2 + Math.sin(angle) * (wheelSize/2 - 6);
+            const x1 = -halfWidth + wheelSize + wheelSize / 2 + Math.cos(angle) * (wheelSize / 2 - 3);
+            const y1 = -halfHeight - wheelSize / 2 + wheelSize / 2 + Math.sin(angle) * (wheelSize / 2 - 3);
+            const x2 = -halfWidth + wheelSize + wheelSize / 2 + Math.cos(angle) * (wheelSize / 2 - 6);
+            const y2 = -halfHeight - wheelSize / 2 + wheelSize / 2 + Math.sin(angle) * (wheelSize / 2 - 6);
 
             ctx.beginPath();
             ctx.moveTo(x1, y1);
@@ -629,10 +733,17 @@ class Car {
         ctx.fillRect(-halfWidth + 3, halfHeight - 1, this.width - 6, 3);
 
         // Add direction indicator - arrow on roof
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.font = '8px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('▲', 0, -halfHeight + 8);
+        if (this.isPolice && !this.exploded) {
+            // Draw police lights on roof
+            let time = Date.now() / 150;
+            ctx.fillStyle = time % 2 < 1 ? '#FF0000' : '#0000FF'; // flashing red/blue
+            ctx.fillRect(-2, -halfHeight + 6, 8, 4);
+        } else {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = '8px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('▲', 0, -halfHeight + 8);
+        }
 
         // Add speed lines when moving fast
         if (Math.abs(this.speed) > 3) {
