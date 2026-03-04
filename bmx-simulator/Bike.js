@@ -48,26 +48,42 @@ class Bike {
             if (this.crashTimer <= 0) {
                 this.state = 'normal';
             }
-            // Still slide a bit while crashed with high friction
-            this.speed = Math.max(0, this.speed - this.friction * 4 * dt);
+
+            // Allow reversing out of crash if timer is up (or close to up to be forgiving)
+            if (this.crashTimer <= 0.2 && thrust === -1) {
+                this.state = 'normal';
+                this.speed = -50;
+            }
+            // Still slide a bit while crashed with high friction if not reversing out
+            else {
+                this.speed = Math.max(0, this.speed - this.friction * 4 * dt);
+            }
         } else {
-            // Steering - proportional to speed
-            if (this.speed > 5) {
-                const speedFactor = Math.min(this.speed / 100, 1.0); // Don't turn on a dime at very low speed, but turn well at mid speed
-                this.angle += turnDir * this.turnSpeed * dt * speedFactor;
+            // Steering - proportional to absolute speed so reversing works too
+            if (Math.abs(this.speed) > 5) {
+                const speedFactor = Math.min(Math.abs(this.speed) / 100, 1.0);
+                // reverse turning direction when going backwards for tank controls
+                const directionScale = this.speed < 0 ? -1 : 1;
+                this.angle += turnDir * this.turnSpeed * dt * speedFactor * directionScale;
             }
 
             // Acceleration & Friction
-            if (thrust) {
+            if (thrust === 1) {
                 this.speed += this.acceleration * dt;
+            } else if (thrust === -1) {
+                this.speed -= this.acceleration * dt;
             } else {
-                this.speed -= this.friction * dt;
+                if (this.speed > 0) {
+                    this.speed = Math.max(0, this.speed - this.friction * dt);
+                } else if (this.speed < 0) {
+                    this.speed = Math.min(0, this.speed + this.friction * dt);
+                }
             }
 
-            this.speed = MathUtils.clamp(this.speed, 0, this.maxSpeed);
+            this.speed = MathUtils.clamp(this.speed, -this.maxSpeed * 0.4, this.maxSpeed);
 
             // Record skid marks if turning and going fast
-            if (Math.abs(turnDir) > 0 && this.speed > this.maxSpeed * 0.7) {
+            if (Math.abs(turnDir) > 0 && Math.abs(this.speed) > this.maxSpeed * 0.7) {
                 if (Math.random() < 0.3) {
                     this.skidMarks.push({ x: this.x, y: this.y, age: 0 });
                 }
@@ -82,7 +98,7 @@ class Bike {
         this.y += dy;
 
         // Check collision (if we moved)
-        if (this.state !== 'crashed' && collisionCtx && this.speed > 0) {
+        if (this.state !== 'crashed' && collisionCtx && Math.abs(this.speed) > 0) {
             // Read pixel from collision map
             // Round coordinates to make sure we query inside the canvas efficiently
             const px = Math.floor(MathUtils.clamp(this.x, 0, collisionCtx.canvas.width - 1));
@@ -93,9 +109,9 @@ class Bike {
             if (imgData[0] < 128) {
                 this.crash();
                 // Bounce back slightly
-                this.x -= dx * 2;
-                this.y -= dy * 2;
-                this.speed *= 0.2; // lose massive speed
+                this.x -= dx * 1.5;
+                this.y -= dy * 1.5;
+                this.speed = 0; // stop instead of losing massive speed
             } else {
                 // Save safe position occasionally? 
                 if (Math.random() < 0.1) {

@@ -15,6 +15,9 @@ class Game {
         this.crashOverlay = document.getElementById('crash-overlay');
         this.messageOverlay = document.getElementById('message-overlay');
 
+        this.mainMenu = document.getElementById('main-menu');
+        this.trackList = document.getElementById('track-list');
+
         this.lastTime = 0;
         this.isRunning = false;
 
@@ -28,21 +31,64 @@ class Game {
         this.raceTimer = 0;
         this.raceFinished = false;
         this.postRaceTimer = 0;
+
+        this.resize();
+        window.addEventListener('resize', () => this.resize());
+    }
+
+    resize() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+
+        if (this.track) {
+            this.collisionCanvas.width = this.track.logicalWidth;
+            this.collisionCanvas.height = this.track.logicalHeight;
+            this.track.draw(this.collisionCtx, true); // Redraw collision map
+
+            // Calculate scale and offset to center the logical track on the physical screen
+            const scaleX = this.canvas.width / this.collisionCanvas.width;
+            const scaleY = this.canvas.height / this.collisionCanvas.height;
+            // Pad by 5% so it's not immediately touching the edge
+            this.renderScale = Math.min(scaleX, scaleY) * 0.95;
+
+            this.offsetX = (this.canvas.width - this.collisionCanvas.width * this.renderScale) / 2;
+            this.offsetY = (this.canvas.height - this.collisionCanvas.height * this.renderScale) / 2;
+        }
     }
 
     init() {
         Input.init();
-        this.loadTrack(0);
+
+        // Build Track Menu
+        this.trackList.innerHTML = '';
+        TrackData.forEach((track, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'track-btn';
+            btn.innerText = track.name;
+            btn.onclick = () => this.startGame(index);
+            this.trackList.appendChild(btn);
+        });
+
+        this.mainMenu.style.display = 'flex'; // Show main menu initially
         this.lastTime = performance.now();
         this.isRunning = true;
         requestAnimationFrame((t) => this.loop(t));
+    }
+
+    startGame(index) {
+        this.mainMenu.style.display = 'none';
+        this.loadTrack(index);
     }
 
     loadTrack(index) {
         if (index >= TrackData.length) {
             this.messageOverlay.innerText = "ALL TRACKS COMPLETED!";
             this.messageOverlay.style.display = 'block';
-            this.isRunning = false;
+            setTimeout(() => {
+                this.mainMenu.style.display = 'flex';
+                this.messageOverlay.style.display = 'none';
+                this.track = null; // stop game updates
+            }, 3000);
             return;
         }
 
@@ -54,8 +100,8 @@ class Game {
         this.messageOverlay.style.display = 'none';
         this.trackNameDisplay.innerText = this.track.name;
 
-        // Render collision map once
-        this.track.draw(this.collisionCtx, true);
+        // Force resize to set up correct canvas scaling based on new track's logical bounds
+        this.resize();
 
         this.bikes = [];
         this.aiControllers = [];
@@ -82,8 +128,10 @@ class Game {
         const dt = (timestamp - this.lastTime) / 1000;
         this.lastTime = timestamp;
 
-        this.update(Math.min(dt, 0.1));
-        this.draw();
+        if (this.track) {
+            this.update(Math.min(dt, 0.1));
+            this.draw();
+        }
 
         requestAnimationFrame((t) => this.loop(t));
     }
@@ -101,7 +149,7 @@ class Game {
 
         // Player Input
         if (this.playerBike) {
-            let thrust = Input.isUp();
+            let thrust = Input.isUp() ? 1 : (Input.isDown() ? -1 : 0);
             let turnDir = 0;
             if (Input.isLeft()) turnDir = -1;
             if (Input.isRight()) turnDir = 1;
@@ -109,7 +157,7 @@ class Game {
             if (!this.raceFinished) {
                 this.playerBike.update(dt, thrust, turnDir, this.collisionCtx);
             } else {
-                this.playerBike.update(dt, false, 0, this.collisionCtx);
+                this.playerBike.update(dt, 0, 0, this.collisionCtx);
             }
 
             this.crashOverlay.style.display = this.playerBike.state === 'crashed' ? 'block' : 'none';
@@ -120,7 +168,7 @@ class Game {
             if (!this.raceFinished) {
                 ai.update(dt, this.track, this.collisionCtx);
             } else {
-                ai.bike.update(dt, false, 0, this.collisionCtx);
+                ai.bike.update(dt, 0, 0, this.collisionCtx);
             }
         }
 
@@ -172,6 +220,16 @@ class Game {
     }
 
     draw() {
+        if (!this.track) return;
+
+        // Wash the screen in the concrete background color first
+        this.ctx.fillStyle = this.track.grassColor;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.save();
+        this.ctx.translate(this.offsetX, this.offsetY);
+        this.ctx.scale(this.renderScale, this.renderScale);
+
         this.track.draw(this.ctx, false);
 
         // Draw skid marks
@@ -183,6 +241,8 @@ class Game {
             if (!bike.isPlayer) bike.draw(this.ctx);
         }
         if (this.playerBike) this.playerBike.draw(this.ctx);
+
+        this.ctx.restore();
     }
 }
 
