@@ -236,14 +236,14 @@ const TrackData = [
         logicalHeight: 950,
         laps: 3,
         startLines: [
-            { x: 450, y: 650, angle: -Math.PI / 2 },
-            { x: 480, y: 650, angle: -Math.PI / 2 },
-            { x: 450, y: 700, angle: -Math.PI / 2 },
-            { x: 480, y: 700, angle: -Math.PI / 2 }
+            { x: 440, y: 550, angle: -Math.PI / 2 },
+            { x: 470, y: 550, angle: -Math.PI / 2 },
+            { x: 440, y: 580, angle: -Math.PI / 2 },
+            { x: 470, y: 580, angle: -Math.PI / 2 }
         ],
-        finishLine: { p1: { x: 410, y: 600 }, p2: { x: 490, y: 600 } },
+        finishLine: { p1: { x: 410, y: 500 }, p2: { x: 490, y: 500 } },
         waypoints: [
-            { x: 450, y: 600 },
+            { x: 450, y: 480 },
             { x: 450, y: 300 },
             { x: 600, y: 200 },
             { x: 800, y: 300 },
