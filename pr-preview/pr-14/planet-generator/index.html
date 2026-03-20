@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Planet Generator 2.0</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 13px;
+            z-index: 100;
+            width: 260px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        #controls h2 {
+            margin-top: 0;
+            font-size: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            text-align: center;
+            color: #4db8ff;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        input[type=range] {
+            width: 100%;
+            margin: 5px 0;
+            background: #333;
+            height: 6px;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #4db8ff;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            background: #70c9ff;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: linear-gradient(to right, #2b5876, #4e4376);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 5px;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+
+<body>
+    <div id="controls">
+        <h2>Planet Settings</h2>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Vary Seed (Visuals Only)</label>
+            </div>
+            <button id="newSeed">Randomize Terrain</button>
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Detail Scale</label>
+                <span id="noiseScaleValue">2.0</span>
+            </div>
+            <input type="range" id="noiseScale" min="0.5" max="10.0" value="2.0" step="0.1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Height Multiplier</label>
+                <span id="heightScaleValue">1.0</span>
+            </div>
+            <input type="range" id="heightScale" min="0" max="3.0" value="1.0" step="0.1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Water Level</label>
+                <span id="waterLevelValue">0.0</span>
+            </div>
+            <input type="range" id="waterLevel" min="-1.0" max="1.0" value="0.0" step="0.05">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Temperature (Biomes)</label>
+                <span id="tempOffsetValue">0.0</span>
+            </div>
+            <input type="range" id="tempOffset" min="-1.0" max="1.0" value="0.0" step="0.1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Rotation Speed</label>
+                <span id="rotationSpeedValue">0.02</span>
+            </div>
+            <input type="range" id="rotationSpeed" min="0" max="0.1" value="0.02" step="0.005">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Clouds Density</label>
+                <span id="cloudDensityValue">0.5</span>
+            </div>
+            <input type="range" id="cloudDensity" min="0" max="1" value="0.5" step="0.05">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Sun Longitude</label>
+            </div>
+            <input type="range" id="sunAngle" min="0" max="6.28" value="0.78" step="0.05">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Sun Latitude</label>
+            </div>
+            <input type="range" id="sunElevation" min="-1.57" max="1.57" value="0.52" step="0.05">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Ring Size</label>
+                <span id="ringSizeValue">1.5</span>
+            </div>
+            <input type="range" id="ringSize" min="0" max="3.0" value="1.5" step="0.1">
+        </div>
+
+        <div class="control-group">
+            <div class="control-header">
+                <label>Moon Count</label>
+                <span id="moonCountValue">1</span>
+            </div>
+            <input type="range" id="moonCount" min="0" max="5" value="1" step="1">
+        </div>
+
+        <button id="resetAnimals"
+            style="background: linear-gradient(to right, #c31432, #240b36); margin-top: 15px;">Reset Ecosystem</button>
+        <div style="margin-top: 10px; font-size: 11px; text-align: center; color: #aaa;">
+            Animals: <span id="animalCount">0</span> | Plants: <span id="plantCount">0</span>
+        </div>
+    </div>
+
+    <!-- Planet Vertex Shader -->
+    <script id="vertexShader" type="x-shader/x-vertex">
+        uniform float time;
+        uniform float radius;
+        uniform float heightScale;
+        uniform float noiseScale;
+        uniform float waterLevel;
+        uniform vec3 seedOffset;
+
+        varying float vElevation;
+        varying vec3 vPosition;
+        varying vec3 vNormal;
+        varying vec2 vUv;
+        varying float vNoiseVal;
+
+        // Simplex 3D Noise 
+        // by Ian McEwan, Ashima Arts
+        vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+        vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+
+        float snoise(vec3 v){ 
+            const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+            const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+            // First corner
+            vec3 i  = floor(v + dot(v, C.yyy) );
+            vec3 x0 = v - i + dot(i, C.xxx) ;
+
+            // Other corners
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min( g.xyz, l.zxy );
+            vec3 i2 = max( g.xyz, l.zxy );
+
+            //  x0 = x0 - 0.0 + 0.0 * C 
+            vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+            vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+            vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+
+            // Permutations
+            i = mod(i, 289.0 ); 
+            vec4 p = permute( permute( permute( 
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+            // Gradients
+            float n_ = 1.0/7.0; // N=7
+            vec3  ns = n_ * D.wyz - D.xzx;
+
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z);  //  mod(p,N*N)
+
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)
+
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+
+            vec4 b0 = vec4( x.xy, y.xy );
+            vec4 b1 = vec4( x.zw, y.zw );
+
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+            vec3 p0 = vec3(a0.xy,h.x);
+            vec3 p1 = vec3(a0.zw,h.y);
+            vec3 p2 = vec3(a1.xy,h.z);
+            vec3 p3 = vec3(a1.zw,h.w);
+
+            //Normalise gradients
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+            p0 *= norm.x;
+            p1 *= norm.y;
+            p2 *= norm.z;
+            p3 *= norm.w;
+
+            // Mix final noise value
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), 
+                                        dot(p2,x2), dot(p3,x3) ) );
+        }
+
+        // FBM (Fractal Brownian Motion)
+        float fbm(vec3 p) {
+            float value = 0.0;
+            float amplitude = 0.5;
+            float frequency = 1.0;
+            for (int i = 0; i < 6; i++) {
+                value += amplitude * snoise(p * frequency + seedOffset);
+                p *= 2.0; 
+                amplitude *= 0.5;
+            }
+            return value;
+        }
+
+        void main() {
+            vUv = uv;
+            vNormal = normal;
+
+            // Calculate noise value at this vertex position
+            vec3 noisePos = position * noiseScale * 0.5; 
+            float noiseVal = fbm(noisePos);
+            vNoiseVal = noiseVal;
+            vElevation = noiseVal; 
+            
+            float displacement = noiseVal * heightScale;
+            vec3 newPosition = position + normal * displacement;
+
+            vPosition = newPosition; // Pass world pos (relative to model)
+            
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+        }
+    </script>
+
+    <!-- Planet Fragment Shader -->
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        uniform float waterLevel;
+        uniform float tempOffset;
+        uniform float time;
+        uniform vec3 lightDirection;
+        uniform vec3 seedOffset;
+        
+        varying float vElevation;
+        varying vec3 vPosition;
+        varying vec3 vNormal;
+        varying vec2 vUv;
+        varying float vNoiseVal;
+
+        // Colors
+        const vec3 COLOR_DEEP_OCEAN = vec3(0.00, 0.02, 0.15);
+        const vec3 COLOR_OCEAN = vec3(0.00, 0.20, 0.60);
+        const vec3 COLOR_SHORE = vec3(0.00, 0.40, 0.70);
+        const vec3 COLOR_BEACH = vec3(0.85, 0.80, 0.60);
+        const vec3 COLOR_FOREST = vec3(0.05, 0.45, 0.05);
+        const vec3 COLOR_JUNGLE = vec3(0.02, 0.30, 0.02);
+        const vec3 COLOR_GRASS = vec3(0.20, 0.60, 0.10);
+        const vec3 COLOR_MOUNTAIN = vec3(0.40, 0.35, 0.30);
+        const vec3 COLOR_ROCK = vec3(0.30, 0.25, 0.25);
+        const vec3 COLOR_SNOW = vec3(0.95, 0.95, 0.98);
+        const vec3 COLOR_DESERT = vec3(0.80, 0.60, 0.30);
+
+        void main() {
+            vec3 normal = normalize(vNormal);
+            
+            vec3 normPos = normalize(vPosition);
+            float latitude = abs(normPos.y); 
+
+            float tempNoise = vNoiseVal * 0.2; 
+            float temperature = 1.0 - latitude + tempOffset - (vElevation * 0.8) + tempNoise;
+            
+            vec3 color = vec3(0.0);
+            float h = vElevation - waterLevel;
+
+            if (h < 0.0) {
+                float depth = -h;
+                if (depth > 0.35) color = COLOR_DEEP_OCEAN;
+                else if (depth > 0.1) color = COLOR_OCEAN;
+                else color = COLOR_SHORE;
+            } else {
+                if (h < 0.03) color = COLOR_BEACH;
+                else if (h < 0.5) {
+                    if (temperature < 0.15) color = COLOR_SNOW; 
+                    else if (temperature < 0.3) color = COLOR_MOUNTAIN; 
+                    else if (temperature > 0.85) color = COLOR_DESERT; 
+                    else if (temperature > 0.6) color = COLOR_JUNGLE; 
+                    else color = COLOR_FOREST; 
+                } else {
+                    if (temperature < 0.35) color = COLOR_SNOW;
+                    else if (temperature < 0.6) color = COLOR_ROCK;
+                    else color = COLOR_MOUNTAIN;
+                }
+            }
+
+            // Lighting
+            // Use Uniform Light Direction
+            vec3 sunDir = normalize(lightDirection); 
+            
+            float diff = max(dot(normal, sunDir), 0.0);
+            vec3 ambient = vec3(0.05, 0.05, 0.08); 
+            
+            float specular = 0.0;
+            if (h < 0.0) {
+                vec3 viewDir = normalize(cameraPosition - vPosition);
+                vec3 reflectDir = reflect(-sunDir, normal);
+                specular = pow(max(dot(viewDir, reflectDir), 0.0), 64.0) * 0.8;
+                specular *= 1.0 + vNoiseVal * 0.5; 
+            }
+
+            vec3 finalColor = color * (ambient + diff) + vec3(specular);
+            
+            float fresnel = pow(1.0 - max(dot(normal, normalize(cameraPosition - vPosition)), 0.0), 3.0);
+            finalColor = mix(finalColor, vec3(0.4, 0.6, 0.8), fresnel * 0.3);
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    </script>
+
+    <!-- Atmosphere Glow (Halo) -->
+    <script id="atmosphereVertexShader" type="x-shader/x-vertex">
+        varying vec3 vNormal;
+        void main() {
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+
+    <script id="atmosphereFragmentShader" type="x-shader/x-fragment">
+        uniform vec3 lightDirection;
+        varying vec3 vNormal;
+        void main() {
+            // Atmosphere should be brighter on sun side?
+            // Dot product with sun direction
+            float sunIntensity = max(dot(vNormal, lightDirection), 0.0);
+            
+            float intensity = pow(0.6 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
+            gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity * (1.0 + sunIntensity);
+        }
+    </script>
+
+    <!-- Cloud Shader -->
+    <script id="cloudVertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        varying vec3 vPosition;
+        void main() {
+            vUv = uv;
+            vPosition = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    </script>
+
+    <script id="cloudFragmentShader" type="x-shader/x-fragment">
+        uniform float time;
+        uniform float cloudDensity;
+        uniform vec3 seedOffset;
+        
+        varying vec2 vUv;
+        varying vec3 vPosition;
+
+        vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x, 289.0);}
+        vec4 taylorInvSqrt(vec4 r){return 1.79284291400159 - 0.85373472095314 * r;}
+        float snoise(vec3 v){ 
+            const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+            const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+            vec3 i  = floor(v + dot(v, C.yyy) );
+            vec3 x0 = v - i + dot(i, C.xxx) ;
+            vec3 g = step(x0.yzx, x0.xyz);
+            vec3 l = 1.0 - g;
+            vec3 i1 = min( g.xyz, l.zxy );
+            vec3 i2 = max( g.xyz, l.zxy );
+            vec3 x1 = x0 - i1 + 1.0 * C.xxx;
+            vec3 x2 = x0 - i2 + 2.0 * C.xxx;
+            vec3 x3 = x0 - 1.0 + 3.0 * C.xxx;
+            i = mod(i, 289.0 ); 
+            vec4 p = permute( permute( permute( 
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                    + i.y + vec4(0.0, i1.y, i2.y, 1.0 )) 
+                    + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+            float n_ = 1.0/7.0; 
+            vec3  ns = n_ * D.wyz - D.xzx;
+            vec4 j = p - 49.0 * floor(p * ns.z * ns.z); 
+            vec4 x_ = floor(j * ns.z);
+            vec4 y_ = floor(j - 7.0 * x_ ); 
+            vec4 x = x_ *ns.x + ns.yyyy;
+            vec4 y = y_ *ns.x + ns.yyyy;
+            vec4 h = 1.0 - abs(x) - abs(y);
+            vec4 b0 = vec4( x.xy, y.xy );
+            vec4 b1 = vec4( x.zw, y.zw );
+            vec4 s0 = floor(b0)*2.0 + 1.0;
+            vec4 s1 = floor(b1)*2.0 + 1.0;
+            vec4 sh = -step(h, vec4(0.0));
+            vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+            vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+            vec3 p0 = vec3(a0.xy,h.x);
+            vec3 p1 = vec3(a0.zw,h.y);
+            vec3 p2 = vec3(a1.xy,h.z);
+            vec3 p3 = vec3(a1.zw,h.w);
+            vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+            p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+            vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+            m = m * m;
+            return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+        }
+
+        float fbm(vec3 p) {
+            float value = 0.0;
+            float amp = 0.5;
+            for (int i = 0; i < 4; i++) {
+                value += amp * snoise(p);
+                p *= 2.0;
+                amp *= 0.5;
+            }
+            return value;
+        }
+
+        void main() {
+            vec3 pos = vPosition * 0.15; 
+            
+            pos.x += time * 0.02;
+            pos.z += time * 0.01;
+            
+            float n = fbm(pos + seedOffset);
+            
+            float density = max(0.0, n * cloudDensity + 0.1); 
+            float alpha = smoothstep(0.2, 0.6, density);
+            
+            vec3 color = vec3(1.0); 
+            
+            gl_FragColor = vec4(color, alpha * 0.7);
+        }
+    </script>
+
+    <!-- Sun Fragment Shader (Glow) -->
+    <script id="sunFragmentShader" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        void main() {
+            vec2 center = vec2(0.5, 0.5);
+            float dist = distance(vUv, center);
+            float glow = 1.0 - smoothstep(0.0, 0.5, dist);
+            glow = pow(glow, 3.0); 
+            
+            float core = 1.0 - smoothstep(0.0, 0.15, dist);
+            core = pow(core, 2.0);
+            
+            vec3 color = mix(vec3(1.0, 0.5, 0.1), vec3(1.0, 1.0, 0.8), core); 
+            
+            if (glow < 0.01) discard;
+
+            gl_FragColor = vec4(color, glow);
+        }
+    </script>
+
+    <!-- Sun Vertex Shader -->
+    <script id="sunVertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            vec4 mvPosition = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+            float scale = 120.0; // Much larger sun
+            mvPosition.xy += position.xy * scale;
+            gl_Position = projectionMatrix * mvPosition;
+        }
+    </script>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        class SimplexNoise {
+            constructor(random = Math.random) {
+                this.p = new Uint8Array(256);
+                this.perm = new Uint8Array(512);
+                this.permMod12 = new Uint8Array(512);
+                for (let i = 0; i < 256; i++) {
+                    this.p[i] = Math.floor(random() * 256);
+                }
+                for (let i = 0; i < 512; i++) {
+                    this.perm[i] = this.p[i & 255];
+                    this.permMod12[i] = this.perm[i] % 12;
+                }
+                this.grad3 = [
+                    1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1, 0,
+                    1, 0, 1, -1, 0, 1, 1, 0, -1, -1, 0, -1,
+                    0, 1, 1, 0, -1, 1, 0, 1, -1, 0, -1, -1
+                ];
+            }
+
+            dot(g, x, y, z) {
+                return g[0] * x + g[1] * y + g[2] * z;
+            }
+
+            noise3D(xin, yin, zin) {
+                let n0, n1, n2, n3;
+                const F3 = 1.0 / 3.0;
+                const s = (xin + yin + zin) * F3;
+                const i = Math.floor(xin + s);
+                const j = Math.floor(yin + s);
+                const k = Math.floor(zin + s);
+                const G3 = 1.0 / 6.0;
+                const t = (i + j + k) * G3;
+                const X0 = i - t;
+                const Y0 = j - t;
+                const Z0 = k - t;
+                const x0 = xin - X0;
+                const y0 = yin - Y0;
+                const z0 = zin - Z0;
+
+                let i1, j1, k1;
+                let i2, j2, k2;
+                if (x0 >= y0) {
+                    if (y0 >= z0) { i1 = 1; j1 = 0; k1 = 0; i2 = 1; j2 = 1; k2 = 0; }
+                    else if (x0 >= z0) { i1 = 1; j1 = 0; k1 = 0; i2 = 1; j2 = 0; k2 = 1; }
+                    else { i1 = 0; j1 = 0; k1 = 1; i2 = 1; j2 = 0; k2 = 1; }
+                } else {
+                    if (y0 < z0) { i1 = 0; j1 = 0; k1 = 1; i2 = 0; j2 = 1; k2 = 1; }
+                    else if (x0 < z0) { i1 = 0; j1 = 1; k1 = 0; i2 = 0; j2 = 1; k2 = 1; }
+                    else { i1 = 0; j1 = 1; k1 = 0; i2 = 1; j2 = 1; k2 = 0; }
+                }
+
+                const x1 = x0 - i1 + G3;
+                const y1 = y0 - j1 + G3;
+                const z1 = z0 - k1 + G3;
+                const x2 = x0 - i2 + 2.0 * G3;
+                const y2 = y0 - j2 + 2.0 * G3;
+                const z2 = z0 - k2 + 2.0 * G3;
+                const x3 = x0 - 1.0 + 3.0 * G3;
+                const y3 = y0 - 1.0 + 3.0 * G3;
+                const z3 = z0 - 1.0 + 3.0 * G3;
+
+                const ii = i & 255;
+                const jj = j & 255;
+                const kk = k & 255;
+                const gi0 = this.permMod12[ii + this.perm[jj + this.perm[kk]]];
+                const gi1 = this.permMod12[ii + i1 + this.perm[jj + j1 + this.perm[kk + k1]]];
+                const gi2 = this.permMod12[ii + i2 + this.perm[jj + j2 + this.perm[kk + k2]]];
+                const gi3 = this.permMod12[ii + 1 + this.perm[jj + 1 + this.perm[kk + 1]]];
+
+                let t0 = 0.6 - x0 * x0 - y0 * y0 - z0 * z0;
+                if (t0 < 0) n0 = 0.0;
+                else {
+                    t0 *= t0;
+                    n0 = t0 * t0 * this.dot(this.grad3.slice(gi0 * 3, gi0 * 3 + 3), x0, y0, z0);
+                }
+
+                let t1 = 0.6 - x1 * x1 - y1 * y1 - z1 * z1;
+                if (t1 < 0) n1 = 0.0;
+                else {
+                    t1 *= t1;
+                    n1 = t1 * t1 * this.dot(this.grad3.slice(gi1 * 3, gi1 * 3 + 3), x1, y1, z1);
+                }
+
+                let t2 = 0.6 - x2 * x2 - y2 * y2 - z2 * z2;
+                if (t2 < 0) n2 = 0.0;
+                else {
+                    t2 *= t2;
+                    n2 = t2 * t2 * this.dot(this.grad3.slice(gi2 * 3, gi2 * 3 + 3), x2, y2, z2);
+                }
+
+                let t3 = 0.6 - x3 * x3 - y3 * y3 - z3 * z3;
+                if (t3 < 0) n3 = 0.0;
+                else {
+                    t3 *= t3;
+                    n3 = t3 * t3 * this.dot(this.grad3.slice(gi3 * 3, gi3 * 3 + 3), x3, y3, z3);
+                }
+
+                return 32.0 * (n0 + n1 + n2 + n3);
+            }
+        }
+
+        const CONFIG = {
+            noiseScale: 2.0,
+            heightScale: 1.0,
+            waterLevel: 0.0,
+            tempOffset: 0.0,
+            seedOffset: { x: 0, y: 0, z: 0 },
+            rotationSpeed: 0.02,
+            cloudDensity: 0.5,
+            planetSize: 10,
+            sunDistance: 400, // Further away
+            sunAngle: 0.78,
+            sunElevation: 0.52,
+            ringSize: 1.5,
+            moonCount: 1
+        };
+
+        let scene, camera, renderer, planetMesh, atmosphereMesh, cloudMesh, starsMesh, sunMesh, sunLight, controls;
+        let noiseGen;
+        let animals = [], plants = [];
+        let ringMesh = null;
+        let moons = [];
+
+        function getTerrainElevation(x, y, z) {
+            const ns = CONFIG.noiseScale * 0.5;
+            const nx = x * ns;
+            const ny = y * ns;
+            const nz = z * ns;
+
+            let value = 0.0;
+            let amplitude = 0.5;
+            let frequency = 1.0;
+
+            for (let i = 0; i < 6; i++) {
+                value += amplitude * noiseGen.noise3D(
+                    nx * frequency + CONFIG.seedOffset.x,
+                    ny * frequency + CONFIG.seedOffset.y,
+                    nz * frequency + CONFIG.seedOffset.z
+                );
+                frequency *= 2.0;
+                amplitude *= 0.5;
+            }
+            return value;
+        }
+
+        function getSurfacePoint(x, y, z) {
+            return getTerrainElevation(x, y, z);
+        }
+
+        function init() {
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            scene.fog = new THREE.FogExp2(0x000000, 0.002);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 40;
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.2);
+            scene.add(ambientLight);
+
+            sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            scene.add(sunLight);
+
+            createStars();
+            createSun();
+
+            noiseGen = new SimplexNoise();
+            CONFIG.seedOffset = { x: Math.random() * 100, y: Math.random() * 100, z: Math.random() * 100 };
+
+            createPlanet();
+            setupUI();
+            animate();
+        }
+
+        function updateSunPosition() {
+            const r = CONFIG.sunDistance;
+            const theta = CONFIG.sunAngle;
+            const phi = CONFIG.sunElevation;
+
+            const x = r * Math.cos(phi) * Math.sin(theta);
+            const y = r * Math.sin(phi);
+            const z = r * Math.cos(phi) * Math.cos(theta);
+
+            sunLight.position.set(x, y, z);
+
+            if (sunMesh) sunMesh.position.set(x, y, z);
+
+            if (planetMesh) {
+                planetMesh.material.uniforms.lightDirection.value.copy(sunLight.position).normalize();
+            }
+            if (atmosphereMesh) {
+                atmosphereMesh.material.uniforms.lightDirection.value.copy(sunLight.position).normalize();
+            }
+        }
+
+        function createSun() {
+            const geometry = new THREE.PlaneGeometry(1, 1);
+            const material = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('sunVertexShader').textContent,
+                fragmentShader: document.getElementById('sunFragmentShader').textContent,
+                transparent: true,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            sunMesh = new THREE.Mesh(geometry, material);
+            scene.add(sunMesh);
+            updateSunPosition();
+        }
+
+        function createStars() {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const colors = [];
+            for (let i = 0; i < 5000; i++) {
+                const x = (Math.random() - 0.5) * 800;
+                const y = (Math.random() - 0.5) * 800;
+                const z = (Math.random() - 0.5) * 800;
+                vertices.push(x, y, z);
+                const colorType = Math.random();
+                if (colorType > 0.9) colors.push(0.8, 0.8, 1.0);
+                else if (colorType > 0.7) colors.push(1.0, 0.9, 0.8);
+                else colors.push(1.0, 1.0, 1.0);
+            }
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            const material = new THREE.PointsMaterial({ size: 1.5, vertexColors: true, transparent: true, opacity: 0.9 });
+            starsMesh = new THREE.Points(geometry, material);
+            scene.add(starsMesh);
+        }
+
+        function createPlanet() {
+            if (planetMesh) scene.remove(planetMesh);
+            if (atmosphereMesh) scene.remove(atmosphereMesh);
+            if (cloudMesh) scene.remove(cloudMesh);
+            if (ringMesh) { scene.remove(ringMesh); ringMesh.geometry.dispose(); ringMesh.material.dispose(); ringMesh = null; }
+            moons.forEach(m => { scene.remove(m.mesh); m.mesh.geometry.dispose(); m.mesh.material.dispose(); });
+            moons = [];
+
+            const geometry = new THREE.IcosahedronGeometry(CONFIG.planetSize, 80);
+            const material = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShader').textContent,
+                uniforms: {
+                    noiseScale: { value: CONFIG.noiseScale },
+                    heightScale: { value: CONFIG.heightScale },
+                    waterLevel: { value: CONFIG.waterLevel },
+                    tempOffset: { value: CONFIG.tempOffset },
+                    seedOffset: { value: new THREE.Vector3(CONFIG.seedOffset.x, CONFIG.seedOffset.y, CONFIG.seedOffset.z) },
+                    time: { value: 0 },
+                    lightDirection: { value: new THREE.Vector3(1, 0.2, 1).normalize() }
+                }
+            });
+            planetMesh = new THREE.Mesh(geometry, material);
+            scene.add(planetMesh);
+
+            const cloudGeo = new THREE.IcosahedronGeometry(CONFIG.planetSize + 0.3, 40);
+            const cloudMat = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('cloudVertexShader').textContent,
+                fragmentShader: document.getElementById('cloudFragmentShader').textContent,
+                uniforms: {
+                    time: { value: 0 },
+                    cloudDensity: { value: CONFIG.cloudDensity },
+                    seedOffset: { value: new THREE.Vector3(CONFIG.seedOffset.x + 50, CONFIG.seedOffset.y + 50, CONFIG.seedOffset.z + 50) }
+                },
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+            });
+            cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+            scene.add(cloudMesh);
+
+            const atmGeometry = new THREE.IcosahedronGeometry(CONFIG.planetSize + 2.5, 32);
+            const atmMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('atmosphereVertexShader').textContent,
+                fragmentShader: document.getElementById('atmosphereFragmentShader').textContent,
+                uniforms: {
+                    lightDirection: { value: new THREE.Vector3(1, 0.2, 1).normalize() }
+                },
+                blending: THREE.AdditiveBlending,
+                side: THREE.BackSide,
+                transparent: true
+            });
+            atmosphereMesh = new THREE.Mesh(atmGeometry, atmMaterial);
+            scene.add(atmosphereMesh);
+
+            updateSunPosition();
+            createRing();
+            createMoons();
+        }
+
+        function createRing() {
+            if (ringMesh) {
+                scene.remove(ringMesh);
+                ringMesh.geometry.dispose();
+                ringMesh.material.dispose();
+                ringMesh = null;
+            }
+            if (CONFIG.ringSize <= 0) return;
+
+            const innerRadius = CONFIG.planetSize * 1.5;
+            const outerRadius = innerRadius + (CONFIG.planetSize * CONFIG.ringSize);
+            const ringGeo = new THREE.RingGeometry(innerRadius, outerRadius, 128);
+            
+            const ringShaderMat = new THREE.ShaderMaterial({
+                vertexShader: `
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    void main() {
+                        vUv = uv;
+                        vPos = position;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    varying vec2 vUv;
+                    varying vec3 vPos;
+                    uniform float innerRadius;
+                    uniform float outerRadius;
+                    
+                    void main() {
+                        float dist = length(vPos.xy);
+                        float normalizedDist = (dist - innerRadius) / (outerRadius - innerRadius);
+                        
+                        float bands = sin(normalizedDist * 60.0) * 0.5 + 0.5;
+                        bands *= sin(normalizedDist * 25.0) * 0.5 + 0.5;
+                        bands += sin(normalizedDist * 120.0) * 0.2;
+                        
+                        float alpha = smoothstep(0.0, 0.05, normalizedDist) * smoothstep(1.0, 0.95, normalizedDist);
+                        alpha *= (bands * 0.6 + 0.1) * 0.9;
+                        
+                        vec3 colorStart = vec3(0.9, 0.85, 0.75);
+                        vec3 colorEnd = vec3(0.5, 0.55, 0.6);
+                        vec3 finalColor = mix(colorStart, colorEnd, normalizedDist);
+                        
+                        gl_FragColor = vec4(finalColor, alpha);
+                    }
+                `,
+                uniforms: {
+                    innerRadius: { value: innerRadius },
+                    outerRadius: { value: outerRadius }
+                },
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                blending: THREE.NormalBlending
+            });
+
+            ringMesh = new THREE.Mesh(ringGeo, ringShaderMat);
+            ringMesh.rotation.x = Math.PI / 2 + 0.1; // slight tilt relative to planet equator
+            ringMesh.rotation.y = 0.2;
+            scene.add(ringMesh);
+        }
+
+        function createMoons() {
+            moons.forEach(m => { scene.remove(m.mesh); m.mesh.geometry.dispose(); m.mesh.material.dispose(); });
+            moons = [];
+            
+            for (let i = 0; i < CONFIG.moonCount; i++) {
+                const size = 0.8 + Math.random() * 1.5;
+                const dist = CONFIG.planetSize * 3.0 + Math.random() * CONFIG.planetSize * 4.0;
+                
+                const geo = new THREE.IcosahedronGeometry(size, 4);
+                // displace the moon vertices to make it look like an asteroid
+                const posAttribute = geo.attributes.position;
+                const vertex = new THREE.Vector3();
+                for (let j = 0; j < posAttribute.count; j++) {
+                    vertex.fromBufferAttribute(posAttribute, j);
+                    vertex.normalize();
+                    const noise = noiseGen.noise3D(
+                        vertex.x * 2 + i * 10, 
+                        vertex.y * 2 + i * 10, 
+                        vertex.z * 2 + i * 10
+                    );
+                    const displacement = size + noise * size * 0.2;
+                    vertex.multiplyScalar(displacement);
+                    posAttribute.setXYZ(j, vertex.x, vertex.y, vertex.z);
+                }
+                geo.computeVertexNormals();
+                
+                const mat = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color().setHSL(0, 0, 0.3 + Math.random() * 0.4),
+                    roughness: 0.9,
+                    metalness: 0.1
+                });
+                const mesh = new THREE.Mesh(geo, mat);
+                scene.add(mesh);
+                
+                moons.push({
+                    mesh: mesh,
+                    distance: dist,
+                    speed: (0.005 + Math.random() * 0.005) * (Math.random() > 0.5 ? 1 : -1),
+                    angle: Math.random() * Math.PI * 2,
+                    tiltX: (Math.random() - 0.5) * 0.8,
+                    tiltZ: (Math.random() - 0.5) * 0.8,
+                    rotSpeedX: Math.random() * 0.05,
+                    rotSpeedY: Math.random() * 0.05
+                });
+            }
+        }
+
+        class Entity {
+            constructor() {
+                this.mesh = new THREE.Group();
+                this.theta = Math.random() * Math.PI * 2;
+                this.phi = Math.acos(2 * Math.random() - 1);
+                scene.add(this.mesh);
+            }
+            remove() {
+                scene.remove(this.mesh);
+                this.mesh.traverse((child) => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+            }
+        }
+
+        class Animal extends Entity {
+            constructor() {
+                super();
+                const body = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.5), new THREE.MeshStandardMaterial({ color: 0xff8844 }));
+                body.position.y = 0.25;
+                this.mesh.add(body);
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.3), new THREE.MeshStandardMaterial({ color: 0xffaa66 }));
+                head.position.set(0, 0.5, 0.35);
+                this.mesh.add(head);
+                const legGeo = new THREE.BoxGeometry(0.08, 0.3, 0.08);
+                const legMat = new THREE.MeshStandardMaterial({ color: 0x442200 });
+                const leg1 = new THREE.Mesh(legGeo, legMat); leg1.position.set(-0.1, 0.15, 0.15);
+                const leg2 = new THREE.Mesh(legGeo, legMat); leg2.position.set(0.1, 0.15, 0.15);
+                const leg3 = new THREE.Mesh(legGeo, legMat); leg3.position.set(-0.1, 0.15, -0.15);
+                const leg4 = new THREE.Mesh(legGeo, legMat); leg4.position.set(0.1, 0.15, -0.15);
+                this.mesh.add(leg1, leg2, leg3, leg4);
+
+                this.speed = 0.005;
+                this.turnSpeed = 0.05;
+                this.targetTheta = this.theta;
+                this.targetPhi = this.phi;
+            }
+            update() {
+                if (Math.random() < 0.02) {
+                    this.targetTheta = this.theta + (Math.random() - 0.5);
+                    this.targetPhi = this.phi + (Math.random() - 0.5);
+                    this.targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1, this.targetPhi));
+                }
+                this.theta += (this.targetTheta - this.theta) * this.turnSpeed;
+                this.phi += (this.targetPhi - this.phi) * this.turnSpeed;
+            }
+        }
+
+        class Plant extends Entity {
+            constructor() {
+                super();
+                const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 0.5, 5), new THREE.MeshStandardMaterial({ color: 0x553311 }));
+                stem.rotation.x = Math.PI / 2;
+                stem.position.y = 0.25;
+                this.mesh.add(stem);
+                const top = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0x22aa22 }));
+                top.position.y = 0.6;
+                this.mesh.add(top);
+            }
+        }
+
+        function populate() {
+            animals.forEach(a => a.remove());
+            plants.forEach(p => p.remove());
+            animals = [];
+            plants = [];
+            for (let i = 0; i < 15; i++) animals.push(new Animal());
+            for (let i = 0; i < 30; i++) plants.push(new Plant());
+            updateCounts();
+        }
+
+        function updateCounts() {
+            document.getElementById('animalCount').innerText = animals.length;
+            document.getElementById('plantCount').innerText = plants.length;
+        }
+
+        function setupUI() {
+            const noiseScaleInput = document.getElementById('noiseScale');
+            noiseScaleInput.addEventListener('input', (e) => {
+                CONFIG.noiseScale = parseFloat(e.target.value);
+                document.getElementById('noiseScaleValue').innerText = CONFIG.noiseScale.toFixed(1);
+                planetMesh.material.uniforms.noiseScale.value = CONFIG.noiseScale;
+            });
+            const heightScaleInput = document.getElementById('heightScale');
+            heightScaleInput.addEventListener('input', (e) => {
+                CONFIG.heightScale = parseFloat(e.target.value);
+                document.getElementById('heightScaleValue').innerText = CONFIG.heightScale.toFixed(1);
+                planetMesh.material.uniforms.heightScale.value = CONFIG.heightScale;
+            });
+            const waterLevelInput = document.getElementById('waterLevel');
+            waterLevelInput.addEventListener('input', (e) => {
+                CONFIG.waterLevel = parseFloat(e.target.value);
+                document.getElementById('waterLevelValue').innerText = CONFIG.waterLevel.toFixed(2);
+                planetMesh.material.uniforms.waterLevel.value = CONFIG.waterLevel;
+            });
+            const tempOffsetInput = document.getElementById('tempOffset');
+            tempOffsetInput.addEventListener('input', (e) => {
+                CONFIG.tempOffset = parseFloat(e.target.value);
+                document.getElementById('tempOffsetValue').innerText = CONFIG.tempOffset.toFixed(1);
+                planetMesh.material.uniforms.tempOffset.value = CONFIG.tempOffset;
+            });
+            const rotSpeedInput = document.getElementById('rotationSpeed');
+            rotSpeedInput.addEventListener('input', (e) => {
+                CONFIG.rotationSpeed = parseFloat(e.target.value);
+                document.getElementById('rotationSpeedValue').innerText = CONFIG.rotationSpeed.toFixed(3);
+            });
+            const cloudDensityInput = document.getElementById('cloudDensity');
+            cloudDensityInput.addEventListener('input', (e) => {
+                CONFIG.cloudDensity = parseFloat(e.target.value);
+                document.getElementById('cloudDensityValue').innerText = CONFIG.cloudDensity.toFixed(2);
+                cloudMesh.material.uniforms.cloudDensity.value = CONFIG.cloudDensity;
+            });
+
+            // Sun Controls
+            const sunAngleInput = document.getElementById('sunAngle');
+            sunAngleInput.addEventListener('input', (e) => {
+                CONFIG.sunAngle = parseFloat(e.target.value);
+                updateSunPosition();
+            });
+            const sunElevationInput = document.getElementById('sunElevation');
+            sunElevationInput.addEventListener('input', (e) => {
+                CONFIG.sunElevation = parseFloat(e.target.value);
+                updateSunPosition();
+            });
+
+            const ringSizeInput = document.getElementById('ringSize');
+            if (ringSizeInput) {
+                ringSizeInput.addEventListener('input', (e) => {
+                    CONFIG.ringSize = parseFloat(e.target.value);
+                    document.getElementById('ringSizeValue').innerText = CONFIG.ringSize.toFixed(1);
+                    createRing();
+                });
+            }
+
+            const moonCountInput = document.getElementById('moonCount');
+            if (moonCountInput) {
+                moonCountInput.addEventListener('input', (e) => {
+                    CONFIG.moonCount = parseInt(e.target.value);
+                    document.getElementById('moonCountValue').innerText = CONFIG.moonCount;
+                    createMoons();
+                });
+            }
+
+
+            document.getElementById('newSeed').addEventListener('click', () => {
+                CONFIG.seedOffset = { x: Math.random() * 100, y: Math.random() * 100, z: Math.random() * 100 };
+                planetMesh.material.uniforms.seedOffset.value.set(CONFIG.seedOffset.x, CONFIG.seedOffset.y, CONFIG.seedOffset.z);
+                cloudMesh.material.uniforms.seedOffset.value.set(CONFIG.seedOffset.x + 50, CONFIG.seedOffset.y + 50, CONFIG.seedOffset.z + 50);
+                populate();
+            });
+            document.getElementById('resetAnimals').addEventListener('click', populate);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now() * 0.001;
+
+            if (planetMesh) {
+                planetMesh.rotation.y += CONFIG.rotationSpeed * 0.5;
+                planetMesh.material.uniforms.time.value = time;
+                cloudMesh.rotation.y += CONFIG.rotationSpeed * 0.6;
+                cloudMesh.material.uniforms.time.value = time;
+
+                if (ringMesh) {
+                    ringMesh.rotation.z -= CONFIG.rotationSpeed * 0.1;
+                }
+                
+                moons.forEach(moon => {
+                    moon.angle += moon.speed;
+                    moon.mesh.position.x = Math.cos(moon.angle) * moon.distance;
+                    moon.mesh.position.y = Math.sin(moon.angle) * moon.distance * moon.tiltX;
+                    moon.mesh.position.z = Math.sin(moon.angle) * moon.distance * Math.cos(moon.tiltZ);
+                    moon.mesh.rotation.x += moon.rotSpeedX;
+                    moon.mesh.rotation.y += moon.rotSpeedY;
+                });
+
+                if (animals.length === 0) populate();
+
+                if (animals[0] && animals[0].mesh.parent !== planetMesh) {
+                    animals.forEach(a => planetMesh.add(a.mesh));
+                    plants.forEach(p => planetMesh.add(p.mesh));
+                }
+
+                const r = CONFIG.planetSize;
+
+                const updateEntity = (entity) => {
+                    entity.update ? entity.update() : null;
+
+                    const dx = r * Math.sin(entity.phi) * Math.cos(entity.theta);
+                    const dy = r * Math.cos(entity.phi);
+                    const dz = r * Math.sin(entity.phi) * Math.sin(entity.theta);
+
+                    const noiseVal = getTerrainElevation(dx, dy, dz);
+                    const hOffset = noiseVal * CONFIG.heightScale;
+
+                    const pos = new THREE.Vector3(dx, dy, dz).normalize().multiplyScalar(r + hOffset);
+                    entity.mesh.position.copy(pos);
+
+                    const up = pos.clone().normalize();
+                    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+                    entity.mesh.setRotationFromQuaternion(q);
+                };
+
+                animals.forEach(updateEntity);
+                plants.forEach(updateEntity);
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('load', init);
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+
+</html>
