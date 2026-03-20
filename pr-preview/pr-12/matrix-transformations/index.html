@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matrix Transformations Visualization</title>
+    <link rel="stylesheet" href="style.css">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+</head>
+<body>
+    <h1>Matrix Transformations Visualization</h1>
+    <p><a href="3d.html">Switch to 3D Visualization</a></p>
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="transformCanvas" width="400" height="400"></canvas>
+        </div>
+        <div id="react-root"></div>
+        <div class="side-panel">
+            <div class="presets">
+                <h2>Preset Transformations</h2>
+                <button id="identityBtn">Identity</button>
+                <button id="rotate45Btn">Rotate 45°</button>
+                <button id="scale2xBtn">Scale 2x</button>
+                <button id="translate50Btn">Translate (50, 30)</button>
+                <button id="shearBtn">Shear</button>
+                <button id="reflectXBtn">Reflect over X-axis</button>
+                <button id="complexBtn">Complex Transform</button>
+            </div>
+            <div class="info">
+                <h2>Info</h2>
+                <p>Matrix transformations combine rotation, scaling, and translation to transform shapes in 2D space.</p>
+                <p>The transformation matrix is applied to each point of the shape.</p>
+            </div>
+            <div class="options">
+                <label><input type="checkbox" id="showGrid" checked> Show grid</label>
+            </div>
+            <div class="pipeline">
+                <h2>Transformation Pipeline</h2>
+                <div id="pipelineDisplay"></div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

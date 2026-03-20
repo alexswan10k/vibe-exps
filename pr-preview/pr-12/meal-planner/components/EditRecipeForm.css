@@ -1,0 +1,438 @@
+/* Edit Recipe Form Component Styles */
+/* Recipe Editor */
+.recipe-editor {
+    margin-top: 20px;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.ingredient-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.ingredient-main {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ingredient-nutritional {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.nutritional-macros {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.nutritional-vitamins, .nutritional-minerals {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 4px;
+}
+
+.nutritional-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+}
+
+.edit-recipe-form {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.edit-recipe-form .modal-buttons {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid #e1e8ed;
+    justify-content: center;
+    gap: 20px;
+}
+
+.recipe-name-input {
+    padding: 8px 12px;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.recipe-name-input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    background: white;
+}
+
+.ingredients-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.add-ingredient-btn {
+    align-self: flex-start;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+}
+
+.add-ingredient-btn:hover {
+    background: linear-gradient(135deg, #229954 0%, #27ae60 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.remove-ingredient-btn {
+    padding: 4px 8px;
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(231, 76, 60, 0.3);
+}
+
+.remove-ingredient-btn:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(231, 76, 60, 0.4);
+}
+
+/* Method Styles */
+.method-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 15px;
+}
+
+.method-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.step-number {
+    font-weight: bold;
+    color: #2c3e50;
+    min-width: 25px;
+    font-size: 16px;
+    margin-top: 8px;
+}
+
+.method-row textarea {
+    flex: 1;
+    padding: 10px 12px;
+    border: 2px solid #e1e8ed;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 60px;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.method-row textarea:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    background: white;
+}
+
+.remove-method-btn {
+    padding: 6px 10px;
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(231, 76, 60, 0.3);
+    align-self: flex-start;
+    margin-top: 8px;
+}
+
+.remove-method-btn:hover {
+    background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(231, 76, 60, 0.4);
+}
+
+.add-method-btn {
+    align-self: flex-start;
+    padding: 6px 12px;
+    background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+}
+
+.add-method-btn:hover {
+    background: linear-gradient(135deg, #229954 0%, #27ae60 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+/* AI Settings Styles */
+.ai-settings-toggle {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.settings-toggle-btn {
+    padding: 8px 16px;
+    background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(127, 140, 141, 0.3);
+}
+
+.settings-toggle-btn:hover {
+    background: linear-gradient(135deg, #7f8c8d 0%, #6c7b7d 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(127, 140, 141, 0.4);
+}
+
+.mode-toggle {
+    display: flex;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.mode-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    background: transparent;
+    color: #7f8c8d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.mode-btn:hover {
+    background: rgba(52, 152, 219, 0.1);
+    color: #3498db;
+}
+
+.mode-btn.active {
+    background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    color: white;
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.ai-settings {
+    margin-bottom: 20px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.setting-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.setting-row:last-child {
+    margin-bottom: 0;
+}
+
+.setting-row label {
+    min-width: 120px;
+    font-weight: 500;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.setting-row input {
+    flex: 1;
+    padding: 10px 12px;
+    border: 2px solid #e1e8ed;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.setting-row input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    background: white;
+}
+
+/* AI Form Styles */
+.ai-form-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.ai-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.copy-prompt-btn, .paste-result-btn {
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(243, 156, 18, 0.3);
+    text-transform: none;
+}
+
+.copy-prompt-btn:hover, .paste-result-btn:hover {
+    background: linear-gradient(135deg, #e67e22 0%, #d35400 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(243, 156, 18, 0.4);
+}
+
+.paste-result-btn {
+    background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+    box-shadow: 0 2px 8px rgba(155, 89, 182, 0.3);
+}
+
+.paste-result-btn:hover {
+    background: linear-gradient(135deg, #8e44ad 0%, #7d3c98 100%);
+    box-shadow: 0 4px 12px rgba(155, 89, 182, 0.4);
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+    /* Ingredient row mobile styles */
+    .ingredient-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .ingredient-row input {
+        margin: 0;
+        width: 80px;
+    }
+
+    .ingredient-row input[type="number"] {
+        flex: none;
+    }
+
+    .ingredient-row input[type="text"]:nth-child(3) {
+        flex: none;
+        width: 80px;
+    }
+
+    /* Method row mobile styles */
+    .method-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+        padding: 12px;
+    }
+
+    .step-number {
+        align-self: flex-start;
+        margin-top: 0;
+    }
+
+    .method-row textarea {
+        width: 100%;
+        margin: 0;
+    }
+
+    /* AI settings mobile styles */
+    .ai-settings-toggle {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+
+    .mode-toggle {
+        align-self: center;
+    }
+
+    .setting-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .setting-row label {
+        min-width: auto;
+        text-align: left;
+    }
+}
