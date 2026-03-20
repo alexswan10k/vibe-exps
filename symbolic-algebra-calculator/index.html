@@ -213,7 +213,7 @@
         <button onclick="processMath('factor')">Factor</button>
 
         <div class="action-group">
-            <button onclick="processMath('solve')">Solve for</button>
+            <button onclick="processMath('solve')">Solve for / Roots of</button>
             <input type="text" id="solveVar" class="secondary-input" value="x" placeholder="var">
         </div>
 
@@ -227,7 +227,20 @@
             <input type="text" id="intVar" class="secondary-input" value="x" placeholder="var">
         </div>
 
-        <button class="clear-btn" onclick="clearHistory()">Clear History</button>
+        <div class="action-group">
+            <button onclick="processMath('sub')">Substitute</button>
+            <input type="text" id="subVar" class="secondary-input" value="x" placeholder="var">
+            <span style="margin: 0 5px;">=</span>
+            <input type="text" id="subVal" class="secondary-input" value="1" placeholder="val">
+        </div>
+
+        <div class="action-group" style="flex-basis: 100%; margin-top: 10px;">
+            <button onclick="processMath('sys')">Solve System</button>
+            <input type="text" id="sysEq1" class="secondary-input" style="flex:1" placeholder="Eq 1, e.g., x+y=5">
+            <input type="text" id="sysEq2" class="secondary-input" style="flex:1" placeholder="Eq 2, e.g., x-y=1">
+        </div>
+
+        <button class="clear-btn" style="margin-top: 10px;" onclick="clearHistory()">Clear History</button>
     </div>
 
     <div id="currentError" class="error" style="display: none;"></div>
@@ -276,11 +289,11 @@
 
         const inputDiv = document.createElement("div");
         inputDiv.className = "input-display";
-        inputDiv.innerHTML = `$$ ${inputLatex} $$`;
+        inputDiv.textContent = `$$ ${inputLatex} $$`;
 
         const resultDiv = document.createElement("div");
         resultDiv.className = "result-display";
-        resultDiv.innerHTML = `$$ ${resultLatex} $$`;
+        resultDiv.textContent = `$$ ${resultLatex} $$`;
 
         itemDiv.appendChild(opDiv);
         itemDiv.appendChild(inputDiv);
@@ -316,6 +329,25 @@
         let inputLatex = "";
 
         try {
+            // Special handling for systems of equations
+            if (action === 'sys') {
+                const eq1 = document.getElementById("sysEq1").value.trim();
+                const eq2 = document.getElementById("sysEq2").value.trim();
+                if (!eq1 || !eq2) {
+                    displayError("Please enter both equations for the system.");
+                    return;
+                }
+                operationStr = `Solve System`;
+                inputLatex = `\\begin{cases} ${nerdamer(eq1).toTeX()} \\\\ ${nerdamer(eq2).toTeX()} \\end{cases}`;
+
+                // nerdamer.solveEquations accepts an array of strings
+                const sol = nerdamer.solveEquations([eq1, eq2]);
+                // format output: [[x, val1], [y, val2]]
+                resultLatex = sol.map(s => `${s[0]} = ${nerdamer(s[1]).toTeX()}`).join(", \\quad ");
+                addToHistory(operationStr, inputLatex, resultLatex);
+                return;
+            }
+
             // Get original LaTeX representation
             try {
                 inputLatex = nerdamer(input).toTeX();
@@ -368,6 +400,15 @@
                     operationStr = `Integrate w.r.t ${iVar}`;
                     inputLatex = "\\int \\left(" + inputLatex + "\\right) d" + iVar;
                     resultLatex = nerdamer(`integrate(${input}, ${iVar})`).toTeX();
+                    break;
+
+                case 'sub':
+                    const sVarToRep = document.getElementById("subVar").value.trim() || 'x';
+                    const sVal = document.getElementById("subVal").value.trim() || '1';
+                    operationStr = `Substitute ${sVarToRep} = ${sVal}`;
+                    const evaluated = nerdamer(input).substitute(sVarToRep, sVal);
+                    // Simplify it right away after sub
+                    resultLatex = nerdamer(evaluated).toTeX();
                     break;
             }
 
