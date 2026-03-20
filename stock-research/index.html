@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Research Hub</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #fff;
+            min-height: 100vh;
+            margin: 0;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        p.subtitle {
+            font-size: 1.2em;
+            margin-bottom: 50px;
+            opacity: 0.9;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 30px;
+            text-decoration: none;
+            color: #333;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.4);
+            background: #fff;
+        }
+
+        .card h2 {
+            margin: 0 0 15px 0;
+            color: #2c3e50;
+            font-size: 1.8em;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            width: 100%;
+        }
+
+        .card p {
+            color: #555;
+            font-size: 1em;
+            line-height: 1.5;
+            flex-grow: 1;
+        }
+
+        .card .ticker {
+            font-weight: bold;
+            font-size: 1.2em;
+            color: #e74c3c;
+            margin-top: 15px;
+            background: #fdfefe;
+            padding: 5px 15px;
+            border-radius: 20px;
+            border: 1px solid #ddd;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 30px;
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            border: 1px solid rgba(255,255,255,0.5);
+            padding: 10px 20px;
+            border-radius: 25px;
+            transition: background 0.3s ease;
+        }
+
+        .back-link:hover {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="../index.html" class="back-link">&larr; Back to Main Portfolio</a>
+
+        <h1>Data-Driven Stock Research</h1>
+        <p class="subtitle">Authoritative analyst consensus, price targets, and investment theses for global equities.</p>
+
+        <div class="grid">
+            <a href="rio-tinto.html" class="card">
+                <h2>Rio Tinto</h2>
+                <p>Global mining and materials giant focused on iron ore, copper, aluminium, and lithium.</p>
+                <div class="ticker">NYSE: RIO</div>
+            </a>
+
+            <a href="bp.html" class="card">
+                <h2>BP p.l.c.</h2>
+                <p>Leading integrated oil and gas company navigating the transition to renewable energy.</p>
+                <div class="ticker">NYSE: BP</div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

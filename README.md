@@ -34,7 +34,6 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Space Game**: A space-themed game
 - **Space Game Site**: Website for the space game
 - **Sprite Sheet Generator**: Tool for generating sprite sheets
-- **Symbolic Algebra Calculator**: A symbolic algebra calculator capable of solving equations, expanding, factoring, differentiating, integrating, substituting, and solving systems of equations
 - **Time Tracker**: A time tracking application
 - **Virtual Aquarium**: A virtual aquarium simulation
 - **Vector Visualization**: Interactive 2D and 3D vector operations with dot and cross products
