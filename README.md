@@ -31,6 +31,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Portrait Site**: A portrait website
 - **Retro Space Shooter**: A retro space shooter game
 - **RSVP Tool**: An RSVP tool for events
+- **Rust Trait Bound Explorer**: Interactive simulator for learning Rust traits and bounds
 - **Space Game**: A space-themed game
 - **Space Game Site**: Website for the space game
 - **Sprite Sheet Generator**: Tool for generating sprite sheets
