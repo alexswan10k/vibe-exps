@@ -101,15 +101,27 @@ const App = () => {
                         step: 500
                     })
                 ),
-                React.createElement('div', { className: 'form-group' },
-                    React.createElement('label', null, 'Annual Pension Contribution (£)'),
+                React.createElement('div', { className: 'form-group', style: { padding: '15px', backgroundColor: '#f0f4f8', borderRadius: '8px', border: '1px solid #cbd5e0' } },
+                    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' } },
+                        React.createElement('label', { style: { margin: 0, fontWeight: 600, color: '#2b5876' } }, 'Annual Pension Contribution'),
+                        React.createElement('span', { style: { fontSize: '1.2rem', fontWeight: 700, color: '#2b5876' } }, formatCurrency(pensionContribution))
+                    ),
                     React.createElement('input', {
-                        type: 'number',
+                        type: 'range',
+                        min: 0,
+                        max: 60000,
+                        step: 1000,
                         value: pensionContribution,
                         onChange: (e) => setPensionContribution(e.target.value),
-                        min: 0,
-                        step: 1000
-                    })
+                        style: { width: '100%', cursor: 'pointer', accentColor: '#2b5876' }
+                    }),
+                    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#666', marginTop: '5px' } },
+                        React.createElement('span', null, '£0'),
+                        React.createElement('span', null, '£60,000 Allowance')
+                    ),
+                    React.createElement('div', { style: { fontSize: '0.85rem', color: '#4a5568', marginTop: '10px', fontStyle: 'italic' } },
+                        '💡 Pre-profit deduction. Extremely effective at reducing Corporation Tax, especially when avoiding the 26.5% marginal rate between £50k and £250k profit.'
+                    )
                 )
             ),
 
@@ -265,7 +277,12 @@ const App = () => {
                             React.createElement('td', null, formatCurrency(outsideResult.companyProfit))
                         ),
                         React.createElement('tr', null,
-                            React.createElement('td', null, 'Corporation Tax'),
+                            React.createElement('td', null,
+                                'Corporation Tax ',
+                                outsideResult.companyProfit > 0 && React.createElement('span', { style: { fontSize: '0.8rem', color: '#666' } },
+                                    `(~${((outsideResult.corporationTax / outsideResult.companyProfit) * 100).toFixed(1)}%)`
+                                )
+                            ),
                             React.createElement('td', { className: 'negative' }, `-${formatCurrency(outsideResult.corporationTax)}`)
                         ),
                         React.createElement('tr', { className: 'total-row' },
