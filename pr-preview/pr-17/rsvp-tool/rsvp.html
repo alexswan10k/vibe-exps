@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RSVP to Event</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1 id="eventTitle">Event Invitation</h1>
+    <div id="eventDetails"></div>
+    <form id="rsvpForm">
+      <div class="form-group">
+        <label for="name">Name:</label>
+        <input type="text" id="name" required>
+      </div>
+      <div class="form-group">
+        <label for="response">Response:</label>
+        <select id="response" required>
+          <option value="">Select Response</option>
+          <option value="Attending">Attending</option>
+          <option value="Not Attending">Not Attending</option>
+          <option value="Maybe">Maybe</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="message">Message:</label>
+        <textarea id="message"></textarea>
+      </div>
+      <button type="submit">Submit RSVP</button>
+    </form>
+    <div id="confirmation" style="display: none;">
+      <p class="success">Thank you for your RSVP!</p>
+    </div>
+    <div id="errorMessage"></div>
+  </div>
+  <script src="script.js"></script>
+  <script>
+    window.addEventListener('load', loadRSVPPage);
+    document.getElementById('rsvpForm').addEventListener('submit', handleRSVPSubmit);
+  </script>
+</body>
+</html>

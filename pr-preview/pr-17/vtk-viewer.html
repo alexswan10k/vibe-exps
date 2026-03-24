@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VTK 3D Viewer</title>
+    <!-- Use the vtk.js UMD build for standalone usage -->
+    <script type="text/javascript" src="https://unpkg.com/vtk.js"></script>
+    <!-- Cornerstone Dependencies -->
+    <script src="https://unpkg.com/dicom-parser@1.8.13/dist/dicomParser.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-core@2.6.1/dist/cornerstone.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-math@0.1.9/dist/cornerstoneMath.min.js"></script>
+    <script src="https://unpkg.com/cornerstone-wado-image-loader@3.3.2/dist/cornerstoneWADOImageLoader.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background-color: #333;
+            /* Dark background for 3D viewer */
+            color: white;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 2;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            pointer-events: auto;
+            /* Enable interaction with UI */
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        button {
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="ui-overlay">
+        <h1>VTK 3D Viewer</h1>
+        <div class="controls">
+            <button id="resetCameraBtn">Reset Camera</button>
+            <div class="file-input-wrapper">
+                <button>Open File</button>
+                <input type="file" id="fileInput" accept=".vtp, .vti, .stl, .dcm, .dcs, application/dicom">
+            </div>
+            <button id="loadFileBtn">Load Sample Cone</button>
+        </div>
+        <div id="status" style="margin-top: 10px; font-size: 0.8rem; color: #ccc;">Ready</div>
+    </div>
+
+    <div id="container"></div>
+
+    <script>
+        // Global variables for VTK objects
+        let renderWindow;
+        let renderer;
+        let openGLRenderWindow;
+        let actor;
+        let mapper;
+
+        async function initCornerstone() {
+            // External dependencies
+            cornerstoneWADOImageLoader.external.cornerstone = cornerstone;
+            cornerstoneWADOImageLoader.external.dicomParser = dicomParser;
+            cornerstoneWADOImageLoader.external.cornerstoneMath = cornerstoneMath;
+
+            // Handle Cross-Origin Web Worker issue by creating a Blob URL
+            const workerUrl = 'https://unpkg.com/cornerstone-wado-image-loader@3.3.2/dist/cornerstoneWADOImageLoaderWebWorker.min.js';
+            let blobUrl = workerUrl;
+
+            try {
+                const response = await fetch(workerUrl);
+                const scriptContent = await response.text();
+                const blob = new Blob([scriptContent], { type: 'application/javascript' });
+                blobUrl = URL.createObjectURL(blob);
+            } catch (e) {
+                console.warn('Failed to fetch worker script for Blob creation, falling back to CDN URL:', e);
+            }
+
+            // Configure WADO Image Loader
+            cornerstoneWADOImageLoader.webWorkerManager.initialize({
+                maxWebWorkers: navigator.hardwareConcurrency || 1,
+                startWebWorkersOnDemand: true,
+                webWorkerPath: blobUrl,
+                taskConfiguration: {
+                    'decodeTask': {
+                        codecsPath: 'https://unpkg.com/cornerstone-wado-image-loader@3.3.2/dist/cornerstoneWADOImageLoaderCodecs.min.js'
+                    }
+                }
+            });
+        }
+
+        function initViewer() {
+            // Setup the render window and renderer
+            const container = document.getElementById('container');
+
+            // Create the full screen renderer
+            const fullScreenRenderer = vtk.Rendering.Misc.vtkFullScreenRenderWindow.newInstance({
+                rootContainer: container,
+                containerStyle: { height: '100%', width: '100%', position: 'absolute' }
+            });
+
+            renderer = fullScreenRenderer.getRenderer();
+            renderWindow = fullScreenRenderer.getRenderWindow();
+            // openGLRenderWindow = fullScreenRenderer.getOpenGLRenderWindow(); // Not available in all builds and unused
+
+            // Set background color (dark grey)
+            renderer.setBackground(0.2, 0.2, 0.2);
+
+            // Initial render
+            renderWindow.render();
+        }
+
+        function cleanupScene() {
+            if (actor) {
+                renderer.removeActor(actor);
+                actor.delete();
+                actor = null;
+            }
+            if (mapper) {
+                mapper.delete();
+                mapper = null;
+            }
+        }
+
+        function loadCone() {
+            cleanupScene();
+
+            // Create a simple cone source
+            const coneSource = vtk.Filters.Sources.vtkConeSource.newInstance({
+                height: 1.0,
+                radius: 0.5,
+                resolution: 80
+            });
+
+            // Create mapper and actor
+            mapper = vtk.Rendering.Core.vtkMapper.newInstance();
+            mapper.setInputConnection(coneSource.getOutputPort());
+
+            actor = vtk.Rendering.Core.vtkActor.newInstance();
+            actor.setMapper(mapper);
+
+            // Add actor to renderer
+            renderer.addActor(actor);
+
+            // Reset camera to view the object
+            renderer.resetCamera();
+            renderWindow.render();
+
+            document.getElementById('status').textContent = "Loaded Sample Cone";
+        }
+
+        function handleDicomFile(file) {
+            const imageId = cornerstoneWADOImageLoader.wadouri.fileManager.add(file);
+            cornerstone.loadImage(imageId).then(image => {
+
+                const width = image.width;
+                const height = image.height;
+                const pixelData = image.getPixelData(); // TypedArray
+
+                // Convert to vtkImageData
+                const imageData = vtk.Common.DataModel.vtkImageData.newInstance();
+                imageData.setDimensions(width, height, 1);
+                imageData.setOrigin(0, 0, 0);
+
+                // Get Spacing
+                const rowPixelSpacing = image.rowPixelSpacing || 1.0;
+                const colPixelSpacing = image.columnPixelSpacing || 1.0;
+                imageData.setSpacing(colPixelSpacing, rowPixelSpacing, 1.0);
+
+                // Create Data Array
+                const dataArray = vtk.Common.Core.vtkDataArray.newInstance({
+                    name: 'Scalars',
+                    numberOfComponents: 1,
+                    values: pixelData
+                });
+
+                imageData.getPointData().setScalars(dataArray);
+
+                cleanupScene();
+
+                // Using vtkImageSlice for 2D slice display in 3D scene
+                mapper = vtk.Rendering.Core.vtkImageMapper.newInstance();
+                mapper.setInputData(imageData);
+
+                actor = vtk.Rendering.Core.vtkImageSlice.newInstance();
+                actor.setMapper(mapper);
+
+                // Setup default window/level based on image properties
+                const windowWidth = image.windowWidth || 256;
+                const windowCenter = image.windowCenter || 128;
+                actor.getProperty().setColorWindow(windowWidth);
+                actor.getProperty().setColorLevel(windowCenter);
+
+                renderer.addActor(actor);
+                renderer.resetCamera();
+                renderWindow.render();
+
+                document.getElementById('status').textContent = `Loaded DICOM: ${file.name}`;
+
+            }).catch(err => {
+                console.error("Error loading DICOM:", err);
+                document.getElementById('status').textContent = "Error loading DICOM";
+            });
+        }
+
+        function handleFile(file) {
+            if (!file) return;
+
+            const extension = file.name.split('.').pop().toLowerCase();
+            const name = file.name;
+
+            document.getElementById('status').textContent = `Loading ${name}...`;
+
+            if (extension === 'dcm' || extension === 'dcs' || file.type === 'application/dicom') {
+                handleDicomFile(file);
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = function onLoad(e) {
+                const content = e.target.result; // ArrayBuffer
+
+                let vtkReader;
+                try {
+                    if (extension === 'vtp') {
+                        vtkReader = vtk.IO.XML.vtkXMLPolyDataReader.newInstance();
+                    } else if (extension === 'vti') {
+                        vtkReader = vtk.IO.XML.vtkXMLImageDataReader.newInstance();
+                    } else if (extension === 'stl') {
+                        vtkReader = vtk.IO.Geometry.vtkSTLReader.newInstance();
+                    } else {
+                        throw new Error("Unsupported file extension");
+                    }
+
+                    // Parse the content
+                    if (vtkReader.parseAsArrayBuffer) {
+                        vtkReader.parseAsArrayBuffer(content);
+                    } else {
+                        vtkReader.parse(content);
+                    }
+
+                    cleanupScene();
+
+                    mapper = vtk.Rendering.Core.vtkMapper.newInstance();
+                    mapper.setInputConnection(vtkReader.getOutputPort());
+
+                    actor = vtk.Rendering.Core.vtkActor.newInstance();
+                    actor.setMapper(mapper);
+
+                    renderer.addActor(actor);
+                    renderer.resetCamera();
+                    renderWindow.render();
+
+                    document.getElementById('status').textContent = `Loaded ${name}`;
+
+                } catch (err) {
+                    console.error("Error loading file:", err);
+                    document.getElementById('status').textContent = `Error loading ${name}`;
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function setupUI() {
+            document.getElementById('resetCameraBtn').addEventListener('click', () => {
+                if (renderer) {
+                    renderer.resetCamera();
+                    renderWindow.render();
+                }
+            });
+
+            document.getElementById('loadFileBtn').addEventListener('click', () => {
+                loadCone();
+            });
+
+            const fileInput = document.getElementById('fileInput');
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFile(e.target.files[0]);
+                }
+            });
+        }
+
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            if (typeof vtk === 'undefined') {
+                document.getElementById('status').innerHTML = "Error: vtk.js not loaded. Check internet connection.";
+                console.error("vtk.js library not found!");
+                return;
+            }
+
+            initCornerstone();
+            initViewer();
+            setupUI();
+
+            // Load cone by default for immediate feedback
+            loadCone();
+        });
+    </script>
+</body>
+
+</html>
