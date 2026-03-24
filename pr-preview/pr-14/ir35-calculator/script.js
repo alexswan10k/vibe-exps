@@ -16,7 +16,7 @@ const App = () => {
 
     // Input States
     const [dailyRate, setDailyRate] = useState(500);
-    const [insideRate, setInsideRate] = useState(500);
+    const [insideAnnualRate, setInsideAnnualRate] = useState(110000);
     const [sameRate, setSameRate] = useState(true);
     const [daysWorked, setDaysWorked] = useState(220); // typical working days in a year
     const [annualExpenses, setAnnualExpenses] = useState(2000);
@@ -37,28 +37,29 @@ const App = () => {
     // Keep inside rate in sync with daily rate if 'sameRate' is true
     useEffect(() => {
         if (sameRate) {
-            setInsideRate(dailyRate);
+            setInsideAnnualRate((parseFloat(dailyRate) || 0) * (parseFloat(daysWorked) || 0));
         }
-    }, [dailyRate, sameRate]);
+    }, [dailyRate, daysWorked, sameRate]);
 
     // Calculate whenever inputs change
     useEffect(() => {
         calculate();
-    }, [dailyRate, insideRate, sameRate, daysWorked, annualExpenses, pensionContribution, targetSalary, targetDividend, takeAllProfit, projectionYears, interestRate]);
+    }, [dailyRate, insideAnnualRate, sameRate, daysWorked, annualExpenses, pensionContribution, targetSalary, targetDividend, takeAllProfit, projectionYears, interestRate]);
 
     const calculate = () => {
         const calc = calcRef.current;
 
         // Ensure numbers
         const rate = parseFloat(dailyRate) || 0;
-        const inRate = parseFloat(insideRate) || 0;
+        const inAnnual = parseFloat(insideAnnualRate) || 0;
         const days = parseFloat(daysWorked) || 0;
         const expenses = parseFloat(annualExpenses) || 0;
         const pension = parseFloat(pensionContribution) || 0;
         const salary = parseFloat(targetSalary) || 0;
         const dividend = takeAllProfit ? null : (parseFloat(targetDividend) || 0);
 
-        const inside = calc.calculateInside(inRate, days, expenses, pension);
+        const insideAnnualRevenue = sameRate ? (rate * days) : inAnnual;
+        const inside = calc.calculateInside(insideAnnualRevenue, expenses, pension);
         const outside = calc.calculateOutside(rate, days, expenses, pension, salary, dividend);
 
         setInsideResult(inside);
@@ -108,13 +109,13 @@ const App = () => {
                         'Inside IR35 rate is the same'
                     ),
                     !sameRate && React.createElement('div', { style: { marginTop: '10px' } },
-                        React.createElement('label', { style: { fontSize: '0.9rem' } }, 'Inside IR35 / Perm Rate (£/day)'),
+                        React.createElement('label', { style: { fontSize: '0.9rem' } }, 'Inside IR35 / Perm Salary (£/year)'),
                         React.createElement('input', {
                             type: 'number',
-                            value: insideRate,
-                            onChange: (e) => setInsideRate(e.target.value),
+                            value: insideAnnualRate,
+                            onChange: (e) => setInsideAnnualRate(e.target.value),
                             min: 0,
-                            step: 50
+                            step: 1000
                         })
                     )
                 ),
@@ -363,18 +364,42 @@ const App = () => {
             )
         ),
 
-        // Projection Chart
+        // Projection Summary & Charts
         React.createElement('div', { className: 'chart-container' },
-            React.createElement('h2', null, '📈 Retained Profit Compound Growth'),
-            React.createElement('p', { style: { marginBottom: '20px', color: '#666' } },
-                `Projecting ${formatCurrency(outsideResult?.retainedProfit || 0)} added annually with a ${interestRate}% expected return (net of corporation tax on interest).`
+            React.createElement('h2', null, '📈 Multi-Year Projection'),
+            projectionData && projectionData.length > 0 && React.createElement('div', { className: 'projection-summary', style: { backgroundColor: '#f0f4f8', padding: '15px', borderRadius: '8px', marginBottom: '20px', border: '1px solid #cbd5e0' } },
+                React.createElement('p', { style: { margin: '0 0 10px 0', fontSize: '1.1rem' } },
+                    `After `, React.createElement('strong', null, `${projectionYears} years`), `, by retaining `,
+                    React.createElement('strong', null, formatCurrency(outsideResult?.retainedProfit || 0)),
+                    ` annually with a `, React.createElement('strong', null, `${interestRate}%`), ` expected return:`
+                ),
+                React.createElement('div', { style: { display: 'flex', gap: '20px', flexWrap: 'wrap' } },
+                    React.createElement('div', null,
+                        React.createElement('div', { style: { fontSize: '0.9rem', color: '#4a5568' } }, 'Total Retained Balance'),
+                        React.createElement('div', { style: { fontSize: '1.4rem', fontWeight: 'bold', color: '#2b6cb0' } }, formatCurrency(projectionData[projectionData.length - 1].endBalance))
+                    ),
+                    React.createElement('div', null,
+                        React.createElement('div', { style: { fontSize: '0.9rem', color: '#4a5568' } }, 'Total Interest Earned'),
+                        React.createElement('div', { style: { fontSize: '1.4rem', fontWeight: 'bold', color: '#38a169' } }, formatCurrency(projectionData[projectionData.length - 1].endBalance - (projectionData[0].addition * projectionYears)))
+                    )
+                )
             ),
-            React.createElement(RetainedProfitChart, { projectionData })
+
+            React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '30px' } },
+                React.createElement('div', null,
+                    React.createElement('h3', { style: { fontSize: '1.1rem', marginBottom: '10px', color: '#2d3748' } }, 'Retained Profit Compound Growth'),
+                    React.createElement(RetainedProfitChart, { projectionData })
+                ),
+                React.createElement('div', null,
+                    React.createElement('h3', { style: { fontSize: '1.1rem', marginBottom: '10px', color: '#2d3748' } }, 'Cumulative Take Home Difference (Outside vs Inside)'),
+                    React.createElement(TakeHomeDiffChart, { projectionData })
+                )
+            )
         )
     );
 };
 
-// Chart Component
+// Retained Profit Chart Component
 const RetainedProfitChart = ({ projectionData }) => {
     const chartRef = useRef(null);
     const canvasRef = useRef(null);
@@ -391,7 +416,6 @@ const RetainedProfitChart = ({ projectionData }) => {
         // Calculate total contributions vs interest vs take home diff
         const contributions = projectionData.map(d => d.addition * d.year);
         const interestEarned = projectionData.map(d => d.endBalance - (d.addition * d.year));
-        const cumulativeTakeHomeDiff = projectionData.map(d => d.cumulativeTakeHomeDiff);
 
         chartRef.current = new Chart(canvasRef.current, {
             type: 'bar',
@@ -399,30 +423,16 @@ const RetainedProfitChart = ({ projectionData }) => {
                 labels: labels,
                 datasets: [
                     {
-                        type: 'line',
-                        label: 'Cumulative Take Home Difference',
-                        data: cumulativeTakeHomeDiff,
-                        borderColor: '#e53e3e',
-                        backgroundColor: '#e53e3e',
-                        borderWidth: 2,
-                        pointBackgroundColor: '#e53e3e',
-                        pointRadius: 4,
-                        fill: false,
-                        yAxisID: 'y'
-                    },
-                    {
                         type: 'bar',
                         label: 'Principal (Retained Profit Added)',
                         data: contributions,
                         backgroundColor: '#3182ce',
-                        yAxisID: 'y'
                     },
                     {
                         type: 'bar',
                         label: 'Compound Interest (Net of Tax)',
                         data: interestEarned,
                         backgroundColor: '#48bb78',
-                        yAxisID: 'y'
                     }
                 ]
             },
@@ -436,6 +446,86 @@ const RetainedProfitChart = ({ projectionData }) => {
                     y: {
                         stacked: true,
                         position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Amount (£)'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '£' + value.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        return () => {
+            if (chartRef.current) {
+                chartRef.current.destroy();
+            }
+        };
+    }, [projectionData]);
+
+    return React.createElement('div', { className: 'chart-wrapper' },
+        React.createElement('canvas', { ref: canvasRef })
+    );
+};
+
+// Take Home Diff Chart Component
+const TakeHomeDiffChart = ({ projectionData }) => {
+    const chartRef = useRef(null);
+    const canvasRef = useRef(null);
+
+    useEffect(() => {
+        if (!projectionData || projectionData.length === 0 || !canvasRef.current) return;
+
+        if (chartRef.current) {
+            chartRef.current.destroy();
+        }
+
+        const labels = projectionData.map(d => `Year ${d.year}`);
+        const cumulativeTakeHomeDiff = projectionData.map(d => d.cumulativeTakeHomeDiff);
+
+        chartRef.current = new Chart(canvasRef.current, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Cumulative Take Home Difference (£)',
+                        data: cumulativeTakeHomeDiff,
+                        borderColor: '#e53e3e',
+                        backgroundColor: 'rgba(229, 62, 62, 0.1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#e53e3e',
+                        pointRadius: 4,
+                        fill: true,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
                         title: {
                             display: true,
                             text: 'Amount (£)'
