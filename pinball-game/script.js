@@ -128,11 +128,18 @@ const buildWalls = () => {
          render: { fillStyle: '#e94560' }
     });
 
+    // Floor of the shooter lane so the ball doesn't fall out
+    const shooterFloor = Bodies.rectangle(WIDTH - 30, HEIGHT - 10, 50, 20, {
+         isStatic: true,
+         render: { fillStyle: '#0f3460' },
+         collisionFilter: { category: GROUP_WALL }
+    });
+
     Composite.add(world, [
         leftWall, rightWall, topWall, shooterWall,
         topLeftCorner, topRightCorner,
         leftSlant, rightSlant,
-        leftLaneDiv, rightLaneDiv
+        leftLaneDiv, rightLaneDiv, shooterFloor
     ]);
 };
 
@@ -277,9 +284,9 @@ const spawnBall = () => {
     ballsRemaining--;
     ballsElement.innerText = ballsRemaining;
 
-    // Start in shooter lane
+    // Start in shooter lane, resting just above the shooter floor
     const radius = 12;
-    ball = Bodies.circle(WIDTH - 30, HEIGHT - 100, radius, {
+    ball = Bodies.circle(WIDTH - 30, HEIGHT - 30, radius, {
         label: 'ball',
         restitution: 0.5, // Natural bounce
         friction: 0.001,
