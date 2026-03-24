@@ -16,6 +16,8 @@ const App = () => {
 
     // Input States
     const [dailyRate, setDailyRate] = useState(500);
+    const [insideRate, setInsideRate] = useState(500);
+    const [sameRate, setSameRate] = useState(true);
     const [daysWorked, setDaysWorked] = useState(220); // typical working days in a year
     const [annualExpenses, setAnnualExpenses] = useState(2000);
     const [pensionContribution, setPensionContribution] = useState(0);
@@ -32,34 +34,51 @@ const App = () => {
     const [outsideResult, setOutsideResult] = useState(null);
     const [projectionData, setProjectionData] = useState(null);
 
+    // Keep inside rate in sync with daily rate if 'sameRate' is true
+    useEffect(() => {
+        if (sameRate) {
+            setInsideRate(dailyRate);
+        }
+    }, [dailyRate, sameRate]);
+
     // Calculate whenever inputs change
     useEffect(() => {
         calculate();
-    }, [dailyRate, daysWorked, annualExpenses, pensionContribution, targetSalary, targetDividend, takeAllProfit, projectionYears, interestRate]);
+    }, [dailyRate, insideRate, sameRate, daysWorked, annualExpenses, pensionContribution, targetSalary, targetDividend, takeAllProfit, projectionYears, interestRate]);
 
     const calculate = () => {
         const calc = calcRef.current;
 
         // Ensure numbers
         const rate = parseFloat(dailyRate) || 0;
+        const inRate = parseFloat(insideRate) || 0;
         const days = parseFloat(daysWorked) || 0;
         const expenses = parseFloat(annualExpenses) || 0;
         const pension = parseFloat(pensionContribution) || 0;
         const salary = parseFloat(targetSalary) || 0;
         const dividend = takeAllProfit ? null : (parseFloat(targetDividend) || 0);
 
-        const inside = calc.calculateInside(rate, days, expenses, pension);
+        const inside = calc.calculateInside(inRate, days, expenses, pension);
         const outside = calc.calculateOutside(rate, days, expenses, pension, salary, dividend);
 
         setInsideResult(inside);
         setOutsideResult(outside);
 
-        // Project Retained Profit
+        // Project Retained Profit & Take Home Difference
         const years = parseInt(projectionYears) || 5;
         const interest = (parseFloat(interestRate) || 0) / 100;
         const annualAddition = outside.retainedProfit;
 
         const projection = calc.projectRetainedProfit(0, years, interest, annualAddition);
+
+        // Add cumulative take home difference to projection data
+        const takeHomeDifference = outside.takeHome - inside.takeHome;
+        let cumulativeDifference = 0;
+        projection.forEach(p => {
+            cumulativeDifference += takeHomeDifference;
+            p.cumulativeTakeHomeDiff = cumulativeDifference;
+        });
+
         setProjectionData(projection);
     };
 
@@ -69,7 +88,7 @@ const App = () => {
             React.createElement('div', { className: 'section' },
                 React.createElement('h2', null, '📋 Contract Details'),
                 React.createElement('div', { className: 'form-group' },
-                    React.createElement('label', null, 'Daily Rate (£)'),
+                    React.createElement('label', null, 'Outside IR35 Rate (£/day)'),
                     React.createElement('input', {
                         type: 'number',
                         value: dailyRate,
@@ -77,6 +96,27 @@ const App = () => {
                         min: 0,
                         step: 50
                     })
+                ),
+                React.createElement('div', { className: 'form-group', style: { padding: '10px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' } },
+                    React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px', fontWeight: 'normal' } },
+                        React.createElement('input', {
+                            type: 'checkbox',
+                            checked: sameRate,
+                            onChange: (e) => setSameRate(e.target.checked),
+                            style: { width: 'auto' }
+                        }),
+                        'Inside IR35 rate is the same'
+                    ),
+                    !sameRate && React.createElement('div', { style: { marginTop: '10px' } },
+                        React.createElement('label', { style: { fontSize: '0.9rem' } }, 'Inside IR35 / Perm Rate (£/day)'),
+                        React.createElement('input', {
+                            type: 'number',
+                            value: insideRate,
+                            onChange: (e) => setInsideRate(e.target.value),
+                            min: 0,
+                            step: 50
+                        })
+                    )
                 ),
                 React.createElement('div', { className: 'form-group' },
                     React.createElement('label', null, 'Days Worked per Year'),
@@ -347,11 +387,11 @@ const RetainedProfitChart = ({ projectionData }) => {
         }
 
         const labels = projectionData.map(d => `Year ${d.year}`);
-        const dataPoints = projectionData.map(d => d.endBalance);
 
-        // Calculate total contributions vs interest
+        // Calculate total contributions vs interest vs take home diff
         const contributions = projectionData.map(d => d.addition * d.year);
         const interestEarned = projectionData.map(d => d.endBalance - (d.addition * d.year));
+        const cumulativeTakeHomeDiff = projectionData.map(d => d.cumulativeTakeHomeDiff);
 
         chartRef.current = new Chart(canvasRef.current, {
             type: 'bar',
@@ -359,14 +399,30 @@ const RetainedProfitChart = ({ projectionData }) => {
                 labels: labels,
                 datasets: [
                     {
+                        type: 'line',
+                        label: 'Cumulative Take Home Difference',
+                        data: cumulativeTakeHomeDiff,
+                        borderColor: '#e53e3e',
+                        backgroundColor: '#e53e3e',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#e53e3e',
+                        pointRadius: 4,
+                        fill: false,
+                        yAxisID: 'y'
+                    },
+                    {
+                        type: 'bar',
                         label: 'Principal (Retained Profit Added)',
                         data: contributions,
                         backgroundColor: '#3182ce',
+                        yAxisID: 'y'
                     },
                     {
+                        type: 'bar',
                         label: 'Compound Interest (Net of Tax)',
                         data: interestEarned,
                         backgroundColor: '#48bb78',
+                        yAxisID: 'y'
                     }
                 ]
             },
@@ -379,6 +435,11 @@ const RetainedProfitChart = ({ projectionData }) => {
                     },
                     y: {
                         stacked: true,
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Amount (£)'
+                        },
                         ticks: {
                             callback: function(value) {
                                 return '£' + value.toLocaleString();
