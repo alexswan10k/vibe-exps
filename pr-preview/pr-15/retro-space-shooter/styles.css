@@ -1,0 +1,100 @@
+body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    font-family: 'Courier New', monospace;
+    color: #00ff00;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+#game-container {
+    position: relative;
+    border: 2px solid #00ff00;
+    box-shadow: 0 0 20px #00ff00;
+    background: #000;
+}
+
+#game-canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+#ui {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    gap: 20px;
+    font-size: 16px;
+    text-shadow: 0 0 5px #00ff00;
+}
+
+#game-over {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid #00ff00;
+    padding: 20px;
+    box-shadow: 0 0 20px #00ff00;
+}
+
+#game-over h2 {
+    margin: 0 0 10px 0;
+    font-size: 24px;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+#game-over p {
+    margin: 0 0 20px 0;
+    font-size: 18px;
+}
+
+#restart-btn {
+    background: #000;
+    color: #00ff00;
+    border: 2px solid #00ff00;
+    padding: 10px 20px;
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    cursor: pointer;
+    text-shadow: 0 0 5px #00ff00;
+    box-shadow: 0 0 10px #00ff00;
+    transition: all 0.3s;
+}
+
+#restart-btn:hover {
+    background: #00ff00;
+    color: #000;
+    box-shadow: 0 0 20px #00ff00;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Retro scanlines effect */
+#game-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 255, 0, 0.03) 2px,
+        rgba(0, 255, 0, 0.03) 4px
+    );
+    pointer-events: none;
+}

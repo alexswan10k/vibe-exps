@@ -1,0 +1,1610 @@
+// Survival Calculator React App using direct React API
+const { useState, useEffect } = React;
+
+// Expense Form Component
+const ExpenseForm = ({ onAdd, initialData, onCancel }) => {
+  const [name, setName] = useState(initialData?.name || '');
+  const [amount, setAmount] = useState(initialData?.amount || '');
+  const [inflationRate, setInflationRate] = useState(initialData?.inflationRate || '');
+  const [durationMonths, setDurationMonths] = useState(initialData?.durationMonths || '');
+
+  // Update form when initialData changes (for editing)
+  useEffect(() => {
+    if (initialData) {
+      setName(initialData.name || '');
+      setAmount(initialData.amount || '');
+      setInflationRate(initialData.inflationRate || '');
+      setDurationMonths(initialData.durationMonths || '');
+    } else {
+      // Clear form when not editing
+      setName('');
+      setAmount('');
+      setInflationRate('');
+      setDurationMonths('');
+    }
+  }, [initialData]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (name && amount && inflationRate) {
+      onAdd({
+        name: name.trim(),
+        amount: parseFloat(amount),
+        inflationRate: parseFloat(inflationRate) / 100, // Convert percentage to decimal
+        durationMonths: durationMonths ? parseInt(durationMonths) : null
+      });
+      // Only clear form if not editing
+      if (!initialData) {
+        setName('');
+        setAmount('');
+        setInflationRate('');
+        setDurationMonths('');
+      }
+    }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) onCancel();
+  };
+
+  return React.createElement('form', { onSubmit: handleSubmit, className: 'form-group' },
+    React.createElement('div', { className: 'form-row' },
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'expense-name' }, 'Expense Name'),
+        React.createElement('input', {
+          id: 'expense-name',
+          type: 'text',
+          value: name,
+          onChange: (e) => setName(e.target.value),
+          placeholder: 'e.g., Rent, Food, Utilities',
+          required: true
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'expense-amount' }, 'Monthly Amount ($)'),
+        React.createElement('input', {
+          id: 'expense-amount',
+          type: 'number',
+          step: '0.01',
+          min: '0',
+          value: amount,
+          onChange: (e) => setAmount(e.target.value),
+          placeholder: '0.00',
+          required: true
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'expense-inflation' }, 'Annual Inflation (%)'),
+        React.createElement('input', {
+          id: 'expense-inflation',
+          type: 'number',
+          step: '0.1',
+          min: '0',
+          value: inflationRate,
+          onChange: (e) => setInflationRate(e.target.value),
+          placeholder: '3.0',
+          required: true
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'expense-duration' }, 'Duration (Months)'),
+        React.createElement('input', {
+          id: 'expense-duration',
+          type: 'number',
+          min: '1',
+          value: durationMonths,
+          onChange: (e) => setDurationMonths(e.target.value),
+          placeholder: 'Leave empty for indefinite',
+          required: false
+        })
+      ),
+      React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'end' } },
+        React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Expense' : 'Add Expense'),
+        initialData && React.createElement('button', { type: 'button', onClick: handleCancel, className: 'btn btn-secondary' }, 'Cancel')
+      )
+    )
+  );
+};
+
+// Expense List Component
+const ExpenseList = ({ expenses, onRemove, onEdit, onViewChart, onToggleEnabled }) => {
+  if (expenses.length === 0) {
+    return React.createElement('div', { className: 'no-data' }, 'No expenses added yet');
+  }
+
+  const formatDuration = (durationMonths) => {
+    if (durationMonths === null) return 'Ongoing';
+    const years = Math.floor(durationMonths / 12);
+    const months = durationMonths % 12;
+    if (years === 0) return `${months} months`;
+    if (months === 0) return `${years} years`;
+    return `${years}y ${months}m`;
+  };
+
+  return React.createElement('div', { className: 'item-list' },
+    expenses.map((expense, index) =>
+      React.createElement('div', {
+        key: index,
+        className: 'item',
+        style: {
+          opacity: expense.enabled ? 1 : 0.5,
+          borderLeft: expense.enabled ? '4px solid #48bb78' : '4px solid #e2e8f0',
+          backgroundColor: expense.enabled ? '#f0fff4' : '#f7fafc'
+        }
+      },
+        React.createElement('div', { className: 'item-toggle' },
+          React.createElement('label', {
+            style: {
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: expense.enabled ? '#2f855a' : '#718096'
+            }
+          },
+            React.createElement('div', {
+              style: {
+                position: 'relative',
+                width: '44px',
+                height: '24px',
+                backgroundColor: expense.enabled ? '#48bb78' : '#e2e8f0',
+                borderRadius: '12px',
+                transition: 'background-color 0.2s',
+                border: '2px solid #cbd5e0'
+              }
+            },
+              React.createElement('div', {
+                style: {
+                  position: 'absolute',
+                  top: '2px',
+                  left: expense.enabled ? '22px' : '2px',
+                  width: '16px',
+                  height: '16px',
+                  backgroundColor: 'white',
+                  borderRadius: '50%',
+                  transition: 'left 0.2s',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                }
+              }),
+              React.createElement('input', {
+                type: 'checkbox',
+                checked: expense.enabled,
+                onChange: () => onToggleEnabled(index, 'expense'),
+                style: {
+                  position: 'absolute',
+                  opacity: 0,
+                  width: '100%',
+                  height: '100%',
+                  margin: 0,
+                  cursor: 'pointer'
+                }
+              })
+            ),
+          )
+        ),
+        React.createElement('div', { className: 'item-info' },
+          React.createElement('div', { className: 'item-name' }, expense.name),
+          React.createElement('div', { className: 'item-details' },
+            `$${expense.amount.toFixed(2)}/month • ${(expense.inflationRate * 100).toFixed(1)}% inflation • ${formatDuration(expense.durationMonths)}`
+          )
+        ),
+        React.createElement('div', { className: 'item-actions' },
+          React.createElement('button', {
+            onClick: () => onViewChart(expense),
+            className: 'btn btn-secondary btn-small'
+          }, '📈 Chart'),
+          React.createElement('button', {
+            onClick: () => onEdit(index),
+            className: 'btn btn-secondary btn-small'
+          }, 'Edit'),
+          React.createElement('button', {
+            onClick: () => onRemove(index),
+            className: 'btn btn-secondary btn-small'
+          }, 'Remove')
+        )
+      )
+    )
+  );
+};
+
+// Savings Pot Form Component
+const SavingsPotForm = ({ onAdd, initialData, onCancel }) => {
+  const [name, setName] = useState(initialData?.name || '');
+  const [amount, setAmount] = useState(initialData?.amount || '');
+  const [interestRate, setInterestRate] = useState(initialData?.interestRate || '');
+  const [riskRate, setRiskRate] = useState(initialData?.riskRate || '');
+  const [monthlyPayment, setMonthlyPayment] = useState(initialData?.monthlyPayment || '');
+  const [yearlyPayment, setYearlyPayment] = useState(initialData?.yearlyPayment || '');
+
+  // Update form when initialData changes (for editing)
+  useEffect(() => {
+    if (initialData) {
+      setName(initialData.name || '');
+      setAmount(initialData.amount || '');
+      setInterestRate(initialData.interestRate || '');
+      setRiskRate(initialData.riskRate || '');
+      setMonthlyPayment(initialData.monthlyPayment || '');
+      setYearlyPayment(initialData.yearlyPayment || '');
+    } else {
+      // Clear form when not editing
+      setName('');
+      setAmount('');
+      setInterestRate('');
+      setRiskRate('');
+      setMonthlyPayment('');
+      setYearlyPayment('');
+    }
+  }, [initialData]);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (name && amount && interestRate && riskRate) {
+      onAdd({
+        name: name.trim(),
+        amount: parseFloat(amount),
+        interestRate: parseFloat(interestRate) / 100, // Convert percentage to decimal
+        riskRate: parseFloat(riskRate) / 100, // Convert percentage to decimal
+        monthlyPayment: parseFloat(monthlyPayment) || 0,
+        yearlyPayment: parseFloat(yearlyPayment) || 0
+      });
+      // Only clear form if not editing
+      if (!initialData) {
+        setName('');
+        setAmount('');
+        setInterestRate('');
+        setRiskRate('');
+        setMonthlyPayment('');
+        setYearlyPayment('');
+      }
+    }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) onCancel();
+  };
+
+  return React.createElement('form', { onSubmit: handleSubmit, className: 'form-group' },
+    React.createElement('div', { className: 'form-row' },
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-name' }, 'Savings Pot Name'),
+        React.createElement('input', {
+          id: 'savings-name',
+          type: 'text',
+          value: name,
+          onChange: (e) => setName(e.target.value),
+          placeholder: 'e.g., Retirement Fund, Emergency Fund',
+          required: true
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-amount' }, 'Current Amount ($)'),
+        React.createElement('input', {
+          id: 'savings-amount',
+          type: 'number',
+          step: '0.01',
+          min: '0',
+          value: amount,
+          onChange: (e) => setAmount(e.target.value),
+          placeholder: '0.00',
+          required: true
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-interest' }, 'Annual Interest (%)'),
+        React.createElement('input', {
+          id: 'savings-interest',
+          type: 'number',
+          step: '0.1',
+          min: '0',
+          value: interestRate,
+          onChange: (e) => setInterestRate(e.target.value),
+          placeholder: '5.0',
+          required: true
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-risk' }, 'Risk Rate (%)'),
+        React.createElement('input', {
+          id: 'savings-risk',
+          type: 'number',
+          step: '0.1',
+          min: '0',
+          value: riskRate,
+          onChange: (e) => setRiskRate(e.target.value),
+          placeholder: '2.0',
+          required: true
+        })
+      )
+    ),
+    React.createElement('div', { className: 'form-row' },
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-monthly-payment' }, 'Monthly Payment ($)'),
+        React.createElement('input', {
+          id: 'savings-monthly-payment',
+          type: 'number',
+          step: '0.01',
+          min: '0',
+          value: monthlyPayment,
+          onChange: (e) => setMonthlyPayment(e.target.value),
+          placeholder: '0.00 (e.g., salary contribution)',
+          required: false
+        })
+      ),
+      React.createElement('div', null,
+        React.createElement('label', { htmlFor: 'savings-yearly-payment' }, 'Yearly Payment ($)'),
+        React.createElement('input', {
+          id: 'savings-yearly-payment',
+          type: 'number',
+          step: '0.01',
+          min: '0',
+          value: yearlyPayment,
+          onChange: (e) => setYearlyPayment(e.target.value),
+          placeholder: '0.00 (e.g., bonus, ISA contribution)',
+          required: false
+        })
+      ),
+      React.createElement('div', { style: { display: 'flex', gap: '8px', alignItems: 'end' } },
+        React.createElement('button', { type: 'submit', className: 'btn btn-primary' }, initialData ? 'Update Savings' : 'Add Savings'),
+        initialData && React.createElement('button', { type: 'button', onClick: handleCancel, className: 'btn btn-secondary' }, 'Cancel')
+      )
+    )
+  );
+};
+
+// Savings Pot List Component
+const SavingsPotList = ({ savingsPots, onRemove, onEdit, onViewChart, onToggleEnabled }) => {
+  if (savingsPots.length === 0) {
+    return React.createElement('div', { className: 'no-data' }, 'No savings pots added yet');
+  }
+
+  // Sort pots by interest rate for spending priority display
+  const sortedPots = [...savingsPots].sort((a, b) => a.interestRate - b.interestRate);
+
+  const formatPaymentDetails = (pot) => {
+    const parts = [
+      `$${pot.amount.toFixed(2)}`,
+      `${(pot.interestRate * 100).toFixed(1)}% interest`,
+      `${(pot.riskRate * 100).toFixed(1)}% risk`
+    ];
+
+    if (pot.monthlyPayment > 0) {
+      parts.push(`$${pot.monthlyPayment.toFixed(2)}/month`);
+    }
+
+    if (pot.yearlyPayment > 0) {
+      parts.push(`$${pot.yearlyPayment.toFixed(2)}/year`);
+    }
+
+    return parts.join(' • ');
+  };
+
+  return React.createElement('div', null,
+    React.createElement('div', { style: { marginBottom: '15px', padding: '10px', backgroundColor: '#e8f4fd', borderRadius: '6px', border: '1px solid #b3d9ff' } },
+      React.createElement('div', { style: { fontWeight: 'bold', color: '#2b6cb0', marginBottom: '5px' } }, '💰 Spending Priority Order'),
+      React.createElement('div', { style: { fontSize: '0.9rem', color: '#4a5568' } },
+        'Expenses are deducted from accounts with the lowest interest rates first to preserve higher-yielding investments.'
+      ),
+      React.createElement('div', { style: { fontSize: '0.85rem', color: '#718096', marginTop: '5px' } },
+        'Current order: ', sortedPots.map((pot, index) => `${index + 1}. ${pot.name}`).join(' → ')
+      )
+    ),
+    React.createElement('div', { className: 'item-list' },
+      savingsPots.map((pot, index) => {
+        const priorityOrder = sortedPots.findIndex(sortedPot => sortedPot.name === pot.name) + 1;
+        return React.createElement('div', {
+          key: index,
+          className: 'item',
+          style: {
+            opacity: pot.enabled ? 1 : 0.5,
+            borderLeft: pot.enabled ? '4px solid #48bb78' : '4px solid #e2e8f0',
+            backgroundColor: pot.enabled ? '#f0fff4' : '#f7fafc'
+          }
+        },
+          React.createElement('div', { className: 'item-toggle' },
+            React.createElement('label', {
+              style: {
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                color: pot.enabled ? '#2f855a' : '#718096'
+              }
+            },
+              React.createElement('div', {
+                style: {
+                  position: 'relative',
+                  width: '44px',
+                  height: '24px',
+                  backgroundColor: pot.enabled ? '#48bb78' : '#e2e8f0',
+                  borderRadius: '12px',
+                  transition: 'background-color 0.2s',
+                  border: '2px solid #cbd5e0'
+                }
+              },
+                React.createElement('div', {
+                  style: {
+                    position: 'absolute',
+                    top: '2px',
+                    left: pot.enabled ? '22px' : '2px',
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                    transition: 'left 0.2s',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                  }
+                }),
+                React.createElement('input', {
+                  type: 'checkbox',
+                  checked: pot.enabled,
+                  onChange: () => onToggleEnabled(index, 'savings'),
+                  style: {
+                    position: 'absolute',
+                    opacity: 0,
+                    width: '100%',
+                    height: '100%',
+                    margin: 0,
+                    cursor: 'pointer'
+                  }
+                })
+              ),
+            )
+          ),
+          React.createElement('div', { className: 'item-info' },
+            React.createElement('div', { className: 'item-name' },
+              React.createElement('span', { style: { marginRight: '8px', backgroundColor: '#e2e8f0', color: '#4a5568', padding: '2px 6px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' } },
+                `#${priorityOrder}`
+              ),
+              pot.name
+            ),
+            React.createElement('div', { className: 'item-details' },
+              formatPaymentDetails(pot)
+            )
+          ),
+          React.createElement('div', { className: 'item-actions' },
+            React.createElement('button', {
+              onClick: () => onViewChart(pot),
+              className: 'btn btn-secondary btn-small'
+            }, '📈 Chart'),
+            React.createElement('button', {
+              onClick: () => onEdit(index),
+              className: 'btn btn-secondary btn-small'
+            }, 'Edit'),
+            React.createElement('button', {
+              onClick: () => onRemove(index),
+              className: 'btn btn-secondary btn-small'
+            }, 'Remove')
+          )
+        );
+      })
+    )
+  );
+};
+
+// Results Display Component
+const ResultsDisplay = ({ result }) => {
+  if (!result) {
+    return React.createElement('div', { className: 'no-data' }, 'Add some expenses and savings pots to see results');
+  }
+
+  const formatTime = (months) => {
+    // If months equals max simulation period (1200 = 100 years), show "Beyond 100 years"
+    if (months >= 1200) {
+      return 'Beyond 100 years';
+    }
+    const years = Math.floor(months / 12);
+    const remainingMonths = months % 12;
+    if (years === 0) return `${remainingMonths} months`;
+    if (remainingMonths === 0) return `${years} years`;
+    return `${years} years ${remainingMonths} months`;
+  };
+
+  return React.createElement('div', null,
+    React.createElement('div', { className: 'results-grid' },
+      React.createElement('div', { className: 'result-card' },
+        React.createElement('div', { className: 'result-value' }, formatTime(result.nominalMonths)),
+        React.createElement('div', { className: 'result-label' }, 'Nominal Survival Time')
+      ),
+      React.createElement('div', { className: 'result-card' },
+        React.createElement('div', { className: 'result-value' }, formatTime(result.minMonths)),
+        React.createElement('div', { className: 'result-label' }, 'Minimum Survival Time')
+      ),
+      React.createElement('div', { className: 'result-card' },
+        React.createElement('div', { className: 'result-value' }, formatTime(result.maxMonths)),
+        React.createElement('div', { className: 'result-label' }, 'Maximum Survival Time')
+      )
+    )
+  );
+};
+
+// Chart Component
+const SurvivalChart = ({ result }) => {
+  const [chart, setChart] = useState(null);
+
+  useEffect(() => {
+    if (result && result.monthlyProgression.length > 0) {
+      // Destroy existing chart
+      if (chart) {
+        chart.destroy();
+      }
+
+      const ctx = document.getElementById('survival-chart');
+      if (ctx) {
+        const newChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: result.monthlyProgression.map(p => {
+              const year = Math.floor((p.month - 1) / 12) + 1;
+              const month = ((p.month - 1) % 12) + 1;
+              return `${year}y ${month}m`;
+            }),
+            datasets: [
+              {
+                label: 'Nominal Savings',
+                data: result.monthlyProgression.map(p => p.nominalSavings),
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                borderWidth: 2,
+                fill: false
+              },
+              {
+                label: 'Minimum Savings (High Risk)',
+                data: result.monthlyProgression.map(p => p.minSavings),
+                borderColor: '#e53e3e',
+                backgroundColor: 'rgba(229, 62, 62, 0.1)',
+                borderWidth: 2,
+                fill: false,
+                borderDash: [5, 5]
+              },
+              {
+                label: 'Maximum Savings (Low Risk)',
+                data: result.monthlyProgression.map(p => p.maxSavings),
+                borderColor: '#38a169',
+                backgroundColor: 'rgba(56, 161, 105, 0.1)',
+                borderWidth: 2,
+                fill: false,
+                borderDash: [10, 5]
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: 'Time'
+                },
+                ticks: {
+                  maxTicksLimit: 20,
+                  font: function(context) {
+                    const progression = result.monthlyProgression[context.index];
+                    if (progression && ((progression.month - 1) % 12) === 0) {
+                      // Make year boundary months (month 1 of each year) bold
+                      return {
+                        weight: 'bold',
+                        size: 12
+                      };
+                    }
+                    return {
+                      weight: 'normal',
+                      size: 10
+                    };
+                  }
+                },
+                grid: {
+                  color: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = result.monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Darker grid line at year boundaries
+                        return '#333';
+                      }
+                    }
+                    return '#e2e8f0';
+                  },
+                  lineWidth: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = result.monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Thicker line at year boundaries
+                        return 2;
+                      }
+                    }
+                    return 1;
+                  }
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'Savings Amount ($)'
+                },
+                min: 0,
+                ticks: {
+                  callback: function(value) {
+                    return '$' + value.toLocaleString();
+                  }
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+              },
+              title: {
+                display: true,
+                text: 'Month-on-Month Savings Progression'
+              },
+              annotation: {
+                annotations: result.monthlyProgression
+                  .filter(p => ((p.month - 1) % 12) === 0)
+                  .map(p => {
+                    const year = Math.floor((p.month - 1) / 12) + 1;
+                    return {
+                      type: 'label',
+                      xValue: result.monthlyProgression.indexOf(p),
+                      yValue: Math.max(...result.monthlyProgression.map(pr => pr.nominalSavings)) * 0.95,
+                      content: `${year}y`,
+                      font: {
+                        size: 12,
+                        weight: 'bold'
+                      },
+                      color: '#333',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 4,
+                      padding: 4
+                    };
+                  })
+              }
+            }
+          }
+        });
+        setChart(newChart);
+      }
+    }
+
+    return () => {
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, [result]);
+
+  if (!result || result.monthlyProgression.length === 0) {
+    return React.createElement('div', { className: 'no-data' }, 'No chart data available');
+  }
+
+  return React.createElement('div', { className: 'chart-wrapper' },
+    React.createElement('canvas', { id: 'survival-chart' })
+  );
+};
+
+// Detailed Analytics Component
+const DetailedAnalytics = ({ result, survivalData }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!result || result.monthlyProgression.length === 0) {
+    return null;
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const formatPercent = (rate) => {
+    return (rate * 100).toFixed(2) + '%';
+  };
+
+  // Get unique expense and savings names
+  const expenseNames = [...new Set(survivalData.expenses.map(e => e.name))];
+  const savingsNames = [...new Set(survivalData.savingsPots.map(s => s.name))];
+
+  // Limit rows when collapsed - show first 12 months and last month
+  const getLimitedProgression = () => {
+    if (isExpanded) return result.monthlyProgression;
+    if (result.monthlyProgression.length <= 13) return result.monthlyProgression;
+
+    const first12 = result.monthlyProgression.slice(0, 12);
+    const last = result.monthlyProgression[result.monthlyProgression.length - 1];
+    return [...first12, last];
+  };
+
+  const limitedProgression = getLimitedProgression();
+
+  return React.createElement('div', { className: 'analytics-section' },
+    React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '30px 0 20px 0' } },
+      React.createElement('h3', { style: { margin: 0, color: '#333', fontSize: '1.3rem' } }, '📊 Detailed Month-by-Month Analytics'),
+      React.createElement('button', {
+        onClick: () => setIsExpanded(!isExpanded),
+        className: 'btn btn-secondary btn-small',
+        style: { margin: 0 }
+      }, isExpanded ? 'Collapse Tables' : 'Expand Tables')
+    ),
+
+    // Summary Cards
+    React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px', marginBottom: '30px' } },
+      React.createElement('div', { style: { background: '#f0f8ff', padding: '15px', borderRadius: '8px', textAlign: 'center' } },
+        React.createElement('div', { style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#667eea' } }, result.nominalMonths),
+        React.createElement('div', { style: { fontSize: '0.9rem', color: '#666' } }, 'Total Months Simulated')
+      ),
+      React.createElement('div', { style: { background: '#fff5f5', padding: '15px', borderRadius: '8px', textAlign: 'center' } },
+        React.createElement('div', { style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#e53e3e' } }, formatCurrency(result.monthlyProgression[result.monthlyProgression.length - 1]?.totalExpenses || 0)),
+        React.createElement('div', { style: { fontSize: '0.9rem', color: '#666' } }, 'Final Monthly Expenses')
+      ),
+      React.createElement('div', { style: { background: '#e0f2fe', padding: '15px', borderRadius: '8px', textAlign: 'center' } },
+        React.createElement('div', { style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#0369a1' } }, formatCurrency(survivalData.getTotalExpenses(0))),
+        React.createElement('div', { style: { fontSize: '0.9rem', color: '#666' } }, 'Initial Monthly Expenses')
+      ),
+      React.createElement('div', { style: { background: '#f0fff4', padding: '15px', borderRadius: '8px', textAlign: 'center' } },
+        React.createElement('div', { style: { fontSize: '1.5rem', fontWeight: 'bold', color: '#38a169' } }, formatCurrency(result.monthlyProgression[0]?.nominalSavings || 0)),
+        React.createElement('div', { style: { fontSize: '0.9rem', color: '#666' } }, 'Starting Savings')
+      )
+    ),
+
+    // Expense Progression Table
+    React.createElement('div', { style: { marginBottom: '40px' } },
+      React.createElement('h4', { style: { marginBottom: '15px', color: '#333', fontSize: '1.1rem' } }, '💸 Individual Expense Progression'),
+      React.createElement('div', { style: { overflowX: 'auto' } },
+        React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' } },
+          React.createElement('thead', null,
+            React.createElement('tr', { style: { background: '#667eea' } },
+              React.createElement('th', { style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, 'Month'),
+              React.createElement('th', { style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, 'Total Expenses'),
+              ...expenseNames.map(name =>
+                React.createElement('th', { key: name, style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, name)
+              )
+            )
+          ),
+          React.createElement('tbody', null,
+            limitedProgression.map((progression, index) =>
+              React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
+                React.createElement('td', { style: { padding: '10px' } }, progression.month),
+                React.createElement('td', { style: { padding: '10px', fontWeight: '600' } }, formatCurrency(progression.totalExpenses)),
+                ...expenseNames.map(expenseName =>
+                  React.createElement('td', { key: expenseName, style: { padding: '10px' } },
+                    formatCurrency(progression.expenseBreakdown[expenseName] || 0)
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+
+    // Separate Savings Progression Tables for each scenario
+    React.createElement('div', { style: { marginBottom: '40px' } },
+      React.createElement('h4', { style: { marginBottom: '15px', color: '#333', fontSize: '1.1rem' } }, '💰 Individual Savings Progression'),
+
+      // Nominal Scenario Table
+      React.createElement('div', { style: { marginBottom: '30px' } },
+        React.createElement('h5', { style: { marginBottom: '10px', color: '#667eea', fontSize: '1rem', fontWeight: '600' } }, '📈 Nominal Scenario (Expected Returns)'),
+        React.createElement('div', { style: { overflowX: 'auto' } },
+          React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' } },
+            React.createElement('thead', null,
+              React.createElement('tr', { style: { background: '#667eea' } },
+                React.createElement('th', { style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, 'Month'),
+                ...savingsNames.map(name =>
+                  React.createElement('th', { key: name, style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, name)
+                )
+              )
+            ),
+            React.createElement('tbody', null,
+              limitedProgression.map((progression, index) =>
+                React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
+                  React.createElement('td', { style: { padding: '10px' } }, progression.month),
+                  ...savingsNames.map(savingsName =>
+                    React.createElement('td', { key: savingsName, style: { padding: '10px' } },
+                      formatCurrency(progression.savingsBreakdown.nominal[savingsName] || 0)
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      ),
+
+      // Minimum Scenario Table
+      React.createElement('div', { style: { marginBottom: '30px' } },
+        React.createElement('h5', { style: { marginBottom: '10px', color: '#e53e3e', fontSize: '1rem', fontWeight: '600' } }, '📉 Minimum Scenario (High Risk - Poor Returns)'),
+        React.createElement('div', { style: { overflowX: 'auto' } },
+          React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' } },
+            React.createElement('thead', null,
+              React.createElement('tr', { style: { background: '#e53e3e' } },
+                React.createElement('th', { style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, 'Month'),
+                ...savingsNames.map(name =>
+                  React.createElement('th', { key: name, style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, name)
+                )
+              )
+            ),
+            React.createElement('tbody', null,
+              limitedProgression.map((progression, index) =>
+                React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
+                  React.createElement('td', { style: { padding: '10px' } }, progression.month),
+                  ...savingsNames.map(savingsName =>
+                    React.createElement('td', { key: savingsName, style: { padding: '10px' } },
+                      formatCurrency(progression.savingsBreakdown.min[savingsName] || 0)
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      ),
+
+      // Maximum Scenario Table
+      React.createElement('div', { style: { marginBottom: '30px' } },
+        React.createElement('h5', { style: { marginBottom: '10px', color: '#38a169', fontSize: '1rem', fontWeight: '600' } }, '📊 Maximum Scenario (Low Risk - Strong Returns)'),
+        React.createElement('div', { style: { overflowX: 'auto' } },
+          React.createElement('table', { style: { width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' } },
+            React.createElement('thead', null,
+              React.createElement('tr', { style: { background: '#38a169' } },
+                React.createElement('th', { style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, 'Month'),
+                ...savingsNames.map(name =>
+                  React.createElement('th', { key: name, style: { padding: '12px', color: 'white', textAlign: 'left', fontWeight: '600' } }, name)
+                )
+              )
+            ),
+            React.createElement('tbody', null,
+              limitedProgression.map((progression, index) =>
+                React.createElement('tr', { key: index, style: { borderBottom: '1px solid #e2e8f0' } },
+                  React.createElement('td', { style: { padding: '10px' } }, progression.month),
+                  ...savingsNames.map(savingsName =>
+                    React.createElement('td', { key: savingsName, style: { padding: '10px' } },
+                      formatCurrency(progression.savingsBreakdown.max[savingsName] || 0)
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    ),
+
+    // Key Metrics Summary
+    React.createElement('div', { style: { background: '#f7fafc', padding: '20px', borderRadius: '8px', marginTop: '30px' } },
+      React.createElement('h4', { style: { marginBottom: '15px', color: '#333', fontSize: '1.1rem' } }, '📈 Key Metrics Summary'),
+      React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' } },
+        React.createElement('div', null,
+          React.createElement('strong', null, 'Initial Setup:'),
+          React.createElement('ul', { style: { marginTop: '8px', paddingLeft: '20px' } },
+            ...survivalData.expenses.map(expense =>
+              React.createElement('li', { key: expense.name },
+                `${expense.name}: ${formatCurrency(expense.amount)}/month (${formatPercent(expense.inflationRate)} inflation)`
+              )
+            ),
+            ...survivalData.savingsPots.map(pot => {
+              const paymentParts = [];
+              if (pot.monthlyPayment > 0) {
+                paymentParts.push(`${formatCurrency(pot.monthlyPayment)}/month`);
+              }
+              if (pot.yearlyPayment > 0) {
+                paymentParts.push(`${formatCurrency(pot.yearlyPayment)}/year`);
+              }
+              const paymentInfo = paymentParts.length > 0 ? ` + ${paymentParts.join(' + ')}` : '';
+              return React.createElement('li', { key: pot.name },
+                `${pot.name}: ${formatCurrency(pot.amount)}${paymentInfo} (${formatPercent(pot.interestRate)} interest, ${formatPercent(pot.riskRate)} risk)`
+              );
+            })
+          )
+        ),
+        React.createElement('div', null,
+          React.createElement('strong', null, 'Final Results:'),
+          React.createElement('ul', { style: { marginTop: '8px', paddingLeft: '20px' } },
+            React.createElement('li', null, `Nominal survival: ${result.nominalMonths} months`),
+            React.createElement('li', null, `Pessimistic survival: ${result.minMonths} months`),
+            React.createElement('li', null, `Optimistic survival: ${result.maxMonths} months`),
+            React.createElement('li', null, `Risk range: ${(result.maxMonths - result.minMonths)} months`)
+          )
+        )
+      )
+    )
+  );
+};
+
+// Help Component
+const HelpSection = ({ isVisible, onToggle }) => {
+  if (!isVisible) {
+    return React.createElement('div', { className: 'help-toggle' },
+      React.createElement('button', {
+        onClick: onToggle,
+        className: 'btn btn-secondary',
+        style: { marginBottom: '20px' }
+      }, '❓ Show Help & Instructions')
+    );
+  }
+
+  return React.createElement('div', { className: 'help-section' },
+    React.createElement('div', { className: 'help-header' },
+      React.createElement('h2', null, '❓ Help & Instructions'),
+      React.createElement('button', {
+        onClick: onToggle,
+        className: 'btn btn-secondary btn-small',
+        style: { marginLeft: 'auto' }
+      }, 'Hide Help')
+    ),
+
+    React.createElement('div', { className: 'help-content' },
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '🎯 What This Tool Does'),
+        React.createElement('p', null,
+          'This calculator helps you determine how long your savings will last based on your monthly expenses, ' +
+          'inflation rates, and investment returns. It simulates three scenarios: nominal (expected returns), ' +
+          'pessimistic (poor market performance), and optimistic (strong market performance).'
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '💸 Adding Monthly Expenses'),
+        React.createElement('ul', null,
+          React.createElement('li', null, 'Enter the name of your expense (e.g., "Rent", "Food", "Utilities")'),
+          React.createElement('li', null, 'Enter the current monthly amount in dollars'),
+          React.createElement('li', null, 'Enter the annual inflation rate as a percentage (e.g., 3.0 for 3% inflation)'),
+          React.createElement('li', null, 'Click "Add Expense" to save it'),
+          React.createElement('li', null, 'You can edit or remove expenses using the buttons next to each item')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '💰 Adding Savings Pots'),
+        React.createElement('ul', null,
+          React.createElement('li', null, 'Enter a name for your savings pot (e.g., "Emergency Fund", "Retirement Account")'),
+          React.createElement('li', null, 'Enter the current amount in dollars'),
+          React.createElement('li', null, 'Enter the annual interest rate as a percentage (e.g., 5.0 for 5% interest)'),
+          React.createElement('li', null, 'Enter the risk rate as a percentage (how much volatility to expect)'),
+          React.createElement('li', null, 'Optional: Add monthly or yearly payment amounts (salary contributions, bonuses, etc.)'),
+          React.createElement('li', null, 'Click "Add Savings" to save it'),
+          React.createElement('li', null, 'You can edit or remove savings pots using the buttons next to each item')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '📊 Understanding the Results'),
+        React.createElement('ul', null,
+          React.createElement('li', null, React.createElement('strong', null, 'Nominal Survival Time:'), ' Expected duration with typical market returns'),
+          React.createElement('li', null, React.createElement('strong', null, 'Minimum Survival Time:'), ' Worst-case scenario with poor market performance'),
+          React.createElement('li', null, React.createElement('strong', null, 'Maximum Survival Time:'), ' Best-case scenario with strong market performance'),
+          React.createElement('li', null, 'Results update automatically when you add, edit, or remove items'),
+          React.createElement('li', null, 'All calculations account for inflation on expenses and compound interest on savings')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '📈 Savings Progression Chart'),
+        React.createElement('p', null,
+          'The chart shows how your savings balance changes month by month across the three scenarios. ' +
+          'The blue line represents nominal returns, red shows the minimum (high risk) scenario, and green shows the maximum (low risk) scenario.'
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '📋 Detailed Analytics'),
+        React.createElement('p', null,
+          'The detailed analytics section provides month-by-month breakdowns of:'
+        ),
+        React.createElement('ul', null,
+          React.createElement('li', null, 'Individual expense amounts (increasing with inflation)'),
+          React.createElement('li', null, 'Individual savings amounts for each pot'),
+          React.createElement('li', null, 'Total expenses and savings progression'),
+          React.createElement('li', null, 'Key metrics summary with initial setup and final results')
+        )
+      ),
+
+      React.createElement('div', { className: 'help-section-content' },
+        React.createElement('h3', null, '💾 Data Persistence'),
+        React.createElement('p', null,
+          'Your data is automatically saved to your browser\'s local storage. ' +
+          'You can close and reopen the page, and your expenses and savings pots will still be there.'
+        )
+      )
+    )
+  );
+};
+
+// Individual Chart Modal Component
+const IndividualChartModal = ({ isOpen, onClose, item, itemType, monthlyProgression }) => {
+  if (!isOpen || !item || !monthlyProgression) return null;
+
+  const [chart, setChart] = useState(null);
+
+  useEffect(() => {
+    if (isOpen && item && monthlyProgression.length > 0) {
+      // Destroy existing chart
+      if (chart) {
+        chart.destroy();
+      }
+
+      const ctx = document.getElementById('individual-chart');
+      if (ctx) {
+        let data, title, yAxisLabel;
+
+        if (itemType === 'expense') {
+          // For expenses, show the inflated amount over time
+          data = monthlyProgression.map(p => ({
+            month: p.month,
+            value: p.expenseBreakdown[item.name] || 0
+          }));
+          title = `Expense Progression: ${item.name}`;
+          yAxisLabel = 'Amount ($)';
+        } else if (itemType === 'savings') {
+          // For savings, show all three scenarios
+          data = monthlyProgression.map(p => ({
+            month: p.month,
+            nominal: p.savingsBreakdown.nominal[item.name] || 0,
+            min: p.savingsBreakdown.min[item.name] || 0,
+            max: p.savingsBreakdown.max[item.name] || 0
+          }));
+          title = `Savings Progression: ${item.name}`;
+          yAxisLabel = 'Amount ($)';
+        }
+
+        const chartData = {
+          labels: data.map(d => {
+            const year = Math.floor((d.month - 1) / 12) + 1;
+            const month = ((d.month - 1) % 12) + 1;
+            return `${year}y ${month}m`;
+          }),
+          datasets: itemType === 'expense' ? [
+            {
+              label: item.name,
+              data: data.map(d => d.value),
+              borderColor: '#667eea',
+              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              borderWidth: 2,
+              fill: false
+            }
+          ] : [
+            {
+              label: 'Nominal',
+              data: data.map(d => d.nominal),
+              borderColor: '#667eea',
+              backgroundColor: 'rgba(102, 126, 234, 0.1)',
+              borderWidth: 2,
+              fill: false
+            },
+            {
+              label: 'Minimum (High Risk)',
+              data: data.map(d => d.min),
+              borderColor: '#e53e3e',
+              backgroundColor: 'rgba(229, 62, 62, 0.1)',
+              borderWidth: 2,
+              fill: false,
+              borderDash: [5, 5]
+            },
+            {
+              label: 'Maximum (Low Risk)',
+              data: data.map(d => d.max),
+              borderColor: '#38a169',
+              backgroundColor: 'rgba(56, 161, 105, 0.1)',
+              borderWidth: 2,
+              fill: false,
+              borderDash: [10, 5]
+            }
+          ]
+        };
+
+        const newChart = new Chart(ctx, {
+          type: 'line',
+          data: chartData,
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: 'Time'
+                },
+                ticks: {
+                  maxTicksLimit: 20,
+                  font: function(context) {
+                    const progression = monthlyProgression[context.index];
+                    if (progression && ((progression.month - 1) % 12) === 0) {
+                      // Make year boundary months (month 1 of each year) bold
+                      return {
+                        weight: 'bold',
+                        size: 12
+                      };
+                    }
+                    return {
+                      weight: 'normal',
+                      size: 10
+                    };
+                  }
+                },
+                grid: {
+                  color: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Darker grid line at year boundaries
+                        return '#333';
+                      }
+                    }
+                    return '#e2e8f0';
+                  },
+                  lineWidth: function(context) {
+                    if (context.index !== undefined) {
+                      const progression = monthlyProgression[context.index];
+                      if (progression && ((progression.month - 1) % 12) === 0) {
+                        // Thicker line at year boundaries
+                        return 2;
+                      }
+                    }
+                    return 1;
+                  }
+                }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: yAxisLabel
+                },
+                min: 0,
+                ticks: {
+                  callback: function(value) {
+                    return '$' + value.toLocaleString();
+                  }
+                }
+              }
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+              },
+              title: {
+                display: true,
+                text: title
+              },
+              annotation: {
+                annotations: monthlyProgression
+                  .filter(p => ((p.month - 1) % 12) === 0)
+                  .map(p => {
+                    const year = Math.floor((p.month - 1) / 12) + 1;
+                    return {
+                      type: 'label',
+                      xValue: monthlyProgression.indexOf(p),
+                      yValue: Math.max(...monthlyProgression.map(pr => {
+                        if (itemType === 'expense') {
+                          return pr.expenseBreakdown[item.name] || 0;
+                        } else {
+                          return Math.max(pr.savingsBreakdown.nominal[item.name] || 0, pr.savingsBreakdown.min[item.name] || 0, pr.savingsBreakdown.max[item.name] || 0);
+                        }
+                      })) * 0.95,
+                      content: `${year}y`,
+                      font: {
+                        size: 12,
+                        weight: 'bold'
+                      },
+                      color: '#333',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: 4,
+                      padding: 4
+                    };
+                  })
+              }
+            }
+          }
+        });
+        setChart(newChart);
+      }
+    }
+
+    return () => {
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, [isOpen, item, itemType, monthlyProgression]);
+
+  return React.createElement('div', {
+    style: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    },
+    onClick: onClose
+  },
+    React.createElement('div', {
+      style: {
+        background: 'white',
+        borderRadius: '16px',
+        padding: '24px',
+        maxWidth: '800px',
+        width: '90%',
+        maxHeight: '80vh',
+        overflow: 'auto',
+        position: 'relative'
+      },
+      onClick: (e) => e.stopPropagation()
+    },
+      React.createElement('button', {
+        onClick: onClose,
+        style: {
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          background: 'none',
+          border: 'none',
+          fontSize: '24px',
+          cursor: 'pointer',
+          color: '#666'
+        }
+      }, '×'),
+      React.createElement('div', { style: { height: '400px' } },
+        React.createElement('canvas', { id: 'individual-chart' })
+      )
+    )
+  );
+};
+
+// Main App Component
+const App = () => {
+  const [survivalData, setSurvivalData] = useState(new SurvivalData());
+  const [result, setResult] = useState(null);
+  const [editingExpense, setEditingExpense] = useState(null);
+  const [editingSavingsPot, setEditingSavingsPot] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [modalState, setModalState] = useState({ isOpen: false, item: null, itemType: null });
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const loadedData = SurvivalData.loadFromLocalStorage();
+    if (loadedData) {
+      setSurvivalData(loadedData);
+    }
+  }, []);
+
+  // Listen for global help state changes
+  useEffect(() => {
+    const listener = (newState) => setShowHelp(newState);
+    helpStateListeners.push(listener);
+    return () => {
+      const index = helpStateListeners.indexOf(listener);
+      if (index > -1) helpStateListeners.splice(index, 1);
+    };
+  }, []);
+
+  // Auto-calculate when data changes
+  useEffect(() => {
+    if (survivalData.expenses.length > 0 && survivalData.savingsPots.length > 0) {
+      try {
+        const calculationResult = survivalData.calculateSurvival();
+        setResult(calculationResult);
+      } catch (error) {
+        console.error('Auto-calculation error:', error);
+        setResult(null);
+      }
+    } else {
+      setResult(null);
+    }
+  }, [survivalData]);
+
+  const handleAddExpense = (expenseData) => {
+    try {
+      const expense = new Expense(expenseData.name, expenseData.amount, expenseData.inflationRate, expenseData.durationMonths);
+      const newSurvivalData = survivalData.addExpense(expense);
+      setSurvivalData(newSurvivalData);
+      setEditingExpense(null);
+    } catch (error) {
+      alert('Error adding expense: ' + error.message);
+    }
+  };
+
+  const handleEditExpense = (index) => {
+    const expense = survivalData.expenses[index];
+    setEditingExpense({
+      index,
+      name: expense.name,
+      amount: expense.amount.toString(),
+      inflationRate: (expense.inflationRate * 100).toString(),
+      durationMonths: expense.durationMonths ? expense.durationMonths.toString() : ''
+    });
+  };
+
+  const handleUpdateExpense = (expenseData) => {
+    try {
+      const expense = new Expense(expenseData.name, expenseData.amount, expenseData.inflationRate, expenseData.durationMonths);
+      const newSurvivalData = survivalData.removeExpense(editingExpense.index).addExpense(expense);
+      setSurvivalData(newSurvivalData);
+      setEditingExpense(null);
+    } catch (error) {
+      alert('Error updating expense: ' + error.message);
+    }
+  };
+
+  const handleRemoveExpense = (index) => {
+    try {
+      const newSurvivalData = survivalData.removeExpense(index);
+      setSurvivalData(newSurvivalData);
+    } catch (error) {
+      alert('Error removing expense: ' + error.message);
+    }
+  };
+
+  const handleAddSavingsPot = (savingsData) => {
+    try {
+      const savingsPot = new SavingsPot(savingsData.name, savingsData.amount, savingsData.interestRate, savingsData.riskRate, savingsData.monthlyPayment, savingsData.yearlyPayment);
+      const newSurvivalData = survivalData.addSavingsPot(savingsPot);
+      setSurvivalData(newSurvivalData);
+      setEditingSavingsPot(null);
+    } catch (error) {
+      alert('Error adding savings pot: ' + error.message);
+    }
+  };
+
+  const handleEditSavingsPot = (index) => {
+    const pot = survivalData.savingsPots[index];
+    setEditingSavingsPot({
+      index,
+      name: pot.name,
+      amount: pot.amount.toString(),
+      interestRate: (pot.interestRate * 100).toString(),
+      riskRate: (pot.riskRate * 100).toString(),
+      monthlyPayment: pot.monthlyPayment.toString(),
+      yearlyPayment: pot.yearlyPayment.toString()
+    });
+  };
+
+  const handleUpdateSavingsPot = (savingsData) => {
+    try {
+      const savingsPot = new SavingsPot(savingsData.name, savingsData.amount, savingsData.interestRate, savingsData.riskRate, savingsData.monthlyPayment, savingsData.yearlyPayment);
+      const newSurvivalData = survivalData.removeSavingsPot(editingSavingsPot.index).addSavingsPot(savingsPot);
+      setSurvivalData(newSurvivalData);
+      setEditingSavingsPot(null);
+    } catch (error) {
+      alert('Error updating savings pot: ' + error.message);
+    }
+  };
+
+  const handleRemoveSavingsPot = (index) => {
+    try {
+      const newSurvivalData = survivalData.removeSavingsPot(index);
+      setSurvivalData(newSurvivalData);
+    } catch (error) {
+      alert('Error removing savings pot: ' + error.message);
+    }
+  };
+
+  const handleViewExpenseChart = (expense) => {
+    setModalState({ isOpen: true, item: expense, itemType: 'expense' });
+  };
+
+  const handleViewSavingsChart = (savingsPot) => {
+    setModalState({ isOpen: true, item: savingsPot, itemType: 'savings' });
+  };
+
+  const handleToggleEnabled = (index, type) => {
+    try {
+      if (type === 'expense') {
+        const expense = survivalData.expenses[index];
+        const updatedExpense = new Expense(
+          expense.name,
+          expense.amount,
+          expense.inflationRate,
+          expense.durationMonths,
+          !expense.enabled
+        );
+        const newSurvivalData = survivalData.updateExpense(index, updatedExpense);
+        setSurvivalData(newSurvivalData);
+      } else if (type === 'savings') {
+        const savingsPot = survivalData.savingsPots[index];
+        const updatedSavingsPot = new SavingsPot(
+          savingsPot.name,
+          savingsPot.amount,
+          savingsPot.interestRate,
+          savingsPot.riskRate,
+          savingsPot.monthlyPayment,
+          savingsPot.yearlyPayment,
+          !savingsPot.enabled
+        );
+        const newSurvivalData = survivalData.updateSavingsPot(index, updatedSavingsPot);
+        setSurvivalData(newSurvivalData);
+      }
+    } catch (error) {
+      alert('Error toggling item: ' + error.message);
+    }
+  };
+
+  const closeModal = () => {
+    setModalState({ isOpen: false, item: null, itemType: null });
+  };
+
+  const formatLastCalculated = () => {
+    if (!survivalData.lastCalculated) return '';
+    return `Last calculated: ${new Date(survivalData.lastCalculated).toLocaleString()}`;
+  };
+
+  return React.createElement('div', null,
+    React.createElement(IndividualChartModal, {
+      isOpen: modalState.isOpen,
+      onClose: closeModal,
+      item: modalState.item,
+      itemType: modalState.itemType,
+      monthlyProgression: result ? result.monthlyProgression : []
+    }),
+    showHelp && React.createElement('div', { className: 'help-section' },
+      React.createElement('div', { className: 'help-header' },
+        React.createElement('h2', null, '❓ Help & Instructions')
+      ),
+
+      React.createElement('div', { className: 'help-content' },
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '🎯 What This Tool Does'),
+          React.createElement('p', null,
+            'This calculator helps you determine how long your savings will last based on your monthly expenses, ' +
+            'inflation rates, and investment returns. It simulates three scenarios: nominal (expected returns), ' +
+            'pessimistic (poor market performance), and optimistic (strong market performance).'
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '💸 Adding Monthly Expenses'),
+          React.createElement('ul', null,
+            React.createElement('li', null, 'Enter the name of your expense (e.g., "Rent", "Food", "Utilities")'),
+            React.createElement('li', null, 'Enter the current monthly amount in dollars'),
+            React.createElement('li', null, 'Enter the annual inflation rate as a percentage (e.g., 3.0 for 3% inflation)'),
+            React.createElement('li', null, 'Click "Add Expense" to save it'),
+            React.createElement('li', null, 'You can edit or remove expenses using the buttons next to each item')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '💰 Adding Savings Pots'),
+          React.createElement('ul', null,
+            React.createElement('li', null, 'Enter a name for your savings pot (e.g., "Emergency Fund", "Retirement Account")'),
+            React.createElement('li', null, 'Enter the current amount in dollars'),
+            React.createElement('li', null, 'Enter the annual interest rate as a percentage (e.g., 5.0 for 5% interest)'),
+            React.createElement('li', null, 'Enter the risk rate as a percentage (how much volatility to expect)'),
+            React.createElement('li', null, 'Optional: Add monthly or yearly payment amounts (salary contributions, bonuses, etc.)'),
+            React.createElement('li', null, 'Click "Add Savings" to save it'),
+            React.createElement('li', null, 'You can edit or remove savings pots using the buttons next to each item')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '📊 Understanding the Results'),
+          React.createElement('ul', null,
+            React.createElement('li', null, React.createElement('strong', null, 'Nominal Survival Time:'), ' Expected duration with typical market returns'),
+            React.createElement('li', null, React.createElement('strong', null, 'Minimum Survival Time:'), ' Worst-case scenario with poor market performance'),
+            React.createElement('li', null, React.createElement('strong', null, 'Maximum Survival Time:'), ' Best-case scenario with strong market performance'),
+            React.createElement('li', null, 'Results update automatically when you add, edit, or remove items'),
+            React.createElement('li', null, 'All calculations account for inflation on expenses and compound interest on savings')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '📈 Savings Progression Chart'),
+          React.createElement('p', null,
+            'The chart shows how your savings balance changes month by month across the three scenarios. ' +
+            'The blue line represents nominal returns, red shows the minimum (high risk) scenario, and green shows the maximum (low risk) scenario.'
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '📋 Detailed Analytics'),
+          React.createElement('p', null,
+            'The detailed analytics section provides month-by-month breakdowns of:'
+          ),
+          React.createElement('ul', null,
+            React.createElement('li', null, 'Individual expense amounts (increasing with inflation)'),
+            React.createElement('li', null, 'Individual savings amounts for each pot'),
+            React.createElement('li', null, 'Total expenses and savings progression'),
+            React.createElement('li', null, 'Key metrics summary with initial setup and final results')
+          )
+        ),
+
+        React.createElement('div', { className: 'help-section-content' },
+          React.createElement('h3', null, '💾 Data Persistence'),
+          React.createElement('p', null,
+            'Your data is automatically saved to your browser\'s local storage. ' +
+            'You can close and reopen the page, and your expenses and savings pots will still be there.'
+          )
+        )
+      )
+    ),
+    React.createElement('div', { className: 'calculator-grid' },
+      React.createElement('div', { className: 'section' },
+        React.createElement('h2', null, editingExpense ? '✏️ Edit Expense' : '📉 Monthly Expenses'),
+        editingExpense ?
+          React.createElement(ExpenseForm, { onAdd: handleUpdateExpense, initialData: editingExpense, onCancel: () => setEditingExpense(null) }) :
+          React.createElement(ExpenseForm, { onAdd: handleAddExpense }),
+        React.createElement(ExpenseList, {
+          expenses: survivalData.expenses,
+          onRemove: handleRemoveExpense,
+          onEdit: handleEditExpense,
+          onViewChart: handleViewExpenseChart,
+          onToggleEnabled: handleToggleEnabled
+        })
+      ),
+      React.createElement('div', { className: 'section' },
+        React.createElement('h2', null, editingSavingsPot ? '✏️ Edit Savings Pot' : '💰 Savings Pots'),
+        editingSavingsPot ?
+          React.createElement(SavingsPotForm, { onAdd: handleUpdateSavingsPot, initialData: editingSavingsPot, onCancel: () => setEditingSavingsPot(null) }) :
+          React.createElement(SavingsPotForm, { onAdd: handleAddSavingsPot }),
+        React.createElement(SavingsPotList, {
+          savingsPots: survivalData.savingsPots,
+          onRemove: handleRemoveSavingsPot,
+          onEdit: handleEditSavingsPot,
+          onViewChart: handleViewSavingsChart,
+          onToggleEnabled: handleToggleEnabled
+        })
+      )
+    ),
+    React.createElement('div', { className: 'section results-section' },
+      React.createElement('h2', null, '📊 Survival Results'),
+      React.createElement(ResultsDisplay, { result })
+    ),
+    result && React.createElement('div', { className: 'chart-container' },
+      React.createElement('h2', null, '📈 Savings Progression Chart'),
+      React.createElement(SurvivalChart, { result })
+    ),
+    React.createElement(DetailedAnalytics, { result, survivalData }),
+    React.createElement('div', { className: 'last-calculated' }, formatLastCalculated())
+  );
+};
+
+// Global help state
+let globalHelpState = false;
+const helpStateListeners = [];
+
+// Function to update global help state and notify listeners
+const setGlobalHelpState = (newState) => {
+  globalHelpState = newState;
+  helpStateListeners.forEach(listener => listener(newState));
+};
+
+// Render the app
+const root = ReactDOM.createRoot(document.getElementById('app'));
+root.render(React.createElement(App));
+
+// Render help toggle in header
+const headerRoot = ReactDOM.createRoot(document.getElementById('header-actions'));
+const HeaderHelpToggle = () => {
+  const [showHelp, setShowHelp] = useState(globalHelpState);
+
+  const handleToggle = () => {
+    const newState = !showHelp;
+    setShowHelp(newState);
+    setGlobalHelpState(newState);
+  };
+
+  // Listen for global state changes
+  useEffect(() => {
+    const listener = (newState) => setShowHelp(newState);
+    helpStateListeners.push(listener);
+    return () => {
+      const index = helpStateListeners.indexOf(listener);
+      if (index > -1) helpStateListeners.splice(index, 1);
+    };
+  }, []);
+
+  return React.createElement('div', { className: 'help-toggle' },
+    React.createElement('button', {
+      onClick: handleToggle,
+      className: 'btn btn-secondary',
+      style: { marginBottom: '0' }
+    }, showHelp ? '❓ Hide Help' : '❓ Show Help & Instructions')
+  );
+};
+headerRoot.render(React.createElement(HeaderHelpToggle));

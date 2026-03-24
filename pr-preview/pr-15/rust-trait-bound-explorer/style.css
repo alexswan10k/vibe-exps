@@ -1,0 +1,380 @@
+:root {
+    --bg-main: #1e1e1e;
+    --bg-panel: #252526;
+    --bg-element: #333333;
+    --bg-hover: #3c3c3c;
+    --bg-terminal: #0d0d0d;
+    --text-main: #d4d4d4;
+    --text-muted: #858585;
+    --rust-orange: #dea584;
+    --rust-red: #f44c4c;
+    --rust-green: #4af626;
+    --rust-blue: #569cd6;
+    --rust-keyword: #c586c0;
+    --rust-function: #dcdcaa;
+    --rust-type: #4ec9b0;
+    --rust-variable: #9cdcfe;
+    --rust-comment: #6a9955;
+    --border-color: #454545;
+    --border-highlight: #5a5a5a;
+    --drop-active: rgba(86, 156, 214, 0.2);
+    --drop-hover: rgba(86, 156, 214, 0.4);
+
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+header {
+    background-color: var(--bg-panel);
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+    text-align: center;
+}
+
+header h1 {
+    font-size: 2rem;
+    color: var(--rust-orange);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.rust-logo {
+    font-size: 2.2rem;
+}
+
+/* Main Layout */
+.container {
+    display: flex;
+    flex: 1;
+    padding: 1rem;
+    gap: 1rem;
+    overflow-x: auto;
+}
+
+.panel {
+    background-color: var(--bg-panel);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    min-width: 250px;
+    flex: 1;
+}
+
+.panel-types { flex: 1.2; }
+.panel-function { flex: 2; }
+.panel-traits { flex: 1; }
+
+.panel h2 {
+    font-size: 1.2rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-main);
+}
+
+.panel-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+h3 {
+    font-size: 1rem;
+    color: var(--text-main);
+    margin: 1rem 0 0.5rem 0;
+}
+
+/* Draggables */
+.draggable-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.draggable-item {
+    background-color: var(--bg-element);
+    border: 1px solid var(--border-highlight);
+    border-radius: 4px;
+    padding: 0.4rem 0.8rem;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    cursor: grab;
+    user-select: none;
+    transition: background-color 0.2s, transform 0.1s;
+    position: relative;
+}
+
+.draggable-item:hover {
+    background-color: var(--bg-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.draggable-item:active {
+    cursor: grabbing;
+}
+
+.draggable-item.dragging {
+    opacity: 0.5;
+}
+
+/* specific colors for item types */
+.type-item {
+    color: var(--rust-type);
+    border-left: 3px solid var(--rust-type);
+}
+
+.trait-item {
+    color: var(--rust-orange);
+    border-left: 3px solid var(--rust-orange);
+}
+
+.custom-type {
+    display: inline-block;
+    margin-top: 1rem;
+    font-weight: bold;
+}
+
+/* Drop Zones */
+.drop-zone {
+    border: 1px dashed var(--border-highlight);
+    border-radius: 4px;
+    min-height: 40px;
+    padding: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    transition: all 0.2s;
+    background-color: rgba(255,255,255,0.02);
+}
+
+.drop-zone.drag-over {
+    border-color: var(--rust-blue);
+    background-color: var(--drop-hover);
+}
+
+.drop-zone .placeholder {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+    pointer-events: none;
+}
+
+.inline-drop-zone {
+    display: inline-flex;
+    min-height: 24px;
+    min-width: 100px;
+    padding: 0.1rem 0.5rem;
+    margin: 0 0.2rem;
+    vertical-align: middle;
+}
+
+.dropped-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* Code Editor Blocks */
+.code-editor, .custom-type-builder {
+    background-color: var(--bg-main);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 1rem;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.95rem;
+    margin-bottom: 1rem;
+}
+
+.code-line {
+    line-height: 1.8;
+    white-space: pre-wrap;
+    display: flex;
+    align-items: center;
+}
+
+.indent-1 { padding-left: 2rem; }
+.bound-line {
+    flex-wrap: wrap;
+}
+
+/* Syntax Highlighting */
+.keyword { color: var(--rust-keyword); font-weight: bold; }
+.function-name { color: var(--rust-function); }
+.type-name { color: var(--rust-type); }
+.var-name { color: var(--rust-variable); }
+.comment { color: var(--rust-comment); font-style: italic; }
+
+.call-site {
+    margin-top: 2rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1rem;
+}
+
+.compile-btn {
+    background-color: var(--rust-orange);
+    color: var(--bg-main);
+    border: none;
+    border-radius: 4px;
+    padding: 0.6rem 1.2rem;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 1rem;
+    transition: background-color 0.2s;
+    width: 100%;
+}
+
+.compile-btn:hover {
+    background-color: #e5b399;
+}
+
+/* Terminal */
+.terminal-panel {
+    background-color: var(--bg-terminal);
+    border-top: 2px solid var(--border-highlight);
+    height: 250px;
+    display: flex;
+    flex-direction: column;
+}
+
+.terminal-header {
+    background-color: #1a1a1a;
+    padding: 0.5rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-bottom: 1px solid var(--border-highlight);
+}
+
+.dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+.red { background-color: #ff5f56; }
+.yellow { background-color: #ffbd2e; }
+.green { background-color: #27c93f; }
+
+.terminal-header .title {
+    color: var(--text-muted);
+    font-family: 'Fira Code', monospace;
+    font-size: 0.8rem;
+    margin-left: 1rem;
+}
+
+.terminal-body {
+    padding: 1rem;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.terminal-line { margin-bottom: 0.3rem; }
+.terminal-line.error { color: var(--rust-red); }
+.terminal-line.success { color: var(--rust-green); }
+.terminal-line.info { color: var(--text-muted); }
+
+/* Remove items from drop zone */
+.dropped-items .draggable-item {
+    position: relative;
+    padding-right: 1.5rem;
+}
+
+.dropped-items .draggable-item::after {
+    content: "×";
+    position: absolute;
+    right: 0.3rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-weight: bold;
+    padding: 0 0.2rem;
+}
+
+.dropped-items .draggable-item:hover::after {
+    color: var(--rust-red);
+}
+
+/* Disallowed visual cues */
+.invalid-drop {
+    background-color: rgba(244, 76, 76, 0.2) !important;
+    border-color: var(--rust-red) !important;
+}
+
+/* Type visual filtering */
+.type-item.dimmed {
+    opacity: 0.3;
+    filter: grayscale(1);
+    cursor: not-allowed;
+}
+
+/* Tooltip */
+.tooltip {
+    position: absolute;
+    background-color: var(--bg-element);
+    border: 1px solid var(--border-highlight);
+    color: var(--text-main);
+    padding: 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    max-width: 250px;
+    pointer-events: none;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    transition: opacity 0.2s;
+}
+
+.tooltip.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.tooltip h4 {
+    color: var(--rust-orange);
+    margin-bottom: 0.3rem;
+    font-size: 0.9rem;
+}
+
+.tooltip code {
+    background-color: #1a1a1a;
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-family: 'Fira Code', monospace;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .container {
+        flex-direction: column;
+    }
+}
