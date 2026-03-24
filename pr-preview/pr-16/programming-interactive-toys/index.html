@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programming Interactive Toys</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); /* Tech/Coding Vibe */
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            font-weight: bold;
+            transition: color 0.3s;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        h1 {
+            color: #fff;
+            text-align: center;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            animation: fadeIn 1s ease-in;
+        }
+
+        p.subtitle {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            opacity: 0.9;
+        }
+
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 30px;
+        }
+
+        .project-card {
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid rgba(100, 150, 255, 0.3);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            animation: slideUp 0.6s ease-out forwards;
+            opacity: 1; /* Reset to 1, rely on animation or just show it */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            min-height: 150px;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .project-card:nth-child(1) { animation-delay: 0.1s; }
+        .project-card:nth-child(2) { animation-delay: 0.2s; }
+        .project-card:nth-child(3) { animation-delay: 0.3s; }
+
+        .project-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+            border-color: rgba(100, 150, 255, 0.6);
+            background: rgba(255, 250, 240, 0.95);
+        }
+
+        .project-card h3 {
+            margin-top: 0;
+            color: #2c3e50;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            text-align: left;
+        }
+
+        .project-card p {
+            color: #555;
+            margin: 15px 0;
+            line-height: 1.5;
+            flex-grow: 1;
+            text-align: left;
+            font-size: 0.95em;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ensure cards render if animation fails */
+        .project-card {
+            transform: translateY(0);
+        }
+
+    </style>
+</head>
+
+<body>
+    <a href="../index.html" class="back-link">← Back to Main Portfolio</a>
+
+    <h1>💻 Programming Interactive Toys</h1>
+    <p class="subtitle">A collection of visual, interactive simulators to help understand complex programming concepts.</p>
+
+    <div class="project-grid">
+        <a href="rust-trait-bound-explorer/index.html" class="project-card">
+            <h3>🦀 Rust Trait Bound Explorer</h3>
+            <p>Interactive educational simulator to understand Rust trait bounds, generic constraints, and compiler errors through drag-and-drop.</p>
+        </a>
+
+        <a href="js-event-loop/index.html" class="project-card">
+            <h3>🔄 JS Event Loop Visualizer</h3>
+            <p>Watch how the call stack, Web APIs, macro task queue, and micro task queue interact in JavaScript.</p>
+        </a>
+
+        <a href="data-structures-explorer/index.html" class="project-card">
+            <h3>🌳 Data Structures Explorer</h3>
+            <p>Interactive visualization of common data structures.</p>
+        </a>
+
+        <a href="algorithm-visualizer/index.html" class="project-card">
+            <h3>📊 Algorithm Visualizer</h3>
+            <p>Visualize sorting algorithms like Bubble, Insertion, Quick, and Merge sort.</p>
+        </a>
+    </div>
+</body>
+
+</html>
