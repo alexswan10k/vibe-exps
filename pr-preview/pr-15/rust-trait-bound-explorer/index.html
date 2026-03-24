@@ -5,114 +5,74 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rust Trait Bound Explorer</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Fonts for that coding feel -->
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <header>
         <h1><span class="rust-logo">🦀</span> Rust Trait Bound Explorer</h1>
-        <p>Learn how Rust trait bounds restrict types and enable powerful abstractions. Drag and drop traits and types to experiment.</p>
+        <p>Understand how generic constraints work in Rust. Adding Trait Bounds to <code>T</code> narrows the set of valid types.</p>
     </header>
 
     <main class="container">
-        <!-- Left Panel: Available Types -->
-        <section class="panel panel-types">
-            <h2>📦 Available Types</h2>
-            <div class="panel-desc">Drag these into the function call to test them.</div>
-
-            <div class="type-category">
-                <h3>Built-in Types</h3>
-                <div class="draggable-container" id="builtin-types-container">
-                    <!-- Populated by JS -->
-                </div>
-            </div>
-
-            <div class="type-category custom-type-section">
-                <h3>Your Type</h3>
-                <div class="custom-type-builder">
-                    <div class="code-block">
-                        <span class="keyword">struct</span> <span class="type-name">MyStruct</span>;
-                    </div>
-                    <div class="implemented-traits">
-                        <h4>Implemented Traits:</h4>
-                        <!-- Drop zone for traits on custom type -->
-                        <div class="drop-zone trait-drop-zone" id="struct-impl-zone">
-                            <span class="placeholder">Drop Traits Here to `impl`</span>
-                            <div class="dropped-items" id="struct-traits"></div>
-                        </div>
-                    </div>
-                    <div class="draggable-item type-item custom-type" draggable="true" data-type="MyStruct" data-kind="type">
-                        MyStruct
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Middle Panel: Function Signature & Call -->
+        <!-- Top Panel: The Generic Function & Constraints -->
         <section class="panel panel-function">
-            <h2>⚙️ Function Definition</h2>
-            <div class="panel-desc">Build a generic function by adding trait bounds.</div>
+            <h2>⚙️ Add Constraints to <code>T</code></h2>
+            <div class="panel-desc">Drag traits from the palette below into the bounds of <code>T</code> to see which types can still be used.</div>
 
             <div class="code-editor">
-                <div class="code-line">
-                    <span class="keyword">fn</span> <span class="function-name">do_something</span>&lt;T&gt;(<span class="var-name">value</span>: T)
-                </div>
+                <div class="code-line"><span class="keyword">fn</span> <span class="function-name">process_data</span>&lt;T&gt;(<span class="var-name">value</span>: T)</div>
                 <div class="code-line indent-1 bound-line">
                     <span class="keyword">where</span> T:
                     <!-- Drop zone for Trait Bounds -->
                     <span class="drop-zone inline-drop-zone" id="function-bounds-zone">
-                        <span class="placeholder">Drop Bounds Here</span>
+                        <span class="placeholder">Drop Traits Here</span>
                         <span class="dropped-items" id="function-bounds"></span>
                     </span>
                 </div>
                 <div class="code-line">{</div>
-                <div class="code-line indent-1 comment">// function body requiring the bounds</div>
+                <div class="code-line indent-1 comment">// function body...</div>
                 <div class="code-line">}</div>
             </div>
 
-            <div class="call-site">
-                <h3>🧪 Call Site (Test your types here)</h3>
-                <div class="code-editor">
-                    <div class="code-line">
-                        <span class="function-name">do_something</span>(
-                        <!-- Drop zone for Types -->
-                        <span class="drop-zone inline-drop-zone" id="call-site-zone">
-                            <span class="placeholder">Drop Type Here</span>
-                            <span class="dropped-items" id="call-site-args"></span>
-                        </span>
-                        );
-                    </div>
-                </div>
-                <button id="compile-btn" class="compile-btn">Run Compiler</button>
-            </div>
-        </section>
-
-        <!-- Right Panel: Available Traits -->
-        <section class="panel panel-traits">
-            <h2>🔖 Available Traits</h2>
-            <div class="panel-desc">Drag traits to the function bounds or to `MyStruct`.</div>
-
-            <div class="trait-category">
-                <h3>Standard Library Traits</h3>
+            <!-- Trait Palette (Draggable Traits) -->
+            <div class="trait-palette">
+                <h3>🔖 Trait Palette (Drag to bounds)</h3>
                 <div class="draggable-container" id="std-traits-container">
                     <!-- Populated by JS -->
                 </div>
             </div>
         </section>
-    </main>
 
-    <!-- Bottom Panel: Terminal Output -->
-    <section class="terminal-panel">
-        <div class="terminal-header">
-            <span class="dot red"></span>
-            <span class="dot yellow"></span>
-            <span class="dot green"></span>
-            <span class="title">rustc output</span>
+        <!-- Bottom Layout: Split into Valid vs Rejected Types -->
+        <div class="type-split-layout">
+
+            <!-- Left Panel: Valid Types -->
+            <section class="panel panel-valid-types">
+                <div class="panel-header valid-header">
+                    <h2>✅ Valid Types for <code>T</code></h2>
+                    <span class="count-badge" id="valid-count">0</span>
+                </div>
+                <div class="panel-desc">These types satisfy all the current constraints on <code>T</code>.</div>
+
+                <div class="type-container" id="valid-types-container">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+
+            <!-- Right Panel: Rejected Types -->
+            <section class="panel panel-rejected-types">
+                 <div class="panel-header rejected-header">
+                    <h2>❌ Rejected Types</h2>
+                    <span class="count-badge" id="rejected-count">0</span>
+                </div>
+                <div class="panel-desc">These types cannot be used because they lack required traits.</div>
+
+                <div class="type-container" id="rejected-types-container">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
         </div>
-        <div class="terminal-body" id="terminal-output">
-            <div class="terminal-line info">Waiting for compilation... Add some bounds and test a type.</div>
-        </div>
-    </section>
+    </main>
 
     <!-- Tooltip container -->
     <div id="tooltip" class="tooltip hidden"></div>
