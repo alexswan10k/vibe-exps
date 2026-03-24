@@ -152,8 +152,8 @@ class IR35Calculator {
         this.taxCalc = new TaxCalculator();
     }
 
-    calculateInside(dailyRate, daysWorked, expenses = 0, pensionContribution = 0) {
-        let grossRevenue = dailyRate * daysWorked;
+    calculateInside(annualRevenue, expenses = 0, pensionContribution = 0) {
+        let grossRevenue = annualRevenue;
         // Inside IR35: fee payer deducts Employer NI and App Levy before paying the "gross" salary
         // Let's assume an umbrella company setup where the umbrella margin is an expense
         let revenueAfterExpenses = grossRevenue - expenses - pensionContribution;
