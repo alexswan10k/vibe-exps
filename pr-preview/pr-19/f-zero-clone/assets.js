@@ -71,6 +71,35 @@ function generateTrackTexture() {
     return canvas;
 }
 
+function generateCollisionMap() {
+    const canvas = document.createElement('canvas');
+    canvas.width = trackSize;
+    canvas.height = trackSize;
+    const ctx = canvas.getContext('2d');
+
+    // Black background (off-track / walls)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, trackSize, trackSize);
+
+    // Track path (white = drivable area)
+    ctx.lineWidth = 140; // Same width as the outer borders
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#fff';
+
+    ctx.beginPath();
+    ctx.moveTo(200, 800);
+    ctx.lineTo(200, 200);
+    ctx.lineTo(800, 200);
+    ctx.lineTo(800, 600);
+    ctx.lineTo(500, 600);
+    ctx.lineTo(500, 800);
+    ctx.closePath();
+    ctx.stroke();
+
+    return canvas;
+}
+
 function generateCarSprite() {
     const canvas = document.createElement('canvas');
     canvas.width = 32;

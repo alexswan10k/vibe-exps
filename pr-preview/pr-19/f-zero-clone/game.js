@@ -11,14 +11,19 @@ const height = canvas.height;
 let gameState = {
     x: 200,          // Track map coordinates
     y: 750,
-    angle: 0,        // Facing right by default? Actually standard math has 0 = East
-    speed: 0,
-    maxSpeed: 8,     // Map pixels per frame
-    acceleration: 0.1,
-    friction: 0.95,
-    turnSpeed: 0.05,
+    vx: 0,           // Velocity X
+    vy: 0,           // Velocity Y
+    angle: 0,        // Facing direction
+    speed: 0,        // Magnitude of velocity
+    maxSpeed: 10,    // Map pixels per frame
+    acceleration: 0.15,
+    braking: 0.3,
+    friction: 0.98,  // Natural slow down
+    grip: 0.08,      // How fast velocity aligns with facing angle (drift factor)
+    turnSpeed: 0.06,
     lap: 1,
     checkpoints: [false, false, false], // Very simple checkpoint system
+    bounceTimer: 0   // For screen shake effect
 };
 
 // Controls
@@ -37,7 +42,7 @@ window.addEventListener('keyup', (e) => {
 });
 
 // Assets (from assets.js)
-let trackTexture, trackData, carSprite, skyTexture;
+let trackTexture, trackData, collisionData, carSprite, skyTexture;
 
 // Render Setup
 const fov = Math.PI / 3; // 60 degrees
@@ -53,38 +58,112 @@ function initAssets() {
     const tCtx = trackCanvas.getContext('2d', { willReadFrequently: true });
     trackData = tCtx.getImageData(0, 0, trackSize, trackSize);
 
+    // Get collision map data
+    const collisionCanvas = generateCollisionMap();
+    const cCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
+    collisionData = cCtx.getImageData(0, 0, trackSize, trackSize);
+
     carSprite = generateCarSprite();
     skyTexture = generateSkyTexture();
 }
 
+// Helper to check collision at a given coordinate
+function isWall(x, y) {
+    x = Math.floor(x) & (trackSize - 1);
+    y = Math.floor(y) & (trackSize - 1);
+    const index = (y * trackSize + x) * 4;
+    // Look at Red channel: 0 is black (wall), 255 is white (track)
+    return collisionData.data[index] < 128;
+}
+
 function update() {
-    // Handle Input
+    // Current forward vector based on facing angle
+    const forwardX = Math.cos(gameState.angle);
+    const forwardY = Math.sin(gameState.angle);
+
+    // Handle Input - apply force to velocity
     if (keys.ArrowUp) {
-        gameState.speed += gameState.acceleration;
-    } else if (keys.ArrowDown) {
-        gameState.speed -= gameState.acceleration * 1.5; // Brakes are stronger
-    } else {
-        // Natural friction
-        gameState.speed *= gameState.friction;
+        gameState.vx += forwardX * gameState.acceleration;
+        gameState.vy += forwardY * gameState.acceleration;
     }
 
-    // Cap speed
-    gameState.speed = Math.max(-2, Math.min(gameState.speed, gameState.maxSpeed));
+    if (keys.ArrowDown) {
+        // Apply braking in opposite direction of current velocity
+        const velMag = Math.sqrt(gameState.vx*gameState.vx + gameState.vy*gameState.vy);
+        if (velMag > 0) {
+            gameState.vx -= (gameState.vx / velMag) * gameState.braking;
+            gameState.vy -= (gameState.vy / velMag) * gameState.braking;
+        }
+    }
+
+    // Apply Friction
+    gameState.vx *= gameState.friction;
+    gameState.vy *= gameState.friction;
+
+    // Calculate current speed (magnitude)
+    gameState.speed = Math.sqrt(gameState.vx*gameState.vx + gameState.vy*gameState.vy);
+
+    // Limit Max Speed
+    if (gameState.speed > gameState.maxSpeed) {
+        const ratio = gameState.maxSpeed / gameState.speed;
+        gameState.vx *= ratio;
+        gameState.vy *= ratio;
+        gameState.speed = gameState.maxSpeed;
+    }
+
+    // Apply Grip (drift physics)
+    // Blend current velocity vector towards facing angle
+    if (gameState.speed > 0.1) {
+        // Target velocity vector if moving straight ahead
+        const targetVx = forwardX * gameState.speed;
+        const targetVy = forwardY * gameState.speed;
+
+        // Lerp current velocity towards target
+        gameState.vx += (targetVx - gameState.vx) * gameState.grip;
+        gameState.vy += (targetVy - gameState.vy) * gameState.grip;
+    }
 
     // Turn (only turn if moving, turning radius depends on speed)
-    if (Math.abs(gameState.speed) > 0.1) {
-        let turnAmount = gameState.turnSpeed * (gameState.speed / gameState.maxSpeed);
-        if (gameState.speed < 0) turnAmount *= -1; // Reverse steering
+    if (gameState.speed > 0.1) {
+        // Less steering power at higher speeds to emulate momentum
+        const turnScale = Math.max(0.3, 1.0 - (gameState.speed / gameState.maxSpeed) * 0.5);
+        let turnAmount = gameState.turnSpeed * turnScale;
+
+        // Reversing logic (if velocity is mostly backwards relative to facing)
+        const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
+        if (dotProduct < -0.5) turnAmount *= -1;
 
         if (keys.ArrowLeft) gameState.angle -= turnAmount;
         if (keys.ArrowRight) gameState.angle += turnAmount;
     }
 
-    // Update Position
-    gameState.x += Math.cos(gameState.angle) * gameState.speed;
-    gameState.y += Math.sin(gameState.angle) * gameState.speed;
+    // --- Collision Detection & Position Update ---
+    let nextX = gameState.x + gameState.vx;
+    let nextY = gameState.y + gameState.vy;
 
-    // Keep on track texture (wrap around for infinite map, though we have a circuit)
+    if (isWall(nextX, nextY)) {
+        // Bounce!
+        // Simple reflection: just invert the velocity and reduce it heavily
+        gameState.vx *= -0.5;
+        gameState.vy *= -0.5;
+
+        // Don't update position into the wall
+        // Push slightly away to prevent sticking
+        gameState.x += gameState.vx * 2;
+        gameState.y += gameState.vy * 2;
+
+        // Trigger shake effect
+        gameState.bounceTimer = 10;
+    } else {
+        // Move normally
+        gameState.x = nextX;
+        gameState.y = nextY;
+    }
+
+    // Reduce bounce timer
+    if (gameState.bounceTimer > 0) gameState.bounceTimer--;
+
+    // Keep on track texture (wrap around for infinite map)
     if (gameState.x < 0) gameState.x += trackSize;
     if (gameState.x >= trackSize) gameState.x -= trackSize;
     if (gameState.y < 0) gameState.y += trackSize;
@@ -216,10 +295,18 @@ function render() {
     // Center bottom of screen
     const carW = carSprite.width * 3; // Scale up
     const carH = carSprite.height * 3;
-    const carX = (width - carW) / 2;
+    let carX = (width - carW) / 2;
     // Bobs slightly based on speed
     const bob = Math.sin(Date.now() / 50) * (gameState.speed * 0.5);
-    const carY = height - carH - 10 + bob;
+    let carY = height - carH - 10 + bob;
+
+    // Shake effect if hit a wall
+    if (gameState.bounceTimer > 0) {
+        const shakeX = (Math.random() - 0.5) * 10 * (gameState.bounceTimer / 10);
+        const shakeY = (Math.random() - 0.5) * 10 * (gameState.bounceTimer / 10);
+        carX += shakeX;
+        carY += shakeY;
+    }
 
     ctx.drawImage(carSprite, carX, carY, carW, carH);
 }
