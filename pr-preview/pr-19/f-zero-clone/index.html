@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>F-Zero Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+            border: 2px solid #333;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated; /* Essential for that retro feel */
+        }
+
+        .controls-info {
+            margin-top: 20px;
+            text-align: center;
+            color: #aaa;
+            font-size: 14px;
+        }
+
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+            font-family: monospace;
+            z-index: 10;
+        }
+
+        .speed {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 32px;
+            font-weight: bold;
+            color: #0ff;
+            text-shadow: 2px 2px 0 #000;
+            font-family: monospace;
+            z-index: 10;
+        }
+
+        #back-link {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            border: 1px solid #555;
+        }
+        #back-link:hover {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body>
+    <a href="../index.html" id="back-link">← Back to Projects</a>
+
+    <div id="game-container">
+        <div class="hud" id="lap-counter">LAP 1/3</div>
+        <div class="speed" id="speedometer">0 km/h</div>
+        <canvas id="gameCanvas" width="400" height="300"></canvas>
+    </div>
+
+    <div class="controls-info">
+        <strong>Controls:</strong> Arrow Up (Accelerate) • Arrow Down (Brake) • Arrow Left/Right (Steer)
+    </div>
+
+    <script src="assets.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
