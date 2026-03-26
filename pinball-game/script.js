@@ -23,8 +23,8 @@ let ballsRemaining = MAX_BALLS;
 let isPlaying = true;
 let ball = null;
 let plungeForce = 0;
-const MAX_PLUNGE = 0.25; // Max force (increased to handle ball mass)
-const PLUNGE_RATE = 0.008;
+const MAX_PLUNGE = 4; // Massively increased to handle heavy ball mass
+const PLUNGE_RATE = 0.1;
 
 // Elements
 const scoreElement = document.getElementById('score');
@@ -348,10 +348,10 @@ Events.on(engine, 'beforeUpdate', () => {
     // Apply upward force when button pressed
     // Force must be applied at the TIP of the flipper to generate torque, not the pivot!
     if (keys.ArrowLeft) {
-        Body.applyForce(flippers.left, { x: flippers.left.position.x + 40, y: flippers.left.position.y }, { x: 0, y: -0.3 });
+        Body.applyForce(flippers.left, { x: flippers.left.position.x + 40, y: flippers.left.position.y }, { x: 0, y: -50 });
     }
     if (keys.ArrowRight) {
-        Body.applyForce(flippers.right, { x: flippers.right.position.x - 40, y: flippers.right.position.y }, { x: 0, y: -0.3 });
+        Body.applyForce(flippers.right, { x: flippers.right.position.x - 40, y: flippers.right.position.y }, { x: 0, y: -50 });
     }
 
     // Plunger Charge
