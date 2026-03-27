@@ -33,6 +33,10 @@ const keys = {
     ArrowDown: false,
     ArrowLeft: false,
     ArrowRight: false,
+    q: false,
+    e: false,
+    Q: false,
+    E: false
 };
 
 window.addEventListener('keydown', (e) => {
@@ -130,9 +134,32 @@ function update() {
         localForwardVel *= gameState.forwardFriction;
     }
 
+    // Handle Strafing / Drifting (L/R shoulder buttons)
+    let isDrifting = false;
+    if (keys.q || keys.Q) {
+        localLateralVel -= 0.15; // Strafe left
+        isDrifting = true;
+    }
+    if (keys.e || keys.E) {
+        localLateralVel += 0.15; // Strafe right
+        isDrifting = true;
+    }
+
     // Apply Lateral Friction (This is what creates the sliding/drifting feel)
     // The hovercraft doesn't instantly snap to its forward vector, it slides
-    localLateralVel *= gameState.lateralFriction;
+    // In F-Zero, holding a shoulder button while turning causes a deliberate outward drift
+    let currentLateralFriction = gameState.lateralFriction;
+
+    // If the user is drifting (holding shoulder button) and turning,
+    // they lose less lateral speed, causing a dramatic outward slide
+    if (isDrifting && gameState.angularVelocity !== 0) {
+        currentLateralFriction = 0.96; // Less friction = more slide
+
+        // Slightly reduce forward speed to pay for the drift (typical racing mechanic)
+        localForwardVel *= 0.99;
+    }
+
+    localLateralVel *= currentLateralFriction;
 
     // Convert local velocities back to global velocities
     gameState.vx = (localForwardVel * forwardX) + (localLateralVel * rightX);
