@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algorithm Visualizer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Algorithm Visualizer</h1>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="algorithm-select">Algorithm</label>
+                    <select id="algorithm-select">
+                        <option value="bubble">Bubble Sort</option>
+                        <option value="insertion">Insertion Sort</option>
+                        <option value="quick">Quick Sort</option>
+                        <option value="merge">Merge Sort</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="size-slider">Array Size</label>
+                    <input type="range" id="size-slider" min="10" max="100" value="50">
+                </div>
+
+                <div class="control-group">
+                    <label for="speed-slider">Speed</label>
+                    <input type="range" id="speed-slider" min="1" max="100" value="50">
+                </div>
+
+                <div class="button-group">
+                    <button id="generate-btn" class="secondary">New Array</button>
+                    <button id="sort-btn" class="primary">Sort</button>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div id="visualizer-container"></div>
+            <div id="stats">
+                <span>Comparisons: <b id="comp-count">0</b></span>
+                <span>Swaps: <b id="swap-count">0</b></span>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
