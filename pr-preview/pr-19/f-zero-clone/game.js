@@ -14,12 +14,13 @@ let gameState = {
     vx: 0,           // Velocity X
     vy: 0,           // Velocity Y
     angle: 0,        // Facing direction
+    angularVelocity: 0, // Rate of turn for visual banking
     speed: 0,        // Magnitude of velocity
-    maxSpeed: 10,    // Map pixels per frame
-    acceleration: 0.15,
-    braking: 0.3,
-    friction: 0.98,  // Natural slow down
-    grip: 0.08,      // How fast velocity aligns with facing angle (drift factor)
+    maxSpeed: 15,    // Map pixels per frame
+    acceleration: 0.2,
+    braking: 0.5,
+    forwardFriction: 0.98, // Natural slow down when coasting forward
+    lateralFriction: 0.85, // "Grip" - higher means more drifting/sliding
     turnSpeed: 0.06,
     lap: 1,
     checkpoints: [false, false, false], // Very simple checkpoint system
@@ -81,84 +82,102 @@ function update() {
     const forwardX = Math.cos(gameState.angle);
     const forwardY = Math.sin(gameState.angle);
 
-    // Handle Input - apply force to velocity
-    if (keys.ArrowUp) {
-        gameState.vx += forwardX * gameState.acceleration;
-        gameState.vy += forwardY * gameState.acceleration;
-    }
+    // Perpendicular "right" vector for lateral movement
+    const rightX = Math.cos(gameState.angle + Math.PI / 2);
+    const rightY = Math.sin(gameState.angle + Math.PI / 2);
 
-    if (keys.ArrowDown) {
-        // Apply braking in opposite direction of current velocity
-        const velMag = Math.sqrt(gameState.vx*gameState.vx + gameState.vy*gameState.vy);
-        if (velMag > 0) {
-            gameState.vx -= (gameState.vx / velMag) * gameState.braking;
-            gameState.vy -= (gameState.vy / velMag) * gameState.braking;
+    // Calculate current speed (magnitude)
+    gameState.speed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
+
+    // Project velocity into local space (forward and lateral components)
+    let localForwardVel = (gameState.vx * forwardX) + (gameState.vy * forwardY);
+    let localLateralVel = (gameState.vx * rightX) + (gameState.vy * rightY);
+
+    // Handle Turning (only turn if moving, turning radius depends on speed)
+    gameState.angularVelocity = 0;
+    if (gameState.speed > 0.1) {
+        // Less steering power at higher speeds to emulate momentum
+        const turnScale = Math.max(0.3, 1.0 - (gameState.speed / gameState.maxSpeed) * 0.3);
+        let turnAmount = gameState.turnSpeed * turnScale;
+
+        // Reversing logic
+        if (localForwardVel < -0.5) turnAmount *= -1;
+
+        if (keys.ArrowLeft) {
+            gameState.angle -= turnAmount;
+            gameState.angularVelocity = -turnAmount;
+        }
+        if (keys.ArrowRight) {
+            gameState.angle += turnAmount;
+            gameState.angularVelocity = turnAmount;
         }
     }
 
-    // Apply Friction
-    gameState.vx *= gameState.friction;
-    gameState.vy *= gameState.friction;
+    // Handle Acceleration / Braking (applied in local forward axis)
+    if (keys.ArrowUp) {
+        localForwardVel += gameState.acceleration;
+    } else if (keys.ArrowDown) {
+        if (localForwardVel > 0) {
+            localForwardVel -= gameState.braking;
+            // Prevent braking from putting us into reverse instantly
+            if (localForwardVel < 0) localForwardVel = 0;
+        } else {
+            // Reverse
+            localForwardVel -= gameState.braking * 0.5;
+        }
+    } else {
+        // Coasting friction
+        localForwardVel *= gameState.forwardFriction;
+    }
 
-    // Calculate current speed (magnitude)
-    gameState.speed = Math.sqrt(gameState.vx*gameState.vx + gameState.vy*gameState.vy);
+    // Apply Lateral Friction (This is what creates the sliding/drifting feel)
+    // The hovercraft doesn't instantly snap to its forward vector, it slides
+    localLateralVel *= gameState.lateralFriction;
 
-    // Limit Max Speed
-    if (gameState.speed > gameState.maxSpeed) {
-        const ratio = gameState.maxSpeed / gameState.speed;
+    // Convert local velocities back to global velocities
+    gameState.vx = (localForwardVel * forwardX) + (localLateralVel * rightX);
+    gameState.vy = (localForwardVel * forwardY) + (localLateralVel * rightY);
+
+    // Limit Max Speed globally
+    const newSpeed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
+    if (newSpeed > gameState.maxSpeed) {
+        const ratio = gameState.maxSpeed / newSpeed;
         gameState.vx *= ratio;
         gameState.vy *= ratio;
-        gameState.speed = gameState.maxSpeed;
-    }
-
-    // Apply Grip (drift physics)
-    // Blend current velocity vector towards facing angle
-    if (gameState.speed > 0.1) {
-        // Target velocity vector if moving straight ahead
-        const targetVx = forwardX * gameState.speed;
-        const targetVy = forwardY * gameState.speed;
-
-        // Lerp current velocity towards target
-        gameState.vx += (targetVx - gameState.vx) * gameState.grip;
-        gameState.vy += (targetVy - gameState.vy) * gameState.grip;
-    }
-
-    // Turn (only turn if moving, turning radius depends on speed)
-    if (gameState.speed > 0.1) {
-        // Less steering power at higher speeds to emulate momentum
-        const turnScale = Math.max(0.3, 1.0 - (gameState.speed / gameState.maxSpeed) * 0.5);
-        let turnAmount = gameState.turnSpeed * turnScale;
-
-        // Reversing logic (if velocity is mostly backwards relative to facing)
-        const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
-        if (dotProduct < -0.5) turnAmount *= -1;
-
-        if (keys.ArrowLeft) gameState.angle -= turnAmount;
-        if (keys.ArrowRight) gameState.angle += turnAmount;
     }
 
     // --- Collision Detection & Position Update ---
     let nextX = gameState.x + gameState.vx;
     let nextY = gameState.y + gameState.vy;
 
-    if (isWall(nextX, nextY)) {
-        // Bounce!
-        // Simple reflection: just invert the velocity and reduce it heavily
-        gameState.vx *= -0.5;
-        gameState.vy *= -0.5;
+    // Independent axis collision for "scraping" against walls
+    let hitWall = false;
 
-        // Don't update position into the wall
-        // Push slightly away to prevent sticking
-        gameState.x += gameState.vx * 2;
-        gameState.y += gameState.vy * 2;
-
-        // Trigger shake effect
-        gameState.bounceTimer = 10;
-    } else {
-        // Move normally
-        gameState.x = nextX;
-        gameState.y = nextY;
+    // Test X axis independently
+    if (isWall(nextX, gameState.y)) {
+        gameState.vx *= -0.5; // Bounce X
+        nextX = gameState.x + gameState.vx; // Recalculate next position
+        hitWall = true;
     }
+
+    // Test Y axis independently
+    if (isWall(nextX, nextY)) {
+        gameState.vy *= -0.5; // Bounce Y
+        nextY = gameState.y + gameState.vy; // Recalculate next position
+        hitWall = true;
+    }
+
+    if (hitWall) {
+        gameState.bounceTimer = 10;
+
+        // Reduce overall speed heavily on hard impacts
+        gameState.vx *= 0.8;
+        gameState.vy *= 0.8;
+    }
+
+    // Move
+    gameState.x = nextX;
+    gameState.y = nextY;
 
     // Reduce bounce timer
     if (gameState.bounceTimer > 0) gameState.bounceTimer--;
@@ -308,7 +327,24 @@ function render() {
         carY += shakeY;
     }
 
-    ctx.drawImage(carSprite, carX, carY, carW, carH);
+    // Apply banking/leaning effect based on turn rate
+    // We rotate the canvas slightly to simulate leaning into the turn
+    ctx.save();
+
+    // The center of rotation for the car sprite
+    const centerX = carX + carW / 2;
+    const centerY = carY + carH / 2;
+
+    // Scale angular velocity up a bit to make the lean noticeable
+    const leanAngle = gameState.angularVelocity * 3;
+
+    ctx.translate(centerX, centerY);
+    ctx.rotate(leanAngle);
+
+    // Draw the car centered at the origin of our translated context
+    ctx.drawImage(carSprite, -carW / 2, -carH / 2, carW, carH);
+
+    ctx.restore();
 }
 
 // Main Loop
