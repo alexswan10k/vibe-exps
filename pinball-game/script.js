@@ -33,10 +33,10 @@ const canvas = document.getElementById('pinball-canvas');
 
 // Create Engine
 const engine = Engine.create({
-    positionIterations: 10,
-    velocityIterations: 8,
-    constraintIterations: 4,
-    gravity: { x: 0, y: 1.2, scale: 0.001 } // Strong downward gravity
+    positionIterations: 12,
+    velocityIterations: 10,
+    constraintIterations: 6,
+    gravity: { x: 0, y: 1.5, scale: 0.001 } // Strong downward gravity
 });
 const world = engine.world;
 
@@ -84,7 +84,8 @@ const buildWalls = () => {
     });
 
     // Shooter lane divider (inner right wall)
-    const shooterWall = Bodies.rectangle(WIDTH - 55, HEIGHT / 2 + 100, 10, HEIGHT - 200, {
+    // Shifted slightly left to give ball more clearance in the lane
+    const shooterWall = Bodies.rectangle(WIDTH - 70, HEIGHT / 2 + 100, 10, HEIGHT - 200, {
         isStatic: true,
         render: { fillStyle: '#0f3460' },
         collisionFilter: { category: GROUP_WALL }
@@ -160,87 +161,62 @@ const flippers = { left: null, right: null };
 const flipperConstraints = { left: null, right: null };
 
 const buildFlippers = () => {
+    // Re-adjust flipper width to leave a gap in the middle
     const flipperWidth = 100;
     const flipperHeight = 16;
+    // Lower them a bit to match the longer slants we will add
     const yPos = HEIGHT - 80;
 
+    // We make flippers kinematic so we can control them explicitly
+    // without physics going crazy from applied forces.
+
     // Left Flipper
-    const leftFlipper = Bodies.rectangle(180, yPos, flipperWidth, flipperHeight, {
+    const leftFlipper = Bodies.rectangle(160 + flipperWidth/2, yPos, flipperWidth, flipperHeight, {
         label: 'flipper_left',
         friction: 0.1,
         frictionAir: 0,
-        density: 0.05,
+        isKinematic: true, // We control position/rotation directly
         render: { fillStyle: '#e94560' },
         collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL }
-    });
-
-    const leftPivot = { x: 180 - flipperWidth/2 + 10, y: yPos };
-    const leftHinge = Constraint.create({
-        pointA: leftPivot,
-        bodyB: leftFlipper,
-        pointB: { x: -flipperWidth/2 + 10, y: 0 },
-        stiffness: 1,
-        length: 0,
-        render: { visible: false }
-    });
-
-    // Max rotation constraint (Stopper)
-    const leftStopper = Constraint.create({
-        pointA: { x: leftPivot.x, y: leftPivot.y + 40 },
-        bodyB: leftFlipper,
-        pointB: { x: flipperWidth/2 - 20, y: 0 }, // Rest on the tip
-        stiffness: 0.1, // Stiffer to hold up the ball better
-        length: 60, // Proper distance to allow resting at ~20-30 degrees
-        render: { visible: false }
     });
 
     // Right Flipper
-    const rightFlipper = Bodies.rectangle(WIDTH - 230, yPos, flipperWidth, flipperHeight, {
+    const rightFlipper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos, flipperWidth, flipperHeight, {
         label: 'flipper_right',
         friction: 0.1,
         frictionAir: 0,
-        density: 0.05,
+        isKinematic: true, // We control position/rotation directly
         render: { fillStyle: '#e94560' },
         collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL }
     });
 
-    const rightPivot = { x: WIDTH - 230 + flipperWidth/2 - 10, y: yPos };
-    const rightHinge = Constraint.create({
-        pointA: rightPivot,
-        bodyB: rightFlipper,
-        pointB: { x: flipperWidth/2 - 10, y: 0 },
-        stiffness: 1,
-        length: 0,
-        render: { visible: false }
-    });
-
-    // Max rotation constraint
-    const rightStopper = Constraint.create({
-        pointA: { x: rightPivot.x, y: rightPivot.y + 40 },
-        bodyB: rightFlipper,
-        pointB: { x: -flipperWidth/2 + 20, y: 0 }, // Rest on the tip
-        stiffness: 0.1,
-        length: 60, // Proper distance to allow resting at ~20-30 degrees
-        render: { visible: false }
-    });
+    // Set initial resting angles
+    Body.setAngle(leftFlipper, Math.PI / 6); // 30 degrees down
+    Body.setAngle(rightFlipper, -Math.PI / 6);
 
     flippers.left = leftFlipper;
     flippers.right = rightFlipper;
-    flipperConstraints.left = leftStopper;
-    flipperConstraints.right = rightStopper;
 
-    Composite.add(world, [
-        leftFlipper, leftHinge, leftStopper,
-        rightFlipper, rightHinge, rightStopper
-    ]);
+    // Store pivot points for rotation logic
+    flippers.left.pivot = { x: 160, y: yPos };
+    flippers.right.pivot = { x: WIDTH - 210, y: yPos };
+
+    // Store limits
+    flippers.left.restAngle = Math.PI / 6;
+    flippers.left.upAngle = -Math.PI / 8; // -22.5 deg
+
+    flippers.right.restAngle = -Math.PI / 6;
+    flippers.right.upAngle = Math.PI / 8;
+
+    Composite.add(world, [leftFlipper, rightFlipper]);
 };
 
-// Bumpers
+// Bumpers and additional world body
 const buildBumpers = () => {
     const bumperOpts = {
         isStatic: true,
         label: 'bumper',
-        restitution: 1.2, // Very bouncy!
+        restitution: 1.5, // Very bouncy!
         render: {
             fillStyle: '#00ffcc',
             strokeStyle: '#fff',
@@ -248,11 +224,15 @@ const buildBumpers = () => {
         }
     };
 
-    // Triangle formation of bumpers
+    // Main Triangle formation of bumpers
     const bumpers = [
-        Bodies.circle(WIDTH / 2 - 80, HEIGHT / 2 - 150, 30, bumperOpts),
-        Bodies.circle(WIDTH / 2 + 30, HEIGHT / 2 - 150, 30, bumperOpts),
-        Bodies.circle(WIDTH / 2 - 25, HEIGHT / 2 - 50, 30, bumperOpts)
+        Bodies.circle(WIDTH / 2 - 80, HEIGHT / 2 - 180, 30, bumperOpts),
+        Bodies.circle(WIDTH / 2 + 30, HEIGHT / 2 - 180, 30, bumperOpts),
+        Bodies.circle(WIDTH / 2 - 25, HEIGHT / 2 - 80, 30, bumperOpts),
+        // Additional smaller bumpers to add body
+        Bodies.circle(WIDTH / 2 - 130, HEIGHT / 2 - 250, 20, bumperOpts),
+        Bodies.circle(WIDTH / 2 + 80, HEIGHT / 2 - 250, 20, bumperOpts),
+        Bodies.circle(WIDTH / 2 - 25, HEIGHT / 2 + 40, 25, bumperOpts)
     ];
 
     Composite.add(world, bumpers);
@@ -261,17 +241,23 @@ const buildBumpers = () => {
     const slingOpt = {
         isStatic: true,
         label: 'slingshot',
-        restitution: 1.5,
+        restitution: 1.8,
         render: { fillStyle: '#ffcc00' }
     };
 
-    const leftSling = Bodies.polygon(140, HEIGHT - 180, 3, 30, slingOpt);
+    // Left Slingshot
+    const leftSling = Bodies.polygon(140, HEIGHT - 180, 3, 40, slingOpt);
     Body.setAngle(leftSling, Math.PI / 6);
 
-    const rightSling = Bodies.polygon(WIDTH - 190, HEIGHT - 180, 3, 30, slingOpt);
+    // Right Slingshot
+    const rightSling = Bodies.polygon(WIDTH - 190, HEIGHT - 180, 3, 40, slingOpt);
     Body.setAngle(rightSling, -Math.PI / 6);
 
-    Composite.add(world, [leftSling, rightSling]);
+    // Some extra static "islands" to keep the ball bouncing
+    const leftIsland = Bodies.polygon(90, HEIGHT / 2 - 20, 5, 30, { isStatic: true, render: { fillStyle: '#e94560' }});
+    const rightIsland = Bodies.polygon(WIDTH - 140, HEIGHT / 2 - 20, 5, 30, { isStatic: true, render: { fillStyle: '#e94560' }});
+
+    Composite.add(world, [leftSling, rightSling, leftIsland, rightIsland]);
 };
 
 // The Ball
@@ -285,8 +271,9 @@ const spawnBall = () => {
     ballsElement.innerText = ballsRemaining;
 
     // Start in shooter lane, resting just above the shooter floor
+    // Shifted x to WIDTH - 40 to be exactly in the center of the new wider shooter lane
     const radius = 12;
-    ball = Bodies.circle(WIDTH - 30, HEIGHT - 30, radius, {
+    ball = Bodies.circle(WIDTH - 40, HEIGHT - 30, radius, {
         label: 'ball',
         restitution: 0.5, // Natural bounce
         friction: 0.001,
@@ -344,15 +331,65 @@ document.addEventListener('keyup', (e) => {
 Events.on(engine, 'beforeUpdate', () => {
     if (!isPlaying) return;
 
-    // Flippers
-    // Apply upward force when button pressed
-    // Force must be applied at the TIP of the flipper to generate torque, not the pivot!
+    // Kinematic Flipper Control
+    // We explicitly calculate and set the angle around the pivot point to avoid physics engine instability
+    const flipperSpeed = 0.4;
+
+    // Left Flipper Logic
     if (keys.ArrowLeft) {
-        Body.applyForce(flippers.left, { x: flippers.left.position.x + 40, y: flippers.left.position.y }, { x: 0, y: -50 });
+        // Move towards upAngle
+        let currentAngle = flippers.left.angle;
+        if (currentAngle > flippers.left.upAngle) {
+            let nextAngle = Math.max(currentAngle - flipperSpeed, flippers.left.upAngle);
+            Body.setAngle(flippers.left, nextAngle);
+            Body.setAngularVelocity(flippers.left, -flipperSpeed); // Impart momentum to ball
+        } else {
+             Body.setAngularVelocity(flippers.left, 0);
+        }
+    } else {
+        // Return to restAngle
+        let currentAngle = flippers.left.angle;
+        if (currentAngle < flippers.left.restAngle) {
+            let nextAngle = Math.min(currentAngle + flipperSpeed, flippers.left.restAngle);
+            Body.setAngle(flippers.left, nextAngle);
+             Body.setAngularVelocity(flippers.left, flipperSpeed);
+        } else {
+             Body.setAngularVelocity(flippers.left, 0);
+        }
     }
+
+    // Fix Left Position to Pivot
+    Body.setPosition(flippers.left, {
+        x: flippers.left.pivot.x + (Math.cos(flippers.left.angle) * 50), // half width
+        y: flippers.left.pivot.y + (Math.sin(flippers.left.angle) * 50)
+    });
+
+    // Right Flipper Logic
     if (keys.ArrowRight) {
-        Body.applyForce(flippers.right, { x: flippers.right.position.x - 40, y: flippers.right.position.y }, { x: 0, y: -50 });
+        let currentAngle = flippers.right.angle;
+        if (currentAngle < flippers.right.upAngle) {
+            let nextAngle = Math.min(currentAngle + flipperSpeed, flippers.right.upAngle);
+            Body.setAngle(flippers.right, nextAngle);
+            Body.setAngularVelocity(flippers.right, flipperSpeed); // Impart momentum to ball
+        } else {
+             Body.setAngularVelocity(flippers.right, 0);
+        }
+    } else {
+        let currentAngle = flippers.right.angle;
+        if (currentAngle > flippers.right.restAngle) {
+            let nextAngle = Math.max(currentAngle - flipperSpeed, flippers.right.restAngle);
+            Body.setAngle(flippers.right, nextAngle);
+            Body.setAngularVelocity(flippers.right, -flipperSpeed);
+        } else {
+             Body.setAngularVelocity(flippers.right, 0);
+        }
     }
+
+    // Fix Right Position to Pivot
+    Body.setPosition(flippers.right, {
+        x: flippers.right.pivot.x - (Math.cos(flippers.right.angle) * 50), // half width
+        y: flippers.right.pivot.y - (Math.sin(flippers.right.angle) * 50)
+    });
 
     // Plunger Charge
     if (keys.Space && ball && ball.position.x > WIDTH - 60 && ball.position.y > HEIGHT - 150) {
