@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private Expense Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://accounts.google.com/gsi/client"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Private Expense Tracker</h1>
+            <p>Syncs directly to your Google Sheet</p>
+        </header>
+
+        <section id="config-section" class="card">
+            <h2>Configuration</h2>
+            <p>Enter your Google Client ID to connect to the database.</p>
+            <div class="form-group">
+                <label for="clientId">Client ID:</label>
+                <input type="text" id="clientId" placeholder="YOUR_GOOGLE_CLIENT_ID" required>
+            </div>
+            <button id="connectBtn" class="btn primary">Connect Database</button>
+            <div id="authStatus" class="status-msg">Not connected</div>
+        </section>
+
+        <section id="app-section" class="card" style="display: none;">
+            <div class="split-view">
+                <div class="form-column">
+                    <h2>Add Expense</h2>
+                    <form id="expenseForm">
+                        <div class="form-group">
+                            <label for="expenseDate">Date</label>
+                            <input type="date" id="expenseDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expensePerson">Person</label>
+                            <input type="text" id="expensePerson" placeholder="Who paid?" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenseAmount">Amount ($)</label>
+                            <input type="number" id="expenseAmount" step="0.01" placeholder="0.00" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="expenseDescription">Description</label>
+                            <input type="text" id="expenseDescription" placeholder="What was it for?" required>
+                        </div>
+                        <button type="submit" id="addBtn" class="btn primary">Add Record</button>
+                    </form>
+                    <div id="addStatus" class="status-msg"></div>
+                </div>
+
+                <div class="list-column">
+                    <div class="header-row">
+                        <h2>Expenses</h2>
+                        <button id="refreshBtn" class="btn secondary">Refresh</button>
+                    </div>
+                    <div class="table-container">
+                        <table id="expensesTable">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Person</th>
+                                    <th>Amount</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expensesBody">
+                                <!-- Records will be injected here -->
+                            </tbody>
+                        </table>
+                        <div id="loadingMsg" class="loading-msg" style="display: none;">Loading records...</div>
+                        <div id="emptyMsg" class="empty-msg" style="display: none;">No records found.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
