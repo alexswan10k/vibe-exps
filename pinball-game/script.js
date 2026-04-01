@@ -158,26 +158,30 @@ const buildDrain = () => {
 
 // Flippers
 const flippers = { left: null, right: null };
-const flipperConstraints = { left: null, right: null };
 
 const buildFlippers = () => {
-    // Re-adjust flipper width to leave a gap in the middle
     const flipperWidth = 100;
     const flipperHeight = 16;
-    // Lower them a bit to match the longer slants we will add
     const yPos = HEIGHT - 80;
-
-    // We make flippers kinematic so we can control them explicitly
-    // without physics going crazy from applied forces.
 
     // Left Flipper
     const leftFlipper = Bodies.rectangle(160 + flipperWidth/2, yPos, flipperWidth, flipperHeight, {
         label: 'flipper_left',
         friction: 0.1,
         frictionAir: 0,
-        isKinematic: true, // We control position/rotation directly
+        density: 0.1, // High density for snappy feel
         render: { fillStyle: '#e94560' },
         collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL }
+    });
+
+    const leftPivot = { x: 160, y: yPos };
+    const leftHinge = Constraint.create({
+        pointA: leftPivot,
+        bodyB: leftFlipper,
+        pointB: { x: -flipperWidth/2, y: 0 },
+        stiffness: 1,
+        length: 0,
+        render: { visible: false }
     });
 
     // Right Flipper
@@ -185,30 +189,51 @@ const buildFlippers = () => {
         label: 'flipper_right',
         friction: 0.1,
         frictionAir: 0,
-        isKinematic: true, // We control position/rotation directly
+        density: 0.1, // High density for snappy feel
         render: { fillStyle: '#e94560' },
         collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL }
     });
 
-    // Set initial resting angles
-    Body.setAngle(leftFlipper, Math.PI / 6); // 30 degrees down
-    Body.setAngle(rightFlipper, -Math.PI / 6);
+    const rightPivot = { x: WIDTH - 210, y: yPos };
+    const rightHinge = Constraint.create({
+        pointA: rightPivot,
+        bodyB: rightFlipper,
+        pointB: { x: flipperWidth/2, y: 0 },
+        stiffness: 1,
+        length: 0,
+        render: { visible: false }
+    });
+
+    // Physical stoppers to limit rotation (invisible)
+    // Left upper stopper (limits up swing)
+    const leftUpperStopper = Bodies.rectangle(160 + flipperWidth/2, yPos - 30, 20, 20, {
+        isStatic: true,
+        render: { visible: false }
+    });
+    // Left lower stopper (rests downwards)
+    const leftLowerStopper = Bodies.rectangle(160 + flipperWidth/2, yPos + 35, 20, 20, {
+        isStatic: true,
+        render: { visible: false }
+    });
+
+    // Right upper stopper
+    const rightUpperStopper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos - 30, 20, 20, {
+        isStatic: true,
+        render: { visible: false }
+    });
+    // Right lower stopper
+    const rightLowerStopper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos + 35, 20, 20, {
+        isStatic: true,
+        render: { visible: false }
+    });
 
     flippers.left = leftFlipper;
     flippers.right = rightFlipper;
 
-    // Store pivot points for rotation logic
-    flippers.left.pivot = { x: 160, y: yPos };
-    flippers.right.pivot = { x: WIDTH - 210, y: yPos };
-
-    // Store limits
-    flippers.left.restAngle = Math.PI / 6;
-    flippers.left.upAngle = -Math.PI / 8; // -22.5 deg
-
-    flippers.right.restAngle = -Math.PI / 6;
-    flippers.right.upAngle = Math.PI / 8;
-
-    Composite.add(world, [leftFlipper, rightFlipper]);
+    Composite.add(world, [
+        leftFlipper, leftHinge, leftUpperStopper, leftLowerStopper,
+        rightFlipper, rightHinge, rightUpperStopper, rightLowerStopper
+    ]);
 };
 
 // Bumpers and additional world body
@@ -331,65 +356,15 @@ document.addEventListener('keyup', (e) => {
 Events.on(engine, 'beforeUpdate', () => {
     if (!isPlaying) return;
 
-    // Kinematic Flipper Control
-    // We explicitly calculate and set the angle around the pivot point to avoid physics engine instability
-    const flipperSpeed = 0.4;
-
-    // Left Flipper Logic
+    // Dynamic Flipper Control
+    // Apply upward force when button pressed, letting physical stoppers handle limits
     if (keys.ArrowLeft) {
-        // Move towards upAngle
-        let currentAngle = flippers.left.angle;
-        if (currentAngle > flippers.left.upAngle) {
-            let nextAngle = Math.max(currentAngle - flipperSpeed, flippers.left.upAngle);
-            Body.setAngle(flippers.left, nextAngle);
-            Body.setAngularVelocity(flippers.left, -flipperSpeed); // Impart momentum to ball
-        } else {
-             Body.setAngularVelocity(flippers.left, 0);
-        }
-    } else {
-        // Return to restAngle
-        let currentAngle = flippers.left.angle;
-        if (currentAngle < flippers.left.restAngle) {
-            let nextAngle = Math.min(currentAngle + flipperSpeed, flippers.left.restAngle);
-            Body.setAngle(flippers.left, nextAngle);
-             Body.setAngularVelocity(flippers.left, flipperSpeed);
-        } else {
-             Body.setAngularVelocity(flippers.left, 0);
-        }
+        // Apply large torque to fight gravity/density and swing the flipper up hard against the stopper
+        Body.applyForce(flippers.left, { x: flippers.left.position.x + 40, y: flippers.left.position.y }, { x: 0, y: -50 });
     }
-
-    // Fix Left Position to Pivot
-    Body.setPosition(flippers.left, {
-        x: flippers.left.pivot.x + (Math.cos(flippers.left.angle) * 50), // half width
-        y: flippers.left.pivot.y + (Math.sin(flippers.left.angle) * 50)
-    });
-
-    // Right Flipper Logic
     if (keys.ArrowRight) {
-        let currentAngle = flippers.right.angle;
-        if (currentAngle < flippers.right.upAngle) {
-            let nextAngle = Math.min(currentAngle + flipperSpeed, flippers.right.upAngle);
-            Body.setAngle(flippers.right, nextAngle);
-            Body.setAngularVelocity(flippers.right, flipperSpeed); // Impart momentum to ball
-        } else {
-             Body.setAngularVelocity(flippers.right, 0);
-        }
-    } else {
-        let currentAngle = flippers.right.angle;
-        if (currentAngle > flippers.right.restAngle) {
-            let nextAngle = Math.max(currentAngle - flipperSpeed, flippers.right.restAngle);
-            Body.setAngle(flippers.right, nextAngle);
-            Body.setAngularVelocity(flippers.right, -flipperSpeed);
-        } else {
-             Body.setAngularVelocity(flippers.right, 0);
-        }
+        Body.applyForce(flippers.right, { x: flippers.right.position.x - 40, y: flippers.right.position.y }, { x: 0, y: -50 });
     }
-
-    // Fix Right Position to Pivot
-    Body.setPosition(flippers.right, {
-        x: flippers.right.pivot.x - (Math.cos(flippers.right.angle) * 50), // half width
-        y: flippers.right.pivot.y - (Math.sin(flippers.right.angle) * 50)
-    });
 
     // Plunger Charge
     if (keys.Space && ball && ball.position.x > WIDTH - 60 && ball.position.y > HEIGHT - 150) {
