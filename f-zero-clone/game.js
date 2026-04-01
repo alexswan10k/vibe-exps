@@ -16,15 +16,27 @@ let gameState = {
     angle: 0,        // Facing direction
     angularVelocity: 0, // Rate of turn for visual banking
     speed: 0,        // Magnitude of velocity
-    maxSpeed: 15,    // Map pixels per frame
-    acceleration: 0.2,
-    braking: 0.5,
-    forwardFriction: 0.98, // Natural slow down when coasting forward
-    lateralFriction: 0.85, // "Grip" - higher means more drifting/sliding
-    turnSpeed: 0.06,
+
+    // F-Zero specific machine stats (Blue Falcon proxy)
+    maxSpeed: 12,       // Map pixels per frame
+    accelPhase1: 0.25,  // Fast initial acceleration
+    accelPhase2: 0.05,  // Slower high-end acceleration
+    coastFriction: 0.995, // Extremely slippery when off gas
+    brakePower: 0.6,
+
+    turnBase: 0.055,    // Base turning speed
+    turnDrop: 0.02,     // How much turn speed drops at max speed
+    gripForward: 0.99,  // Almost perfectly aligns to forward when driving normally
+    gripSlide: 0.92,    // Slides outward significantly when using L/R
+    gripBlast: 1.0,     // Locks velocity to forward angle instantly (mashing gas)
+
     lap: 1,
     checkpoints: [false, false, false], // Very simple checkpoint system
-    bounceTimer: 0   // For screen shake effect
+    bounceTimer: 0,  // For screen shake effect
+
+    // Input history for advanced mechanics
+    framesSinceAccel: 0,
+    isBlastTurning: false
 };
 
 // Controls
@@ -86,26 +98,39 @@ function update() {
     const forwardX = Math.cos(gameState.angle);
     const forwardY = Math.sin(gameState.angle);
 
-    // Perpendicular "right" vector for lateral movement
-    const rightX = Math.cos(gameState.angle + Math.PI / 2);
-    const rightY = Math.sin(gameState.angle + Math.PI / 2);
-
     // Calculate current speed (magnitude)
     gameState.speed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
 
-    // Project velocity into local space (forward and lateral components)
-    let localForwardVel = (gameState.vx * forwardX) + (gameState.vy * forwardY);
-    let localLateralVel = (gameState.vx * rightX) + (gameState.vy * rightY);
+    // 1. INPUT TRACKING (For Blast Turning)
+    // Blast turning is achieved in F-Zero by mashing the accelerator while turning.
+    // It prevents drifting outward but drops your speed slightly.
+    if (keys.ArrowUp) {
+        if (gameState.framesSinceAccel > 0 && gameState.framesSinceAccel < 15 && gameState.angularVelocity !== 0) {
+            gameState.isBlastTurning = true;
+        }
+        gameState.framesSinceAccel = 0;
+    } else {
+        gameState.framesSinceAccel++;
+        gameState.isBlastTurning = false;
+    }
 
-    // Handle Turning (only turn if moving, turning radius depends on speed)
+    // 2. TURNING
     gameState.angularVelocity = 0;
-    if (gameState.speed > 0.1) {
-        // Less steering power at higher speeds to emulate momentum
-        const turnScale = Math.max(0.3, 1.0 - (gameState.speed / gameState.maxSpeed) * 0.3);
-        let turnAmount = gameState.turnSpeed * turnScale;
+    if (gameState.speed > 0.5) {
+        // Turning radius depends heavily on speed in F-Zero. Max speed = wider turns.
+        const speedRatio = gameState.speed / gameState.maxSpeed;
+        let turnAmount = gameState.turnBase - (gameState.turnDrop * speedRatio);
+
+        // If holding a slide button (L/R) AND steering in that direction, turn is sharper
+        if ((keys.q || keys.Q) && keys.ArrowLeft) turnAmount *= 1.3;
+        if ((keys.e || keys.E) && keys.ArrowRight) turnAmount *= 1.3;
+
+        // Blast turning sharpens the turn even more
+        if (gameState.isBlastTurning) turnAmount *= 1.5;
 
         // Reversing logic
-        if (localForwardVel < -0.5) turnAmount *= -1;
+        const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
+        if (dotProduct < -0.5) turnAmount *= -1;
 
         if (keys.ArrowLeft) {
             gameState.angle -= turnAmount;
@@ -117,89 +142,104 @@ function update() {
         }
     }
 
-    // Handle Acceleration / Braking (applied in local forward axis)
+    // 3. ACCELERATION AND FRICTION
+    let thrust = 0;
     if (keys.ArrowUp) {
-        localForwardVel += gameState.acceleration;
-    } else if (keys.ArrowDown) {
-        if (localForwardVel > 0) {
-            localForwardVel -= gameState.braking;
-            // Prevent braking from putting us into reverse instantly
-            if (localForwardVel < 0) localForwardVel = 0;
+        // F-Zero two-phase acceleration: fast initially, slows down at high end
+        if (gameState.speed < gameState.maxSpeed * 0.6) {
+            thrust = gameState.accelPhase1;
         } else {
-            // Reverse
-            localForwardVel -= gameState.braking * 0.5;
+            thrust = gameState.accelPhase2;
         }
-    } else {
-        // Coasting friction
-        localForwardVel *= gameState.forwardFriction;
+    } else if (keys.ArrowDown) {
+        thrust = -gameState.brakePower;
     }
 
-    // Handle Strafing / Drifting (L/R shoulder buttons)
-    let isDrifting = false;
-    if (keys.q || keys.Q) {
-        localLateralVel -= 0.15; // Strafe left
-        isDrifting = true;
-    }
-    if (keys.e || keys.E) {
-        localLateralVel += 0.15; // Strafe right
-        isDrifting = true;
-    }
+    // Apply thrust along the facing angle
+    gameState.vx += forwardX * thrust;
+    gameState.vy += forwardY * thrust;
 
-    // Apply Lateral Friction (This is what creates the sliding/drifting feel)
-    // The hovercraft doesn't instantly snap to its forward vector, it slides
-    // In F-Zero, holding a shoulder button while turning causes a deliberate outward drift
-    let currentLateralFriction = gameState.lateralFriction;
-
-    // If the user is drifting (holding shoulder button) and turning,
-    // they lose less lateral speed, causing a dramatic outward slide
-    if (isDrifting && gameState.angularVelocity !== 0) {
-        currentLateralFriction = 0.96; // Less friction = more slide
-
-        // Slightly reduce forward speed to pay for the drift (typical racing mechanic)
-        localForwardVel *= 0.99;
+    // Apply "Ice" friction if coasting
+    if (!keys.ArrowUp && !keys.ArrowDown) {
+        gameState.vx *= gameState.coastFriction;
+        gameState.vy *= gameState.coastFriction;
     }
 
-    localLateralVel *= currentLateralFriction;
+    // 4. GRIP & DRIFT MECHANICS
+    // In F-Zero, the ship's velocity vector constantly tries to align with its facing angle.
+    // How fast it aligns depends on the "grip".
 
-    // Convert local velocities back to global velocities
-    gameState.vx = (localForwardVel * forwardX) + (localLateralVel * rightX);
-    gameState.vy = (localForwardVel * forwardY) + (localLateralVel * rightY);
+    let currentGrip = gameState.gripForward;
 
-    // Limit Max Speed globally
-    const newSpeed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
-    if (newSpeed > gameState.maxSpeed) {
-        const ratio = gameState.maxSpeed / newSpeed;
+    // Slide Turning (L/R) drops grip significantly, allowing the momentum vector to slide outward
+    if ((keys.q || keys.Q) || (keys.e || keys.E)) {
+        currentGrip = gameState.gripSlide;
+    }
+
+    // Blast Turning locks the velocity vector to the facing angle instantly (perfect grip),
+    // but costs a bit of speed as a penalty.
+    if (gameState.isBlastTurning) {
+        currentGrip = gameState.gripBlast;
+        gameState.vx *= 0.98; // Speed penalty for blast turning
+        gameState.vy *= 0.98;
+    }
+
+    // Calculate the target velocity (where the ship wants to go based on facing angle and current speed)
+    // We only re-align if we are moving forward
+    const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
+    if (dotProduct > 0.1) {
+        const targetVx = forwardX * gameState.speed;
+        const targetVy = forwardY * gameState.speed;
+
+        // Lerp current velocity towards the facing angle based on Grip
+        gameState.vx += (targetVx - gameState.vx) * currentGrip;
+        gameState.vy += (targetVy - gameState.vy) * currentGrip;
+    }
+
+    // Limit Max Speed
+    gameState.speed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
+    if (gameState.speed > gameState.maxSpeed) {
+        const ratio = gameState.maxSpeed / gameState.speed;
         gameState.vx *= ratio;
         gameState.vy *= ratio;
     }
 
-    // --- Collision Detection & Position Update ---
+    // 5. COLLISION DETECTION (Wall Bumping & Scraping)
     let nextX = gameState.x + gameState.vx;
     let nextY = gameState.y + gameState.vy;
 
-    // Independent axis collision for "scraping" against walls
-    let hitWall = false;
-
-    // Test X axis independently
-    if (isWall(nextX, gameState.y)) {
-        gameState.vx *= -0.5; // Bounce X
-        nextX = gameState.x + gameState.vx; // Recalculate next position
-        hitWall = true;
-    }
-
-    // Test Y axis independently
     if (isWall(nextX, nextY)) {
-        gameState.vy *= -0.5; // Bounce Y
-        nextY = gameState.y + gameState.vy; // Recalculate next position
-        hitWall = true;
-    }
+        // Hit a wall! Calculate bounce angle.
+        // F-Zero treats walls differently depending on attack angle.
+        // A head-on collision stops you dead. A shallow collision lets you scrape.
 
-    if (hitWall) {
-        gameState.bounceTimer = 10;
+        // We do this by finding the wall normal. Since we only have a bitmask,
+        // we approximate by checking adjacent pixels.
+        const hitX = isWall(nextX, gameState.y);
+        const hitY = isWall(gameState.x, nextY);
 
-        // Reduce overall speed heavily on hard impacts
-        gameState.vx *= 0.8;
-        gameState.vy *= 0.8;
+        if (hitX && !hitY) {
+            // Hit a vertical wall
+            gameState.vx *= -0.4; // Bounce
+            gameState.vy *= 0.9;  // Scrape friction
+            nextX = gameState.x + gameState.vx;
+        } else if (hitY && !hitX) {
+            // Hit a horizontal wall
+            gameState.vy *= -0.4; // Bounce
+            gameState.vx *= 0.9;  // Scrape friction
+            nextY = gameState.y + gameState.vy;
+        } else {
+            // Hit a corner or head-on
+            gameState.vx *= -0.5;
+            gameState.vy *= -0.5;
+            nextX = gameState.x + gameState.vx;
+            nextY = gameState.y + gameState.vy;
+        }
+
+        // Heavy speed penalty for hitting walls
+        gameState.vx *= 0.7;
+        gameState.vy *= 0.7;
+        gameState.bounceTimer = 15;
     }
 
     // Move
