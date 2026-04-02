@@ -9,8 +9,8 @@ const height = canvas.height;
 
 // Game State
 let gameState = {
-    x: 200,          // Track map coordinates
-    y: 750,
+    x: 800,          // Track map coordinates (Scaled up 4x)
+    y: 3000,
     vx: 0,           // True global X velocity
     vy: 0,           // True global Y velocity
     angle: 0,        // Facing direction
@@ -18,12 +18,12 @@ let gameState = {
     angularVelocity: 0, // Rate of turn for visual banking
 
     // F-Zero specific machine stats
-    maxSpeed: 22,       // Map pixels per frame
-    acceleration: 0.6,
+    maxSpeed: 16,       // Relative to a 4x bigger track, this feels 2x faster visually but covers less ground
+    acceleration: 0.4,
     brakePower: 1.0,
     coastFriction: 0.99,
 
-    turnSpeed: 0.08,    // Base turn speed
+    turnSpeed: 0.05,    // Smoother turns for a wider track
 
     // "Grip" determines how strongly the velocity vector aligns to the facing angle.
     // 1.0 = instant alignment (no sliding), 0.0 = pure ice (no turning control).
@@ -66,6 +66,7 @@ let trackTexture, trackData, collisionData, carSprite, skyTexture;
 const fov = Math.PI / 3; // 60 degrees
 const halfFov = fov / 2;
 const projectionPlaneY = height / 2; // Horizon line
+const camHeight = 12; // Lower camera makes ground move faster visually
 
 // We need image data for fast pixel access for the track
 function initAssets() {
@@ -251,21 +252,21 @@ function checkLap() {
     // We expect the player to go clockwise: bottom -> left -> top -> right -> bottom
 
     // Checkpoint 1: top left corner
-    if (gameState.x > 150 && gameState.x < 250 && gameState.y > 150 && gameState.y < 250) {
+    if (gameState.x > 600 && gameState.x < 1000 && gameState.y > 600 && gameState.y < 1000) {
         gameState.checkpoints[0] = true;
     }
     // Checkpoint 2: top right corner
-    if (gameState.checkpoints[0] && gameState.x > 750 && gameState.x < 850 && gameState.y > 150 && gameState.y < 250) {
+    if (gameState.checkpoints[0] && gameState.x > 3000 && gameState.x < 3400 && gameState.y > 600 && gameState.y < 1000) {
         gameState.checkpoints[1] = true;
     }
     // Checkpoint 3: bottom right corner
-    if (gameState.checkpoints[1] && gameState.x > 750 && gameState.x < 850 && gameState.y > 550 && gameState.y < 650) {
+    if (gameState.checkpoints[1] && gameState.x > 3000 && gameState.x < 3400 && gameState.y > 2200 && gameState.y < 2600) {
         gameState.checkpoints[2] = true;
     }
 
-    // Finish line: near x=140..260, y=750 (bottom left)
+    // Finish line: near bottom left
     if (gameState.checkpoints[0] && gameState.checkpoints[1] && gameState.checkpoints[2]) {
-        if (gameState.x > 100 && gameState.x < 300 && gameState.y > 700 && gameState.y < 800) {
+        if (gameState.x > 400 && gameState.x < 1200 && gameState.y > 2800 && gameState.y < 3200) {
             gameState.lap++;
             gameState.checkpoints = [false, false, false];
             if (gameState.lap > 3) {
@@ -296,9 +297,6 @@ function render() {
     // plane is perpendicular to dir
     const planeX = -Math.sin(gameState.angle) * fovScale;
     const planeY = Math.cos(gameState.angle) * fovScale;
-
-    // Height of camera above ground
-    const camHeight = 30;
 
     // Get screen ImageData to write directly for the floor
     const screenData = ctx.getImageData(0, projectionPlaneY, width, height / 2);
@@ -409,7 +407,7 @@ initAssets();
 // Start player near the finish line pointing UP (which on our map is -y, but let's see how our angles work)
 // Math.PI * 1.5 is pointing UP (North)
 gameState.angle = Math.PI * 1.5;
-gameState.x = 200;
-gameState.y = 850;
+gameState.x = 800;
+gameState.y = 3000;
 
 loop();
