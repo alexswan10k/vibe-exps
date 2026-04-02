@@ -18,12 +18,12 @@ let gameState = {
     angularVelocity: 0, // Rate of turn for visual banking
 
     // F-Zero specific machine stats
-    maxSpeed: 16,       // Relative to a 4x bigger track, this feels 2x faster visually but covers less ground
-    acceleration: 0.4,
-    brakePower: 1.0,
+    maxSpeed: 45,       // Massively increased speed relative to 4x track size and high camera
+    acceleration: 1.0,
+    brakePower: 2.0,
     coastFriction: 0.99,
 
-    turnSpeed: 0.05,    // Smoother turns for a wider track
+    turnSpeed: 0.065,   // Slightly tighter turning to handle higher speeds
 
     // "Grip" determines how strongly the velocity vector aligns to the facing angle.
     // 1.0 = instant alignment (no sliding), 0.0 = pure ice (no turning control).
@@ -66,7 +66,7 @@ let trackTexture, trackData, collisionData, carSprite, skyTexture;
 const fov = Math.PI / 3; // 60 degrees
 const halfFov = fov / 2;
 const projectionPlaneY = height / 2; // Horizon line
-const camHeight = 12; // Lower camera makes ground move faster visually
+const camHeight = 80; // Higher camera allows seeing further down the scaled up track
 
 // We need image data for fast pixel access for the track
 function initAssets() {
@@ -342,7 +342,8 @@ function render() {
 
             // Simple depth shading (fog)
             // Range 0 to 1, higher y = closer = brighter
-            const shade = Math.min(1, y / (height / 4));
+            // Scaled so you can see further down the larger track
+            const shade = Math.min(1, (y / (height / 2)) * 1.5 + 0.1);
 
             pixels[screenOffset] = trackData.data[texOffset] * shade;         // R
             pixels[screenOffset + 1] = trackData.data[texOffset + 1] * shade; // G
