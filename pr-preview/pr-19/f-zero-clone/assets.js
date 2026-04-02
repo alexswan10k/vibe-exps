@@ -5,7 +5,8 @@
  * - A background/sky texture
  */
 
-const trackSize = 1024; // Power of 2 for easy wrapping/scaling
+const trackSize = 4096; // 4x larger for higher speed/drifting scale
+const scaleFactor = 4;  // How much to scale the original 1024 drawing instructions
 
 function generateTrackTexture() {
     const canvas = document.createElement('canvas');
@@ -17,15 +18,29 @@ function generateTrackTexture() {
     ctx.fillStyle = '#8B4513';
     ctx.fillRect(0, 0, trackSize, trackSize);
 
-    // Add noise to dirt
-    const imgData = ctx.getImageData(0, 0, trackSize, trackSize);
+    // Create a small 128x128 noise pattern to tile (much faster than generating 16M noise pixels)
+    const noiseCanvas = document.createElement('canvas');
+    noiseCanvas.width = 128;
+    noiseCanvas.height = 128;
+    const nCtx = noiseCanvas.getContext('2d');
+    nCtx.fillStyle = '#8B4513';
+    nCtx.fillRect(0, 0, 128, 128);
+    const imgData = nCtx.getImageData(0, 0, 128, 128);
     for (let i = 0; i < imgData.data.length; i += 4) {
         let noise = (Math.random() - 0.5) * 40;
         imgData.data[i] = Math.min(255, Math.max(0, imgData.data[i] + noise));
         imgData.data[i+1] = Math.min(255, Math.max(0, imgData.data[i+1] + noise));
         imgData.data[i+2] = Math.min(255, Math.max(0, imgData.data[i+2] + noise));
     }
-    ctx.putImageData(imgData, 0, 0);
+    nCtx.putImageData(imgData, 0, 0);
+
+    // Tile the noise
+    const pattern = ctx.createPattern(noiseCanvas, 'repeat');
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, trackSize, trackSize);
+
+    // Scale context to draw track exactly as before but 4x larger
+    ctx.scale(scaleFactor, scaleFactor);
 
     // Draw track path
     ctx.lineWidth = 120;
@@ -68,6 +83,9 @@ function generateTrackTexture() {
         ctx.fillRect(150 + i*20, 760, 10, 10);
     }
 
+    // Reset scale
+    ctx.scale(1/scaleFactor, 1/scaleFactor);
+
     return canvas;
 }
 
@@ -80,6 +98,8 @@ function generateCollisionMap() {
     // Black background (off-track / walls)
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, trackSize, trackSize);
+
+    ctx.scale(scaleFactor, scaleFactor);
 
     // Track path (white = drivable area)
     ctx.lineWidth = 140; // Same width as the outer borders
@@ -96,6 +116,8 @@ function generateCollisionMap() {
     ctx.lineTo(500, 800);
     ctx.closePath();
     ctx.stroke();
+
+    ctx.scale(1/scaleFactor, 1/scaleFactor);
 
     return canvas;
 }
