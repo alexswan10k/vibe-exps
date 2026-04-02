@@ -11,30 +11,31 @@ const height = canvas.height;
 let gameState = {
     x: 200,          // Track map coordinates
     y: 750,
-    vx: 0,           // Velocity X
-    vy: 0,           // Velocity Y
+    vx: 0,           // True global X velocity
+    vy: 0,           // True global Y velocity
     angle: 0,        // Facing direction
+    speed: 0,        // Magnitude of velocity vector
     angularVelocity: 0, // Rate of turn for visual banking
-    speed: 0,        // Magnitude of velocity
 
-    // F-Zero specific machine stats (Blue Falcon proxy)
-    maxSpeed: 12,       // Map pixels per frame
-    accelPhase1: 0.25,  // Fast initial acceleration
-    accelPhase2: 0.05,  // Slower high-end acceleration
-    coastFriction: 0.995, // Extremely slippery when off gas
-    brakePower: 0.6,
+    // F-Zero specific machine stats
+    maxSpeed: 22,       // Map pixels per frame
+    acceleration: 0.6,
+    brakePower: 1.0,
+    coastFriction: 0.99,
 
-    turnBase: 0.055,    // Base turning speed
-    turnDrop: 0.02,     // How much turn speed drops at max speed
-    gripForward: 0.99,  // Almost perfectly aligns to forward when driving normally
-    gripSlide: 0.92,    // Slides outward significantly when using L/R
-    gripBlast: 1.0,     // Locks velocity to forward angle instantly (mashing gas)
+    turnSpeed: 0.08,    // Base turn speed
+
+    // "Grip" determines how strongly the velocity vector aligns to the facing angle.
+    // 1.0 = instant alignment (no sliding), 0.0 = pure ice (no turning control).
+    baseGrip: 0.15,     // Natural drifting feeling
+    slideGrip: 0.02,    // Holding L/R drops grip, causing wide slides
+    blastGrip: 0.5,     // Mashing A locks grip, sharpening turns
 
     lap: 1,
-    checkpoints: [false, false, false], // Very simple checkpoint system
-    bounceTimer: 0,  // For screen shake effect
+    checkpoints: [false, false, false],
+    bounceTimer: 0,
 
-    // Input history for advanced mechanics
+    // Input history for Blast Turning
     framesSinceAccel: 0,
     isBlastTurning: false
 };
@@ -103,7 +104,6 @@ function update() {
 
     // 1. INPUT TRACKING (For Blast Turning)
     // Blast turning is achieved in F-Zero by mashing the accelerator while turning.
-    // It prevents drifting outward but drops your speed slightly.
     if (keys.ArrowUp) {
         if (gameState.framesSinceAccel > 0 && gameState.framesSinceAccel < 15 && gameState.angularVelocity !== 0) {
             gameState.isBlastTurning = true;
@@ -117,16 +117,11 @@ function update() {
     // 2. TURNING
     gameState.angularVelocity = 0;
     if (gameState.speed > 0.5) {
-        // Turning radius depends heavily on speed in F-Zero. Max speed = wider turns.
-        const speedRatio = gameState.speed / gameState.maxSpeed;
-        let turnAmount = gameState.turnBase - (gameState.turnDrop * speedRatio);
+        let turnAmount = gameState.turnSpeed;
 
-        // If holding a slide button (L/R) AND steering in that direction, turn is sharper
-        if ((keys.q || keys.Q) && keys.ArrowLeft) turnAmount *= 1.3;
-        if ((keys.e || keys.E) && keys.ArrowRight) turnAmount *= 1.3;
-
-        // Blast turning sharpens the turn even more
-        if (gameState.isBlastTurning) turnAmount *= 1.5;
+        // Sharp turn logic (if sliding while steering the same direction)
+        if ((keys.q || keys.Q) && keys.ArrowLeft) turnAmount *= 1.2;
+        if ((keys.e || keys.E) && keys.ArrowRight) turnAmount *= 1.2;
 
         // Reversing logic
         const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
@@ -145,12 +140,7 @@ function update() {
     // 3. ACCELERATION AND FRICTION
     let thrust = 0;
     if (keys.ArrowUp) {
-        // F-Zero two-phase acceleration: fast initially, slows down at high end
-        if (gameState.speed < gameState.maxSpeed * 0.6) {
-            thrust = gameState.accelPhase1;
-        } else {
-            thrust = gameState.accelPhase2;
-        }
+        thrust = gameState.acceleration;
     } else if (keys.ArrowDown) {
         thrust = -gameState.brakePower;
     }
@@ -166,32 +156,31 @@ function update() {
     }
 
     // 4. GRIP & DRIFT MECHANICS
-    // In F-Zero, the ship's velocity vector constantly tries to align with its facing angle.
-    // How fast it aligns depends on the "grip".
+    // The ship's velocity vector `(vx, vy)` constantly tries to align with its facing `angle`.
+    // We achieve this by projecting current velocity onto the facing angle, and lerping towards it.
 
-    let currentGrip = gameState.gripForward;
+    let currentGrip = gameState.baseGrip;
 
-    // Slide Turning (L/R) drops grip significantly, allowing the momentum vector to slide outward
-    if ((keys.q || keys.Q) || (keys.e || keys.E)) {
-        currentGrip = gameState.gripSlide;
+    // Slide Turning (L/R) drops grip, causing the velocity vector to NOT align quickly (sliding)
+    if (keys.q || keys.Q || keys.e || keys.E) {
+        currentGrip = gameState.slideGrip;
     }
 
-    // Blast Turning locks the velocity vector to the facing angle instantly (perfect grip),
-    // but costs a bit of speed as a penalty.
+    // Blast Turning locks the velocity vector to the facing angle instantly (high grip)
     if (gameState.isBlastTurning) {
-        currentGrip = gameState.gripBlast;
-        gameState.vx *= 0.98; // Speed penalty for blast turning
+        currentGrip = gameState.blastGrip;
+        // Minor speed penalty for blast turning
+        gameState.vx *= 0.98;
         gameState.vy *= 0.98;
     }
 
-    // Calculate the target velocity (where the ship wants to go based on facing angle and current speed)
-    // We only re-align if we are moving forward
+    // Re-align velocity towards facing angle
     const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
     if (dotProduct > 0.1) {
+        // targetV is the velocity vector if we were moving perfectly straight
         const targetVx = forwardX * gameState.speed;
         const targetVy = forwardY * gameState.speed;
 
-        // Lerp current velocity towards the facing angle based on Grip
         gameState.vx += (targetVx - gameState.vx) * currentGrip;
         gameState.vy += (targetVy - gameState.vy) * currentGrip;
     }
@@ -209,36 +198,30 @@ function update() {
     let nextY = gameState.y + gameState.vy;
 
     if (isWall(nextX, nextY)) {
-        // Hit a wall! Calculate bounce angle.
-        // F-Zero treats walls differently depending on attack angle.
-        // A head-on collision stops you dead. A shallow collision lets you scrape.
-
-        // We do this by finding the wall normal. Since we only have a bitmask,
-        // we approximate by checking adjacent pixels.
+        // To allow scraping, we test axes independently
         const hitX = isWall(nextX, gameState.y);
         const hitY = isWall(gameState.x, nextY);
 
         if (hitX && !hitY) {
             // Hit a vertical wall
-            gameState.vx *= -0.4; // Bounce
-            gameState.vy *= 0.9;  // Scrape friction
+            gameState.vx *= -0.5; // Bounce
+            gameState.vy *= 0.9;  // Scrape
             nextX = gameState.x + gameState.vx;
         } else if (hitY && !hitX) {
             // Hit a horizontal wall
-            gameState.vy *= -0.4; // Bounce
-            gameState.vx *= 0.9;  // Scrape friction
+            gameState.vy *= -0.5; // Bounce
+            gameState.vx *= 0.9;  // Scrape
             nextY = gameState.y + gameState.vy;
         } else {
-            // Hit a corner or head-on
+            // Hit corner or head-on
             gameState.vx *= -0.5;
             gameState.vy *= -0.5;
             nextX = gameState.x + gameState.vx;
             nextY = gameState.y + gameState.vy;
         }
 
-        // Heavy speed penalty for hitting walls
-        gameState.vx *= 0.7;
-        gameState.vy *= 0.7;
+        gameState.vx *= 0.8;
+        gameState.vy *= 0.8;
         gameState.bounceTimer = 15;
     }
 
@@ -249,7 +232,7 @@ function update() {
     // Reduce bounce timer
     if (gameState.bounceTimer > 0) gameState.bounceTimer--;
 
-    // Keep on track texture (wrap around for infinite map)
+    // Wrap around for infinite map
     if (gameState.x < 0) gameState.x += trackSize;
     if (gameState.x >= trackSize) gameState.x -= trackSize;
     if (gameState.y < 0) gameState.y += trackSize;
