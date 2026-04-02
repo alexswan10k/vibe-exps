@@ -59,6 +59,7 @@ const GROUP_BALL = 0x0002;
 const GROUP_FLIPPER = 0x0004;
 const GROUP_WALL = 0x0008;
 const GROUP_SENSOR = 0x0010; // For bottom drain
+const GROUP_STOPPER = 0x0020; // For flipper stoppers
 
 // --- Map Building ---
 const buildWalls = () => {
@@ -98,9 +99,10 @@ const buildWalls = () => {
         render: { fillStyle: '#0f3460' },
         collisionFilter: { category: GROUP_WALL }
     });
-    const topRightCorner = Bodies.polygon(WIDTH - 80, 60, 3, 70, {
+    // Deflector at the top of the shooter lane to guide the ball left
+    const topRightCorner = Bodies.rectangle(WIDTH - 50, 40, 150, 20, {
         isStatic: true,
-        angle: -Math.PI / 4,
+        angle: Math.PI / 6, // Tilt to deflect left into the main playfield
         render: { fillStyle: '#0f3460' },
         collisionFilter: { category: GROUP_WALL }
     });
@@ -171,7 +173,7 @@ const buildFlippers = () => {
         frictionAir: 0,
         density: 0.1, // High density for snappy feel
         render: { fillStyle: '#e94560' },
-        collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL }
+        collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL | GROUP_STOPPER }
     });
 
     const leftPivot = { x: 160, y: yPos };
@@ -191,7 +193,7 @@ const buildFlippers = () => {
         frictionAir: 0,
         density: 0.1, // High density for snappy feel
         render: { fillStyle: '#e94560' },
-        collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL }
+        collisionFilter: { category: GROUP_FLIPPER, mask: GROUP_BALL | GROUP_STOPPER }
     });
 
     const rightPivot = { x: WIDTH - 210, y: yPos };
@@ -206,24 +208,28 @@ const buildFlippers = () => {
 
     // Physical stoppers to limit rotation (invisible)
     // Left upper stopper (limits up swing)
-    const leftUpperStopper = Bodies.rectangle(160 + flipperWidth/2, yPos - 30, 20, 20, {
+    const leftUpperStopper = Bodies.rectangle(160 + flipperWidth/2, yPos - 40, 40, 40, {
         isStatic: true,
+        collisionFilter: { category: GROUP_STOPPER },
         render: { visible: false }
     });
     // Left lower stopper (rests downwards)
-    const leftLowerStopper = Bodies.rectangle(160 + flipperWidth/2, yPos + 35, 20, 20, {
+    const leftLowerStopper = Bodies.rectangle(160 + flipperWidth/2, yPos + 35, 40, 40, {
         isStatic: true,
+        collisionFilter: { category: GROUP_STOPPER },
         render: { visible: false }
     });
 
     // Right upper stopper
-    const rightUpperStopper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos - 30, 20, 20, {
+    const rightUpperStopper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos - 40, 40, 40, {
         isStatic: true,
+        collisionFilter: { category: GROUP_STOPPER },
         render: { visible: false }
     });
     // Right lower stopper
-    const rightLowerStopper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos + 35, 20, 20, {
+    const rightLowerStopper = Bodies.rectangle(WIDTH - 210 - flipperWidth/2, yPos + 35, 40, 40, {
         isStatic: true,
+        collisionFilter: { category: GROUP_STOPPER },
         render: { visible: false }
     });
 
