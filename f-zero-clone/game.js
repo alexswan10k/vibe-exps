@@ -1,414 +1,320 @@
-/**
- * F-Zero Clone - Mode 7 style renderer using HTML5 Canvas (CPU Raycaster approach)
- */
+// F-Zero Clone - Main Game Logic
 
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const width = canvas.width;
-const height = canvas.height;
+// --- Constants & Config ---
+const TRACK_SIZE = 2048; // Size of the texture/collision map
+const WORLD_SCALE = 10;   // Scale the 3D plane relative to the map
+const SHIP_MAX_SPEED = 2.0;
+const SHIP_ACCEL = 0.02;
+const SHIP_BRAKE = 0.05;
+const FRICTION = 0.98;
+const GRASS_FRICTION = 0.90;
+const TURN_SPEED = 0.04;
+const DRIFT_MULTIPLIER = 1.5; // Turning is sharper when drifting
+const GRIP = 0.95; // How fast velocity aligns with forward direction
+const DRIFT_GRIP = 0.85; // Lower grip when sliding (Q/E)
 
-// Game State
-let gameState = {
-    x: 800,          // Track map coordinates (Scaled up 4x)
-    y: 3000,
-    vx: 0,           // True global X velocity
-    vy: 0,           // True global Y velocity
-    angle: 0,        // Facing direction
-    speed: 0,        // Magnitude of velocity vector
-    angularVelocity: 0, // Rate of turn for visual banking
-
-    // F-Zero specific machine stats
-    maxSpeed: 45,       // Massively increased speed relative to 4x track size and high camera
-    acceleration: 1.0,
-    brakePower: 2.0,
-    coastFriction: 0.99,
-
-    turnSpeed: 0.065,   // Slightly tighter turning to handle higher speeds
-
-    // "Grip" determines how strongly the velocity vector aligns to the facing angle.
-    // 1.0 = instant alignment (no sliding), 0.0 = pure ice (no turning control).
-    baseGrip: 0.15,     // Natural drifting feeling
-    slideGrip: 0.02,    // Holding L/R drops grip, causing wide slides
-    blastGrip: 0.5,     // Mashing A locks grip, sharpening turns
-
+// --- Game State ---
+const state = {
+    x: TRACK_SIZE / 2, // Start in middle of map coordinates
+    y: TRACK_SIZE / 2,
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    speed: 0,
     lap: 1,
-    checkpoints: [false, false, false],
-    bounceTimer: 0,
-
-    // Input history for Blast Turning
-    framesSinceAccel: 0,
-    isBlastTurning: false
+    maxLaps: 3,
+    checkpoints: 0,
+    keys: {
+        ArrowUp: false,
+        ArrowDown: false,
+        ArrowLeft: false,
+        ArrowRight: false,
+        q: false,
+        e: false
+    }
 };
 
-// Controls
-const keys = {
-    ArrowUp: false,
-    ArrowDown: false,
-    ArrowLeft: false,
-    ArrowRight: false,
-    q: false,
-    e: false,
-    Q: false,
-    E: false
-};
+// --- Globals ---
+let scene, camera, renderer;
+let trackPlane, shipMesh;
+let collisionCtx;
+let lastTime = performance.now();
 
-window.addEventListener('keydown', (e) => {
-    if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
-});
-window.addEventListener('keyup', (e) => {
-    if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
-});
+// UI Elements
+const speedEl = document.getElementById('speedometer');
+const lapEl = document.getElementById('lap-counter');
 
-// Assets (from assets.js)
-let trackTexture, trackData, collisionData, carSprite, skyTexture;
+// --- Initialization ---
+function init() {
+    // 1. Generate Track & Collision Map
+    generateTrack();
 
-// Render Setup
-const fov = Math.PI / 3; // 60 degrees
-const halfFov = fov / 2;
-const projectionPlaneY = height / 2; // Horizon line
-const camHeight = 80; // Higher camera allows seeing further down the scaled up track
+    // 2. Setup Three.js
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Sky blue
+    scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
 
-// We need image data for fast pixel access for the track
-function initAssets() {
-    const trackCanvas = generateTrackTexture();
-    trackTexture = trackCanvas;
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-    // Get track pixel data
-    const tCtx = trackCanvas.getContext('2d', { willReadFrequently: true });
-    trackData = tCtx.getImageData(0, 0, trackSize, trackSize);
+    renderer = new THREE.WebGLRenderer({ antialias: false }); // F-Zero is pixelated!
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
 
-    // Get collision map data
-    const collisionCanvas = generateCollisionMap();
-    const cCtx = collisionCanvas.getContext('2d', { willReadFrequently: true });
-    collisionData = cCtx.getImageData(0, 0, trackSize, trackSize);
+    // 3. Create World
+    setupWorld();
 
-    carSprite = generateCarSprite();
-    skyTexture = generateSkyTexture();
+    // 4. Input handling
+    window.addEventListener('keydown', (e) => { if (state.keys.hasOwnProperty(e.key)) state.keys[e.key] = true; });
+    window.addEventListener('keyup', (e) => { if (state.keys.hasOwnProperty(e.key)) state.keys[e.key] = false; });
+    window.addEventListener('resize', onWindowResize, false);
+
+    // 5. Start Loop
+    requestAnimationFrame(gameLoop);
 }
 
-// Helper to check collision at a given coordinate
-function isWall(x, y) {
-    x = Math.floor(x) & (trackSize - 1);
-    y = Math.floor(y) & (trackSize - 1);
-    const index = (y * trackSize + x) * 4;
-    // Look at Red channel: 0 is black (wall), 255 is white (track)
-    return collisionData.data[index] < 128;
+// --- Track Generation ---
+function generateTrack() {
+    // We create a canvas, draw the track on it, and use it for BOTH the 3D texture and the 2D collision logic.
+    const canvas = document.createElement('canvas');
+    canvas.width = TRACK_SIZE;
+    canvas.height = TRACK_SIZE;
+    collisionCtx = canvas.getContext('2d', { willReadFrequently: true });
+
+    // Background (Grass/Dirt - Off track)
+    collisionCtx.fillStyle = '#8B4513'; // Dirt brown
+    collisionCtx.fillRect(0, 0, TRACK_SIZE, TRACK_SIZE);
+
+    // Draw the track (Asphalt - On track)
+    // We'll draw a simple loop using overlapping thick strokes
+    collisionCtx.lineCap = 'round';
+    collisionCtx.lineJoin = 'round';
+
+    // Outer walls (for visual boundary, we'll extract exact pixel colors for collision)
+    collisionCtx.strokeStyle = '#333333'; // Dark grey road
+    collisionCtx.lineWidth = 120; // Road width
+
+    collisionCtx.beginPath();
+    // A simple kidney-bean shape
+    collisionCtx.moveTo(TRACK_SIZE * 0.3, TRACK_SIZE * 0.8);
+    collisionCtx.lineTo(TRACK_SIZE * 0.7, TRACK_SIZE * 0.8);
+    collisionCtx.arcTo(TRACK_SIZE * 0.9, TRACK_SIZE * 0.8, TRACK_SIZE * 0.9, TRACK_SIZE * 0.5, 200);
+    collisionCtx.lineTo(TRACK_SIZE * 0.9, TRACK_SIZE * 0.3);
+    collisionCtx.arcTo(TRACK_SIZE * 0.9, TRACK_SIZE * 0.1, TRACK_SIZE * 0.5, TRACK_SIZE * 0.1, 200);
+    collisionCtx.lineTo(TRACK_SIZE * 0.2, TRACK_SIZE * 0.1);
+    collisionCtx.arcTo(TRACK_SIZE * 0.1, TRACK_SIZE * 0.1, TRACK_SIZE * 0.1, TRACK_SIZE * 0.5, 150);
+    collisionCtx.lineTo(TRACK_SIZE * 0.1, TRACK_SIZE * 0.6);
+    collisionCtx.arcTo(TRACK_SIZE * 0.1, TRACK_SIZE * 0.8, TRACK_SIZE * 0.3, TRACK_SIZE * 0.8, 150);
+
+    collisionCtx.stroke();
+
+    // Draw start/finish line
+    collisionCtx.fillStyle = '#FFFFFF';
+    collisionCtx.fillRect(TRACK_SIZE * 0.45, TRACK_SIZE * 0.8 - 60, 20, 120);
+
+    // Set starting position explicitly on the straightaway
+    state.x = TRACK_SIZE * 0.5;
+    state.y = TRACK_SIZE * 0.8;
+    state.angle = Math.PI; // Facing left (along the bottom straight)
+
+    // Create the Three.js texture from this canvas
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter; // Pixelated look
+    texture.minFilter = THREE.NearestFilter;
+
+    // Create the ground plane
+    const geometry = new THREE.PlaneGeometry(TRACK_SIZE / WORLD_SCALE, TRACK_SIZE / WORLD_SCALE);
+    const material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+    trackPlane = new THREE.Mesh(geometry, material);
+    trackPlane.rotation.x = -Math.PI / 2; // Lay flat
+    // Center the plane so map coordinates (0,0) correspond to top-left, not center.
+    // Actually, it's easier to leave it centered and map coordinates.
+    // ThreeJS Plane 0,0 is center. Canvas 0,0 is top left.
 }
 
-function update() {
-    // Current forward vector based on facing angle
-    const forwardX = Math.cos(gameState.angle);
-    const forwardY = Math.sin(gameState.angle);
+function setupWorld() {
+    scene.add(trackPlane);
 
-    // Calculate current speed (magnitude)
-    gameState.speed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
+    // Simple Ship (Triangle)
+    const shipGeo = new THREE.ConeGeometry(0.5, 1.5, 3);
+    // Cone by default points up (+Y).
+    // To make it point +X (angle 0), rotate -90 deg on Z.
+    shipGeo.rotateZ(-Math.PI / 2);
+    // Then lay it flat by rotating -90 deg on X.
+    shipGeo.rotateX(-Math.PI / 2);
+    const shipMat = new THREE.MeshBasicMaterial({ color: 0x00aaff });
+    shipMesh = new THREE.Mesh(shipGeo, shipMat);
+    shipMesh.position.y = 0.5; // Hover slightly
+    scene.add(shipMesh);
+}
 
-    // 1. INPUT TRACKING (For Blast Turning)
-    // Blast turning is achieved in F-Zero by mashing the accelerator while turning.
-    if (keys.ArrowUp) {
-        if (gameState.framesSinceAccel > 0 && gameState.framesSinceAccel < 15 && gameState.angularVelocity !== 0) {
-            gameState.isBlastTurning = true;
-        }
-        gameState.framesSinceAccel = 0;
-    } else {
-        gameState.framesSinceAccel++;
-        gameState.isBlastTurning = false;
+// --- Physics & Logic ---
+function updatePhysics(dt) {
+    // 1. Acceleration & Braking
+    if (state.keys.ArrowUp) {
+        state.speed += SHIP_ACCEL;
+    } else if (state.keys.ArrowDown) {
+        state.speed -= SHIP_BRAKE;
     }
 
-    // 2. TURNING
-    gameState.angularVelocity = 0;
-    if (gameState.speed > 0.5) {
-        let turnAmount = gameState.turnSpeed;
+    // 2. Turning & Drifting (F-Zero Style)
+    let currentTurnSpeed = TURN_SPEED;
+    let currentGrip = GRIP;
 
-        // Sharp turn logic (if sliding while steering the same direction)
-        if ((keys.q || keys.Q) && keys.ArrowLeft) turnAmount *= 1.2;
-        if ((keys.e || keys.E) && keys.ArrowRight) turnAmount *= 1.2;
-
-        // Reversing logic
-        const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
-        if (dotProduct < -0.5) turnAmount *= -1;
-
-        if (keys.ArrowLeft) {
-            gameState.angle -= turnAmount;
-            gameState.angularVelocity = -turnAmount;
-        }
-        if (keys.ArrowRight) {
-            gameState.angle += turnAmount;
-            gameState.angularVelocity = turnAmount;
-        }
+    // If drifting (Q/E), turn sharper but lose grip (slide sideways)
+    if (state.keys.q || state.keys.e) {
+        currentTurnSpeed *= DRIFT_MULTIPLIER;
+        currentGrip = DRIFT_GRIP;
     }
 
-    // 3. ACCELERATION AND FRICTION
-    let thrust = 0;
-    if (keys.ArrowUp) {
-        thrust = gameState.acceleration;
-    } else if (keys.ArrowDown) {
-        thrust = -gameState.brakePower;
-    }
+    if (state.keys.ArrowLeft) state.angle += currentTurnSpeed;
+    if (state.keys.ArrowRight) state.angle -= currentTurnSpeed;
 
-    // Apply thrust along the facing angle
-    gameState.vx += forwardX * thrust;
-    gameState.vy += forwardY * thrust;
+    // Cap speed
+    if (state.speed > SHIP_MAX_SPEED) state.speed = SHIP_MAX_SPEED;
+    if (state.speed < -SHIP_MAX_SPEED/2) state.speed = -SHIP_MAX_SPEED/2;
 
-    // Apply "Ice" friction if coasting
-    if (!keys.ArrowUp && !keys.ArrowDown) {
-        gameState.vx *= gameState.coastFriction;
-        gameState.vy *= gameState.coastFriction;
-    }
+    // 3. Calculate Intent Vector (Where the nose points)
+    const intentVx = Math.cos(state.angle) * state.speed;
+    const intentVy = -Math.sin(state.angle) * state.speed; // Canvas Y is down, Math Y is up, careful here. We'll use standard math and invert later if needed.
 
-    // 4. GRIP & DRIFT MECHANICS
-    // The ship's velocity vector `(vx, vy)` constantly tries to align with its facing `angle`.
-    // We achieve this by projecting current velocity onto the facing angle, and lerping towards it.
+    // 4. Apply Grip (Lerp actual velocity towards intent velocity)
+    // This creates the sliding sensation. If Grip is 1.0, it turns on rails.
+    state.vx = state.vx * (1 - currentGrip) + intentVx * currentGrip;
+    state.vy = state.vy * (1 - currentGrip) + intentVy * currentGrip;
 
-    let currentGrip = gameState.baseGrip;
+    // 5. Collision Detection (Check pixel color under ship)
+    // We sample slightly ahead of the ship to prevent getting stuck
+    const checkX = state.x + state.vx * 2;
+    const checkY = state.y + state.vy * 2;
 
-    // Slide Turning (L/R) drops grip, causing the velocity vector to NOT align quickly (sliding)
-    if (keys.q || keys.Q || keys.e || keys.E) {
-        currentGrip = gameState.slideGrip;
-    }
+    let onTrack = false;
+    let hitWall = false;
 
-    // Blast Turning locks the velocity vector to the facing angle instantly (high grip)
-    if (gameState.isBlastTurning) {
-        currentGrip = gameState.blastGrip;
-        // Minor speed penalty for blast turning
-        gameState.vx *= 0.98;
-        gameState.vy *= 0.98;
-    }
+    if (checkX >= 0 && checkX < TRACK_SIZE && checkY >= 0 && checkY < TRACK_SIZE) {
+        const pixel = collisionCtx.getImageData(Math.floor(checkX), Math.floor(checkY), 1, 1).data;
+        // r, g, b, a
+        // Asphalt is #333333 (rgb 51,51,51) or Start line is #FFFFFF (255,255,255)
+        // Dirt is #8B4513 (rgb 139, 69, 19)
 
-    // Re-align velocity towards facing angle
-    const dotProduct = (gameState.vx * forwardX) + (gameState.vy * forwardY);
-    if (dotProduct > 0.1) {
-        // targetV is the velocity vector if we were moving perfectly straight
-        const targetVx = forwardX * gameState.speed;
-        const targetVy = forwardY * gameState.speed;
+        // Helper to check color proximity
+        const isColor = (r, g, b, targetR, targetG, targetB, threshold = 20) => {
+            return Math.abs(r - targetR) < threshold &&
+                   Math.abs(g - targetG) < threshold &&
+                   Math.abs(b - targetB) < threshold;
+        };
 
-        gameState.vx += (targetVx - gameState.vx) * currentGrip;
-        gameState.vy += (targetVy - gameState.vy) * currentGrip;
-    }
-
-    // Limit Max Speed
-    gameState.speed = Math.sqrt(gameState.vx * gameState.vx + gameState.vy * gameState.vy);
-    if (gameState.speed > gameState.maxSpeed) {
-        const ratio = gameState.maxSpeed / gameState.speed;
-        gameState.vx *= ratio;
-        gameState.vy *= ratio;
-    }
-
-    // 5. COLLISION DETECTION (Wall Bumping & Scraping)
-    let nextX = gameState.x + gameState.vx;
-    let nextY = gameState.y + gameState.vy;
-
-    if (isWall(nextX, nextY)) {
-        // To allow scraping, we test axes independently
-        const hitX = isWall(nextX, gameState.y);
-        const hitY = isWall(gameState.x, nextY);
-
-        if (hitX && !hitY) {
-            // Hit a vertical wall
-            gameState.vx *= -0.5; // Bounce
-            gameState.vy *= 0.9;  // Scrape
-            nextX = gameState.x + gameState.vx;
-        } else if (hitY && !hitX) {
-            // Hit a horizontal wall
-            gameState.vy *= -0.5; // Bounce
-            gameState.vx *= 0.9;  // Scrape
-            nextY = gameState.y + gameState.vy;
+        if (isColor(pixel[0], pixel[1], pixel[2], 51, 51, 51, 50)) {
+            onTrack = true; // Road
+        } else if (isColor(pixel[0], pixel[1], pixel[2], 255, 255, 255, 50)) {
+            onTrack = true; // Start line
+            checkLap(checkX, checkY);
+        } else if (isColor(pixel[0], pixel[1], pixel[2], 139, 69, 19, 50)) {
+            // Off track - slow down drastically
+            state.vx *= GRASS_FRICTION;
+            state.vy *= GRASS_FRICTION;
+            state.speed *= GRASS_FRICTION;
         } else {
-            // Hit corner or head-on
-            gameState.vx *= -0.5;
-            gameState.vy *= -0.5;
-            nextX = gameState.x + gameState.vx;
-            nextY = gameState.y + gameState.vy;
+            // Out of bounds / Wall (In our simple map, anything else is a wall or edge)
+            hitWall = true;
         }
-
-        gameState.vx *= 0.8;
-        gameState.vy *= 0.8;
-        gameState.bounceTimer = 15;
+    } else {
+        hitWall = true; // Edge of map
     }
 
-    // Move
-    gameState.x = nextX;
-    gameState.y = nextY;
+    if (hitWall) {
+        // Nudge back BEFORE reversing velocity
+        state.x -= state.vx * 2;
+        state.y -= state.vy * 2;
 
-    // Reduce bounce timer
-    if (gameState.bounceTimer > 0) gameState.bounceTimer--;
+        // Simple bounce
+        state.vx *= -0.5;
+        state.vy *= -0.5;
+        state.speed *= 0.5;
+    } else {
+        // Apply general friction and move
+        state.vx *= FRICTION;
+        state.vy *= FRICTION;
+        state.speed *= FRICTION;
 
-    // Wrap around for infinite map
-    if (gameState.x < 0) gameState.x += trackSize;
-    if (gameState.x >= trackSize) gameState.x -= trackSize;
-    if (gameState.y < 0) gameState.y += trackSize;
-    if (gameState.y >= trackSize) gameState.y -= trackSize;
-
-    // Update HUD
-    const speedKmh = Math.abs(Math.round((gameState.speed / gameState.maxSpeed) * 450));
-    document.getElementById('speedometer').innerText = speedKmh + " km/h";
-
-    // Simple lap logic based on position
-    checkLap();
-}
-
-function checkLap() {
-    // Very rudimentary lap detection based on bounding boxes on the map
-    // We expect the player to go clockwise: bottom -> left -> top -> right -> bottom
-
-    // Checkpoint 1: top left corner
-    if (gameState.x > 600 && gameState.x < 1000 && gameState.y > 600 && gameState.y < 1000) {
-        gameState.checkpoints[0] = true;
-    }
-    // Checkpoint 2: top right corner
-    if (gameState.checkpoints[0] && gameState.x > 3000 && gameState.x < 3400 && gameState.y > 600 && gameState.y < 1000) {
-        gameState.checkpoints[1] = true;
-    }
-    // Checkpoint 3: bottom right corner
-    if (gameState.checkpoints[1] && gameState.x > 3000 && gameState.x < 3400 && gameState.y > 2200 && gameState.y < 2600) {
-        gameState.checkpoints[2] = true;
-    }
-
-    // Finish line: near bottom left
-    if (gameState.checkpoints[0] && gameState.checkpoints[1] && gameState.checkpoints[2]) {
-        if (gameState.x > 400 && gameState.x < 1200 && gameState.y > 2800 && gameState.y < 3200) {
-            gameState.lap++;
-            gameState.checkpoints = [false, false, false];
-            if (gameState.lap > 3) {
-                document.getElementById('lap-counter').innerText = "FINISH!";
-            } else {
-                document.getElementById('lap-counter').innerText = "LAP " + gameState.lap + "/3";
-            }
-        }
+        state.x += state.vx;
+        state.y += state.vy;
     }
 }
 
-// Mode 7 rendering function using ImageData
-function render() {
-    // 1. Clear & draw sky
-    // Sky wraps based on angle
-    let skyOffsetX = ((gameState.angle / (Math.PI * 2)) * skyTexture.width) % skyTexture.width;
-    if (skyOffsetX < 0) skyOffsetX += skyTexture.width;
-
-    ctx.drawImage(skyTexture, -skyOffsetX, 0, skyTexture.width, height / 2);
-    ctx.drawImage(skyTexture, skyTexture.width - skyOffsetX, 0, skyTexture.width, height / 2);
-
-    // Pre-calculate view vectors
-    const dirX = Math.cos(gameState.angle);
-    const dirY = Math.sin(gameState.angle);
-
-    // The view plane length determines FOV
-    const fovScale = Math.tan(halfFov);
-    // plane is perpendicular to dir
-    const planeX = -Math.sin(gameState.angle) * fovScale;
-    const planeY = Math.cos(gameState.angle) * fovScale;
-
-    // Get screen ImageData to write directly for the floor
-    const screenData = ctx.getImageData(0, projectionPlaneY, width, height / 2);
-    const pixels = screenData.data;
-
-    // Scanline rendering for the floor (from horizon down to bottom of screen)
-    for (let y = 0; y < height / 2; y++) {
-        // Current y position compared to the center of the screen (the horizon)
-        const p = y + 1;
-
-        // Distance to the row.
-        // We use (height/2) / p to map scanlines exponentially further away as they approach horizon
-        const rowDistance = camHeight * (height / 2) / p;
-
-        // Step vector for this row
-        // Leftmost ray
-        const rayDirX0 = dirX - planeX;
-        const rayDirY0 = dirY - planeY;
-
-        // Rightmost ray
-        const rayDirX1 = dirX + planeX;
-        const rayDirY1 = dirY + planeY;
-
-        // Real world coordinates of the leftmost point in this row
-        let floorX = gameState.x + rowDistance * rayDirX0;
-        let floorY = gameState.y + rowDistance * rayDirY0;
-
-        // How much to step in world space per screen pixel
-        const floorStepX = rowDistance * (rayDirX1 - rayDirX0) / width;
-        const floorStepY = rowDistance * (rayDirY1 - rayDirY0) / width;
-
-        for (let x = 0; x < width; x++) {
-            // Get texture coordinates, mask with bitwise AND for repeating texture
-            // Using size-1 assumes trackSize is a power of 2 (1024)
-            const tx = Math.floor(floorX) & (trackSize - 1);
-            const ty = Math.floor(floorY) & (trackSize - 1);
-
-            // Fetch color from track map
-            const texOffset = (ty * trackSize + tx) * 4;
-
-            // Write to screen buffer
-            const screenOffset = (y * width + x) * 4;
-
-            // Simple depth shading (fog)
-            // Range 0 to 1, higher y = closer = brighter
-            // Scaled so you can see further down the larger track
-            const shade = Math.min(1, (y / (height / 2)) * 1.5 + 0.1);
-
-            pixels[screenOffset] = trackData.data[texOffset] * shade;         // R
-            pixels[screenOffset + 1] = trackData.data[texOffset + 1] * shade; // G
-            pixels[screenOffset + 2] = trackData.data[texOffset + 2] * shade; // B
-            pixels[screenOffset + 3] = 255;                                   // A
-
-            // Step to next pixel
-            floorX += floorStepX;
-            floorY += floorStepY;
-        }
+function checkLap(x, y) {
+    // Extremely basic lap logic. If we cross the white box going right-to-left roughly.
+    // In a real game we'd need checkpoints.
+    // For simplicity, just debounce.
+    if (state.checkpoints === 0) {
+        state.lap++;
+        state.checkpoints = 1; // Prevent immediate re-trigger
+        setTimeout(() => { state.checkpoints = 0; }, 5000); // 5 sec cooldown
+        lapEl.innerText = `LAP ${state.lap}/${state.maxLaps}`;
     }
-
-    // Put floor data back to canvas
-    ctx.putImageData(screenData, 0, projectionPlaneY);
-
-    // 3. Draw car sprite
-    // Center bottom of screen
-    const carW = carSprite.width * 3; // Scale up
-    const carH = carSprite.height * 3;
-    let carX = (width - carW) / 2;
-    // Bobs slightly based on speed
-    const bob = Math.sin(Date.now() / 50) * (gameState.speed * 0.5);
-    let carY = height - carH - 10 + bob;
-
-    // Shake effect if hit a wall
-    if (gameState.bounceTimer > 0) {
-        const shakeX = (Math.random() - 0.5) * 10 * (gameState.bounceTimer / 10);
-        const shakeY = (Math.random() - 0.5) * 10 * (gameState.bounceTimer / 10);
-        carX += shakeX;
-        carY += shakeY;
-    }
-
-    // Apply banking/leaning effect based on turn rate
-    // We rotate the canvas slightly to simulate leaning into the turn
-    ctx.save();
-
-    // The center of rotation for the car sprite
-    const centerX = carX + carW / 2;
-    const centerY = carY + carH / 2;
-
-    // Scale angular velocity up a bit to make the lean noticeable
-    const leanAngle = gameState.angularVelocity * 3;
-
-    ctx.translate(centerX, centerY);
-    ctx.rotate(leanAngle);
-
-    // Draw the car centered at the origin of our translated context
-    ctx.drawImage(carSprite, -carW / 2, -carH / 2, carW, carH);
-
-    ctx.restore();
 }
 
-// Main Loop
-function loop() {
-    update();
-    render();
-    requestAnimationFrame(loop);
+function updateCameraAndMesh() {
+    // Map 2D coordinates (0 to TRACK_SIZE) to 3D Plane coordinates (-PlaneSize/2 to +PlaneSize/2)
+    const planeSize = TRACK_SIZE / WORLD_SCALE;
+    const worldX = (state.x - TRACK_SIZE / 2) / WORLD_SCALE;
+    const worldZ = (state.y - TRACK_SIZE / 2) / WORLD_SCALE; // Canvas Y maps to 3D Z
+
+    // Update Ship
+    shipMesh.position.set(worldX, 0.5, worldZ);
+    shipMesh.rotation.y = state.angle; // Adjust angle to match 3D space
+
+    // Mode 7 Camera logic
+    const camDistance = 8;
+    const camHeight = 4;
+
+    // Position camera behind ship
+    // Canvas angle 0 is +X, angle Pi is -X.
+    // X is cos, Y (which maps to Z here) is -sin
+    const offsetX = -Math.cos(state.angle) * camDistance;
+    const offsetZ = Math.sin(state.angle) * camDistance; // +Z because Canvas Y is down, 3D Z is forward/back.
+
+    camera.position.set(worldX + offsetX, camHeight, worldZ + offsetZ);
+
+    // We want to look slightly ahead of the ship, not directly down at it, to mimic the F-zero view.
+    const lookAheadX = worldX + Math.cos(state.angle) * 10;
+    const lookAheadZ = worldZ - Math.sin(state.angle) * 10;
+
+    // To make the ship face away from the camera properly, its rotation needs to match the angle.
+    // Angle 0 points right (+X). Rotation Y in ThreeJS: positive is counter-clockwise looking from top.
+    // So angle 0 -> rotation 0 (points +X if unrotated geo points +X)
+    shipMesh.rotation.y = state.angle;
+
+    camera.lookAt(lookAheadX, 0, lookAheadZ);
+}
+
+function updateUI() {
+    // Display speed in roughly km/h based on our arbitrary units
+    const displaySpeed = Math.floor(Math.abs(state.speed) * 150);
+    speedEl.innerText = `${displaySpeed} km/h`;
+}
+
+// --- Main Loop ---
+function gameLoop(now) {
+    requestAnimationFrame(gameLoop);
+
+    const dt = now - lastTime;
+    lastTime = now;
+
+    // Cap dt to prevent massive jumps if tab is backgrounded
+    if (dt > 100) return;
+
+    updatePhysics(dt);
+    updateCameraAndMesh();
+    updateUI();
+
+    renderer.render(scene, camera);
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 // Start
-initAssets();
-// Start player near the finish line pointing UP (which on our map is -y, but let's see how our angles work)
-// Math.PI * 1.5 is pointing UP (North)
-gameState.angle = Math.PI * 1.5;
-gameState.x = 800;
-gameState.y = 3000;
-
-loop();
+init();
