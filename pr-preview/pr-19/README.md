@@ -12,7 +12,6 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Colony Simulator**: A modular colony management simulation game
 - **Dungeon Crawler**: A dungeon crawler game
 - **Expense Tracker**: A tool for tracking expenses
-- **F-Zero Clone**: A SNES Mode 7-style retro futuristic racing game clone
 - **Goal Setter**: A goal setting application
 - **GTA Style Game**: A GTA-style driving game
 - **Hacker Simulator**: A hacker simulation tool
