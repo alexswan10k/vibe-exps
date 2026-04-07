@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Particle Fireworks</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="instructions">
+        <h2>How to Use</h2>
+        <p>Click anywhere on the canvas to spawn a burst of fireworks particles.</p>
+        <p>Adjust the controls to customize color, size, and decay rate.</p>
+        <p>Use Choreograph Mode to record a sequence of bursts, then play it back.</p>
+    </div>
+    <div id="controls">
+        <h2>Fireworks Controls</h2>
+        <label for="color1">Color 1:</label>
+        <input type="color" id="color1" value="#ff4500">
+        
+        <label for="color2">Color 2:</label>
+        <input type="color" id="color2" value="#00ff00">
+        
+        <label for="color3">Color 3:</label>
+        <input type="color" id="color3" value="#0000ff">
+        
+        <label for="sizeSlider">Particle Size:</label>
+        <input type="range" id="sizeSlider" min="1" max="10" value="5">
+        
+        <label for="decaySlider">Decay Rate:</label>
+        <input type="range" id="decaySlider" min="0.01" max="0.1" step="0.01" value="0.02">
+        
+        <button id="choreographBtn">Enter Choreograph Mode</button>
+        <button id="playSequenceBtn" disabled>Play Sequence</button>
+        <button id="saveSequenceBtn" disabled>Save Sequence</button>
+        <button id="loadSequenceBtn">Load Sequence</button>
+    </div>
+    <canvas id="fireworksCanvas"></canvas>
+    <script src="script.js"></script>
+</body>
+</html>
