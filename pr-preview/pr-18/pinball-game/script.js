@@ -1,6 +1,5 @@
 // pinball-game/script.js
 
-// Aliases
 const Engine = Matter.Engine,
       Render = Matter.Render,
       Runner = Matter.Runner,
@@ -11,7 +10,6 @@ const Engine = Matter.Engine,
       Events = Matter.Events,
       Vector = Matter.Vector;
 
-// Constants
 const WIDTH = 600;
 const HEIGHT = 800;
 const MAX_BALLS = 3;
@@ -23,18 +21,19 @@ let ballsRemaining = MAX_BALLS;
 let ball = null;
 let isPlaying = true;
 let isPlunging = false;
+let plungeForce = 0;
 
 // UI
 const scoreEl = document.getElementById('score');
 const ballsEl = document.getElementById('balls');
 const canvas = document.getElementById('pinball-canvas');
 
-// Engine with high iteration count for fast-moving small objects
+// Engine
 const engine = Engine.create({
-    positionIterations: 20,
-    velocityIterations: 20,
-    constraintIterations: 10,
-    gravity: { x: 0, y: 1.5, scale: 0.001 }
+    positionIterations: 12,
+    velocityIterations: 10,
+    constraintIterations: 8,
+    gravity: { x: 0, y: 1.5, scale: 0.001 } // Stronger gravity feels better
 });
 const world = engine.world;
 
@@ -45,190 +44,144 @@ const render = Render.create({
         width: WIDTH,
         height: HEIGHT,
         wireframes: false,
-        background: '#1a1a2e'
+        background: '#111' // Darker arcade background
     }
 });
 
-// Collision Categories
+// Collision Masks
 const CAT_DEFAULT = 0x0001;
 const CAT_BALL = 0x0002;
 const CAT_FLIPPER = 0x0004;
-const CAT_WALL = 0x0008;
-const CAT_STOPPER = 0x0010;
+const CAT_STOPPER = 0x0008;
 
-// --- BUILD WORLD ---
-
-// 1. Static Geometry (Walls, Shooter Lane, Deflector)
-const buildGeometry = () => {
+// Map Geometry
+const buildMap = () => {
     const wallOpt = {
         isStatic: true,
-        render: { fillStyle: '#0f3460' },
-        collisionFilter: { category: CAT_WALL },
-        friction: 0,
-        restitution: 0.4
+        render: { fillStyle: '#333' },
+        friction: 0
     };
 
-    // Outer bounds
+    // Outer Walls
     const leftWall = Bodies.rectangle(10, HEIGHT/2, 20, HEIGHT, wallOpt);
-    const rightWall = Bodies.rectangle(WIDTH - 10, HEIGHT/2, 20, HEIGHT, wallOpt);
+    const rightWall = Bodies.rectangle(WIDTH-10, HEIGHT/2, 20, HEIGHT, wallOpt);
     const topWall = Bodies.rectangle(WIDTH/2, 10, WIDTH, 20, wallOpt);
 
-    // Shooter lane (40px wide on the right)
-    // Wall separates playfield from shooter lane
-    const shooterDivider = Bodies.rectangle(WIDTH - 60, HEIGHT - 250, 10, 500, wallOpt);
+    // Shooter Lane Divider (40px lane)
+    const shooterDivider = Bodies.rectangle(WIDTH - 50, HEIGHT - 250, 10, 500, wallOpt);
 
-    // Top right deflector (Guides plunged ball smoothly into playfield)
-    // Arc is complex, so we use a large angled rectangle
-    const deflector = Bodies.rectangle(WIDTH - 80, 80, 200, 20, {
-        ...wallOpt,
-        angle: -Math.PI / 6, // Tilt up and left
-        restitution: 0.1 // Low bounce so it rolls along it
-    });
+    // Top Right Deflector Arc (Simulation using angled blocks)
+    const deflector1 = Bodies.rectangle(WIDTH - 60, 50, 150, 20, { ...wallOpt, angle: Math.PI / 4 });
+    const deflector2 = Bodies.rectangle(WIDTH - 150, 30, 100, 20, { ...wallOpt, angle: Math.PI / 8 });
 
-    // Bottom angled walls guiding to flippers
-    const leftSlant = Bodies.rectangle(120, HEIGHT - 200, 250, 20, {
-        ...wallOpt,
-        angle: Math.PI / 5.5
-    });
-    const rightSlant = Bodies.rectangle(WIDTH - 180, HEIGHT - 200, 250, 20, {
-        ...wallOpt,
-        angle: -Math.PI / 5.5
-    });
+    // Lower Slants
+    const leftSlant = Bodies.rectangle(100, HEIGHT - 180, 220, 20, { ...wallOpt, angle: Math.PI / 6 });
+    const rightSlant = Bodies.rectangle(WIDTH - 160, HEIGHT - 180, 220, 20, { ...wallOpt, angle: -Math.PI / 6 });
+
+    // Shooter Floor
+    const shooterFloor = Bodies.rectangle(WIDTH - 25, HEIGHT - 10, 50, 20, wallOpt);
 
     Composite.add(world, [
-        leftWall, rightWall, topWall, shooterDivider, deflector, leftSlant, rightSlant
+        leftWall, rightWall, topWall,
+        shooterDivider, deflector1, deflector2,
+        leftSlant, rightSlant, shooterFloor
     ]);
 };
 
-// 2. Physical Plunger
-let plungerBody = null;
-let plungerSpring = null;
-const buildPlunger = () => {
-    const startY = HEIGHT - 40;
-    const plungerX = WIDTH - 35; // Center of 40px shooter lane
-
-    plungerBody = Bodies.rectangle(plungerX, startY, 30, 40, {
-        label: 'plunger',
-        density: 0.05,
-        frictionAir: 0.05, // Slows it down slightly when snapping back
-        render: { fillStyle: '#e94560' },
-        collisionFilter: { category: CAT_WALL | CAT_BALL } // Hits the ball
-    });
-
-    // Spring pulls it up to rest position
-    plungerSpring = Constraint.create({
-        pointA: { x: plungerX, y: startY - 20 },
-        bodyB: plungerBody,
-        pointB: { x: 0, y: -20 },
-        stiffness: 0.1,
-        damping: 0.1,
-        length: 0,
-        render: { visible: false }
-    });
-
-    // Bottom floor to stop plunger falling forever
-    const plungerFloor = Bodies.rectangle(plungerX, HEIGHT + 50, 50, 20, {
-        isStatic: true, render: { visible: false }
-    });
-
-    Composite.add(world, [plungerBody, plungerSpring, plungerFloor]);
-};
-
-// 3. Flippers with physical stoppers
+// Flippers
 const flippers = { left: null, right: null };
 const buildFlippers = () => {
-    const flipWidth = 80; // Shortened to leave a drain gap
-    const flipHeight = 18;
-    const yPos = HEIGHT - 100;
-    const gap = 180; // Widen gap between pivots slightly
+    const fWidth = 90;
+    const fHeight = 16;
+    const y = HEIGHT - 80;
 
-    const flipOpt = {
+    const leftPivotX = 170;
+    const rightPivotX = WIDTH - 230; // 60px gap for drain
+
+    const fOpt = {
+        density: 0.1, // Heavy so ball doesn't push them down
         friction: 0.1,
-        frictionAir: 0,
-        density: 0.05,
-        render: { fillStyle: '#ff0055' },
-        collisionFilter: { category: CAT_FLIPPER, mask: CAT_BALL | CAT_STOPPER }
+        render: { fillStyle: '#e74c3c' },
+        collisionFilter: { category: CAT_FLIPPER, mask: CAT_DEFAULT | CAT_BALL | CAT_STOPPER }
     };
 
     // Left Flipper
-    const leftX = (WIDTH - gap) / 2 - 20; // Shift left slightly
-    const leftFlip = Bodies.rectangle(leftX + flipWidth/2, yPos, flipWidth, flipHeight, { ...flipOpt, label: 'flipper_left' });
-
+    const leftF = Bodies.rectangle(leftPivotX + fWidth/2, y, fWidth, fHeight, fOpt);
     const leftHinge = Constraint.create({
-        pointA: { x: leftX, y: yPos },
-        bodyB: leftFlip,
-        pointB: { x: -flipWidth/2 + 10, y: 0 },
+        pointA: { x: leftPivotX, y: y },
+        bodyB: leftF,
+        pointB: { x: -fWidth/2 + 10, y: 0 },
         stiffness: 1, length: 0, render: { visible: false }
     });
-
-    // Physical Stoppers for Left
-    // Added collisionFilter so only the flippers hit them, not the ball
-    const stopOpt = { isStatic: true, render: { visible: false }, collisionFilter: { category: CAT_STOPPER, mask: CAT_FLIPPER }};
-    const lStopUp = Bodies.circle(leftX + flipWidth - 20, yPos - 35, 15, stopOpt);
-    const lStopDown = Bodies.circle(leftX + flipWidth - 20, yPos + 35, 15, stopOpt);
 
     // Right Flipper
-    const rightX = leftX + gap;
-    const rightFlip = Bodies.rectangle(rightX - flipWidth/2, yPos, flipWidth, flipHeight, { ...flipOpt, label: 'flipper_right' });
-
+    const rightF = Bodies.rectangle(rightPivotX - fWidth/2, y, fWidth, fHeight, fOpt);
     const rightHinge = Constraint.create({
-        pointA: { x: rightX, y: yPos },
-        bodyB: rightFlip,
-        pointB: { x: flipWidth/2 - 10, y: 0 },
+        pointA: { x: rightPivotX, y: y },
+        bodyB: rightF,
+        pointB: { x: fWidth/2 - 10, y: 0 },
         stiffness: 1, length: 0, render: { visible: false }
     });
 
-    // Physical Stoppers for Right
-    const rStopUp = Bodies.circle(rightX - flipWidth + 20, yPos - 35, 15, stopOpt);
-    const rStopDown = Bodies.circle(rightX - flipWidth + 20, yPos + 35, 15, stopOpt);
+    // Stoppers (Invisible limits)
+    const stopOpt = {
+        isStatic: true,
+        render: { visible: false },
+        collisionFilter: { category: CAT_STOPPER, mask: CAT_FLIPPER } // ONLY hit flippers
+    };
 
-    flippers.left = leftFlip;
-    flippers.right = rightFlip;
+    const lStopUp = Bodies.circle(leftPivotX + fWidth - 10, y - 40, 15, stopOpt);
+    const lStopDown = Bodies.circle(leftPivotX + fWidth - 10, y + 40, 15, stopOpt);
+
+    const rStopUp = Bodies.circle(rightPivotX - fWidth + 10, y - 40, 15, stopOpt);
+    const rStopDown = Bodies.circle(rightPivotX - fWidth + 10, y + 40, 15, stopOpt);
+
+    flippers.left = leftF;
+    flippers.right = rightF;
 
     Composite.add(world, [
-        leftFlip, leftHinge, lStopUp, lStopDown,
-        rightFlip, rightHinge, rStopUp, rStopDown
+        leftF, leftHinge, lStopUp, lStopDown,
+        rightF, rightHinge, rStopUp, rStopDown
     ]);
 };
 
-// 4. Bumpers
+// Bumpers
 const buildBumpers = () => {
-    const bumperOpt = {
+    const bOpt = {
         isStatic: true,
         label: 'bumper',
-        restitution: 1.5,
-        render: { fillStyle: '#00ffcc', strokeStyle: '#fff', lineWidth: 3 }
+        restitution: 1.8, // Bouncy
+        render: { fillStyle: '#2ecc71', strokeStyle: '#fff', lineWidth: 2 }
     };
 
-    // Center cluster
-    const cx = WIDTH / 2 - 20; // Shift left accounting for shooter lane
+    const cx = (WIDTH - 50) / 2; // Center of playfield
     const bumpers = [
-        Bodies.circle(cx, 250, 25, bumperOpt),
-        Bodies.circle(cx - 70, 320, 25, bumperOpt),
-        Bodies.circle(cx + 70, 320, 25, bumperOpt),
-        Bodies.circle(cx, 400, 25, bumperOpt)
+        Bodies.circle(cx, 200, 30, bOpt),
+        Bodies.circle(cx - 80, 280, 30, bOpt),
+        Bodies.circle(cx + 80, 280, 30, bOpt),
+        Bodies.circle(cx, 360, 30, bOpt)
     ];
 
-    // Bouncy slingshots above flippers
-    const slingOpt = { isStatic: true, label: 'slingshot', restitution: 1.5, render: { fillStyle: '#ffcc00' } };
-    const lSling = Bodies.polygon(100, HEIGHT - 260, 3, 30, slingOpt);
-    Body.setAngle(lSling, Math.PI / 4);
-    const rSling = Bodies.polygon(WIDTH - 160, HEIGHT - 260, 3, 30, slingOpt);
-    Body.setAngle(rSling, -Math.PI / 4);
+    // Slingshots (triangles above flippers)
+    const sOpt = { ...bOpt, label: 'slingshot', render: { fillStyle: '#f1c40f' }};
+    const lSling = Bodies.polygon(130, HEIGHT - 220, 3, 30, sOpt);
+    Body.setAngle(lSling, Math.PI / 4.5);
+
+    const rSling = Bodies.polygon(WIDTH - 190, HEIGHT - 220, 3, 30, sOpt);
+    Body.setAngle(rSling, -Math.PI / 4.5);
 
     Composite.add(world, [...bumpers, lSling, rSling]);
 };
 
-// 5. Drain (Death Zone)
+// Drain
 const buildDrain = () => {
-    const drain = Bodies.rectangle(WIDTH / 2, HEIGHT + 100, WIDTH * 2, 100, {
-        isStatic: true, isSensor: true, label: 'drain'
+    const drain = Bodies.rectangle(WIDTH/2, HEIGHT + 50, WIDTH, 100, {
+        isStatic: true, isSensor: true, label: 'drain', render: { visible: false }
     });
     Composite.add(world, drain);
 };
 
-// --- GAME LOGIC ---
-
+// The Ball
 const spawnBall = () => {
     if (ballsRemaining <= 0) {
         gameOver();
@@ -238,65 +191,79 @@ const spawnBall = () => {
     ballsRemaining--;
     ballsEl.innerText = ballsRemaining;
 
-    // Spawn resting exactly on top of the physical plunger
-    ball = Bodies.circle(WIDTH - 35, HEIGHT - 80, BALL_RADIUS, {
+    // Spawn resting directly on the shooter floor
+    ball = Bodies.circle(WIDTH - 25, HEIGHT - 35, BALL_RADIUS, {
         label: 'ball',
         restitution: 0.4,
-        density: 0.02,
-        render: { fillStyle: '#ffffff' },
-        collisionFilter: { category: CAT_BALL, mask: CAT_WALL | CAT_FLIPPER | CAT_DEFAULT }
+        density: 0.05, // Heavy ball to smash through things
+        render: { fillStyle: '#ecf0f1' },
+        collisionFilter: { category: CAT_BALL, mask: CAT_DEFAULT | CAT_FLIPPER }
     });
 
     Composite.add(world, ball);
+    plungeForce = 0; // Reset plunger charge
 };
 
+// Game Over Screen
 const gameOver = () => {
     isPlaying = false;
     const msg = document.createElement('div');
-    msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#e94560;font-size:48px;font-weight:bold;text-shadow:0 0 10px #0f3460;text-align:center;pointer-events:auto;z-index:100;';
+    msg.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#e74c3c;font-size:48px;font-weight:bold;text-shadow:0 0 10px #000;text-align:center;pointer-events:auto;z-index:100;';
     msg.innerHTML = `GAME OVER<br><span style="font-size:24px;color:#fff">Score: ${score}</span><br><span style="font-size:16px;color:#fff;cursor:pointer;text-decoration:underline" onclick="location.reload()">Play Again</span>`;
     document.getElementById('game-container').appendChild(msg);
 };
 
-// --- INPUT & UPDATE ---
-
+// Input
 const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
-
 document.addEventListener('keydown', e => {
     const k = e.code === 'Space' ? 'Space' : e.key;
     if (keys[k] !== undefined) keys[k] = true;
 });
-
 document.addEventListener('keyup', e => {
     const k = e.code === 'Space' ? 'Space' : e.key;
-    if (keys[k] !== undefined) keys[k] = false;
+    if (keys[k] !== undefined) {
+        keys[k] = false;
+
+        // Release Plunger (Direct Impulse)
+        if (k === 'Space' && ball && ball.position.x > WIDTH - 50 && ball.position.y > HEIGHT - 100) {
+            // Apply upward impulse proportional to charge time
+            Body.applyForce(ball, ball.position, { x: 0, y: -plungeForce });
+            plungeForce = 0;
+            ball.render.fillStyle = '#ecf0f1'; // Reset color
+        }
+    }
 });
 
+// Update Loop
 Events.on(engine, 'beforeUpdate', () => {
     if (!isPlaying) return;
 
-    // Plunger Pull
-    if (keys.Space) {
-        // Apply strong downward force to spring-loaded plunger block
-        Body.applyForce(plungerBody, plungerBody.position, { x: 0, y: 2 });
+    // Charge Plunger
+    if (keys.Space && ball && ball.position.x > WIDTH - 50 && ball.position.y > HEIGHT - 100) {
+        // Massively increased force to launch the heavy ball against strong gravity
+        plungeForce = Math.min(plungeForce + 0.1, 5.0); // Max charge 5.0
+        // Visual indicator: ball turns red
+        const ratio = plungeForce / 5.0;
+        ball.render.fillStyle = `rgb(255, ${255 - ratio*255}, ${255 - ratio*255})`;
     }
 
-    // Flipper activation (Massive torque applied at tip)
+    // Flipper Torques
     if (keys.ArrowLeft) {
-        Body.applyForce(flippers.left, { x: flippers.left.position.x + 50, y: flippers.left.position.y }, { x: 0, y: -20 });
+        // Massive upward force to counteract density and swing up fast
+        Body.applyForce(flippers.left, { x: flippers.left.position.x + 40, y: flippers.left.position.y }, { x: 0, y: -50 });
     }
     if (keys.ArrowRight) {
-        Body.applyForce(flippers.right, { x: flippers.right.position.x - 50, y: flippers.right.position.y }, { x: 0, y: -20 });
+        Body.applyForce(flippers.right, { x: flippers.right.position.x - 40, y: flippers.right.position.y }, { x: 0, y: -50 });
     }
 });
 
-// --- COLLISIONS ---
+// Collisions
 Events.on(engine, 'collisionStart', event => {
     event.pairs.forEach(pair => {
         const a = pair.bodyA.label;
         const b = pair.bodyB.label;
 
-        // Drain check
+        // Drain
         if (a === 'drain' || b === 'drain') {
             if (a === 'ball' || b === 'ball') {
                 Composite.remove(world, ball);
@@ -305,7 +272,7 @@ Events.on(engine, 'collisionStart', event => {
             }
         }
 
-        // Bumper Score
+        // Bumper
         if ((a === 'ball' && (b === 'bumper' || b === 'slingshot')) ||
             (b === 'ball' && (a === 'bumper' || a === 'slingshot'))) {
 
@@ -321,14 +288,13 @@ Events.on(engine, 'collisionStart', event => {
     });
 });
 
-// INIT
-buildGeometry();
-buildPlunger();
+// Init
+buildMap();
 buildFlippers();
 buildBumpers();
 buildDrain();
 spawnBall();
 
 Render.run(render);
-const runner = Runner.create({ isFixed: true }); // Fixed timestep for better collision accuracy
+const runner = Runner.create();
 Runner.run(runner, engine);
