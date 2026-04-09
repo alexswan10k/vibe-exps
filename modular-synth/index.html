@@ -330,7 +330,7 @@
             width: 100%;
             height: 100%;
             pointer-events: none;
-            z-index: 5;
+            z-index: 50;
         }
 
         .cable-path {
@@ -350,8 +350,9 @@
 
         /* Specific Module Styles */
         .step-sequencer-grid {
-            display: flex;
-            gap: 5px;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
             justify-content: center;
             margin-bottom: 10px;
         }
@@ -429,11 +430,14 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 5px;
+            gap: 0px;
         }
         .step-knob-container {
-            transform: scale(0.7);
-            height: 40px;
+            transform: scale(0.65);
+            transform-origin: top center;
+            height: 35px;
+            width: 40px;
+            margin-bottom: -10px;
         }
 
         /* Dragging Cable */
@@ -588,7 +592,7 @@
             },
             sequencer: {
                 name: 'Sequencer',
-                width: 320,
+                width: 340,
                 controls: [
                     { id: 'tempo', name: 'Tempo', type: 'knob', default: 0.5 },
                     { id: 'run', name: 'Run', type: 'switch', default: 0 }
