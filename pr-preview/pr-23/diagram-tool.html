@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Diagram Tool</title>
+    <!-- React & ReactDOM (No Babel) -->
+    <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <!-- Marked for Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #1e1e24;
+            --dots-color: #383842;
+            --node-bg: #2b2b36;
+            --node-border: #4a4a5a;
+            --node-text: #e0e0e6;
+            --accent: #7c4dff;
+            --accent-glow: rgba(124, 77, 255, 0.4);
+            --connection-color: #a0a0b0;
+            --handle-color: #7c4dff;
+            --toolbar-bg: #2b2b36;
+            --toolbar-border: #4a4a5a;
+            --selection-color: #ffab40;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(var(--dots-color) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: var(--node-text);
+        }
+
+        #root {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: var(--toolbar-bg);
+            border: 1px solid var(--toolbar-border);
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+            gap: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        button {
+            background: #3f3f4e;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background: #505060;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button.primary {
+            background: var(--accent);
+        }
+
+        button.primary:hover {
+            background: #8e65ff;
+        }
+
+        /* Canvas Layers */
+        .svg-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .node-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* Nodes */
+        .node {
+            position: absolute;
+            background: var(--node-bg);
+            border: 1px solid var(--node-border);
+            border-radius: 8px;
+            min-width: 100px;
+            min-height: 60px;
+            padding: 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.2s, border-color 0.2s;
+            user-select: none;
+            pointer-events: auto;
+        }
+
+        .node:hover {
+            border-color: #6a6a7a;
+        }
+
+        .node.selected {
+            border-color: var(--selection-color);
+            box-shadow: 0 0 0 2px rgba(255, 171, 64, 0.3), 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .node-header {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid var(--node-border);
+            border-radius: 8px 8px 0 0;
+            cursor: grab;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .node-header:active {
+            cursor: grabbing;
+        }
+
+        .node-title-input {
+            background: transparent;
+            border: none;
+            color: #aaa;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            width: 100%;
+            outline: none;
+            cursor: text;
+        }
+
+        .node-title-input:focus {
+            color: white;
+        }
+
+        .delete-btn {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ff5252;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            line-height: 1;
+            color: white;
+            margin-left: 8px;
+        }
+
+        .node:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .node-content {
+            padding: 12px;
+            color: var(--node-text);
+            font-size: 14px;
+            line-height: 1.5;
+            outline: none;
+            cursor: text;
+            min-height: 1em;
+            width: fit-content;
+            max-width: 300px;
+            min-width: 120px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* Handles (Ports) */
+        .handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--node-border);
+            border-radius: 50%;
+            cursor: crosshair;
+            transition: background 0.2s, transform 0.2s;
+            z-index: 10;
+        }
+
+        .handle:hover {
+            background: var(--handle-color);
+            transform: scale(1.2);
+        }
+
+        .handle-left {
+            top: 50%;
+            left: -6px;
+            transform: translateY(-50%);
+        }
+
+        .handle-left:hover {
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        .handle-right {
+            top: 50%;
+            right: -6px;
+            background: var(--accent);
+            transform: translateY(-50%);
+        }
+
+        .handle-right:hover {
+            transform: translateY(-50%) scale(1.2);
+        }
+
+        .handle-top {
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .handle-top:hover {
+            transform: translateX(-50%) scale(1.2);
+        }
+
+        .handle-bottom {
+            bottom: -6px;
+            left: 50%;
+            background: var(--accent);
+            transform: translateX(-50%);
+        }
+
+        .handle-bottom:hover {
+            transform: translateX(-50%) scale(1.2);
+        }
+
+        /* Connections */
+        path.connection {
+            fill: none;
+            stroke: var(--connection-color);
+            stroke-width: 2;
+            stroke-linecap: round;
+            pointer-events: stroke;
+        }
+
+        path.connection.selected {
+            stroke: var(--selection-color);
+            stroke-width: 3;
+        }
+
+        path.connection:hover {
+            stroke: var(--selection-color);
+            cursor: pointer;
+            stroke-width: 3;
+        }
+
+        path.temp-connection {
+            fill: none;
+            stroke: var(--accent);
+            stroke-width: 2;
+            stroke-dasharray: 5, 5;
+            pointer-events: none;
+        }
+
+        #hint {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #888;
+            pointer-events: none;
+        }
+
+        .node-content-edit {
+            width: 100%;
+            min-height: 60px;
+            background: rgba(0, 0, 0, 0.2);
+            border: none;
+            color: inherit;
+            font-family: inherit;
+            font-size: inherit;
+            resize: vertical;
+            outline: none;
+            padding: 4px;
+            display: block;
+        }
+
+        .node-content-markdown h1,
+        .node-content-markdown h2,
+        .node-content-markdown h3 {
+            margin: 0 0 8px 0;
+            font-size: 1.1em;
+            color: #fff;
+        }
+
+        .node-content-markdown p {
+            margin: 0 0 8px 0;
+        }
+
+        .node-content-markdown ul,
+        .node-content-markdown ol {
+            margin: 0 0 8px 0;
+            padding-left: 20px;
+        }
+
+        .node-content-markdown code {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="root"></div>
+
+    <script>
+        // --- No-Build React Setup ---
+        const { useState, useEffect, useCallback, useRef } = React;
+        const h = React.createElement;
+
+        // --- Hooks ---
+        const useHistory = (initialState) => {
+            const [index, setIndex] = useState(0);
+            const [history, setHistory] = useState([initialState]);
+
+            const setState = (newState) => {
+                const current = history[index];
+                if (JSON.stringify(current) === JSON.stringify(newState)) return;
+
+                const next = history.slice(0, index + 1);
+                next.push(newState);
+                setHistory(next);
+                setIndex(next.length - 1);
+            };
+
+            const undo = () => index > 0 && setIndex(index - 1);
+            const redo = () => index < history.length - 1 && setIndex(index + 1);
+
+            return [history[index], setState, undo, redo, index > 0, index < history.length - 1];
+        };
+
+        // --- Helpers ---
+        const generateId = (prefix) => prefix + '-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+
+        const calculateSimplePath = (x1, y1, x2, y2) => {
+            const dist = Math.abs(x2 - x1);
+            const controlOffset = Math.max(dist * 0.5, 50);
+            return `M ${x1} ${y1} C ${x1 + controlOffset} ${y1}, ${x2 - controlOffset} ${y2}, ${x2} ${y2}`;
+        };
+
+        const GRID_SIZE = 20;
+        const snapToGrid = (val) => Math.round(val / GRID_SIZE) * GRID_SIZE;
+
+        const checkIntersection = (rect1, rect2) => {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        };
+
+        // --- Components ---
+
+        const Toolbar = ({ onAdd, onClear, onExport, onImport, onShare, onUndo, onRedo, canUndo, canRedo, onZoomIn, onZoomOut, onResetView, onDuplicate }) => {
+            return h('div', { className: 'toolbar' },
+                h('button', { className: 'primary', onClick: onAdd }, 'Add Node'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onUndo, disabled: !canUndo, style: { opacity: canUndo ? 1 : 0.5 } }, 'Undo'),
+                h('button', { onClick: onRedo, disabled: !canRedo, style: { opacity: canRedo ? 1 : 0.5 } }, 'Redo'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onDuplicate, title: 'Duplicate Selection (Ctrl+D)' }, 'Duplicate'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onZoomIn }, '+'),
+                h('button', { onClick: onZoomOut }, '-'),
+                h('button', { onClick: onResetView }, 'Reset'),
+                h('div', { style: { width: 1, background: '#4a4a5a', margin: '0 5px' } }),
+                h('button', { onClick: onExport }, 'Export'),
+                h('button', { onClick: onImport }, 'Import'),
+                h('button', { style: { background: '#ff5252' }, onClick: onClear }, 'Clear'),
+                h('button', { onClick: onShare }, 'Share')
+            );
+        };
+
+        const ConnectionPopup = ({ connection, onDelete, onUpdate }) => {
+            if (!connection) return null;
+
+            const colors = ['#a0a0b0', '#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4'];
+            const markers = [
+                { id: 'none', label: 'None' },
+                { id: 'arrow', label: 'Arrow' },
+                { id: 'circle', label: 'Circle' }
+            ];
+            const styles = [
+                { id: 'solid', label: 'Solid' },
+                { id: 'dashed', label: 'Dashed' },
+                { id: 'dotted', label: 'Dotted' }
+            ];
+
+            return h('div', {
+                style: {
+                    position: 'absolute',
+                    top: 80, // Below toolbar
+                    left: 20,
+                    zIndex: 101,
+                    background: 'var(--toolbar-bg)',
+                    border: '1px solid var(--toolbar-border)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    minWidth: '200px'
+                },
+                onMouseDown: (e) => e.stopPropagation()
+            },
+                h('div', { style: { fontWeight: 'bold', borderBottom: '1px solid #4a4a5a', paddingBottom: '8px', marginBottom: '4px' } }, 'Connection Style'),
+
+                // Direction Presets
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: '4px' } },
+                    h('button', {
+                        title: 'Forward',
+                        style: { flex: 1, marginRight: '4px', fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'none', markerEnd: 'arrow' })
+                    }, '→'),
+                    h('button', {
+                        title: 'Reverse',
+                        style: { flex: 1, marginRight: '4px', fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'arrow', markerEnd: 'none' })
+                    }, '←'),
+                    h('button', {
+                        title: 'Both',
+                        style: { flex: 1, marginRight: '4px', fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'arrow', markerEnd: 'arrow' })
+                    }, '↔'),
+                    h('button', {
+                        title: 'None',
+                        style: { flex: 1, fontSize: '16px', padding: '4px', background: '#3f3f4e', border: 'none', borderRadius: '4px', cursor: 'pointer' },
+                        onClick: () => onUpdate({ markerStart: 'none', markerEnd: 'none' })
+                    }, '-')
+                ),
+
+                // Start Marker
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('span', { style: { fontSize: '12px' } }, 'Start:'),
+                    h('select', {
+                        value: connection.markerStart || 'none',
+                        onChange: (e) => onUpdate({ markerStart: e.target.value }),
+                        style: { background: '#3f3f4e', color: 'white', border: 'none', padding: '4px', borderRadius: '4px' }
+                    }, markers.map(m => h('option', { key: m.id, value: m.id }, m.label)))
+                ),
+
+                // End Marker
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('span', { style: { fontSize: '12px' } }, 'End:'),
+                    h('select', {
+                        value: connection.markerEnd || 'arrow',
+                        onChange: (e) => onUpdate({ markerEnd: e.target.value }),
+                        style: { background: '#3f3f4e', color: 'white', border: 'none', padding: '4px', borderRadius: '4px' }
+                    }, markers.map(m => h('option', { key: m.id, value: m.id }, m.label)))
+                ),
+
+                // Line Style
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
+                    h('span', { style: { fontSize: '12px' } }, 'Style:'),
+                    h('select', {
+                        value: connection.lineStyle || 'solid',
+                        onChange: (e) => onUpdate({ lineStyle: e.target.value }),
+                        style: { background: '#3f3f4e', color: 'white', border: 'none', padding: '4px', borderRadius: '4px' }
+                    }, styles.map(s => h('option', { key: s.id, value: s.id }, s.label)))
+                ),
+
+                // Color
+                h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' } },
+                    colors.map(c =>
+                        h('div', {
+                            key: c,
+                            style: {
+                                width: 16, height: 16, borderRadius: '50%', background: c, cursor: 'pointer',
+                                border: (connection.color || '#a0a0b0') === c ? '2px solid white' : '1px solid transparent'
+                            },
+                            onClick: () => onUpdate({ color: c })
+                        })
+                    )
+                ),
+
+                h('button', {
+                    style: { marginTop: '8px', background: '#ff5252', width: '100%' },
+                    onClick: onDelete
+                }, 'Delete Connection')
+            );
+        };
+
+        const Connection = ({ id, x1, y1, x2, y2, isSelected, onSelect, markerStart = 'none', markerEnd = 'arrow', color = '#a0a0b0', lineStyle = 'solid' }) => {
+            const d = calculateSimplePath(x1, y1, x2, y2);
+
+            // Clean color for ID (remove #)
+            const colorId = color.replace('#', '');
+            const getMarkerId = (type, position) => {
+                if (!type || type === 'none') return null;
+                if (type === 'arrow') return `marker-arrow-${position}-${colorId}`;
+                return `marker-${type}-${colorId}`;
+            };
+
+            const startMarkerId = getMarkerId(markerStart, 'start');
+            const endMarkerId = getMarkerId(markerEnd, 'end');
+
+            let strokeDasharray = '';
+            if (lineStyle === 'dashed') strokeDasharray = '5, 5';
+            if (lineStyle === 'dotted') strokeDasharray = '2, 4';
+
+            return h('g', {
+                className: 'connection-wrapper',
+                onClick: (e) => {
+                    e.stopPropagation();
+                    onSelect(e);
+                }
+            },
+                // Invisible wide path for easier clicking
+                h('path', {
+                    d: d,
+                    stroke: 'transparent',
+                    strokeWidth: 20,
+                    fill: 'none',
+                    style: { cursor: 'pointer', pointerEvents: 'stroke' }
+                }),
+                // Visible path
+                h('path', {
+                    d: d,
+                    className: 'connection' + (isSelected ? ' selected' : ''),
+                    style: {
+                        pointerEvents: 'stroke',
+                        stroke: isSelected ? 'var(--selection-color)' : color,
+                        strokeDasharray: strokeDasharray
+                    },
+                    markerStart: startMarkerId ? `url(#${startMarkerId})` : undefined,
+                    markerEnd: endMarkerId ? `url(#${endMarkerId})` : undefined
+                })
+            );
+        };
+
+        const Node = ({ node, isSelected, onUpdate, onSelect, onDelete, onStartConnect, onConnect }) => {
+            const nodeRef = useRef(null);
+            const [isEditing, setIsEditing] = useState(false);
+            const [tempContent, setTempContent] = useState(node.content);
+
+            // Sync content if changed externally
+            useEffect(() => {
+                setTempContent(node.content);
+            }, [node.content]);
+
+            const handleBlur = () => {
+                setIsEditing(false);
+                if (tempContent !== node.content) {
+                    onUpdate(node.id, { content: tempContent });
+                }
+            };
+
+            const renderHandle = (type, position) => {
+                // type: 'in' | 'out'
+                // position: 'left' | 'right' | 'top' | 'bottom'
+                const handleId = `handle-${node.id}-${position}`;
+                const className = `handle handle-${position}`;
+
+                return h('div', {
+                    key: position,
+                    className: className,
+                    id: handleId,
+                    onMouseDown: (e) => {
+                        e.stopPropagation();
+                        e.preventDefault(); // Prevent text selection
+                        onStartConnect(node.id, position, e);
+                    },
+                    onMouseUp: (e) => {
+                        e.stopPropagation();
+                        onConnect(node.id, position);
+                    }
+                });
+            };
+
+            // Generate style based on node color (if present)
+            const style = {
+                left: node.x,
+                top: node.y,
+            };
+
+            if (node.color) {
+                style.borderColor = node.color;
+                style.boxShadow = isSelected
+                    ? `0 0 0 2px ${node.color}4d, 0 4px 12px rgba(0, 0, 0, 0.5)`
+                    : `0 4px 12px rgba(0, 0, 0, 0.4)`;
+            }
+
+            return h('div', {
+                ref: nodeRef,
+                className: 'node' + (isSelected ? ' selected' : ''),
+                id: `node-${node.id}`, // Add ID for intersection observer
+                style: style,
+                onMouseDown: (e) => {
+                    e.stopPropagation();
+                    onSelect(e);
+                }
+            },
+                // Header
+                h('div', {
+                    className: 'node-header',
+                    style: node.color ? { backgroundColor: `${node.color}1a`, borderBottomColor: node.color } : {},
+                    onMouseDown: (e) => {
+                        e.stopPropagation();
+                        onSelect(e, true);
+                    }
+                },
+                    h('input', {
+                        className: 'node-title-input',
+                        value: node.title,
+                        onChange: (e) => onUpdate(node.id, { title: e.target.value }),
+                        onMouseDown: (e) => e.stopPropagation()
+                    }),
+                    h('div', { style: { display: 'flex', gap: '4px' } },
+                        // Simple color picker
+                        ['#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4'].map(c =>
+                            h('div', {
+                                key: c,
+                                style: {
+                                    width: 10, height: 10, borderRadius: '50%', background: c, cursor: 'pointer',
+                                    border: node.color === c ? '1px solid white' : 'none'
+                                },
+                                onMouseDown: (e) => {
+                                    e.stopPropagation();
+                                    onUpdate(node.id, { color: c });
+                                }
+                            })
+                        ),
+                        h('div', {
+                            className: 'delete-btn',
+                            onClick: (e) => {
+                                e.stopPropagation();
+                                onDelete(node.id);
+                            }
+                        }, '×')
+                    )
+                ),
+                // Content
+                h('div', {
+                    className: 'node-content',
+                    onDoubleClick: () => setIsEditing(true)
+                },
+                    isEditing
+                        ? h('textarea', {
+                            className: 'node-content-edit',
+                            value: tempContent,
+                            onChange: (e) => setTempContent(e.target.value),
+                            onBlur: handleBlur,
+                            autoFocus: true,
+                            onMouseDown: (e) => e.stopPropagation()
+                        })
+                        : h('div', {
+                            className: 'node-content-markdown',
+                            dangerouslySetInnerHTML: { __html: typeof marked !== 'undefined' ? marked.parse(node.content) : node.content }
+                        })
+                ),
+                // Ports
+                renderHandle('in', 'left'),
+                renderHandle('in', 'top'),
+                renderHandle('out', 'right'),
+                renderHandle('out', 'bottom')
+            );
+        };
+
+        const SelectionBox = ({ box }) => {
+            if (!box) return null;
+            const width = Math.abs(box.currentX - box.startX);
+            const height = Math.abs(box.currentY - box.startY);
+            const left = Math.min(box.currentX, box.startX);
+            const top = Math.min(box.currentY, box.startY);
+
+            return h('div', {
+                style: {
+                    position: 'absolute',
+                    left: left,
+                    top: top,
+                    width: width,
+                    height: height,
+                    backgroundColor: 'rgba(124, 77, 255, 0.2)',
+                    border: '1px solid var(--accent)',
+                    pointerEvents: 'none',
+                    zIndex: 1000
+                }
+            });
+        };
+
+        const App = () => {
+            const [state, setState, undo, redo, canUndo, canRedo] = useHistory({ nodes: [], connections: [] });
+            const { nodes, connections } = state;
+
+            // Selection State: Set of IDs
+            const [selection, setSelection] = useState(new Set());
+
+            // Viewport State
+            const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+            const [isPanning, setIsPanning] = useState(false);
+
+            // Interaction State
+            const [dragging, setDragging] = useState(null); // { startX, startY, initialNodes: {id: {x, y}} }
+            const [connecting, setConnecting] = useState(null);
+            const [selectionBox, setSelectionBox] = useState(null);
+
+            // Snapping State
+            const [snapLines, setSnapLines] = useState([]);
+
+            // Clipboard State
+            const clipboardRef = useRef(null);
+
+
+            // --- Persistence ---
+
+            useEffect(() => {
+                const hash = window.location.hash.substring(1);
+                if (hash) {
+                    try {
+                        const data = JSON.parse(decodeURIComponent(atob(hash)));
+                        setState({
+                            nodes: data.nodes || [],
+                            connections: data.connections || []
+                        });
+                    } catch (e) {
+                        console.error("Failed to load from URL", e);
+                    }
+                } else {
+                    const id1 = generateId('node');
+                    const id2 = generateId('node');
+                    setState({
+                        nodes: [
+                            { id: id1, x: 100, y: 100, title: 'START', content: 'Welcome to React Flow' },
+                            { id: id2, x: 450, y: 150, title: 'END', content: 'Editable Titles & Content!' }
+                        ],
+                        connections: [
+                            { id: generateId('conn'), from: id1, to: id2 }
+                        ]
+                    });
+                }
+            }, []);
+
+            useEffect(() => {
+                const data = { nodes, connections };
+                const b64 = btoa(encodeURIComponent(JSON.stringify(data)));
+                window.history.replaceState(null, '', '#' + b64);
+            }, [nodes, connections]);
+
+            // --- Helpers ---
+
+            const screenToWorld = (screenX, screenY) => {
+                return {
+                    x: (screenX - viewport.x) / viewport.zoom,
+                    y: (screenY - viewport.y) / viewport.zoom
+                };
+            };
+
+            const setNodes = (newNodesOrFn) => {
+                const newNodes = typeof newNodesOrFn === 'function' ? newNodesOrFn(nodes) : newNodesOrFn;
+                setState({ nodes: newNodes, connections });
+            };
+
+            const setConnections = (newConnsOrFn) => {
+                const newConns = typeof newConnsOrFn === 'function' ? newConnsOrFn(connections) : newConnsOrFn;
+                setState({ nodes, connections: newConns });
+            };
+
+            const updateState = (updates) => {
+                setState({ ...state, ...updates });
+            };
+
+            // --- Actions ---
+
+            // --- Actions ---
+
+            const addNode = () => {
+                const cx = (window.innerWidth / 2 - viewport.x) / viewport.zoom;
+                const cy = (window.innerHeight / 2 - viewport.y) / viewport.zoom;
+
+                const newNode = {
+                    id: generateId('node'),
+                    x: snapToGrid(cx - 50),
+                    y: snapToGrid(cy - 30),
+                    title: 'NODE',
+                    content: 'New Node'
+                };
+                setNodes([...nodes, newNode]);
+                setSelection(new Set([newNode.id])); // Select new node
+            };
+
+            const deleteSelected = useCallback(() => {
+                if (selection.size === 0) return;
+
+                const newNodes = nodes.filter(n => !selection.has(n.id));
+                const newConnections = connections.filter(c =>
+                    !selection.has(c.id) && !selection.has(c.from) && !selection.has(c.to)
+                );
+
+                setState({ nodes: newNodes, connections: newConnections });
+                setSelection(new Set());
+            }, [selection, nodes, connections, state]);
+
+            const copySelection = useCallback(() => {
+                if (selection.size === 0) return;
+
+                const selectedNodes = nodes.filter(n => selection.has(n.id));
+                const selectedConnections = connections.filter(c =>
+                    selection.has(c.id) || (selection.has(c.from) && selection.has(c.to))
+                );
+
+                clipboardRef.current = {
+                    nodes: selectedNodes,
+                    connections: selectedConnections
+                };
+                console.log('Copied to clipboard:', clipboardRef.current);
+            }, [selection, nodes, connections]);
+
+            const pasteClipboard = useCallback(() => {
+                if (!clipboardRef.current) return;
+
+                const { nodes: copiedNodes, connections: copiedConnections } = clipboardRef.current;
+
+                // Mapping old IDs to new IDs
+                const idMap = {};
+                const newNodes = copiedNodes.map(n => {
+                    const newId = generateId('node');
+                    idMap[n.id] = newId;
+                    return {
+                        ...n,
+                        id: newId,
+                        x: n.x + 20, // Offset for visibility
+                        y: n.y + 20
+                    };
+                });
+
+                const newConnections = copiedConnections.map(c => {
+                    // Only copy connections if both endpoints are in the pasted set
+                    if (idMap[c.from] && idMap[c.to]) {
+                        return {
+                            ...c,
+                            id: generateId('conn'),
+                            from: idMap[c.from],
+                            to: idMap[c.to]
+                        };
+                    }
+                    return null;
+                }).filter(Boolean);
+
+                setState({
+                    nodes: [...nodes, ...newNodes],
+                    connections: [...connections, ...newConnections]
+                });
+
+                // Select the newly pasted items
+                const newSelection = new Set();
+                newNodes.forEach(n => newSelection.add(n.id));
+                newConnections.forEach(c => newSelection.add(c.id));
+                setSelection(newSelection);
+
+            }, [nodes, connections, state]);
+
+            const duplicateSelection = useCallback(() => {
+                copySelection();
+                pasteClipboard();
+            }, [copySelection, pasteClipboard]);
+
+
+            // --- Event Handlers ---
+
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+                        e.preventDefault();
+                        if (e.shiftKey) redo();
+                        else undo();
+                        return;
+                    }
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
+                        e.preventDefault();
+                        redo();
+                        return;
+                    }
+                    // Select All
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+                        e.preventDefault();
+                        const allIds = new Set([...nodes.map(n => n.id), ...connections.map(c => c.id)]);
+                        setSelection(allIds);
+                        return;
+                    }
+
+                    // Copy
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
+                        e.preventDefault();
+                        copySelection();
+                        return;
+                    }
+
+                    // Paste
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
+                        e.preventDefault();
+                        pasteClipboard();
+                        return;
+                    }
+
+                    // Duplicate
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
+                        e.preventDefault();
+                        duplicateSelection();
+                        return;
+                    }
+
+
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
+                        deleteSelected();
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [deleteSelected, undo, redo, nodes, connections, copySelection, pasteClipboard, duplicateSelection]);
+
+
+            const handleWheel = (e) => {
+                e.preventDefault();
+                const scale = e.deltaY > 0 ? 0.9 : 1.1;
+                const newZoom = Math.min(Math.max(0.1, viewport.zoom * scale), 5);
+                const mouseWorldX = (e.clientX - viewport.x) / viewport.zoom;
+                const mouseWorldY = (e.clientY - viewport.y) / viewport.zoom;
+                const newX = e.clientX - mouseWorldX * newZoom;
+                const newY = e.clientY - mouseWorldY * newZoom;
+                setViewport({ x: newX, y: newY, zoom: newZoom });
+            };
+
+            const handleMouseDown = (e) => {
+                // Middle mouse (1) or Space+Left (0) -> Pan
+                if (e.button === 1 || (e.button === 0 && e.code === 'Space')) {
+                    setIsPanning(true);
+                    return;
+                }
+
+                // Left Click on canvas -> Clear selection or Start Marquee
+                if (e.button === 0) {
+                    // Check if we clicked on background (not node/connection/toolbar)
+                    if (e.target.id === 'root' || e.target.classList.contains('svg-layer')) {
+                        if (!e.shiftKey) {
+                            setSelection(new Set());
+                        }
+                        setSelectionBox({ startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY });
+                    }
+                }
+            };
+
+            const handleMouseMove = (e) => {
+                if (isPanning) {
+                    setViewport(prev => ({ ...prev, x: prev.x + e.movementX, y: prev.y + e.movementY }));
+                }
+
+                if (dragging) {
+                    const dx = (e.clientX - dragging.startX) / viewport.zoom;
+                    const dy = (e.clientY - dragging.startY) / viewport.zoom;
+
+                    // Calculate proposed positions for all dragged nodes
+                    const updatedNodes = nodes.map(n => {
+                        if (dragging.initialNodes[n.id]) {
+                            const init = dragging.initialNodes[n.id];
+                            return { ...n, x: init.x + dx, y: init.y + dy };
+                        }
+                        return n;
+                    });
+
+                    // Snapping (Logic applied to the *primary* grabbed node, or just arbitrary one if multiple)
+                    // For simplicity, let's snap the node directly under cursor if possible, or just the first selected one.
+                    // We'll skip complex multi-snap for now and just snap coordinates.
+
+                    // Simple grid snap for all moving nodes
+                    /*
+                    // Better approach: snap the delta? Or snap individual nodes?
+                    // Standard visual editors often snap the "primary selection" and apply delta to others.
+                    // Let's defer complex snapping refactor and stick to grid snap for now.
+                    */
+
+                    const primaryNodeId = dragging.primaryId;
+                    let snapDx = 0;
+                    let snapDy = 0;
+
+                    // Calculate snap delta based on primary node
+                    if (primaryNodeId) {
+                        const init = dragging.initialNodes[primaryNodeId];
+                        const rawX = init.x + dx;
+                        const rawY = init.y + dy;
+                        const snappedX = snapToGrid(rawX);
+                        const snappedY = snapToGrid(rawY);
+                        snapDx = snappedX - (init.x + dx);
+                        snapDy = snappedY - (init.y + dy);
+                    }
+
+                    const finalNodes = updatedNodes.map(n => {
+                        if (dragging.initialNodes[n.id]) {
+                            return { ...n, x: n.x + snapDx, y: n.y + snapDy };
+                        }
+                        return n;
+                    });
+
+                    // We can implement "smart snap lines" again later, but for multi-selection it's tricky.
+                    // Let's stick to grid snap for robustness first.
+
+                    setNodes(finalNodes);
+                }
+
+                if (selectionBox) {
+                    setSelectionBox(prev => ({ ...prev, currentX: e.clientX, currentY: e.clientY }));
+                }
+
+                if (connecting) {
+                    const worldPos = screenToWorld(e.clientX, e.clientY);
+                    setConnecting(prev => ({ ...prev, currentX: worldPos.x, currentY: worldPos.y }));
+                }
+            };
+
+            const handleMouseUp = () => {
+                setIsPanning(false);
+                setDragging(null);
+                setSnapLines([]);
+
+                if (selectionBox) {
+                    // Finalize Marquee Selection
+                    const sb = selectionBox;
+                    const rect = {
+                        x: Math.min(sb.startX, sb.currentX),
+                        y: Math.min(sb.startY, sb.currentY),
+                        width: Math.abs(sb.currentX - sb.startX),
+                        height: Math.abs(sb.currentY - sb.startY)
+                    };
+
+                    // Convert selection box to world coords to check node intersection
+                    const worldRect = {
+                        x: (rect.x - viewport.x) / viewport.zoom,
+                        y: (rect.y - viewport.y) / viewport.zoom,
+                        width: rect.width / viewport.zoom,
+                        height: rect.height / viewport.zoom
+                    };
+
+                    const newSelection = new Set(selection);
+                    // Select Nodes
+                    nodes.forEach(n => {
+                        // Simple box check (node is approx 100x60, but let's use DOM elements if possible?
+                        // We can approximate node size or look up elements.
+                        // For now, approximate node rect:
+                        // We need the ACTUAL size. Let's assume min-width/height.
+                        // A better way is to see if the node center is in the box, or slight overlap.
+                        // Let's assume standard node size 120x60 for hit testing if DOM not available easily.
+                        const nodeW = 120;
+                        const nodeH = 80;
+                        const nodeRect = { x: n.x, y: n.y, width: nodeW, height: nodeH };
+
+                        if (checkIntersection(worldRect, nodeRect)) {
+                            newSelection.add(n.id);
+                        }
+                    });
+
+                    // Select Connections (tougher, maybe checking endpoints?)
+                    // For now, let's just select nodes.
+
+                    setSelection(newSelection);
+                    setSelectionBox(null);
+                }
+
+                if (connecting) {
+                    setConnecting(null);
+                }
+            };
+
+            // Node Interactions
+            const onNodeSelect = (e, nodeId) => {
+                if (e.shiftKey) {
+                    const newSet = new Set(selection);
+                    if (newSet.has(nodeId)) newSet.delete(nodeId);
+                    else newSet.add(nodeId);
+                    setSelection(newSet);
+                } else {
+                    if (!selection.has(nodeId)) {
+                        setSelection(new Set([nodeId]));
+                    }
+                }
+            };
+
+            const onNodeStartDrag = (e, nodeId) => {
+                if (e.button !== 0) return; // Only left drag
+
+                // If dragging a node that isn't selected, select it (and deselect others usually, unless shift?)
+                // Standard behavior: 
+                // - Click on unselected: select only it.
+                // - Click on selected: keep selection, maybe drag all.
+
+                let newSelection = selection;
+                if (!selection.has(nodeId)) {
+                    if (!e.shiftKey) {
+                        newSelection = new Set([nodeId]);
+                        setSelection(newSelection);
+                    } else {
+                        newSelection = new Set(selection);
+                        newSelection.add(nodeId);
+                        setSelection(newSelection);
+                    }
+                }
+
+                // Prepare resize/drag map
+                const initialNodes = {};
+                nodes.forEach(n => {
+                    if (newSelection.has(n.id)) {
+                        initialNodes[n.id] = { x: n.x, y: n.y };
+                    }
+                });
+
+                setDragging({
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    primaryId: nodeId,
+                    initialNodes: initialNodes
+                });
+            };
+
+            // Connection Interactions
+            const onConnectionSelect = (e, connId) => {
+                if (e.shiftKey) {
+                    const newSet = new Set(selection);
+                    if (newSet.has(connId)) newSet.delete(connId);
+                    else newSet.add(connId);
+                    setSelection(newSet);
+                } else {
+                    setSelection(new Set([connId]));
+                }
+            };
+
+            // Markers definition
+            const markerColors = ['a0a0b0', '7c4dff', 'ff5252', '4caf50', 'ffab40', '03a9f4'];
+            // We need to match the colors array in popup: ['#a0a0b0', '#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4']
+            const palette = ['#a0a0b0', '#7c4dff', '#ff5252', '#4caf50', '#ffab40', '#03a9f4'];
+
+            const selectedConnectionId = selection.size === 1 ? Array.from(selection)[0] : null;
+            const selectedConnection = selectedConnectionId ? connections.find(c => c.id === selectedConnectionId) : null;
+
+            return h('div', {
+                style: { width: '100%', height: '100%', cursor: isPanning ? 'grabbing' : 'default' },
+                onMouseDown: handleMouseDown,
+                onMouseMove: handleMouseMove,
+                onMouseUp: handleMouseUp,
+                onWheel: handleWheel,
+                // Prevent context menu
+                onContextMenu: (e) => e.preventDefault()
+            },
+                h(Toolbar, {
+                    onAdd: addNode,
+                    onClear: () => { setNodes([]); setConnections([]); setState({ nodes: [], connections: [] }); },
+                    onUndo: undo,
+                    onRedo: redo,
+                    canUndo: canUndo,
+                    canRedo: canRedo,
+                    onDuplicate: duplicateSelection,
+                    onZoomIn: () => setViewport(prev => ({ ...prev, zoom: Math.min(prev.zoom * 1.2, 5) })),
+                    onZoomOut: () => setViewport(prev => ({ ...prev, zoom: Math.max(prev.zoom / 1.2, 0.1) })),
+                    onResetView: () => setViewport({ x: 0, y: 0, zoom: 1 }),
+                    onExport: () => {
+                        const data = JSON.stringify({ nodes, connections }, null, 2);
+                        const blob = new Blob([data], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = 'diagram.json';
+                        a.click();
+                    },
+                    onImport: () => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = 'application/json';
+                        input.onchange = (e) => {
+                            const file = e.target.files[0];
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                try {
+                                    const data = JSON.parse(e.target.result);
+                                    setState(data);
+                                } catch (err) {
+                                    alert('Invalid JSON file');
+                                }
+                            };
+                            reader.readAsText(file);
+                        };
+                        input.click();
+                    },
+                    onShare: () => {
+                        const data = { nodes, connections };
+                        const b64 = btoa(encodeURIComponent(JSON.stringify(data)));
+                        const url = window.location.origin + window.location.pathname + '#' + b64;
+                        navigator.clipboard.writeText(url).then(() => alert('URL copied to clipboard!'));
+                    }
+                }),
+
+                // Connection Popup
+                selectedConnection && h(ConnectionPopup, {
+                    connection: selectedConnection,
+                    onDelete: deleteSelected,
+                    onUpdate: (updates) => {
+                        setConnections(prev => prev.map(c => c.id === selectedConnection.id ? { ...c, ...updates } : c));
+                    }
+                }),
+
+                h('div', {
+                    style: {
+                        transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+                        transformOrigin: '0 0',
+                        width: '100%',
+                        height: '100%',
+                        position: 'absolute',
+                        top: 0,
+                        left: 0
+                    }
+                },
+                    // Connection Layer
+                    h('svg', { className: 'svg-layer', style: { overflow: 'visible' } },
+                        h('defs', {},
+                            // Generate markers for each color
+                            palette.flatMap(c => {
+                                const cId = c.replace('#', '');
+                                return [
+                                    // End Arrow (Standard)
+                                    h('marker', { key: `arrow-end-${cId}`, id: `marker-arrow-end-${cId}`, markerWidth: 10, markerHeight: 7, refX: 10, refY: 3.5, orient: 'auto' },
+                                        h('polygon', { points: '0 0, 10 3.5, 0 7', fill: c })
+                                    ),
+                                    // Start Arrow (Reversed)
+                                    h('marker', { key: `arrow-start-${cId}`, id: `marker-arrow-start-${cId}`, markerWidth: 10, markerHeight: 7, refX: 0, refY: 3.5, orient: 'auto' },
+                                        h('polygon', { points: '10 0, 0 3.5, 10 7', fill: c })
+                                    ),
+                                    // Circle (Symmetric)
+                                    h('marker', { key: `circle-${cId}`, id: `marker-circle-${cId}`, markerWidth: 8, markerHeight: 8, refX: 4, refY: 4, orient: 'auto' },
+                                        h('circle', { cx: 4, cy: 4, r: 3, fill: c })
+                                    )
+                                ];
+                            })
+                        ),
+                        connections.map(c => {
+                            const fromNode = nodes.find(n => n.id === c.from);
+                            const toNode = nodes.find(n => n.id === c.to);
+
+                            if (!fromNode || !toNode) return null;
+
+                            const getNodeWidth = (id) => {
+                                const el = document.getElementById(`node-${id}`);
+                                return el ? el.offsetWidth : 100;
+                            };
+                            const getNodeHeight = (id) => {
+                                const el = document.getElementById(`node-${id}`);
+                                return el ? el.offsetHeight : 60;
+                            };
+
+                            const startX = fromNode.x + (c.sourceHandle === 'left' ? 0 : c.sourceHandle === 'right' ? getNodeWidth(fromNode.id) : getNodeWidth(fromNode.id) / 2);
+                            const startY = fromNode.y + (c.sourceHandle === 'top' ? 0 : c.sourceHandle === 'bottom' ? getNodeHeight(fromNode.id) : getNodeHeight(fromNode.id) / 2);
+                            const endX = toNode.x + (c.targetHandle === 'left' ? 0 : c.targetHandle === 'right' ? getNodeWidth(toNode.id) : getNodeWidth(toNode.id) / 2);
+                            const endY = toNode.y + (c.targetHandle === 'top' ? 0 : c.targetHandle === 'bottom' ? getNodeHeight(toNode.id) : getNodeHeight(toNode.id) / 2);
+
+                            const sX = isNaN(startX) ? fromNode.x + 100 : startX;
+                            const sY = isNaN(startY) ? fromNode.y + 30 : startY;
+                            const eX = isNaN(endX) ? toNode.x : endX;
+                            const eY = isNaN(endY) ? toNode.y + 30 : endY;
+
+                            return h(Connection, {
+                                key: c.id,
+                                id: c.id,
+                                x1: sX, y1: sY, x2: eX, y2: eY,
+                                isSelected: selection.has(c.id),
+                                onSelect: (e) => onConnectionSelect(e, c.id),
+                                markerStart: c.markerStart,
+                                markerEnd: c.markerEnd,
+                                color: c.color,
+                                lineStyle: c.lineStyle
+                            });
+                        }),
+                        // Active drag connection line
+                        connecting && h('path', {
+                            d: calculateSimplePath(connecting.startX, connecting.startY, connecting.currentX, connecting.currentY),
+                            className: 'temp-connection',
+                            strokeDasharray: '5,5'
+                        }),
+                        snapLines.map((l, i) =>
+                            h('line', { key: i, x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, stroke: '#ffab40', strokeWidth: 1, strokeDasharray: '4,4' })
+                        )
+                    ),
+                    // Node Layer
+                    h('div', { className: 'node-layer' },
+                        nodes.map(node => h(Node, {
+                            key: node.id,
+                            node: node,
+                            isSelected: selection.has(node.id),
+                            onUpdate: (id, updates) => setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n)),
+                            onSelect: (e, isHeader) => {
+                                if (isHeader) onNodeStartDrag(e, node.id);
+                                else onNodeSelect(e, node.id);
+                            },
+                            onDelete: (id) => {
+                                updateState({
+                                    nodes: nodes.filter(n => n.id !== id),
+                                    connections: connections.filter(c => c.from !== id && c.to !== id)
+                                });
+                            },
+                            onStartConnect: (nodeId, handleType, e) => {
+                                const handleRect = e.target.getBoundingClientRect();
+                                const startX = (handleRect.left + handleRect.width / 2 - viewport.x) / viewport.zoom;
+                                const startY = (handleRect.top + handleRect.height / 2 - viewport.y) / viewport.zoom;
+                                setConnecting({
+                                    nodeId,
+                                    handleType,
+                                    startX,
+                                    startY,
+                                    currentX: startX,
+                                    currentY: startY
+                                });
+                            },
+                            onConnect: (targetNodeId, targetHandleType) => {
+                                if (connecting) {
+                                    if (connecting.nodeId === targetNodeId) return;
+                                    if (connecting.handleType === targetHandleType) return;
+
+                                    setConnections([...connections, {
+                                        id: generateId('conn'),
+                                        from: connecting.nodeId,
+                                        to: targetNodeId,
+                                        sourceHandle: connecting.handleType,
+                                        targetHandle: targetHandleType
+                                    }]);
+                                    setConnecting(null);
+                                }
+                            }
+                        }))
+                    )
+                ),
+                h(SelectionBox, { box: selectionBox }),
+                h('div', { id: 'hint' },
+                    'Space+Drag to Pan | Scroll to Zoom | Left Drag to Select | Shift+Click for Multi-Select'
+                )
+            );
+        };
+
+
+
+        ReactDOM.render(h(App), document.getElementById('root'));
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nutrition Overview - Meal Planner</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="nutrition-calculations.js"></script>
+    <script src="components/Nutrition.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="components/Nutrition.css">
+    <style>
+        .nutrition-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .nutrition-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .nutrition-header h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin: 0;
+        }
+
+        .back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+            z-index: 1000;
+        }
+
+        .back-btn:hover {
+            background: #138496;
+        }
+
+        @media (max-width: 768px) {
+            .nutrition-header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="nutrition-root"></div>
+
+    <script>
+        const { useState, useEffect } = React;
+
+        function NutritionApp() {
+            const [recipes, setRecipes] = useState([]);
+            const [calendar, setCalendar] = useState({
+                Monday: null,
+                Tuesday: null,
+                Wednesday: null,
+                Thursday: null,
+                Friday: null,
+                Saturday: null,
+                Sunday: null
+            });
+            const [ingredientsData, setIngredientsData] = useState({});
+
+            useEffect(() => {
+                // Load data from localStorage
+                const storedRecipes = localStorage.getItem('recipes');
+                if (storedRecipes) {
+                    setRecipes(JSON.parse(storedRecipes));
+                }
+                const storedCalendar = localStorage.getItem('calendar');
+                if (storedCalendar) {
+                    setCalendar(JSON.parse(storedCalendar));
+                }
+                const storedIngredientsData = localStorage.getItem('ingredientsData');
+                if (storedIngredientsData) {
+                    setIngredientsData(JSON.parse(storedIngredientsData));
+                }
+            }, []);
+
+            // Helper function to get current recipe by ID
+            const getRecipeById = (id) => {
+                return recipes.find(recipe => recipe.id == id);
+            };
+
+            return React.createElement('div', { className: 'nutrition-container' },
+                React.createElement('div', { className: 'nutrition-header' },
+                    React.createElement('h1', null, 'Nutritional Overview')
+                ),
+                React.createElement(Nutrition, { recipes, calendar, getRecipeById, ingredientsData })
+            );
+        }
+
+        ReactDOM.render(React.createElement(NutritionApp), document.getElementById('nutrition-root'));
+    </script>
+</body>
+</html>
