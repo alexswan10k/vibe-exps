@@ -753,6 +753,95 @@ function draw() {
     ctx.restore();
 }
 
+function setupTouchControls() {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    if (!isMobile) return;
+
+    const joystickZone = document.getElementById('joystick-zone');
+    const joystickKnob = document.getElementById('joystick-knob');
+    let joystickActive = false;
+    let joystickOrigin = { x: 0, y: 0 };
+    const maxDistance = 40;
+
+    if (joystickZone) {
+        joystickZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            joystickActive = true;
+            const touch = e.touches[0];
+            const rect = joystickZone.getBoundingClientRect();
+
+            const touchX = touch.clientX - rect.left;
+            const touchY = touch.clientY - rect.top;
+
+            joystickOrigin = {
+                x: rect.width / 2,
+                y: rect.height / 2
+            };
+
+            updateJoystick(touchX, touchY);
+        }, { passive: false });
+
+        joystickZone.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!joystickActive) return;
+            const touch = e.touches[0];
+            const rect = joystickZone.getBoundingClientRect();
+            updateJoystick(touch.clientX - rect.left, touch.clientY - rect.top);
+        }, { passive: false });
+
+        const resetJoystick = () => {
+            joystickActive = false;
+            joystickKnob.style.transform = `translate(0px, 0px)`;
+            keys['w'] = false;
+            keys['a'] = false;
+            keys['s'] = false;
+            keys['d'] = false;
+        };
+
+        joystickZone.addEventListener('touchend', resetJoystick);
+        joystickZone.addEventListener('touchcancel', resetJoystick);
+
+        function updateJoystick(x, y) {
+            let dx = x - joystickOrigin.x;
+            let dy = y - joystickOrigin.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance > maxDistance) {
+                dx = (dx / distance) * maxDistance;
+                dy = (dy / distance) * maxDistance;
+            }
+
+            joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+
+            keys['w'] = dy < -10;
+            keys['s'] = dy > 10;
+            keys['a'] = dx < -10;
+            keys['d'] = dx > 10;
+        }
+    }
+
+    const bindButton = (id, key) => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[key] = true;
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.4)';
+            }, { passive: false });
+            const resetBtn = (e) => {
+                e.preventDefault();
+                keys[key] = false;
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+            };
+            btn.addEventListener('touchend', resetBtn);
+            btn.addEventListener('touchcancel', resetBtn);
+        }
+    };
+
+    bindButton('btn-action', 'e');
+    bindButton('btn-brake', ' ');
+}
+
 function updateCamera() {
     const worldSize = world.getWorldSize();
     // Camera follows the player
