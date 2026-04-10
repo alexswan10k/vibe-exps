@@ -97,6 +97,8 @@ function init() {
     document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
     document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
 
+    setupTouchControls();
+
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         mouseX = e.clientX - rect.left;
