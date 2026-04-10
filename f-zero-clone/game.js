@@ -3,9 +3,9 @@
 // --- Constants & Config ---
 const TRACK_SIZE = 2048; // Size of the texture/collision map
 const WORLD_SCALE = 10;   // Scale the 3D plane relative to the map
-const SHIP_MAX_SPEED = 2.0;
-const SHIP_ACCEL = 0.02;
-const SHIP_BRAKE = 0.05;
+const SHIP_MAX_SPEED = 8.0;
+const SHIP_ACCEL = 0.08;
+const SHIP_BRAKE = 0.2;
 const FRICTION = 0.98;
 const GRASS_FRICTION = 0.90;
 const TURN_SPEED = 0.04;
@@ -37,7 +37,7 @@ const state = {
 // --- Globals ---
 let scene, camera, renderer;
 let trackPlane, shipMesh;
-let collisionCtx;
+let collisionData; // Uint8ClampedArray of the track for fast reads
 let lastTime = performance.now();
 
 // UI Elements
@@ -110,6 +110,9 @@ function generateTrack() {
     // Draw start/finish line
     collisionCtx.fillStyle = '#FFFFFF';
     collisionCtx.fillRect(TRACK_SIZE * 0.45, TRACK_SIZE * 0.8 - 60, 20, 120);
+
+    // Extract raw image data once so we aren't stalling the GPU reading pixels every frame
+    collisionData = collisionCtx.getImageData(0, 0, TRACK_SIZE, TRACK_SIZE).data;
 
     // Set starting position explicitly on the straightaway
     state.x = TRACK_SIZE * 0.5;
@@ -191,30 +194,39 @@ function updatePhysics(dt) {
     let hitWall = false;
 
     if (checkX >= 0 && checkX < TRACK_SIZE && checkY >= 0 && checkY < TRACK_SIZE) {
-        const pixel = collisionCtx.getImageData(Math.floor(checkX), Math.floor(checkY), 1, 1).data;
-        // r, g, b, a
-        // Asphalt is #333333 (rgb 51,51,51) or Start line is #FFFFFF (255,255,255)
-        // Dirt is #8B4513 (rgb 139, 69, 19)
+        // Read directly from the cached typed array
+        const index = (Math.floor(checkY) * TRACK_SIZE + Math.floor(checkX)) * 4;
 
-        // Helper to check color proximity
-        const isColor = (r, g, b, targetR, targetG, targetB, threshold = 20) => {
-            return Math.abs(r - targetR) < threshold &&
-                   Math.abs(g - targetG) < threshold &&
-                   Math.abs(b - targetB) < threshold;
+        const r = collisionData[index];
+        const g = collisionData[index + 1];
+        const b = collisionData[index + 2];
+
+        // The track is drawn using grayscale colors:
+        // Road is rgb(51, 51, 51)
+        // Start line is rgb(255, 255, 255)
+        // A pixel is "grayscale" if R, G, and B are roughly equal.
+        const isGrayscale = Math.abs(r - g) < 20 && Math.abs(g - b) < 20 && Math.abs(r - b) < 20;
+
+        // Dirt/Off-track is rgb(139, 69, 19)
+        const isColor = (cR, cG, cB, targetR, targetG, targetB, threshold = 20) => {
+            return Math.abs(cR - targetR) < threshold &&
+                   Math.abs(cG - targetG) < threshold &&
+                   Math.abs(cB - targetB) < threshold;
         };
 
-        if (isColor(pixel[0], pixel[1], pixel[2], 51, 51, 51, 50)) {
-            onTrack = true; // Road
-        } else if (isColor(pixel[0], pixel[1], pixel[2], 255, 255, 255, 50)) {
-            onTrack = true; // Start line
-            checkLap(checkX, checkY);
-        } else if (isColor(pixel[0], pixel[1], pixel[2], 139, 69, 19, 50)) {
+        if (isGrayscale) {
+            onTrack = true;
+            // Specifically trigger lap if it's very bright (the start line)
+            if (r > 200 && g > 200 && b > 200) {
+                checkLap(checkX, checkY);
+            }
+        } else if (isColor(r, g, b, 139, 69, 19, 50)) {
             // Off track - slow down drastically
             state.vx *= GRASS_FRICTION;
             state.vy *= GRASS_FRICTION;
             state.speed *= GRASS_FRICTION;
         } else {
-            // Out of bounds / Wall (In our simple map, anything else is a wall or edge)
+            // Out of bounds / Wall
             hitWall = true;
         }
     } else {
