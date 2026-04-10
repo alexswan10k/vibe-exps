@@ -430,14 +430,14 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 0px;
+            gap: 2px;
         }
         .step-knob-container {
             transform: scale(0.65);
             transform-origin: top center;
-            height: 35px;
+            height: 40px;
             width: 40px;
-            margin-bottom: -10px;
+            margin-bottom: 12px;
         }
 
         /* Dragging Cable */
@@ -646,13 +646,9 @@
             }
 
             getFrequency(val) {
-                // Exponential mapping for frequency
-                // 0 -> 20Hz, 1 -> 2000Hz (roughly)
-                // Using formula: 20 * (100 ^ val)
                 return 20 * Math.pow(100, val);
             }
 
-            // Create nodes for a module
             createModule(module) {
                 if (!this.ctx) return;
                 const id = module.id;
@@ -660,23 +656,19 @@
                 switch(module.type) {
                     case 'oscillator':
                         const osc = this.ctx.createOscillator();
-                        const oscGain = this.ctx.createGain(); // Output gain
-                        const fmGain = this.ctx.createGain(); // FM depth
+                        const oscGain = this.ctx.createGain();
+                        const fmGain = this.ctx.createGain();
                         
                         osc.type = 'sine';
                         osc.start();
                         osc.connect(oscGain);
                         
-                        // FM setup
-                        fmGain.gain.value = 500; // FM index
+                        fmGain.gain.value = 500;
                         fmGain.connect(osc.frequency);
 
                         this.nodes.set(id, { 
                             main: oscGain, 
-                            inputs: { 
-                                voct: osc.frequency, 
-                                fm: fmGain 
-                            }, 
+                            inputs: { voct: osc.frequency, fm: fmGain },
                             core: osc 
                         });
                         break;
@@ -687,14 +679,11 @@
                         
                         filter.type = 'lowpass';
                         modGain.connect(filter.frequency);
-                        modGain.gain.value = 1000; // Mod depth
+                        modGain.gain.value = 1000;
 
                         this.nodes.set(id, { 
                             main: filter, 
-                            inputs: { 
-                                in: filter, 
-                                mod: modGain 
-                            }, 
+                            inputs: { in: filter, mod: modGain },
                             core: filter 
                         });
                         break;
@@ -707,24 +696,19 @@
                         
                         this.nodes.set(id, { 
                             main: vca, 
-                            inputs: { 
-                                in: vca, 
-                                cv: cvGain 
-                            }, 
+                            inputs: { in: vca, cv: cvGain },
                             core: vca 
                         });
                         break;
 
                     case 'envelope':
-                        // Envelopes don't process audio, they generate CV.
-                        // We use a constant source for output that we modulate.
                         const envOut = this.ctx.createConstantSource();
                         envOut.offset.value = 0;
                         envOut.start();
                         
                         this.nodes.set(id, { 
                             main: envOut, 
-                            inputs: { gate: null }, // Special handling for gate
+                            inputs: { gate: null },
                             core: envOut,
                             state: { stage: 'idle', val: 0, time: 0 }
                         });
@@ -742,11 +726,7 @@
                         
                         this.nodes.set(id, { 
                             main: master, 
-                            inputs: { 
-                                in1: ch1, 
-                                in2: ch2, 
-                                in3: ch3 
-                            },
+                            inputs: { in1: ch1, in2: ch2, in3: ch3 },
                             chGains: [ch1, ch2, ch3]
                         });
                         break;
@@ -764,11 +744,39 @@
                         });
                         break;
 
+                    case 'delay':
+                        const delay = this.ctx.createDelay(5.0);
+                        const fb = this.ctx.createGain();
+                        const mix = this.ctx.createGain();
+                        const dry = this.ctx.createGain();
+                        const inNode = this.ctx.createGain();
+                        const outNode = this.ctx.createGain();
+
+                        inNode.connect(dry);
+                        dry.connect(outNode);
+
+                        inNode.connect(delay);
+                        delay.connect(mix);
+                        mix.connect(outNode);
+
+                        delay.connect(fb);
+                        fb.connect(delay);
+
+                        this.nodes.set(id, {
+                            main: outNode,
+                            inputs: { in: inNode },
+                            core: delay,
+                            fb: fb,
+                            mix: mix,
+                            dry: dry
+                        });
+                        break;
+
                     case 'output':
                         const outGain = this.ctx.createGain();
                         outGain.connect(this.ctx.destination);
                         this.nodes.set(id, {
-                            main: null, // No output to other modules
+                            main: null,
                             inputs: { in: outGain },
                             core: outGain
                         });
@@ -784,19 +792,33 @@
                         });
                         break;
 
+                    case 'keyboard':
+                    case 'midi_in':
                     case 'sequencer':
-                        // Sequencer outputs CV/Gate.
-                        const seqCv = this.ctx.createConstantSource();
-                        const seqGate = this.ctx.createConstantSource();
-                        seqCv.start();
-                        seqGate.start();
+                        const outCv = this.ctx.createConstantSource();
+                        const outGate = this.ctx.createConstantSource();
+                        outCv.start();
+                        outGate.start();
                         
                         this.nodes.set(id, {
-                            main: null, // multiple outputs
-                            outputs: { cv: seqCv, gate: seqGate },
+                            main: null,
+                            outputs: { cv: outCv, gate: outGate },
                             inputs: {}
                         });
                         break;
+                }
+            }
+
+            updateCVGate(id, cv, gate) {
+                if (!this.ctx || !this.nodes.has(id)) return;
+                const nodeData = this.nodes.get(id);
+                if (!nodeData.outputs) return;
+
+                if (cv !== null) {
+                    nodeData.outputs.cv.offset.setTargetAtTime(cv, this.ctx.currentTime, 0.01);
+                }
+                if (gate !== null) {
+                    nodeData.outputs.gate.offset.setTargetAtTime(gate, this.ctx.currentTime, 0.01);
                 }
             }
 
@@ -804,7 +826,6 @@
                 if (!this.ctx || !this.nodes.has(module.id)) return;
                 const nodeData = this.nodes.get(module.id);
                 
-                // Helper to get control val
                 const getVal = (id) => {
                     const c = module.controls.find(c => c.id === id);
                     return c ? c.value : 0;
@@ -815,152 +836,169 @@
                         const freqVal = getVal('freq');
                         const waveVal = getVal('wave');
                         
-                        // Freq: 20Hz to 2000Hz (approx)
-                        // Simple linear mapping for now: 20 + val * 1000
-                        const freq = 20 + (freqVal * 2000);
+                        const freq = this.getFrequency(freqVal);
                         nodeData.core.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.05);
                         
-                        // Waveform blending (discrete for simple osc)
                         if (waveVal < 0.33) nodeData.core.type = 'sine';
                         else if (waveVal < 0.66) nodeData.core.type = 'square';
                         else nodeData.core.type = 'sawtooth';
                         break;
                         
                     case 'vcf':
-                        const cutoff = getVal('cutoff');
-                        const res = getVal('res');
-                        // 20Hz to 10kHz
-                        nodeData.core.frequency.setTargetAtTime(20 + cutoff * 10000, this.ctx.currentTime, 0.05);
-                        nodeData.core.Q.value = res * 20;
+                        const cutoffVal = getVal('cutoff');
+                        const resVal = getVal('res');
+                        const cutoff = 20 * Math.pow(1000, cutoffVal);
+                        nodeData.core.frequency.setTargetAtTime(cutoff, this.ctx.currentTime, 0.05);
+                        nodeData.core.Q.setTargetAtTime(resVal * 20, this.ctx.currentTime, 0.05);
                         break;
                         
                     case 'vca':
-                        // Initial gain set by 'Level' knob + CV
-                        // We set the base gain, CV adds to it.
-                        // Actually, better: VCA usually closed (0) and opened by Env.
-                        // 'Level' knob acts as offset or input attenuator? 
-                        // Let's make 'Level' knob a bias (drone) or max volume.
-                        // Standard VCA: Output = In * (LevelKnob + CV)
-                        // If we implement CV scaling, it gets complex.
-                        // Simple version: Level is bias.
-                        // nodeData.core.gain.value = getVal('level'); 
-                        // BUT, if we have CV connection, we rely on that.
-                        // Let's make Level knob set the MAXIMUM gain the CV can reach, 
-                        // OR acting as a manual offset.
-                        // Let's say Level is manual offset.
-                        nodeData.core.gain.setTargetAtTime(getVal('level'), this.ctx.currentTime, 0.05);
+                        const levelVal = getVal('level');
+                        nodeData.core.gain.setTargetAtTime(levelVal, this.ctx.currentTime, 0.05);
+                        break;
+
+                    case 'envelope':
+                        const aVal = getVal('a');
+                        const dVal = getVal('d');
+                        const sVal = getVal('s');
+                        const rVal = getVal('r');
+                        this.updateEnvelopeParams(module.id, aVal, dVal, sVal, rVal);
+                        break;
+
+                    case 'delay':
+                        const timeVal = getVal('time');
+                        const fbVal = getVal('fb');
+                        const mixVal = getVal('mix');
+
+                        nodeData.core.delayTime.setTargetAtTime(timeVal * 1.0, this.ctx.currentTime, 0.05);
+                        nodeData.fb.gain.setTargetAtTime(fbVal * 0.9, this.ctx.currentTime, 0.05);
+                        nodeData.mix.gain.setTargetAtTime(mixVal, this.ctx.currentTime, 0.05);
+                        nodeData.dry.gain.setTargetAtTime(1.0 - mixVal, this.ctx.currentTime, 0.05);
                         break;
 
                     case 'mixer':
-                        nodeData.chGains[0].gain.value = getVal('lvl1');
-                        nodeData.chGains[1].gain.value = getVal('lvl2');
-                        nodeData.chGains[2].gain.value = getVal('lvl3');
-                        nodeData.main.gain.value = getVal('master');
+                        const l1 = getVal('lvl1');
+                        const l2 = getVal('lvl2');
+                        const l3 = getVal('lvl3');
+                        const masterLvl = getVal('master');
+                        nodeData.chGains[0].gain.setTargetAtTime(l1, this.ctx.currentTime, 0.05);
+                        nodeData.chGains[1].gain.setTargetAtTime(l2, this.ctx.currentTime, 0.05);
+                        nodeData.chGains[2].gain.setTargetAtTime(l3, this.ctx.currentTime, 0.05);
+                        nodeData.main.gain.setTargetAtTime(masterLvl !== undefined && masterLvl !== 0 ? masterLvl : 1, this.ctx.currentTime, 0.05);
                         break;
 
                     case 'lfo':
-                        // 0.1Hz to 20Hz
-                        const lfoFreq = 0.1 + (getVal('freq') * 20);
-                        nodeData.core.frequency.value = lfoFreq;
-                        nodeData.amp.gain.value = getVal('amt') * 1000; // Scale for modulation
+                        const lfoFreqVal = getVal('freq');
+                        const lfoAmt = getVal('amt');
+                        const lfoFreq = 0.1 + (lfoFreqVal * 20);
+                        nodeData.core.frequency.setTargetAtTime(lfoFreq, this.ctx.currentTime, 0.05);
+                        nodeData.amp.gain.setTargetAtTime(lfoAmt * 1000, this.ctx.currentTime, 0.05);
                         break;
 
                     case 'output':
-                        nodeData.core.gain.value = getVal('vol');
-                        break;
-                    
-                    case 'envelope':
-                        // Updates occur on trigger
-                        nodeData.params = {
-                            a: getVal('a'),
-                            d: getVal('d'),
-                            s: getVal('s'),
-                            r: getVal('r')
-                        };
+                        const vol = getVal('vol');
+                        nodeData.core.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.05);
                         break;
                 }
             }
 
-            triggerEnvelope(moduleId, gateOpen) {
-                if (!this.ctx) return;
+            updateEnvelopeParams(moduleId, a, d, s, r) {
+                if (!this.nodes.has(moduleId)) return;
                 const nodeData = this.nodes.get(moduleId);
-                if (!nodeData || !nodeData.params) return;
+                nodeData.adsr = { a, d, s, r };
+            }
+
+            triggerEnvelope(moduleId, isGateOn) {
+                if (!this.ctx || !this.nodes.has(moduleId)) return;
+                const nodeData = this.nodes.get(moduleId);
+                const adsr = nodeData.adsr || {a:0.1, d:0.1, s:0.5, r:0.1};
                 
-                const { a, d, s, r } = nodeData.params;
                 const now = this.ctx.currentTime;
-                const target = nodeData.core.offset;
+                const param = nodeData.core.offset;
 
-                // Max envelope value is 1 (which usually corresponds to e.g. 1000Hz mod or 1.0 gain)
-                
-                target.cancelScheduledValues(now);
-                
-                if (gateOpen) {
-                    // Attack
-                    target.setValueAtTime(target.value, now);
-                    target.linearRampToValueAtTime(1, now + (a * 2) + 0.005);
-                    // Decay to Sustain
-                    target.linearRampToValueAtTime(s, now + (a * 2) + (d * 2) + 0.005);
+                const attackTime = Math.max(0.01, adsr.a * 2);
+                const decayTime = Math.max(0.01, adsr.d * 2);
+                const sustainLevel = adsr.s;
+                const releaseTime = Math.max(0.01, adsr.r * 2);
+
+                param.cancelScheduledValues(now);
+
+                if (isGateOn) {
+                    param.setValueAtTime(param.value, now);
+                    param.linearRampToValueAtTime(1.0, now + attackTime);
+                    param.linearRampToValueAtTime(sustainLevel, now + attackTime + decayTime);
                 } else {
-                    // Release
-                    target.setValueAtTime(target.value, now);
-                    target.linearRampToValueAtTime(0, now + (r * 2) + 0.005);
-                }
-            }
-            
-            updateSequencer(moduleId, cvValue, gateValue) {
-                const nodeData = this.nodes.get(moduleId);
-                if (nodeData && nodeData.outputs) {
-                    nodeData.outputs.cv.offset.value = cvValue; // 0-1 (mapped later to freq)
-                    nodeData.outputs.gate.offset.value = gateValue;
+                    param.setValueAtTime(param.value, now);
+                    param.linearRampToValueAtTime(0, now + releaseTime);
                 }
             }
 
-            connect(fromId, fromPatch, toId, toPatch) {
-                const source = this.nodes.get(fromId);
-                const dest = this.nodes.get(toId);
-                if (!source || !dest) return;
+            connect(sourceId, sourcePort, destId, destPort) {
+                if (!this.ctx) return;
+                const srcNode = this.nodes.get(sourceId);
+                const dstNode = this.nodes.get(destId);
 
-                // Determine source node
-                let srcNode = source.main;
-                if (source.outputs && source.outputs[fromPatch]) {
-                    srcNode = source.outputs[fromPatch];
+                if (!srcNode || !dstNode) return;
+
+                let sourceObj = null;
+                if (sourcePort.includes('out') && srcNode.outputs) {
+                    const portName = sourcePort.split('-')[2];
+                    sourceObj = srcNode.outputs[portName] || srcNode.main;
+                } else {
+                    sourceObj = srcNode.main;
                 }
 
-                // Determine dest node
-                let dstNode = null;
-                if (dest.inputs && dest.inputs[toPatch]) {
-                    dstNode = dest.inputs[toPatch];
-                } else if (toPatch === 'gate' && dest.inputs.gate === null) {
-                    // Special case for envelope gate input (handled logically, not audio-wise mostly)
-                    // But for visual consistency we might need to track it. 
-                    // Wait, Env Gate is logic. We need to listen to the source.
-                    // If source is Gate/Square LFO, we can use a ScriptProcessor or Analyser? 
-                    // For this prototype, we'll cheat: 
-                    // If connecting Sequencer Gate -> Env Gate, we handle it in React logic via events if possible,
-                    // OR we use the audio graph. 
-                    // Let's use audio graph: connect to a gain node, and monitor it?
-                    // Too complex for single file. 
-                    // Fallback: Sequencer Logic triggers Envelope Logic directly in React state if connected.
-                    return; 
-                }
+                if (!sourceObj) return;
 
-                if (srcNode && dstNode) {
-                    try { srcNode.connect(dstNode); } catch(e) {}
+                const destName = destPort.split('-').pop();
+
+                if (dstNode.inputs && dstNode.inputs[destName]) {
+                    if (destName === 'voct' && sourceObj.connect) {
+                        const scaleNode = this.ctx.createGain();
+                        scaleNode.gain.value = 2000;
+                        sourceObj.connect(scaleNode);
+                        scaleNode.connect(dstNode.inputs[destName]);
+
+                        if (!srcNode.connections) srcNode.connections = [];
+                        srcNode.connections.push({ port: sourcePort, dest: scaleNode });
+                        return;
+                    }
+
+                    sourceObj.connect(dstNode.inputs[destName]);
                 }
             }
 
             disconnectAll() {
-                if(!this.ctx) return;
-                this.nodes.forEach(n => {
-                    // Do NOT disconnect n.core if it's different from n.main (internal wiring)
-                    // Only disconnect the nodes that connect to OTHER modules
-                    
-                    // If core IS main (like VCF/VCA), it gets disconnected by main check below.
-                    // If core connects to main (Osc/LFO), we MUST keep core->main connection.
-                    
-                    if (n.main && n.main.disconnect) n.main.disconnect();
-                    if (n.outputs) Object.values(n.outputs).forEach(o => o.disconnect());
+                this.nodes.forEach(node => {
+                    if (node.main && node.main.disconnect) {
+                        node.main.disconnect();
+                    }
+                    if (node.outputs) {
+                        Object.values(node.outputs).forEach(out => out.disconnect && out.disconnect());
+                    }
+                    if (node.connections) {
+                        node.connections.forEach(c => c.dest.disconnect && c.dest.disconnect());
+                        node.connections = [];
+                    }
                 });
+            }
+
+            destroyModule(id) {
+                if (!this.nodes.has(id)) return;
+                const nodeData = this.nodes.get(id);
+                if (nodeData.core && nodeData.core.stop) {
+                    try { nodeData.core.stop(); } catch(e){}
+                }
+                if (nodeData.outputs) {
+                    Object.values(nodeData.outputs).forEach(out => {
+                        if (out.stop) { try { out.stop(); } catch(e){} }
+                        if (out.disconnect) out.disconnect();
+                    });
+                }
+                if (nodeData.main && nodeData.main.disconnect) {
+                    nodeData.main.disconnect();
+                }
+                this.nodes.delete(id);
             }
         }
 
@@ -1100,10 +1138,23 @@
 
             const handleNoteOn = (note) => {
                 setActiveNote(note);
-                // Convert midi note to CV (0-1). Base C2 = note 36.
-                // 1V/oct means 1 octave = 12 notes = 0.2 CV (since 5 octaves = 1.0)
+                // 1V/oct: each octave (12 notes) = 1V.
+                // Assuming 0 CV maps to C2 (note 36).
+                // Let's use 0.1 per octave if CV range is 0-1 for 10 octaves,
+                // or 0.2 per octave if CV range is 0-1 for 5 octaves.
+                // The getFrequency formula is 20 * (100 ^ val).
+                // 100^val means val=0->20Hz, val=1->2000Hz (approx 6.6 octaves).
+                // To get exact 1V/oct tracking we need `osc.frequency.value *= Math.pow(2, volts)`.
+                // In our connect logic:
+                // `scaleNode.gain.value = 2000;`
+                // `cv -> scaleNode -> osc.frequency`
+                // This adds `cv * 2000` to the frequency (linear FM).
+                // WAIT! The original synthesizer did not have exponential V/Oct.
+                // We should keep the linear approach but change the comment so it's not misleading, OR leave it as it matches the existing 2000 multiplier?
+
+                // Let's just fix the comment and baseNote logic to be clean.
                 const baseNote = 36;
-                const cv = (note - baseNote) / 60; // 60 notes range
+                const cv = (note - baseNote) / 60;
                 updateCVGate(moduleId, cv, 1);
                 triggerEnv(moduleId, 1);
             };
@@ -1168,23 +1219,6 @@
                 }
             }, [moduleId]);
             return <div style={{textAlign:'center', marginTop: '10px', fontSize:'0.8rem'}}>{status}</div>;
-        }
-
-
-        function OldSeq() {
-            return (
-                <div className="step-sequencer-grid">
-                    {stepValues.map((val, idx) => (
-                        <div 
-                            key={idx}
-                            className={`step-btn ${val > 0 ? 'active' : ''} ${currentStep === idx ? 'current' : ''}`}
-                            onClick={(e) => { e.stopPropagation(); onStepToggle(idx); }}
-                        >
-                            {idx + 1}
-                        </div>
-                    ))}
-                </div>
-            );
         }
 
         function OscilloscopeDisplay({ moduleId, audioEngine }) {
