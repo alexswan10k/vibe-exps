@@ -550,6 +550,114 @@ class CarSimulator {
             if (event.code === 'KeyF') this.toggleDebug();
         });
         document.addEventListener('keyup', (event) => this.keys[event.code] = false);
+
+        this.setupTouchControls();
+    }
+
+    setupTouchControls() {
+        const btnToggle = document.getElementById('btn-toggle-touch');
+        const touchControls = document.getElementById('touch-controls');
+        let isTouchActive = false;
+
+        if (!btnToggle || !touchControls) return;
+
+        btnToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isTouchActive = !isTouchActive;
+            touchControls.style.display = isTouchActive ? 'block' : 'none';
+        });
+
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickKnob = document.getElementById('joystick-knob');
+        let joystickId = null;
+        let joystickCenter = { x: 0, y: 0 };
+
+        if (joystickZone && joystickKnob) {
+            joystickZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                joystickId = touch.identifier;
+                const rect = joystickZone.getBoundingClientRect();
+                joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+                this.updateJoystick(touch.clientX, touch.clientY, joystickKnob);
+            }, { passive: false });
+
+            joystickZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joystickId) {
+                        this.updateJoystick(e.changedTouches[i].clientX, e.changedTouches[i].clientY, joystickKnob);
+                        break;
+                    }
+                }
+            }, { passive: false });
+
+            joystickZone.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joystickId) {
+                        joystickId = null;
+                        this.resetJoystick(joystickKnob);
+                        break;
+                    }
+                }
+            }, { passive: false });
+        }
+
+        const bindTouch = (id, code) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                this.keys[code] = true;
+            });
+            el.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                this.keys[code] = false;
+            });
+            el.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                this.keys[code] = false;
+            });
+        };
+
+        bindTouch('btn-brake', 'Space');
+        bindTouch('btn-reset', 'KeyR');
+    }
+
+
+    updateJoystick(x, y, knob) {
+        const joystickZone = document.getElementById('joystick-zone');
+        const rect = joystickZone.getBoundingClientRect();
+        const joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+
+        const maxDist = 35;
+        let dx = x - joystickCenter.x;
+        let dy = y - joystickCenter.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > maxDist) {
+            const ratio = maxDist / dist;
+            dx *= ratio;
+            dy *= ratio;
+        }
+
+        knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+        const threshold = 10;
+        this.keys['KeyW'] = dy < -threshold;
+        this.keys['KeyS'] = dy > threshold;
+        this.keys['KeyA'] = dx < -threshold;
+        this.keys['KeyD'] = dx > threshold;
+    }
+
+    resetJoystick(knob) {
+        knob.style.transform = `translate(-50%, -50%)`;
+        this.keys['KeyW'] = false;
+        this.keys['KeyS'] = false;
+        this.keys['KeyA'] = false;
+        this.keys['KeyD'] = false;
     }
 
     togglePause() {
