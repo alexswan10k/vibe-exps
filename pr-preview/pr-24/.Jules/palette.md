@@ -1,3 +1,0 @@
-## 2026-04-10 - Add aria attributes and empty state to main index
-**Learning:** Adding empty states effectively signals that interactions have worked successfully but yielded no result and that it wasn't a failure, which improves UX. It is also important to use ARIA attributes like `aria-pressed` to toggle dynamic states rather than relying solely on visual cues like classes. Additionally, buttons with only an icon should have a textual `aria-label` for screen readers.
-**Action:** Always add an empty state for any search or filtering mechanism. Verify button states have corresponding ARIA tags and that icon-only buttons are labelled.
