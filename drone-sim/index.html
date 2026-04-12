@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pro Drone Sim 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+
+        /* UI Overlay */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+
+        /* HUD */
+        #hud-top { padding: 10px; display: flex; justify-content: space-between; pointer-events: auto; background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent); color: #00ffcc; text-shadow: 0 0 5px #00ffcc; font-size: 14px; font-weight: bold; }
+        .hud-group { display: flex; gap: 15px; align-items: center; }
+        .stat { background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; border: 1px solid rgba(0,255,204,0.3); }
+
+        /* Controls Area */
+        #controls-area { height: 50%; display: flex; justify-content: space-between; align-items: flex-end; padding: 20px; padding-bottom: 40px; pointer-events: none; }
+
+        /* Joysticks */
+        .joystick-zone { width: 140px; height: 140px; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; position: relative; pointer-events: auto; backdrop-filter: blur(2px); transition: border-color 0.2s; }
+        .joystick-zone.active { border-color: rgba(0, 255, 204, 0.8); background: rgba(0, 255, 204, 0.1); }
+        .stick-thumb { width: 50px; height: 50px; background: radial-gradient(circle at 30% 30%, #fff, #aaa); border-radius: 50%; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 4px 10px rgba(0,0,0,0.5); pointer-events: none; }
+
+        /* Labels */
+        .stick-label { position: absolute; bottom: -25px; width: 100%; text-align: center; color: rgba(255,255,255,0.7); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Buttons */
+        .btn { background: rgba(0, 0, 0, 0.6); border: 1px solid #444; color: white; padding: 8px 16px; border-radius: 20px; font-size: 12px; cursor: pointer; pointer-events: auto; transition: all 0.2s; text-transform: uppercase; font-weight: bold; }
+        .btn:active { background: #00ffcc; color: black; transform: scale(0.95); }
+        .btn.toggled { background: #00ffcc; color: black; box-shadow: 0 0 10px #00ffcc; border-color: #00ffcc; }
+
+        /* Permission Modal */
+        #modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 1; transition: opacity 0.5s; }
+        .modal-content { background: #222; padding: 30px; border-radius: 12px; text-align: center; color: white; border: 1px solid #444; max-width: 80%; }
+        .modal-content h2 { margin-top: 0; color: #00ffcc; }
+        .big-btn { background: #00ffcc; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; color: #000; }
+
+        /* Animations */
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Desktop Notice */
+        @media (min-width: 1024px) {
+            .joystick-zone { opacity: 0.5; }
+            .stick-label::after { content: " (WASD / Arrows)"; display: block; font-size: 9px; opacity: 0.7; }
+        }
+    </style>
+    <!-- Three.js from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Simplex Noise for terrain -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div id="hud-top">
+            <div class="hud-group">
+                <div class="stat" id="alt-stat">ALT: 0m</div>
+                <div class="stat" id="spd-stat">SPD: 0km/h</div>
+            </div>
+            <div class="hud-group">
+                <button class="btn" id="cam-btn" onclick="toggleCamera()">View: TPS</button>
+                <button class="btn" id="gyro-btn" onclick="toggleGyro()">Gyro: OFF</button>
+                <button class="btn" onclick="resetDrone()">Reset</button>
+            </div>
+        </div>
+
+        <div id="controls-area">
+            <div class="joystick-zone" id="stick-left">
+                <div class="stick-thumb" id="thumb-left"></div>
+                <div class="stick-label">Throttle / Yaw</div>
+            </div>
+            <div class="joystick-zone" id="stick-right">
+                <div class="stick-thumb" id="thumb-right"></div>
+                <div class="stick-label">Pitch / Roll</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Start Modal -->
+    <div id="modal-overlay">
+        <div class="modal-content">
+            <h2>Drone Flight Sim</h2>
+            <p>Realistic physics engine enabled.</p>
+            <p>Use left stick for altitude/rotation.</p>
+            <p>Use right stick (or tilt device) to move.</p>
+            <button class="big-btn" onclick="startApp()">LAUNCH DRONE</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            droneWeight: 1.2, // kg
+            motorPower: 25, // Power multiplier
+            drag: 0.98, // Air resistance
+            angularDrag: 0.90, // Rotation resistance
+            gravity: 9.81,
+            maxTilt: Math.PI / 4, // 45 degrees max tilt
+            mapChunkSize: 200, // World generation chunk size
+        };
+
+        // --- Global State ---
+        let scene, camera, renderer, drone, propellers = [];
+        let terrain;
+        let clock = new THREE.Clock();
+        let isRunning = false;
+
+        // Flight State
+        const droneState = {
+            position: new THREE.Vector3(0, 2, 0),
+            velocity: new THREE.Vector3(0, 0, 0),
+            rotation: new THREE.Euler(0, 0, 0, 'YXZ'), // Yaw, Pitch, Roll
+            angularVelocity: new THREE.Vector3(0, 0, 0),
+            throttle: 0 // 0 to 1
+        };
+
+        // Inputs
+        const input = {
+            throttle: 0, // 0 to 1 (Left stick Y)
+            yaw: 0,      // -1 to 1 (Left stick X)
+            pitch: 0,    // -1 to 1 (Right stick Y)
+            roll: 0,     // -1 to 1 (Right stick X)
+            gyroEnabled: false
+        };
+
+        // Camera State
+        let cameraMode = 'TPS'; // 'TPS' (Third Person) or 'FPV' (First Person)
+        const camOffset = new THREE.Vector3(0, 2, 5);
+        const camLookAt = new THREE.Vector3(0, 0, -10);
+
+        // --- Initialization ---
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Sky blue
+            scene.fog = new THREE.Fog(0x87CEEB, 20, 150);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Lighting
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+            scene.add(hemiLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 200;
+            dirLight.shadow.camera.left = -100;
+            dirLight.shadow.camera.right = 100;
+            dirLight.shadow.camera.top = 100;
+            dirLight.shadow.camera.bottom = -100;
+            scene.add(dirLight);
+
+            createDrone();
+            createWorld();
+            setupInput();
+            setupKeyboard();
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        // --- Object Creation ---
+        function createDrone() {
+            drone = new THREE.Group();
+
+            // Body
+            const bodyGeo = new THREE.BoxGeometry(0.4, 0.1, 0.4);
+            const bodyMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.castShadow = true;
+            body.receiveShadow = true;
+            drone.add(body);
+
+            // Arms
+            const armGeo = new THREE.BoxGeometry(1.2, 0.05, 0.05);
+            const armMat = new THREE.MeshPhongMaterial({ color: 0x555555 });
+
+            const arm1 = new THREE.Mesh(armGeo, armMat);
+            arm1.rotation.y = Math.PI / 4;
+            drone.add(arm1);
+
+            const arm2 = new THREE.Mesh(armGeo, armMat);
+            arm2.rotation.y = -Math.PI / 4;
+            drone.add(arm2);
+
+            // Propellers & Motors
+            const motorGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.1, 8);
+            const motorMat = new THREE.MeshPhongMaterial({ color: 0x888888 });
+            const propGeo = new THREE.BoxGeometry(0.6, 0.01, 0.05);
+            const propMat = new THREE.MeshPhongMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8 });
+
+            const positions = [
+                { x: 0.4, z: 0.4 }, { x: -0.4, z: -0.4 },
+                { x: 0.4, z: -0.4 }, { x: -0.4, z: 0.4 }
+            ];
+
+            positions.forEach(pos => {
+                // Motor
+                const motor = new THREE.Mesh(motorGeo, motorMat);
+                motor.position.set(pos.x, 0.05, pos.z);
+                drone.add(motor);
+
+                // Propeller
+                const prop = new THREE.Mesh(propGeo, propMat);
+                prop.position.set(0, 0.06, 0); // Relative to motor parent if needed, but here relative to drone
+                // We'll create a pivot helper
+                const pivot = new THREE.Group();
+                pivot.position.set(pos.x, 0.08, pos.z);
+                pivot.add(prop);
+                drone.add(pivot);
+                propellers.push(pivot);
+            });
+
+            // Camera Mount (visual only)
+            const camGeo = new THREE.BoxGeometry(0.1, 0.1, 0.2);
+            const camMat = new THREE.MeshLambertMaterial({ color: 0x000000 });
+            const camObj = new THREE.Mesh(camGeo, camMat);
+            camObj.position.set(0, -0.05, -0.2);
+            drone.add(camObj);
+
+            // Light
+            const spotLight = new THREE.SpotLight(0xffffff, 2);
+            spotLight.position.set(0, -0.1, -0.2);
+            spotLight.target.position.set(0, -5, -5);
+            spotLight.angle = Math.PI / 6;
+            spotLight.penumbra = 0.5;
+            spotLight.castShadow = true;
+            drone.add(spotLight);
+            drone.add(spotLight.target);
+
+            scene.add(drone);
+        }
+
+        function createWorld() {
+            // Ground
+            const groundGeo = new THREE.PlaneGeometry(1000, 1000, 100, 100);
+            const groundMat = new THREE.MeshStandardMaterial({
+                color: 0x1a4a1a,
+                roughness: 0.8,
+                flatShading: true
+            });
+
+            // Simple terrain generation
+            const positions = groundGeo.attributes.position;
+            const simplex = new SimplexNoise();
+
+            for (let i = 0; i < positions.count; i++) {
+                const x = positions.getX(i);
+                const y = positions.getY(i); // This is actually Z in 3D space for planes usually, but rotated later
+                // Create rolling hills
+                const z = simplex.noise2D(x * 0.01, y * 0.01) * 10 + simplex.noise2D(x * 0.05, y * 0.05) * 2;
+                positions.setZ(i, z);
+            }
+            groundGeo.computeVertexNormals();
+
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            terrain = ground; // Keep ref for collision if needed
+
+            // Obstacles / "City" Blocks
+            const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+            const boxMat = new THREE.MeshPhongMaterial({ color: 0x555577 });
+
+            for (let i = 0; i < 50; i++) {
+                const box = new THREE.Mesh(boxGeo, boxMat);
+                const h = 5 + Math.random() * 20;
+                const w = 2 + Math.random() * 5;
+                const d = 2 + Math.random() * 5;
+
+                box.scale.set(w, h, d);
+
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 30 + Math.random() * 100;
+
+                box.position.set(
+                    Math.cos(angle) * radius,
+                    h / 2 - 5, // Sunk slightly
+                    Math.sin(angle) * radius
+                );
+
+                box.castShadow = true;
+                box.receiveShadow = true;
+                scene.add(box);
+            }
+
+            // Grid helper for reference
+            const grid = new THREE.GridHelper(1000, 100, 0x000000, 0x000000);
+            grid.position.y = 0.1;
+            grid.material.opacity = 0.1;
+            grid.material.transparent = true;
+            scene.add(grid);
+        }
+
+        // --- Physics Engine ---
+        function updatePhysics(dt) {
+            // 1. Inputs to Target Angles
+            // Roll and Pitch are controlled by Right Stick (or Gyro)
+            // Ideally: Stick Right = Roll Right = Tilt Right
+            // Stick Up = Pitch Down (Nose down) = Tilt Forward
+
+            const targetPitch = input.pitch * CONFIG.maxTilt;
+            const targetRoll = -input.roll * CONFIG.maxTilt; // Invert roll for natural feel
+            const targetYawSpeed = -input.yaw * 2.5; // Rad/s
+
+            // 2. Smooth Rotation (Interia)
+            // Interpolate current rotation to target rotation
+            const lerpFactor = 5 * dt;
+            droneState.rotation.x += (targetPitch - droneState.rotation.x) * lerpFactor;
+            droneState.rotation.z += (targetRoll - droneState.rotation.z) * lerpFactor;
+            droneState.rotation.y += targetYawSpeed * dt;
+
+            // Apply rotation to mesh
+            drone.rotation.set(droneState.rotation.x, droneState.rotation.y, droneState.rotation.z);
+
+            // 3. Calculate Forces
+            // Gravity
+            const gravityForce = new THREE.Vector3(0, -CONFIG.gravity * CONFIG.droneWeight, 0);
+
+            // Thrust
+            // Thrust is always strictly UP relative to the drone body
+            // We need to transform the local Up vector (0,1,0) by the drone's rotation
+            const thrustDir = new THREE.Vector3(0, 1, 0).applyEuler(drone.rotation);
+
+            // Throttle input is 0-1.
+            // Hover throttle calculation: Gravity / MaxThrust
+            // Let's say MaxThrust = Gravity * 2 (2G capability)
+            const maxThrustForce = CONFIG.droneWeight * CONFIG.gravity * 2.0;
+
+            // Non-linear throttle curve for better control
+            // input 0.5 should be roughly hover
+            let throttleInput = input.throttle;
+            if (throttleInput < 0) throttleInput = 0; // clamp
+
+            const currentThrust = throttleInput * maxThrustForce;
+            const thrustVector = thrustDir.multiplyScalar(currentThrust);
+
+            // Drag (Air Resistance) - opposing velocity
+            const dragForce = droneState.velocity.clone().multiplyScalar(-CONFIG.drag * dt); // Simplified linear drag
+
+            // 4. Integration (Newton's Second Law: F=ma)
+            const totalForce = new THREE.Vector3().add(gravityForce).add(thrustVector);
+            const acceleration = totalForce.divideScalar(CONFIG.droneWeight);
+
+            // Update Velocity
+            droneState.velocity.add(acceleration.multiplyScalar(dt));
+
+            // Apply Drag (damping) directly to velocity for stability
+            droneState.velocity.multiplyScalar(CONFIG.drag);
+
+            // Update Position
+            droneState.position.add(droneState.velocity.clone().multiplyScalar(dt));
+
+            // Ground Collision
+            // Simple check against flat plane y=0 (approximate terrain height at origin)
+            // In a real game, we'd raycast down to find terrain height
+            let terrainHeight = 0; // Default
+
+            // Very basic boundary check
+            if (droneState.position.y < terrainHeight + 0.2) {
+                droneState.position.y = terrainHeight + 0.2;
+                droneState.velocity.y = 0;
+                // Friction if touching ground
+                droneState.velocity.x *= 0.9;
+                droneState.velocity.z *= 0.9;
+            }
+
+            // Apply to Mesh
+            drone.position.copy(droneState.position);
+        }
+
+        function updateCamera() {
+            if (cameraMode === 'TPS') {
+                // Follow camera
+                const relativeOffset = camOffset.clone().applyAxisAngle(new THREE.Vector3(0,1,0), droneState.rotation.y);
+                const targetPos = drone.position.clone().add(relativeOffset);
+
+                // Smooth camera
+                camera.position.lerp(targetPos, 0.1);
+                camera.lookAt(drone.position);
+            } else {
+                // FPV
+                const fpvOffset = new THREE.Vector3(0, 0, -0.2).applyEuler(drone.rotation);
+                camera.position.copy(drone.position).add(fpvOffset);
+
+                // Look forward relative to drone
+                const lookDir = new THREE.Vector3(0, 0, -1).applyEuler(drone.rotation);
+                const lookTarget = camera.position.clone().add(lookDir);
+                camera.lookAt(lookTarget);
+            }
+        }
+
+        // --- Input Handling ---
+        const joysticks = {
+            left: { id: 'stick-left', thumb: 'thumb-left', active: false, origin: {x:0, y:0}, pos: {x:0, y:0}, touchId: null },
+            right: { id: 'stick-right', thumb: 'thumb-right', active: false, origin: {x:0, y:0}, pos: {x:0, y:0}, touchId: null }
+        };
+
+        function setupInput() {
+            // Touch handlers
+            document.addEventListener('touchstart', handleTouchStart, { passive: false });
+            document.addEventListener('touchmove', handleTouchMove, { passive: false });
+            document.addEventListener('touchend', handleTouchEnd, { passive: false });
+
+            // Gyro
+            window.addEventListener('deviceorientation', handleGyro);
+        }
+
+        function setupKeyboard() {
+            const keys = { w: false, s: false, a: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+
+            document.addEventListener('keydown', (e) => {
+                if(keys.hasOwnProperty(e.key)) keys[e.key] = true;
+                // Space for throttle up, Shift for throttle down
+                if(e.code === 'Space') input.throttle = Math.min(input.throttle + 0.05, 1);
+                if(e.code === 'ShiftLeft') input.throttle = Math.max(input.throttle - 0.05, 0);
+            });
+
+            document.addEventListener('keyup', (e) => {
+                if(keys.hasOwnProperty(e.key)) keys[e.key] = false;
+            });
+
+            // Update loop for keys
+            setInterval(() => {
+                // Right stick logic (Pitch/Roll) mapped to Arrows
+                if (keys.ArrowUp) input.pitch = -1;
+                else if (keys.ArrowDown) input.pitch = 1;
+                else if (!joysticks.right.active) input.pitch = 0;
+
+                if (keys.ArrowLeft) input.roll = -1;
+                else if (keys.ArrowRight) input.roll = 1;
+                else if (!joysticks.right.active) input.roll = 0;
+
+                // Left stick logic (Throttle/Yaw) mapped to WASD
+                // W/S modifies throttle incrementally usually, but for mapping consistenty:
+                if (keys.w) input.throttle = Math.min(input.throttle + 0.02, 1);
+                if (keys.s) input.throttle = Math.max(input.throttle - 0.02, 0);
+
+                if (keys.a) input.yaw = -1;
+                else if (keys.d) input.yaw = 1;
+                else if (!joysticks.left.active) input.yaw = 0;
+
+            }, 16);
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                const target = document.elementFromPoint(t.clientX, t.clientY);
+
+                if (target) {
+                    // Check Left Stick
+                    if (target.closest('#stick-left')) {
+                        activateJoystick('left', t);
+                    }
+                    // Check Right Stick
+                    else if (target.closest('#stick-right') && !input.gyroEnabled) {
+                        activateJoystick('right', t);
+                    }
+                }
+            }
+        }
+
+        function activateJoystick(side, touch) {
+            const stick = joysticks[side];
+            const el = document.getElementById(stick.id);
+            const rect = el.getBoundingClientRect();
+
+            stick.active = true;
+            stick.touchId = touch.identifier;
+            stick.origin = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+            el.classList.add('active');
+
+            updateJoystick(side, touch.clientX, touch.clientY);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (joysticks.left.active && joysticks.left.touchId === t.identifier) {
+                    updateJoystick('left', t.clientX, t.clientY);
+                }
+                if (joysticks.right.active && joysticks.right.touchId === t.identifier) {
+                    updateJoystick('right', t.clientX, t.clientY);
+                }
+            }
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (joysticks.left.active && joysticks.left.touchId === t.identifier) {
+                    resetJoystick('left');
+                }
+                if (joysticks.right.active && joysticks.right.touchId === t.identifier) {
+                    resetJoystick('right');
+                }
+            }
+        }
+
+        function updateJoystick(side, clientX, clientY) {
+            const stick = joysticks[side];
+            const maxDist = 70; // Half of joystick size
+
+            let dx = clientX - stick.origin.x;
+            let dy = clientY - stick.origin.y;
+
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            // Clamp distance
+            if (dist > maxDist) {
+                const ratio = maxDist / dist;
+                dx *= ratio;
+                dy *= ratio;
+            }
+
+            // Move thumb
+            const thumb = document.getElementById(stick.thumb);
+            thumb.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+            // Normalize inputs (-1 to 1)
+            const xNorm = dx / maxDist;
+            const yNorm = dy / maxDist;
+
+            if (side === 'left') {
+                // Throttle is mapped differently.
+                // Center isn't 0 throttle, bottom is 0.
+                // But for game feel, let's make stick Y direct throttle control.
+                // -1 (up) to 1 (down) -> map to 0 to 1?
+                // Standard mode 2: Up is high throttle.
+                // dy is negative when up.
+                // -70 (up) -> throttle 1. 70 (down) -> throttle 0.
+                input.throttle = 1 - ((dy + maxDist) / (maxDist * 2));
+                input.yaw = xNorm;
+            } else {
+                input.roll = xNorm;
+                input.pitch = yNorm; // Up (neg) is pitch down (forward)
+            }
+        }
+
+        function resetJoystick(side) {
+            const stick = joysticks[side];
+            stick.active = false;
+            stick.touchId = null;
+            document.getElementById(stick.id).classList.remove('active');
+            document.getElementById(stick.thumb).style.transform = `translate(-50%, -50%)`;
+
+            if (side === 'right') {
+                input.pitch = 0;
+                input.roll = 0;
+            }
+            if (side === 'left') {
+                input.yaw = 0;
+                // Do not reset throttle, it stays where you left it or spring centers?
+                // Real drones: throttle stick doesn't spring back. Virtual ones do.
+                // We will hold current throttle value in logic, but visually it centers.
+                // To keep it simple: Spring back to hover (0.5)?
+                // Let's spring back input variables to 0 but keep throttle persistent?
+                // Actually, for screen sticks, spring center usually means 50% throttle.
+                // Let's assume spring center = hover.
+                input.throttle = 0.5;
+            }
+        }
+
+        function handleGyro(e) {
+            if (!input.gyroEnabled || !e.gamma) return;
+
+            // Landscape mode orientation handling
+            // Gamma: Left/Right tilt (-90 to 90) -> Roll
+            // Beta: Front/Back tilt (-180 to 180) -> Pitch
+
+            // Adjust based on typical holding angle (45 deg)
+            const pitchOffset = 30;
+
+            let pitchRaw = e.beta;
+            let rollRaw = e.gamma;
+
+            // Clamp and normalize
+            input.pitch = THREE.MathUtils.clamp((pitchRaw - pitchOffset) / 30, -1, 1);
+            input.roll = THREE.MathUtils.clamp(rollRaw / 30, -1, 1);
+        }
+
+        // --- Logic & Render ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isRunning) return;
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            updatePhysics(dt);
+            updateCamera();
+
+            // Animate props based on throttle
+            const propSpeed = 10 + (input.throttle * 50);
+            propellers.forEach((prop, i) => {
+                const dir = i % 2 === 0 ? 1 : -1;
+                prop.rotation.y += propSpeed * dt * dir;
+            });
+
+            renderer.render(scene, camera);
+            updateHUD();
+        }
+
+        function updateHUD() {
+            const speed = Math.sqrt(droneState.velocity.x**2 + droneState.velocity.z**2) * 3.6; // m/s to km/h
+            document.getElementById('spd-stat').innerText = `SPD: ${speed.toFixed(1)} km/h`;
+            document.getElementById('alt-stat').innerText = `ALT: ${droneState.position.y.toFixed(1)}m`;
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- UI Functions ---
+        function startApp() {
+            document.getElementById('modal-overlay').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('modal-overlay').style.display = 'none';
+                isRunning = true;
+                clock.start();
+                init();
+            }, 500);
+
+            // Request DeviceOrientation permission for iOS 13+
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(response => {
+                        if (response === 'granted') {
+                            // Permission granted
+                        }
+                    })
+                    .catch(console.error);
+            }
+        }
+
+        function toggleCamera() {
+            cameraMode = cameraMode === 'TPS' ? 'FPV' : 'TPS';
+            document.getElementById('cam-btn').innerText = `View: ${cameraMode}`;
+        }
+
+        function toggleGyro() {
+            input.gyroEnabled = !input.gyroEnabled;
+            const btn = document.getElementById('gyro-btn');
+            const stick = document.getElementById('stick-right');
+
+            if (input.gyroEnabled) {
+                btn.innerText = "Gyro: ON";
+                btn.classList.add('toggled');
+                stick.style.opacity = '0.2';
+                stick.style.pointerEvents = 'none';
+            } else {
+                btn.innerText = "Gyro: OFF";
+                btn.classList.remove('toggled');
+                stick.style.opacity = '1';
+                stick.style.pointerEvents = 'auto';
+                input.pitch = 0;
+                input.roll = 0;
+            }
+        }
+
+        function resetDrone() {
+            droneState.position.set(0, 2, 0);
+            droneState.velocity.set(0, 0, 0);
+            droneState.rotation.set(0, 0, 0);
+            droneState.angularVelocity.set(0, 0, 0);
+            input.throttle = 0;
+            input.pitch = 0;
+            input.roll = 0;
+            input.yaw = 0;
+        }
+
+        // Initialize early just in case, but wait for start button
+        // init();
+    </script>
+</body>
+</html>
