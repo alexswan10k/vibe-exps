@@ -1,0 +1,133 @@
+n<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Colony Sim</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="mode-indicator">
+            <div class="mode-text">Mode: Idle</div>
+            <div class="mode-description">Click a command button to start</div>
+        </div>
+        <div id="cancel-hint">
+            Right-click or press ESC to cancel
+        </div>
+        <div id="ui-panel">
+            <div id="left-column">
+                <div id="pawn-info">
+                    <h3>Pawn Info</h3>
+                    <div id="pawn-list"></div>
+                </div>
+                <div id="commands">
+                    <h3>Commands</h3>
+                    <button id="chop-trees">Chop Trees</button>
+                    <button id="mine-iron">Mine Iron</button>
+                    <button id="mine-stone">Mine Stone</button>
+                    <button id="harvest-plants">Harvest Plants</button>
+                    
+                    <h4>Zones</h4>
+                    <button id="zone-stockpile">Stockpile Zone</button>
+                    <button id="zone-growing">Growing Zone</button>
+
+                    <h4>Build</h4>
+                    <button id="build-wall">Build Wall</button>
+                    <button id="build-door">Build Door</button>
+                    <button id="build-table">Build Table</button>
+                    <button id="build-bed">Build Bed</button>
+                    <button id="build-chair">Build Chair</button>
+
+                    <h4>Craft</h4>
+                    <button id="craft-food">Craft Food</button>
+                    <button id="craft-tools">Craft Tools</button>
+                    
+                    <h4>Management</h4>
+                    <button id="toggle-priorities">Work Priorities</button>
+                </div>
+            </div>
+            <div id="right-column">
+                <div id="task-queue">
+                    <h3>Task Queue <button id="toggle-task-queue" class="toggle-btn">▶</button></h3>
+                    <div id="task-list" class="collapsed"></div>
+                </div>
+                <div id="legend">
+                    <h3>Legend</h3>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #f39c12;"></div>
+                        <span>Pawn</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #27ae60;"></div>
+                        <span>Tree</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #95a5a6;"></div>
+                        <span>Iron</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #8e44ad;"></div>
+                        <span>Wall</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #e67e22;"></div>
+                        <span>Crafting Table</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #f4d03f;"></div>
+                        <span>Storage</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #2ecc71;"></div>
+                        <span>Grass</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #d35400;"></div>
+                        <span>Dirt</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #7f8c8d;"></div>
+                        <span>Stone</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #32CD32;"></div>
+                        <span>Plant</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #8b4513;"></div>
+                        <span>Dropped Wood</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: #c0c0c0;"></div>
+                        <span>Dropped Iron</span>
+                    </div>
+                </div>
+                <div id="resources">
+                    <h3>Resources</h3>
+                    <div id="resource-list"></div>
+                </div>
+                <div id="crafted-items">
+                    <h3>Crafted Items</h3>
+                    <div id="crafted-list"></div>
+                </div>
+                <div id="tile-inventory">
+                    <h3>Tile Inventory</h3>
+                    <div class="resource-item">Hover over a tile</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="types.js"></script>
+    <script src="utils.js"></script>
+    <script src="entities.js"></script>
+    <script src="pawn.js"></script>
+    <script src="input-manager.js"></script>
+    <script src="renderer.js"></script>
+    <script src="ui-manager.js"></script>
+    <script src="task-manager.js"></script>
+    <script src="game.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
