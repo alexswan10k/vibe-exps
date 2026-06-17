@@ -43,12 +43,29 @@ let playerArmor = 50;
 let wantedLevel = 0;
 let playerMoney = 500;
 
+// Weapon Inventory variables
+let playerWeaponIndex = 1; // 0=Fists, 1=Pistol, 2=Shotgun, 3=Uzi, 4=RPG
+let playerAmmo = {
+    0: Infinity, // Fists
+    1: Infinity, // Pistol
+    2: 30,       // Shotgun
+    3: 150,      // Uzi
+    4: 6         // RPG
+};
+
+// Mission variables
+let currentMission = null;
+let missionPayphone = { x: 788, y: 756, radius: 15, active: true };
+let notifTimer = 0;
+
 // Initialize game
 function init() {
     canvas = document.getElementById('game-canvas');
     ctx = canvas.getContext('2d');
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    
+    // Set dynamic sizing
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
 
     minimapCanvas = document.getElementById('minimap-canvas');
     if (minimapCanvas) {
@@ -94,8 +111,55 @@ function init() {
     }
 
     // Event listeners
-    document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
-    document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+    document.addEventListener('keydown', (e) => {
+        if (!e.key) return;
+        const key = e.key.toLowerCase();
+        const code = e.code ? e.code.toLowerCase() : '';
+        keys[key] = true;
+        if (code) keys[code] = true;
+        
+        // Weapon switching 1-5
+        if (['1', '2', '3', '4', '5'].includes(key)) {
+            playerWeaponIndex = parseInt(key) - 1;
+            if (typeof audioSystem !== 'undefined') audioSystem.playPunch(); // click sound
+        }
+
+        // Horn key H
+        if (key === 'h') {
+            if (player.inCar && typeof audioSystem !== 'undefined') {
+                audioSystem.playHorn(true);
+            }
+        }
+
+        // Prevent scrolling with arrows and space
+        if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
+            e.preventDefault();
+        }
+    });
+    
+    document.addEventListener('keyup', (e) => {
+        if (!e.key) return;
+        const key = e.key.toLowerCase();
+        const code = e.code ? e.code.toLowerCase() : '';
+        keys[key] = false;
+        if (code) keys[code] = false;
+
+        // Stop Horn
+        if (key === 'h') {
+            if (typeof audioSystem !== 'undefined') {
+                audioSystem.playHorn(false);
+            }
+        }
+    });
+
+    window.addEventListener('wheel', (e) => {
+        if (e.deltaY > 0) {
+            playerWeaponIndex = (playerWeaponIndex + 1) % 5;
+        } else {
+            playerWeaponIndex = (playerWeaponIndex - 1 + 5) % 5;
+        }
+        if (typeof audioSystem !== 'undefined') audioSystem.playPunch(); // click sound
+    });
 
     setupTouchControls();
 
@@ -115,6 +179,14 @@ function init() {
 
     // Start game loop
     gameLoop();
+}
+
+function resizeCanvas() {
+    if (!canvas) return;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    camera.width = canvas.width;
+    camera.height = canvas.height;
 }
 
 // Create cars
@@ -307,6 +379,87 @@ function update(deltaTime) {
     // Update scoring system
     updateScoring(prevX, prevY, deltaTime);
 
+    // Update active mission
+    if (currentMission) {
+        currentMission.timer -= deltaTime;
+        if (currentMission.timer <= 0) {
+            failMission("TIME IS UP!");
+        } else {
+            if (currentMission.type === 'taxi') {
+                let pass = currentMission.passenger;
+                if (!pass.pickedUp) {
+                    let px = player.inCar && player.car ? player.car.x + player.car.width/2 : player.x + player.width/2;
+                    let py = player.inCar && player.car ? player.car.y + player.car.height/2 : player.y + player.height/2;
+                    let dx = px - pass.x;
+                    let dy = py - pass.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (player.inCar && player.car && dist < 55 && Math.abs(player.car.speed) < 0.8) {
+                        pass.pickedUp = true;
+                        showMissionNotification("PASSENGER INSIDE", "Deliver them to the green target zone!");
+                    }
+                } else {
+                    let px = player.inCar && player.car ? player.car.x + player.car.width/2 : player.x + player.width/2;
+                    let py = player.inCar && player.car ? player.car.y + player.car.height/2 : player.y + player.height/2;
+                    let dx = px - currentMission.destination.x;
+                    let dy = py - currentMission.destination.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < currentMission.destination.size && Math.abs(player.car.speed) < 0.8) {
+                        passMission();
+                    }
+                }
+            } else if (currentMission.type === 'escape') {
+                if (wantedLevel === 0) {
+                    passMission();
+                }
+            } else if (currentMission.type === 'assassination') {
+                if (currentMission.target && currentMission.target.exploded) {
+                    passMission();
+                }
+            }
+        }
+    }
+
+    // Notification banner timer
+    if (notifTimer > 0) {
+        notifTimer -= deltaTime;
+        if (notifTimer <= 0) {
+            const banner = document.getElementById('big-notification');
+            if (banner) banner.style.display = 'none';
+        }
+    }
+
+    // Audio updates
+    if (typeof audioSystem !== 'undefined') {
+        if (player.inCar && player.car) {
+            let speedRatio = Math.abs(player.car.speed) / player.car.maxSpeed;
+            let isAccelerating = keys['w'] || keys['keyw'] || keys['arrowup'];
+            audioSystem.updateEngine(speedRatio, isAccelerating);
+
+            let lateralV = -player.car.vx * Math.sin(player.car.angle) + player.car.vy * Math.cos(player.car.angle);
+            let drift = Math.abs(lateralV);
+            if (keys[' ']) drift += 1.5;
+            audioSystem.updateDrift(drift);
+
+            if (player.car.isPolice && !player.car.exploded) {
+                audioSystem.playSiren(true);
+            } else {
+                audioSystem.playSiren(false);
+            }
+        } else {
+            audioSystem.updateEngine(0, false);
+            audioSystem.updateDrift(0);
+
+            // Play sirens if police are actively chasing
+            let activePolice = cars.find(c => c.isPolice && !c.exploded);
+            if (activePolice && wantedLevel > 0) {
+                audioSystem.playSiren(true);
+            } else {
+                audioSystem.playSiren(false);
+            }
+        }
+    }
+
     updateUI();
 
     // Update traffic lights
@@ -387,6 +540,46 @@ function updateUI() {
     const armorBar = document.getElementById('armor-bar');
     if (armorBar) armorBar.style.width = `${Math.max(0, playerArmor)}%`;
 
+    // Update Weapon Box
+    const weaponIconEl = document.getElementById('weapon-icon');
+    const ammoEl = document.getElementById('ammo');
+    const weaponEmojis = ['👊', '🔫', '🎯', '🔥', '🚀']; // Fists, Pistol, Shotgun, Uzi, RPG
+
+    if (weaponIconEl && typeof playerWeaponIndex !== 'undefined') {
+        weaponIconEl.textContent = weaponEmojis[playerWeaponIndex];
+    }
+    if (ammoEl && typeof playerAmmo !== 'undefined' && typeof playerWeaponIndex !== 'undefined') {
+        let amt = playerAmmo[playerWeaponIndex];
+        ammoEl.textContent = amt === Infinity ? '∞' : amt;
+    }
+
+    // Update Mission Panel
+    const missionPanel = document.getElementById('mission-panel');
+    if (missionPanel) {
+        if (currentMission) {
+            missionPanel.style.display = 'block';
+            document.getElementById('mission-title').textContent = currentMission.name;
+            
+            let inst = "";
+            if (currentMission.type === 'taxi') {
+                inst = currentMission.passenger.pickedUp ? "Deliver customer to green zone" : "Find passenger marked in green";
+            } else if (currentMission.type === 'escape') {
+                inst = "Lose wanted level or survive wanted level 3!";
+            } else if (currentMission.type === 'assassination') {
+                inst = "Destroy target maroon car (chase red arrow)";
+            }
+            document.getElementById('mission-instruction').textContent = inst;
+
+            // Timer display mm:ss
+            let secsTotal = Math.max(0, Math.floor(currentMission.timer / 1000));
+            let mins = Math.floor(secsTotal / 60);
+            let secs = secsTotal % 60;
+            document.getElementById('mission-timer').textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        } else {
+            missionPanel.style.display = 'none';
+        }
+    }
+
     // Update Wanted Level Stars
     for (let i = 1; i <= 5; i++) {
         const star = document.getElementById(`star-${i}`);
@@ -443,6 +636,39 @@ function drawMinimap() {
     minimapCtx.arc(player.x + player.width / 2, player.y + player.height / 2, 60, 0, Math.PI * 2);
     minimapCtx.fill();
 
+    // Draw mission targets on minimap
+    if (currentMission) {
+        if (currentMission.type === 'taxi') {
+            let pass = currentMission.passenger;
+            let dest = currentMission.destination;
+            if (!pass.pickedUp) {
+                minimapCtx.fillStyle = '#FF00FF'; // passenger blip (magenta)
+                minimapCtx.beginPath();
+                minimapCtx.arc(pass.x, pass.y, 80, 0, Math.PI * 2);
+                minimapCtx.fill();
+            } else {
+                minimapCtx.fillStyle = '#00FF00'; // destination blip (green)
+                minimapCtx.beginPath();
+                minimapCtx.arc(dest.x, dest.y, 120, 0, Math.PI * 2);
+                minimapCtx.fill();
+            }
+        } else if (currentMission.type === 'assassination') {
+            let target = currentMission.target;
+            if (target && !target.exploded) {
+                minimapCtx.fillStyle = '#FF3333'; // target blip (red)
+                minimapCtx.beginPath();
+                minimapCtx.arc(target.x + target.width/2, target.y + target.height/2, 90, 0, Math.PI * 2);
+                minimapCtx.fill();
+            }
+        }
+    } else if (typeof missionPayphone !== 'undefined' && missionPayphone.active) {
+        // Draw payphone blip
+        minimapCtx.fillStyle = '#FFFF00'; // payphone (yellow)
+        minimapCtx.beginPath();
+        minimapCtx.arc(missionPayphone.x, missionPayphone.y, 75, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
     minimapCtx.restore();
 }
 
@@ -477,11 +703,11 @@ function draw() {
     const b = Math.floor(235 * lightLevel);
 
     // Draw sky gradient background
-    const gradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, `rgb(${r}, ${g}, ${b})`); // Sky blue scaled down
     gradient.addColorStop(1, `rgb(${Math.floor(152 * lightLevel)}, ${Math.floor(251 * lightLevel)}, ${Math.floor(152 * lightLevel)})`); // Light green scaled
     ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Save context and apply camera transform
     ctx.save();
@@ -501,125 +727,213 @@ function draw() {
         ...world.crossroads
     ];
 
-    // Draw road shadows first
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    // Draw sidewalks first (large concrete bases under the roads)
+    ctx.fillStyle = '#a0a0a0'; // Concrete sidewalk color
     for (let road of allRoads) {
-        ctx.fillRect(road.x + 2, road.y + 2, road.width, road.height);
+        ctx.fillRect(road.x - 8, road.y - 8, road.width + 16, road.height + 16);
     }
 
-    // Draw roads with gradient
-    const roadGradient = ctx.createLinearGradient(0, 0, 0, 100);
-    roadGradient.addColorStop(0, '#2F4F4F');
-    roadGradient.addColorStop(1, '#1C1C1C');
-    ctx.fillStyle = roadGradient;
+    // Draw curbs (darker concrete border)
+    ctx.fillStyle = '#7a7a7a';
+    for (let road of allRoads) {
+        ctx.fillRect(road.x - 2, road.y - 2, road.width + 4, road.height + 4);
+    }
+
+    // Draw asphalt (road bed)
+    ctx.fillStyle = '#222222'; // Dark asphalt
     for (let road of allRoads) {
         ctx.fillRect(road.x, road.y, road.width, road.height);
     }
 
-    // Draw road borders
-    ctx.strokeStyle = '#696969';
-    ctx.lineWidth = 3;
+    // Draw markings (yellow centerlines and white lanes)
     for (let road of allRoads) {
-        ctx.strokeRect(road.x, road.y, road.width, road.height);
-    }
+        ctx.lineWidth = 2;
+        if (road.type === 'horizontal' || road.width > road.height) {
+            // Double yellow line in the center
+            ctx.strokeStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.moveTo(road.x, road.y + road.height / 2 - 2);
+            ctx.lineTo(road.x + road.width, road.y + road.height / 2 - 2);
+            ctx.moveTo(road.x, road.y + road.height / 2 + 2);
+            ctx.lineTo(road.x + road.width, road.y + road.height / 2 + 2);
+            ctx.stroke();
 
-    // Draw road markings with better styling
-    ctx.strokeStyle = '#FFFF00';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([15, 10]);
-    for (let road of allRoads) {
-        ctx.beginPath();
-        if (road.width > road.height) {
-            // Horizontal road - draw center line
-            ctx.moveTo(road.x, road.y + road.height / 2);
-            ctx.lineTo(road.x + road.width, road.y + road.height / 2);
+            // Dashed white lane dividers (left & right lanes)
+            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+            ctx.setLineDash([8, 12]);
+            ctx.beginPath();
+            // top half divider
+            ctx.moveTo(road.x, road.y + road.height * 0.25);
+            ctx.lineTo(road.x + road.width, road.y + road.height * 0.25);
+            // bottom half divider
+            ctx.moveTo(road.x, road.y + road.height * 0.75);
+            ctx.lineTo(road.x + road.width, road.y + road.height * 0.75);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        } else if (road.type === 'vertical' || road.height > road.width) {
+            // Double yellow line in the center
+            ctx.strokeStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.moveTo(road.x + road.width / 2 - 2, road.y);
+            ctx.lineTo(road.x + road.width / 2 - 2, road.y + road.height);
+            ctx.moveTo(road.x + road.width / 2 + 2, road.y);
+            ctx.lineTo(road.x + road.width / 2 + 2, road.y + road.height);
+            ctx.stroke();
+
+            // Dashed white lane dividers
+            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+            ctx.setLineDash([8, 12]);
+            ctx.beginPath();
+            // left half divider
+            ctx.moveTo(road.x + road.width * 0.25, road.y);
+            ctx.lineTo(road.x + road.width * 0.25, road.y + road.height);
+            // right half divider
+            ctx.moveTo(road.x + road.width * 0.75, road.y);
+            ctx.lineTo(road.x + road.width * 0.75, road.y + road.height);
+            ctx.stroke();
+            ctx.setLineDash([]);
         } else {
-            // Vertical road - draw center line
-            ctx.moveTo(road.x + road.width / 2, road.y);
-            ctx.lineTo(road.x + road.width / 2, road.y + road.height);
-        }
-        ctx.stroke();
-    }
-    ctx.setLineDash([]);
-
-    // Draw lane markings for wider roads
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 15]);
-    for (let road of allRoads) {
-        if (road.width > road.height && road.width > 100) {
-            // Draw lane dividers for wide horizontal roads
-            ctx.beginPath();
-            ctx.moveTo(road.x + road.width / 3, road.y);
-            ctx.lineTo(road.x + road.width / 3, road.y + road.height);
-            ctx.moveTo(road.x + 2 * road.width / 3, road.y);
-            ctx.lineTo(road.x + 2 * road.width / 3, road.y + road.height);
-            ctx.stroke();
-        } else if (road.height > road.width && road.height > 100) {
-            // Draw lane dividers for wide vertical roads
-            ctx.beginPath();
-            ctx.moveTo(road.x, road.y + road.height / 3);
-            ctx.lineTo(road.x + road.width, road.y + road.height / 3);
-            ctx.moveTo(road.x, road.y + 2 * road.height / 3);
-            ctx.lineTo(road.x + road.width, road.y + 2 * road.height / 3);
-            ctx.stroke();
+            // Crossroads/Intersections
+            // Draw crosswalk stripes (zebra crossing) on all 4 entrances
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            let w = road.width;
+            let h = road.height;
+            // Zebra horizontal (top & bottom)
+            for (let i = 10; i < w - 10; i += 12) {
+                ctx.fillRect(road.x + i, road.y + 2, 6, 10);
+                ctx.fillRect(road.x + i, road.y + h - 12, 6, 10);
+            }
+            // Zebra vertical (left & right)
+            for (let i = 10; i < h - 10; i += 12) {
+                ctx.fillRect(road.x + 2, road.y + i, 10, 6);
+                ctx.fillRect(road.x + w - 12, road.y + i, 10, 6);
+            }
         }
     }
-    ctx.setLineDash([]);
 
     if (typeof particleSystem !== 'undefined') {
         particleSystem.drawSkidMarks(ctx);
     }
 
-    // Draw buildings with enhanced graphics
+    // Draw buildings with 3D parallax extrusion
+    const camCenterX = camera.x + canvas.width / 2;
+    const camCenterY = camera.y + canvas.height / 2;
+
     for (let building of world.buildings) {
-        // Building shadow
+        // Calculate camera-relative screen offset for 3D depth effect
+        let screenX = (building.x + building.width / 2) - camCenterX;
+        let screenY = (building.y + building.height / 2) - camCenterY;
+
+        // Projection factors (tweak to change building height)
+        let prFactor = 0.16; 
+        let offsetX = screenX * prFactor;
+        let offsetY = screenY * prFactor;
+
+        // Base Corners
+        let b1x = building.x, b1y = building.y;
+        let b2x = building.x + building.width, b2y = building.y;
+        let b3x = building.x + building.width, b3y = building.y + building.height;
+        let b4x = building.x, b4y = building.y + building.height;
+
+        // Roof Corners
+        let r1x = b1x + offsetX, r1y = b1y + offsetY;
+        let r2x = b2x + offsetX, r2y = b2y + offsetY;
+        let r3x = b3x + offsetX, r3y = b3y + offsetY;
+        let r4x = b4x + offsetX, r4y = b4y + offsetY;
+
+        // Draw Shadows of the walls and building
         ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.fillRect(building.x + 3, building.y + 3, building.width, building.height);
+        ctx.beginPath();
+        ctx.moveTo(b1x, b1y);
+        ctx.lineTo(b2x, b2y);
+        ctx.lineTo(r2x + 8, r2y + 8);
+        ctx.lineTo(r3x + 8, r3y + 8);
+        ctx.lineTo(r4x + 8, r4y + 8);
+        ctx.lineTo(b4x, b4y);
+        ctx.closePath();
+        ctx.fill();
 
-        // Building body with gradient effect
-        const gradient = ctx.createLinearGradient(building.x, building.y, building.x + building.width, building.y + building.height);
-        gradient.addColorStop(0, '#A0522D');
-        gradient.addColorStop(1, '#8B4513');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(building.x, building.y, building.width, building.height);
-
-        // Building outline
-        ctx.strokeStyle = '#654321';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(building.x, building.y, building.width, building.height);
-
-        // Add windows to buildings with lighting effect
-        ctx.fillStyle = '#FFFF99';
-        for (let wx = building.x + 10; wx < building.x + building.width - 10; wx += 20) {
-            for (let wy = building.y + 10; wy < building.y + building.height - 10; wy += 20) {
-                // Randomly light some windows
-                if (Math.random() > 0.7) {
-                    ctx.fillStyle = '#FFD700'; // Brighter for lit windows
-                } else {
-                    ctx.fillStyle = '#FFFF99'; // Normal window color
-                }
-                ctx.fillRect(wx, wy, 8, 8);
-
-                // Window frame
-                ctx.strokeStyle = '#DAA520';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(wx, wy, 8, 8);
-
-                ctx.fillStyle = '#FFFF99'; // Reset for next window
-            }
+        // Render Walls (only walls facing the camera)
+        // Left Wall
+        if (offsetX > 0) {
+            ctx.fillStyle = '#653c24'; // Shaded wall brown
+            ctx.beginPath();
+            ctx.moveTo(b1x, b1y);
+            ctx.lineTo(b4x, b4y);
+            ctx.lineTo(r4x, r4y);
+            ctx.lineTo(r1x, r1y);
+            ctx.closePath();
+            ctx.fill();
+        }
+        // Right Wall
+        if (offsetX < 0) {
+            ctx.fillStyle = '#422412'; // Darker shaded wall brown
+            ctx.beginPath();
+            ctx.moveTo(b2x, b2y);
+            ctx.lineTo(b3x, b3y);
+            ctx.lineTo(r3x, r3y);
+            ctx.lineTo(r2x, r2y);
+            ctx.closePath();
+            ctx.fill();
+        }
+        // Top Wall
+        if (offsetY > 0) {
+            ctx.fillStyle = '#7c4c30'; // Lighter brown wall
+            ctx.beginPath();
+            ctx.moveTo(b1x, b1y);
+            ctx.lineTo(b2x, b2y);
+            ctx.lineTo(r2x, r2y);
+            ctx.lineTo(r1x, r1y);
+            ctx.closePath();
+            ctx.fill();
+        }
+        // Bottom Wall
+        if (offsetY < 0) {
+            ctx.fillStyle = '#311a0d'; // Darkest brown wall
+            ctx.beginPath();
+            ctx.moveTo(b3x, b3y);
+            ctx.lineTo(b4x, b4y);
+            ctx.lineTo(r4x, r4y);
+            ctx.lineTo(r3x, r3y);
+            ctx.closePath();
+            ctx.fill();
         }
 
-        // Draw pedestrians
-        for (let ped of pedestrians) {
-            if (ped.state === 'dead' && ped.x > building.x && ped.x < building.x + building.width && ped.y > building.y && ped.y < building.y + building.height) {
-                // hide dead bodies under buildings? or just draw generally
-            }
-        }
+        // Draw Roof
+        const roofGradient = ctx.createLinearGradient(r1x, r1y, r3x, r3y);
+        roofGradient.addColorStop(0, '#a55c32'); // Terracotta roof color
+        roofGradient.addColorStop(1, '#82421f');
+        ctx.fillStyle = roofGradient;
+        ctx.beginPath();
+        ctx.moveTo(r1x, r1y);
+        ctx.lineTo(r2x, r2y);
+        ctx.lineTo(r3x, r3y);
+        ctx.lineTo(r4x, r4y);
+        ctx.closePath();
+        ctx.fill();
 
-        // Add door
-        ctx.fillStyle = '#4A4A4A';
-        ctx.fillRect(building.x + building.width / 2 - 5, building.y + building.height - 15, 10, 15);
+        // Roof Border
+        ctx.strokeStyle = '#5c2d14';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
+        // Roof Details: Helipad or Air Conditioner boxes
+        ctx.fillStyle = '#555';
+        ctx.fillRect(r1x + building.width * 0.3, r1y + building.height * 0.3, building.width * 0.4, building.height * 0.4);
+        ctx.strokeStyle = '#333';
+        ctx.strokeRect(r1x + building.width * 0.3, r1y + building.height * 0.3, building.width * 0.4, building.height * 0.4);
+        
+        // Helipad circle
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(r1x + building.width / 2, r1y + building.height / 2, building.width * 0.15, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('H', r1x + building.width / 2, r1y + building.height / 2);
     }
 
     // Draw traffic lights with enhanced graphics
@@ -702,14 +1016,14 @@ function draw() {
     if (darkness > 0.1) { // 0.1 threshold to not draw if full day
         ctx.fillStyle = `rgba(5, 5, 20, ${darkness * 0.85})`;
         // Huge rect to cover camera
-        ctx.fillRect(camera.x - CANVAS_WIDTH, camera.y - CANVAS_HEIGHT, CANVAS_WIDTH * 3, CANVAS_HEIGHT * 3);
+        ctx.fillRect(camera.x - canvas.width, camera.y - canvas.height, canvas.width * 3, canvas.height * 3);
 
         // Draw headlights over the darkness using lighter composition
         ctx.globalCompositeOperation = 'lighter';
         for (let car of cars) {
             // Check if car is on screen
-            if (car.x > camera.x - car.width * 2 && car.x < camera.x + CANVAS_WIDTH + car.width * 2 &&
-                car.y > camera.y - car.height * 2 && car.y < camera.y + CANVAS_HEIGHT + car.height * 2) {
+            if (car.x > camera.x - car.width * 2 && car.x < camera.x + canvas.width + car.width * 2 &&
+                car.y > camera.y - car.height * 2 && car.y < camera.y + canvas.height + car.height * 2) {
 
                 // Headlight parameters
                 const lightLength = 300;
@@ -749,13 +1063,116 @@ function draw() {
         weaponSystem.draw(ctx);
     }
 
+    // Draw Payphone
+    if (typeof missionPayphone !== 'undefined' && missionPayphone.active && !currentMission) {
+        let flash = Math.sin(Date.now() * 0.015) * 0.2 + 0.8;
+        ctx.fillStyle = `rgba(255, 215, 0, ${0.25 * flash})`;
+        ctx.beginPath();
+        ctx.arc(missionPayphone.x, missionPayphone.y, 30, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFF00'; // yellow phone booth
+        ctx.fillRect(missionPayphone.x - 8, missionPayphone.y - 12, 16, 24);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.8;
+        ctx.strokeRect(missionPayphone.x - 8, missionPayphone.y - 12, 16, 24);
+
+        ctx.fillStyle = '#000';
+        ctx.font = '10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('📞', missionPayphone.x, missionPayphone.y);
+
+        let dist = Math.sqrt((player.x + player.width/2 - missionPayphone.x)**2 + (player.y + player.height/2 - missionPayphone.y)**2);
+        if (dist < 40 && !player.inCar) {
+            ctx.fillStyle = '#FFFF99';
+            ctx.font = 'bold 12px Arial';
+            ctx.fillText('E: Answer Phone', missionPayphone.x, missionPayphone.y - 20);
+
+            if (keys['e']) {
+                startRandomMission();
+                keys['e'] = false; // consume E
+            }
+        }
+    }
+
+    // Draw active mission targets
+    if (currentMission) {
+        if (currentMission.type === 'taxi') {
+            let pass = currentMission.passenger;
+            let dest = currentMission.destination;
+            if (!pass.pickedUp) {
+                // Draw passenger
+                ctx.fillStyle = '#FF00FF'; // magenta shirt
+                ctx.beginPath();
+                ctx.arc(pass.x, pass.y, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FDBCB4'; // skin head
+                ctx.beginPath();
+                ctx.arc(pass.x, pass.y - 8, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Blinking green indicator
+                let bounce = Math.sin(Date.now() * 0.015) * 6;
+                ctx.fillStyle = '#00FF00';
+                ctx.beginPath();
+                ctx.moveTo(pass.x, pass.y - 15 + bounce);
+                ctx.lineTo(pass.x - 5, pass.y - 23 + bounce);
+                ctx.lineTo(pass.x + 5, pass.y - 23 + bounce);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Draw destination zone
+                let flash = Math.sin(Date.now() * 0.012) * 0.2 + 0.6;
+                ctx.fillStyle = `rgba(0, 255, 0, ${0.2 * flash})`;
+                ctx.beginPath();
+                ctx.arc(dest.x, dest.y, dest.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = `rgba(0, 255, 0, ${flash})`;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(dest.x, dest.y, dest.size, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.fillStyle = '#00FF00';
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText('TARGET ZONE', dest.x, dest.y - dest.size - 5);
+            }
+        } else if (currentMission.type === 'assassination') {
+            let target = currentMission.target;
+            if (target && !target.exploded) {
+                let bounce = Math.sin(Date.now() * 0.015) * 6;
+                ctx.fillStyle = '#FF3333';
+                ctx.beginPath();
+                ctx.moveTo(target.x + target.width/2, target.y - 15 + bounce);
+                ctx.lineTo(target.x + target.width/2 - 6, target.y - 23 + bounce);
+                ctx.lineTo(target.x + target.width/2 + 6, target.y - 23 + bounce);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    }
+
     // Restore context
     ctx.restore();
 }
 
 function setupTouchControls() {
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
-    if (!isMobile) return;
+    // Add click handler for the toggle button (works on desktop & mobile)
+    const toggleBtn = document.getElementById('btn-toggle-touch');
+    const touchPanel = document.getElementById('touch-controls');
+    
+    if (toggleBtn && touchPanel) {
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (touchPanel.style.display === 'block') {
+                touchPanel.style.display = 'none';
+            } else {
+                touchPanel.style.display = 'block';
+            }
+            if (typeof audioSystem !== 'undefined') audioSystem.playPunch();
+        });
+    }
 
     const joystickZone = document.getElementById('joystick-zone');
     const joystickKnob = document.getElementById('joystick-knob');
@@ -764,21 +1181,14 @@ function setupTouchControls() {
     const maxDistance = 40;
 
     if (joystickZone) {
+        // Touch events
         joystickZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
             joystickActive = true;
             const touch = e.touches[0];
             const rect = joystickZone.getBoundingClientRect();
-
-            const touchX = touch.clientX - rect.left;
-            const touchY = touch.clientY - rect.top;
-
-            joystickOrigin = {
-                x: rect.width / 2,
-                y: rect.height / 2
-            };
-
-            updateJoystick(touchX, touchY);
+            joystickOrigin = { x: rect.width / 2, y: rect.height / 2 };
+            updateJoystick(touch.clientX - rect.left, touch.clientY - rect.top);
         }, { passive: false });
 
         joystickZone.addEventListener('touchmove', (e) => {
@@ -788,6 +1198,20 @@ function setupTouchControls() {
             const rect = joystickZone.getBoundingClientRect();
             updateJoystick(touch.clientX - rect.left, touch.clientY - rect.top);
         }, { passive: false });
+
+        // Mouse events for joystick testing on desktop
+        joystickZone.addEventListener('mousedown', (e) => {
+            joystickActive = true;
+            const rect = joystickZone.getBoundingClientRect();
+            joystickOrigin = { x: rect.width / 2, y: rect.height / 2 };
+            updateJoystick(e.clientX - rect.left, e.clientY - rect.top);
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!joystickActive) return;
+            const rect = joystickZone.getBoundingClientRect();
+            updateJoystick(e.clientX - rect.left, e.clientY - rect.top);
+        });
 
         const resetJoystick = () => {
             joystickActive = false;
@@ -800,6 +1224,7 @@ function setupTouchControls() {
 
         joystickZone.addEventListener('touchend', resetJoystick);
         joystickZone.addEventListener('touchcancel', resetJoystick);
+        document.addEventListener('mouseup', resetJoystick);
 
         function updateJoystick(x, y) {
             let dx = x - joystickOrigin.x;
@@ -823,6 +1248,7 @@ function setupTouchControls() {
     const bindButton = (id, key) => {
         const btn = document.getElementById(id);
         if (btn) {
+            // Touch
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 keys[key] = true;
@@ -835,6 +1261,20 @@ function setupTouchControls() {
             };
             btn.addEventListener('touchend', resetBtn);
             btn.addEventListener('touchcancel', resetBtn);
+
+            // Mouse
+            btn.addEventListener('mousedown', (e) => {
+                keys[key] = true;
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.4)';
+            });
+            btn.addEventListener('mouseup', () => {
+                keys[key] = false;
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+            });
+            btn.addEventListener('mouseleave', () => {
+                keys[key] = false;
+                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
+            });
         }
     };
 
@@ -845,12 +1285,111 @@ function setupTouchControls() {
 function updateCamera() {
     const worldSize = world.getWorldSize();
     // Camera follows the player
-    camera.x = player.x - CANVAS_WIDTH / 2;
-    camera.y = player.y - CANVAS_HEIGHT / 2;
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
 
     // Keep camera within world bounds
-    camera.x = Math.max(0, Math.min(worldSize.width - CANVAS_WIDTH, camera.x));
-    camera.y = Math.max(0, Math.min(worldSize.height - CANVAS_HEIGHT, camera.y));
+    camera.x = Math.max(0, Math.min(worldSize.width - canvas.width, camera.x));
+    camera.y = Math.max(0, Math.min(worldSize.height - canvas.height, camera.y));
+}
+
+function showMissionNotification(title, desc, duration = 4000) {
+    const banner = document.getElementById('big-notification');
+    const t = document.getElementById('notif-title');
+    const d = document.getElementById('notif-desc');
+    if (banner && t && d) {
+        t.textContent = title;
+        d.textContent = desc;
+        banner.style.display = 'block';
+        notifTimer = duration;
+    }
+}
+
+function startRandomMission() {
+    let missionTypes = ['taxi', 'escape', 'assassination'];
+    let type = missionTypes[Math.floor(Math.random() * missionTypes.length)];
+
+    if (type === 'taxi') {
+        let allValidRoads = [...world.horizontalRoads, ...world.verticalRoads];
+        let randRoad = allValidRoads[Math.floor(Math.random() * allValidRoads.length)];
+        let passengerX = randRoad.x + randRoad.width / 2;
+        let passengerY = randRoad.y + randRoad.height / 2;
+
+        let destRoad = randRoad;
+        while (destRoad === randRoad) {
+            destRoad = allValidRoads[Math.floor(Math.random() * allValidRoads.length)];
+        }
+        let destX = destRoad.x + destRoad.width / 2;
+        let destY = destRoad.y + destRoad.height / 2;
+
+        currentMission = {
+            type: 'taxi',
+            name: 'TAXI DRIVER',
+            passenger: { x: passengerX, y: passengerY, pickedUp: false },
+            destination: { x: destX, y: destY, size: 40 },
+            timer: 60000,
+            reward: 1200
+        };
+        showMissionNotification("TAXI MISSION", "Pick up the magenta passenger waving on the street!");
+    } else if (type === 'escape') {
+        currentMission = {
+            type: 'escape',
+            name: 'POLICE CHASE',
+            timer: 45000,
+            reward: 1800
+        };
+        wantedLevel = 3;
+        showMissionNotification("POLICE CHASE", "Survive wanted level 3 police for 45 seconds!");
+    } else if (type === 'assassination') {
+        const worldSize = world.getWorldSize();
+        let spawnX = player.x + (Math.random() > 0.5 ? 600 : -600);
+        let spawnY = player.y + (Math.random() > 0.5 ? 600 : -600);
+        spawnX = Math.max(100, Math.min(worldSize.width - 100, spawnX));
+        spawnY = Math.max(100, Math.min(worldSize.height - 100, spawnY));
+
+        let targetCar = new Car(spawnX, spawnY, 0, false, '#800000');
+        targetCar.health = 220;
+        targetCar.maxSpeed = 5.2;
+        targetCar.isTarget = true;
+        cars.push(targetCar);
+
+        currentMission = {
+            type: 'assassination',
+            name: 'MOB TIE-UP',
+            target: targetCar,
+            timer: 75000,
+            reward: 2500
+        };
+        showMissionNotification("ELIMINATE TARGET", "Find and destroy the maroon target car!");
+    }
+}
+
+function passMission() {
+    if (!currentMission) return;
+    playerMoney += currentMission.reward;
+    score += currentMission.reward;
+    showMissionNotification("MISSION PASSED!", `+$${currentMission.reward}`);
+    if (typeof audioSystem !== 'undefined') audioSystem.playMissionPassed();
+    
+    // Auto-replenish ammo as a bonus!
+    playerAmmo[2] = Math.min(playerAmmo[2] + 8, 45);
+    playerAmmo[3] = Math.min(playerAmmo[3] + 40, 250);
+    playerAmmo[4] = Math.min(playerAmmo[4] + 2, 8);
+    
+    currentMission = null;
+}
+
+function failMission(reason = "") {
+    if (!currentMission) return;
+    showMissionNotification("MISSION FAILED", reason || "Busted!");
+    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+    
+    // Clear targets
+    if (currentMission.type === 'assassination' && currentMission.target) {
+        currentMission.target.exploded = true; // remove target car
+    }
+    
+    currentMission = null;
 }
 
 // Start the game when page loads

@@ -94,6 +94,9 @@ class Pedestrian {
     die() {
         this.state = 'dead';
         this.color = '#880000'; // dead
+        if (typeof audioSystem !== 'undefined') {
+            audioSystem.playScream();
+        }
     }
 
     draw(ctx) {

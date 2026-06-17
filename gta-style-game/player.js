@@ -6,12 +6,13 @@ class Player {
         this.y = y;
         this.width = 20;
         this.height = 20;
-        this.speed = 3;
+        this.speed = 3.2;
         this.inCar = false;
         this.car = null;
         this.worldWidth = worldSize.width;
         this.worldHeight = worldSize.height;
         this.overrideAngle = null;
+        this.angle = 0;
     }
 
     update(keys, buildings) {
@@ -23,19 +24,19 @@ class Player {
         let dx = 0, dy = 0;
         let isMoving = false;
 
-        if (keys['w'] || keys['arrowup']) {
+        if (keys['w'] || keys['keyw'] || keys['arrowup']) {
             dy -= this.speed;
             isMoving = true;
         }
-        if (keys['s'] || keys['arrowdown']) {
+        if (keys['s'] || keys['keys'] || keys['arrowdown']) {
             dy += this.speed;
             isMoving = true;
         }
-        if (keys['a'] || keys['arrowleft']) {
+        if (keys['a'] || keys['keya'] || keys['arrowleft']) {
             dx -= this.speed;
             isMoving = true;
         }
-        if (keys['d'] || keys['arrowright']) {
+        if (keys['d'] || keys['keyd'] || keys['arrowright']) {
             dx += this.speed;
             isMoving = true;
         }
@@ -61,7 +62,9 @@ class Player {
 
         // Update animation state
         this.isMoving = isMoving;
-        this.facingDirection = this.getFacingDirection(dx, dy);
+        if (isMoving) {
+            this.angle = Math.atan2(dy, dx);
+        }
     }
 
     getFacingDirection(dx, dy) {
@@ -83,8 +86,8 @@ class Player {
     }
 
     enterCar(car) {
-        if (Math.abs(this.x + this.width / 2 - (car.x + car.width / 2)) < 50 &&
-            Math.abs(this.y + this.height / 2 - (car.y + car.height / 2)) < 50) {
+        if (Math.abs(this.x + this.width / 2 - (car.x + car.width / 2)) < 65 &&
+            Math.abs(this.y + this.height / 2 - (car.y + car.height / 2)) < 65) {
             this.inCar = true;
             this.car = car;
             car.isPlayerCar = true; // Take control of this car
@@ -111,79 +114,110 @@ class Player {
             ctx.save();
             ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
 
-            // Apply rotation based on overrideAngle or facingDirection
+            let drawAngle = this.angle;
             if (this.overrideAngle !== undefined && this.overrideAngle !== null) {
-                ctx.rotate(this.overrideAngle + Math.PI / 2); // assuming down is looking forward in original art
-            } else {
-                let moveAngle = 0;
-                if (this.facingDirection === 'right') moveAngle = -Math.PI / 2;
-                if (this.facingDirection === 'left') moveAngle = Math.PI / 2;
-                if (this.facingDirection === 'up') moveAngle = Math.PI;
-                ctx.rotate(moveAngle);
+                drawAngle = this.overrideAngle;
             }
+            ctx.rotate(drawAngle);
 
-            // Player shadow
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.fillRect(-this.width / 2 + 1, -this.height / 2 + 1, this.width, this.height);
+            // Shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+            ctx.fillRect(-8 + 2, -10 + 2, 16, 20);
 
-            // Player body (main torso)
-            ctx.fillStyle = '#4169E1'; // Royal blue shirt
-            ctx.fillRect(-this.width / 2, -this.height / 2, this.width, this.height);
-
-            // Player head
-            ctx.fillStyle = '#FDBCB4'; // Skin color
-            ctx.fillRect(-6, -this.height - 8, 12, 8);
-
-            // Player hair
-            ctx.fillStyle = '#8B4513'; // Brown hair
-            ctx.fillRect(-5, -this.height - 10, 10, 4);
-
-            // Eyes
-            ctx.fillStyle = '#000';
-            ctx.fillRect(-4, -this.height - 6, 2, 2); // left eye
-            ctx.fillRect(2, -this.height - 6, 2, 2); // right eye
-
-            // Eye whites
-            ctx.fillStyle = '#FFF';
-            ctx.fillRect(-3, -this.height - 6, 1, 1); // left eye white
-            ctx.fillRect(3, -this.height - 6, 1, 1); // right eye white
-
-            // Nose
-            ctx.fillStyle = '#F0A0A0';
-            ctx.fillRect(-1, -this.height - 4, 2, 1);
-
-            // Mouth
-            ctx.fillStyle = '#000';
-            ctx.fillRect(-2, -this.height - 2, 4, 1);
-
-            // Arms
-            ctx.fillStyle = '#FDBCB4';
-            ctx.fillRect(-this.width / 2 - 3, -this.height / 2 + 2, 3, this.height - 4); // left arm
-            ctx.fillRect(this.width / 2, -this.height / 2 + 2, 3, this.height - 4); // right arm
-
-            // Legs
-            ctx.fillStyle = '#000080'; // Dark blue pants
-            ctx.fillRect(-this.width / 2 + 2, this.height / 2 - 2, 6, this.height / 2); // left leg
-            ctx.fillRect(this.width / 2 - 8, this.height / 2 - 2, 6, this.height / 2); // right leg
-
-            // Shoes
-            ctx.fillStyle = '#000';
-            ctx.fillRect(-this.width / 2 + 1, this.height / 2 + this.height / 2 - 3, 8, 3); // left shoe
-            ctx.fillRect(this.width / 2 - 9, this.height / 2 + this.height / 2 - 3, 8, 3); // right shoe
-
-            // If aiming, draw a gun in the right hand
-            if (this.overrideAngle !== undefined && this.overrideAngle !== null) {
-                ctx.fillStyle = '#444'; // Gun color
-                // Draw pistol coming out of right hand, pointing "forward"
-                ctx.fillRect(this.width / 2, -this.height / 2 - 8, 4, 12);
-                ctx.fillStyle = '#222';
-                ctx.fillRect(this.width / 2 + 1, -this.height / 2 - 8, 2, 4);
-            }
-
-            // Add some animation based on movement
+            // Legs walking animation
             if (this.isMoving) {
-                // Slight bobbing animation
-                ctx.translate(0, Math.sin(gameTime * 0.01) * 0.5);
+                let walkCycle = Math.sin(Date.now() * 0.015) * 6;
+                ctx.fillStyle = '#000080'; // Jeans color
+                // Left leg
+                ctx.fillRect(-6 + walkCycle, -8, 8, 5);
+                // Right leg
+                ctx.fillRect(-6 - walkCycle, 3, 8, 5);
+            } else {
+                ctx.fillStyle = '#000080';
+                ctx.fillRect(-6, -7, 6, 5);
+                ctx.fillRect(-6, 2, 6, 5);
+            }
+
+            // Torso (shoulders along Y-axis)
+            ctx.fillStyle = '#4169E1'; // Royal blue shirt
+            ctx.fillRect(-5, -10, 10, 20);
+
+            // Head (centered)
+            ctx.fillStyle = '#FDBCB4'; // Skin tone
+            ctx.beginPath();
+            ctx.arc(0, 0, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hair (on the back/West side of head)
+            ctx.fillStyle = '#8B4513'; // Brown hair
+            ctx.beginPath();
+            ctx.arc(-2, 0, 4.5, Math.PI / 2, 3 * Math.PI / 2);
+            ctx.fill();
+            ctx.fillRect(-4, -4.5, 3, 9); // hair bulk
+
+            // Eyes (looking East)
+            ctx.fillStyle = '#FFF'; // Whites
+            ctx.fillRect(2, -3, 1.5, 1.5);
+            ctx.fillRect(2, 1.5, 1.5, 1.5);
+            ctx.fillStyle = '#000'; // Pupils
+            ctx.fillRect(3, -2.5, 1, 1);
+            ctx.fillRect(3, 2, 1, 1);
+
+            // Weapon drawing overlay
+            if (this.overrideAngle !== undefined && this.overrideAngle !== null) {
+                // Determine current weapon type from game state
+                let currentWeapon = 1; // default to pistol
+                if (typeof playerWeaponIndex !== 'undefined') {
+                    currentWeapon = playerWeaponIndex;
+                }
+                
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2.5;
+                ctx.fillStyle = '#222';
+
+                // Fists/Melee is 0, Pistol is 1, Shotgun is 2, Uzi/SMG is 3, RPG is 4
+                if (currentWeapon === 1) {
+                    // Pistol: single hand forward
+                    ctx.beginPath();
+                    ctx.moveTo(3, -5);
+                    ctx.lineTo(12, -5); // gun barrel
+                    ctx.stroke();
+                } else if (currentWeapon === 2) {
+                    // Shotgun: two hands, long barrel
+                    ctx.lineWidth = 3.5;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -5);
+                    ctx.lineTo(16, -2); // barrel
+                    ctx.stroke();
+                } else if (currentWeapon === 3) {
+                    // Machine gun: short dual barrel
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(3, -6);
+                    ctx.lineTo(14, -6);
+                    ctx.moveTo(3, 3);
+                    ctx.lineTo(12, 3);
+                    ctx.stroke();
+                } else if (currentWeapon === 4) {
+                    // RPG: Huge launcher on shoulder
+                    ctx.fillStyle = '#2b3a2b'; // green launcher
+                    ctx.strokeStyle = '#1a241a';
+                    ctx.fillRect(-5, -12, 22, 5); // RPG tube
+                    ctx.fillStyle = '#4f4f4f'; // metal head
+                    ctx.beginPath();
+                    ctx.moveTo(17, -13);
+                    ctx.lineTo(22, -9.5);
+                    ctx.lineTo(17, -6);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            } else {
+                // Hands resting at sides
+                ctx.fillStyle = '#FDBCB4'; // Skin tone hands
+                ctx.beginPath();
+                ctx.arc(2, -9, 2, 0, Math.PI * 2);
+                ctx.arc(2, 9, 2, 0, Math.PI * 2);
+                ctx.fill();
             }
 
             ctx.restore();

@@ -117,20 +117,26 @@ class Car {
         let newX = this.x + this.vx;
         let newY = this.y + this.vy;
 
-        // Check collision with buildings only (not other cars for player)
-        if (!this.isCollidingWithBuildings(newX, newY, buildings)) { // Wait, player car should collide with cars too realistically, but kept to original logic for now
+        let collidingCar = this.getCollidingCar(newX, newY, cars);
+
+        if (!this.isCollidingWithBuildings(newX, newY, buildings) && !collidingCar) {
             this.x = newX;
             this.y = newY;
         } else {
-            // Bounce back on collision with buildings
-            let impactSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-            if (impactSpeed > 2) {
-                this.takeDamage(impactSpeed * 5); // Take damage on crash
-            }
+            if (collidingCar) {
+                this.resolveCarCollision(collidingCar);
+            } else {
+                // Bounce back on collision with buildings
+                let impactSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (impactSpeed > 2) {
+                    this.takeDamage(impactSpeed * 5); // Take damage on crash
+                    if (typeof audioSystem !== 'undefined') audioSystem.playCrash(impactSpeed);
+                }
 
-            this.vx *= -0.5;
-            this.vy *= -0.5;
-            this.speed *= -0.5;
+                this.vx *= -0.5;
+                this.vy *= -0.5;
+                this.speed *= -0.5;
+            }
         }
 
         // Keep car in world bounds
@@ -598,6 +604,68 @@ class Car {
         }
     }
 
+    getCollidingCar(x, y, cars) {
+        for (let car of cars) {
+            if (car === this) continue;
+            if (x < car.x + car.width && x + this.width > car.x &&
+                y < car.y + car.height && y + this.height > car.y) {
+                return car;
+            }
+        }
+        return null;
+    }
+
+    resolveCarCollision(other) {
+        let dx = (other.x + other.width / 2) - (this.x + this.width / 2);
+        let dy = (other.y + other.height / 2) - (this.y + this.height / 2);
+        let dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+        let nx = dx / dist;
+        let ny = dy / dist;
+
+        let rvx = other.vx - this.vx;
+        let rvy = other.vy - this.vy;
+
+        let velAlongNormal = rvx * nx + rvy * ny;
+
+        if (velAlongNormal < 0) {
+            let restitution = 0.45;
+            let impulseScalar = -(1 + restitution) * velAlongNormal;
+            impulseScalar /= 2;
+
+            this.vx -= impulseScalar * nx;
+            this.vy -= impulseScalar * ny;
+            this.speed = this.vx * Math.cos(this.angle) + this.vy * Math.sin(this.angle);
+
+            other.vx += impulseScalar * nx;
+            other.vy += impulseScalar * ny;
+            other.speed = other.vx * Math.cos(other.angle) + other.vy * Math.sin(other.angle);
+        }
+
+        // Push away to prevent sticking
+        let overlap = (this.width / 2 + other.width / 2) - dist;
+        if (overlap > 0) {
+            this.x -= nx * overlap * 0.5;
+            this.y -= ny * overlap * 0.5;
+            other.x += nx * overlap * 0.5;
+            other.y += ny * overlap * 0.5;
+        }
+
+        let impactSpeed = Math.abs(velAlongNormal);
+        if (impactSpeed > 1.2) {
+            this.takeDamage(impactSpeed * 3.5);
+            other.takeDamage(impactSpeed * 3.5);
+            if (typeof audioSystem !== 'undefined') audioSystem.playCrash(impactSpeed);
+            
+            // Add crash sparks/particles
+            if (typeof particleSystem !== 'undefined') {
+                for (let i = 0; i < 8; i++) {
+                    particleSystem.addSmoke((this.x + other.x) / 2 + this.width / 4, (this.y + other.y) / 2 + this.height / 4);
+                }
+            }
+        }
+    }
+
     draw(ctx, cameraX, cameraY) {
         ctx.save();
         ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
@@ -607,151 +675,107 @@ class Car {
         let halfHeight = this.height / 2;
 
         // Car shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.fillRect(-halfWidth + 2, -halfHeight + 2, this.width, this.height);
-
-        // Car body with gradient (front to back)
-        const bodyGradient = ctx.createLinearGradient(-halfWidth, -halfHeight, halfWidth, halfHeight);
 
         let displayColor = this.color;
         if (this.exploded) {
             displayColor = '#222222'; // Burnt husk
         }
 
-        bodyGradient.addColorStop(0, this.shadeColor(displayColor, 30)); // Front - lighter
-        bodyGradient.addColorStop(0.3, displayColor); // Middle
-        bodyGradient.addColorStop(0.7, this.shadeColor(displayColor, -10)); // Rear
-        bodyGradient.addColorStop(1, this.shadeColor(displayColor, -30)); // Back - darkest
+        // Car body with gradient (front/right to back/left)
+        const bodyGradient = ctx.createLinearGradient(halfWidth, -halfHeight, -halfWidth, halfHeight);
+        bodyGradient.addColorStop(0, this.shadeColor(displayColor, 20)); // Front
+        bodyGradient.addColorStop(0.5, displayColor); // Middle
+        bodyGradient.addColorStop(1, this.shadeColor(displayColor, -25)); // Rear
         ctx.fillStyle = bodyGradient;
         ctx.fillRect(-halfWidth, -halfHeight, this.width, this.height);
 
         // Car outline
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 1.8;
         ctx.strokeRect(-halfWidth, -halfHeight, this.width, this.height);
 
-        // Car roof with distinct front and back
-        const roofGradient = ctx.createLinearGradient(-halfWidth + 5, -halfHeight + 2, halfWidth - 5, -halfHeight + 2);
-        roofGradient.addColorStop(0, this.shadeColor(this.color, -20)); // Front roof
-        roofGradient.addColorStop(0.5, this.shadeColor(this.color, -40)); // Middle roof - darkest
-        roofGradient.addColorStop(1, this.shadeColor(this.color, -25)); // Back roof
-        ctx.fillStyle = roofGradient;
-        ctx.fillRect(-halfWidth + 5, -halfHeight + 2, this.width - 10, this.height - 8);
+        // Wheels
+        ctx.fillStyle = '#1c1c1c';
+        let wheelW = 10;
+        let wheelH = 4;
+        // Front-left
+        ctx.fillRect(halfWidth - 14, -halfHeight - 2, wheelW, wheelH);
+        // Front-right
+        ctx.fillRect(halfWidth - 14, halfHeight - 2, wheelW, wheelH);
+        // Rear-left
+        ctx.fillRect(-halfWidth + 6, -halfHeight - 2, wheelW, wheelH);
+        // Rear-right
+        ctx.fillRect(-halfWidth + 6, halfHeight - 2, wheelW, wheelH);
 
-        // Front windshield (larger and more prominent)
-        ctx.fillStyle = 'rgba(135, 206, 235, 0.9)';
-        ctx.fillRect(-halfWidth + 8, -halfHeight + 4, this.width - 16, this.height - 12);
+        // Metallic rims
+        ctx.fillStyle = '#a8a8a8';
+        ctx.fillRect(halfWidth - 12, -halfHeight - 1, 6, 2);
+        ctx.fillRect(halfWidth - 12, halfHeight - 1, 6, 2);
+        ctx.fillRect(-halfWidth + 8, -halfHeight - 1, 6, 2);
+        ctx.fillRect(-halfWidth + 8, halfHeight - 1, 6, 2);
 
-        // Rear windshield (smaller and darker)
-        ctx.fillStyle = 'rgba(135, 206, 235, 0.7)';
-        ctx.fillRect(-halfWidth + 8, halfHeight - 8, this.width - 16, 4);
+        if (!this.exploded) {
+            // Car roof
+            const roofGradient = ctx.createLinearGradient(-halfWidth + 12, 0, halfWidth - 12, 0);
+            roofGradient.addColorStop(0, this.shadeColor(displayColor, -10));
+            roofGradient.addColorStop(1, this.shadeColor(displayColor, -30));
+            ctx.fillStyle = roofGradient;
+            ctx.fillRect(-halfWidth + 12, -halfHeight + 2, this.width - 24, this.height - 4);
 
-        // Side windows with front-back distinction
-        ctx.fillStyle = 'rgba(135, 206, 235, 0.8)';
-        ctx.fillRect(-halfWidth + 8, -halfHeight + 4, this.width - 16, 4); // top side windows
-        ctx.fillRect(-halfWidth + 8, halfHeight - 8, this.width - 16, 4); // bottom side windows
-
-        // Wheels with more detail
-        ctx.fillStyle = '#1a1a1a';
-        let wheelSize = Math.min(this.width * 0.15, this.height * 0.4);
-        // Front wheels
-        ctx.fillRect(-halfWidth + wheelSize, -halfHeight - wheelSize / 2, wheelSize, wheelSize);
-        ctx.fillRect(halfWidth - wheelSize * 2, -halfHeight - wheelSize / 2, wheelSize, wheelSize);
-        // Back wheels
-        ctx.fillRect(-halfWidth + wheelSize, halfHeight - wheelSize / 2, wheelSize, wheelSize);
-        ctx.fillRect(halfWidth - wheelSize * 2, halfHeight - wheelSize / 2, wheelSize, wheelSize);
-
-        // Wheel rims (metallic)
-        ctx.fillStyle = '#C0C0C0';
-        ctx.fillRect(-halfWidth + wheelSize + 2, -halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
-        ctx.fillRect(halfWidth - wheelSize * 2 + 2, -halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
-        ctx.fillRect(-halfWidth + wheelSize + 2, halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
-        ctx.fillRect(halfWidth - wheelSize * 2 + 2, halfHeight - wheelSize / 2 + 2, wheelSize - 4, wheelSize - 4);
-
-        // Wheel spokes
-        ctx.strokeStyle = '#808080';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < 5; i++) {
-            const angle = (i * Math.PI * 2) / 5;
-            const x1 = -halfWidth + wheelSize + wheelSize / 2 + Math.cos(angle) * (wheelSize / 2 - 3);
-            const y1 = -halfHeight - wheelSize / 2 + wheelSize / 2 + Math.sin(angle) * (wheelSize / 2 - 3);
-            const x2 = -halfWidth + wheelSize + wheelSize / 2 + Math.cos(angle) * (wheelSize / 2 - 6);
-            const y2 = -halfHeight - wheelSize / 2 + wheelSize / 2 + Math.sin(angle) * (wheelSize / 2 - 6);
-
+            // Front Windshield (curved glass pointing East)
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.85)';
             ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
+            ctx.moveTo(halfWidth - 12, -halfHeight + 3);
+            ctx.quadraticCurveTo(halfWidth - 6, 0, halfWidth - 12, halfHeight - 3);
+            ctx.lineTo(halfWidth - 15, halfHeight - 3);
+            ctx.quadraticCurveTo(halfWidth - 10, 0, halfWidth - 15, -halfHeight + 3);
+            ctx.closePath();
+            ctx.fill();
+
+            // Rear windshield
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.7)';
+            ctx.fillRect(-halfWidth + 12, -halfHeight + 3, 3, this.height - 6);
+
+            // Side windows
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.75)';
+            ctx.fillRect(-halfWidth + 15, -halfHeight + 2, this.width - 32, 2); // left side window
+            ctx.fillRect(-halfWidth + 15, halfHeight - 4, this.width - 32, 2); // right side window
+
+            // Headlights (Facing East/front)
+            ctx.fillStyle = '#FFFFEE';
+            ctx.fillRect(halfWidth - 3, -halfHeight + 2, 4, 3); // Left headlight
+            ctx.fillRect(halfWidth - 3, halfHeight - 5, 4, 3); // Right headlight
+            
+            // Headlight inner glow
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(halfWidth - 2, -halfHeight + 3, 2, 1);
+            ctx.fillRect(halfWidth - 2, halfHeight - 4, 2, 1);
+
+            // Brake lights / Taillights (Facing West/rear)
+            let isBraking = this.isPlayerCar && (keys[' '] || keys['s'] || keys['arrowdown']);
+            ctx.fillStyle = isBraking ? '#FF0000' : '#8B0000'; // brighter red when braking
+            ctx.fillRect(-halfWidth - 1, -halfHeight + 2, 2, 3); // Left taillight
+            ctx.fillRect(-halfWidth - 1, halfHeight - 5, 2, 3); // Right taillight
+
+            // License plate
+            ctx.fillStyle = '#FFF';
+            ctx.fillRect(-halfWidth - 1, -3, 1, 6);
+            ctx.fillStyle = '#000';
+            ctx.font = '3px monospace';
+            ctx.fillText('GTA', -halfWidth, 2);
+        } else {
+            // Exploded roof
+            ctx.fillStyle = '#111';
+            ctx.fillRect(-halfWidth + 12, -halfHeight + 2, this.width - 24, this.height - 4);
         }
 
-        // FRONT HEADLIGHTS - Much more prominent
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(-halfWidth - 2, -halfHeight + 4, 6, 7); // Left headlight
-        ctx.fillRect(halfWidth - 4, -halfHeight + 4, 6, 7); // Right headlight
-
-        // Headlight inner glow
-        ctx.fillStyle = '#FFFF99';
-        ctx.fillRect(-halfWidth - 1, -halfHeight + 5, 4, 5);
-        ctx.fillRect(halfWidth - 3, -halfHeight + 5, 4, 5);
-
-        // Headlight outer glow
-        ctx.fillStyle = 'rgba(255, 255, 153, 0.4)';
-        ctx.fillRect(-halfWidth - 4, -halfHeight + 2, 10, 11);
-        ctx.fillRect(halfWidth - 6, -halfHeight + 2, 10, 11);
-
-        // REAR TAILLIGHTS - Distinct red design
-        ctx.fillStyle = '#8B0000'; // Dark red background
-        ctx.fillRect(-halfWidth - 1, halfHeight - 11, 5, 6); // Left taillight background
-        ctx.fillRect(halfWidth - 4, halfHeight - 11, 5, 6); // Right taillight background
-
-        // Taillight inner lights
-        ctx.fillStyle = '#FF0000';
-        ctx.fillRect(-halfWidth, halfHeight - 10, 3, 4);
-        ctx.fillRect(halfWidth - 3, halfHeight - 10, 3, 4);
-
-        // Taillight glow
-        ctx.fillStyle = 'rgba(255, 68, 68, 0.4)';
-        ctx.fillRect(-halfWidth - 3, halfHeight - 13, 9, 10);
-        ctx.fillRect(halfWidth - 6, halfHeight - 13, 9, 10);
-
-        // License plate (front and back)
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(-8, halfHeight - 3, 16, 4); // Rear plate
-
-        // License plate text
-        ctx.fillStyle = '#000';
-        ctx.font = '4px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('GTA', 0, halfHeight - 1);
-
-        // Front bumper/grille
-        ctx.fillStyle = '#333';
-        ctx.fillRect(-halfWidth + 3, -halfHeight - 2, this.width - 6, 3);
-
-        // Rear bumper
-        ctx.fillStyle = '#333';
-        ctx.fillRect(-halfWidth + 3, halfHeight - 1, this.width - 6, 3);
-
-        // Add direction indicator - arrow on roof
+        // Sirens for police cars
         if (this.isPolice && !this.exploded) {
-            // Draw police lights on roof
             let time = Date.now() / 150;
             ctx.fillStyle = time % 2 < 1 ? '#FF0000' : '#0000FF'; // flashing red/blue
-            ctx.fillRect(-2, -halfHeight + 6, 8, 4);
-        } else {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.font = '8px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('▲', 0, -halfHeight + 8);
-        }
-
-        // Add speed lines when moving fast
-        if (Math.abs(this.speed) > 3) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([3, 4]);
-            ctx.strokeRect(-halfWidth - 5, -halfHeight - 5, this.width + 10, this.height + 10);
-            ctx.setLineDash([]);
+            ctx.fillRect(-2, -3, 5, 6);
         }
 
         ctx.restore();
