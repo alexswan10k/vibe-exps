@@ -41,6 +41,14 @@ compile_game() {
     
     if [ -f "$game_dir/build/game.sfc" ]; then
         echo "-> Success! ROM built at $game/build/game.sfc"
+        echo "-> Generating base64 rom.js wrapper for standalone file:// support..."
+        node -e "
+            const fs = require('fs');
+            const data = fs.readFileSync('$game_dir/build/game.sfc');
+            const base64 = data.toString('base64');
+            fs.writeFileSync('$game_dir/build/rom.js', 'window.snes_roms = window.snes_roms || {}; window.snes_roms[\"$game\"] = \"' + base64 + '\";');
+        "
+        echo "-> Success! Wrapper built at $game/build/rom.js"
     else
         echo "-> Error: ROM build failed (game.sfc not found in build directory)."
         exit 1

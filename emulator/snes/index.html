@@ -502,14 +502,44 @@
             document.body.appendChild(script);
         }
 
-        // Automatic boot if query parameter is active and running over HTTP/HTTPS
-        // (Will boot directly if running on a server, or let user know they can drop the ROM)
+        function base64ToBlobUrl(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes.buffer], { type: 'application/octet-stream' });
+            return URL.createObjectURL(blob);
+        }
+
+        // Automatic boot if query parameter is active
         if (activeGame) {
             const isLocalFile = window.location.protocol === 'file:';
             if (isLocalFile) {
-                console.warn("Local file:// detected. Browser CORS prevents relative fetches. Please upload the compiled game.sfc using drag-and-drop or select file.");
-                ledText.innerText = 'Needs ROM File';
-                ledLight.style.backgroundColor = 'var(--accent-yellow)';
+                console.log(`Local file:// mode: loading base64 rom.js wrapper for ${activeGame}...`);
+                const script = document.createElement('script');
+                script.src = activeGame + '/build/rom.js';
+                
+                script.onload = () => {
+                    if (window.snes_roms && window.snes_roms[activeGame]) {
+                        console.log("Successfully loaded ROM via base64 wrapper script.");
+                        const blobUrl = base64ToBlobUrl(window.snes_roms[activeGame]);
+                        bootEmulator(blobUrl, `${activeGame}.sfc`);
+                    } else {
+                        console.error("ROM wrapper loaded but window.snes_roms was not populated.");
+                        ledText.innerText = 'ROM Load Error';
+                        ledLight.style.backgroundColor = 'var(--accent-red)';
+                    }
+                };
+                
+                script.onerror = () => {
+                    console.warn("Could not load local rom.js wrapper. Falling back to drag-and-drop mode.");
+                    ledText.innerText = 'Needs ROM File';
+                    ledLight.style.backgroundColor = 'var(--accent-yellow)';
+                };
+                
+                document.body.appendChild(script);
             } else {
                 // Construct relative path: hello-world/build/game.sfc
                 const relativeRomUrl = activeGame + '/build/game.sfc?t=' + Date.now();
