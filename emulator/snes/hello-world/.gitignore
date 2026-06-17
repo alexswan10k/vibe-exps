@@ -1,0 +1,16 @@
+# Rust Build Artifacts
+target/
+
+# SNES Compilation Outputs and Intermediates
+game.sfc
+game.sym
+linkfile
+*.pic
+*.map
+*.pal
+*.obj
+*.ps
+*.asp
+
+# Local Build Output Directory
+build/
