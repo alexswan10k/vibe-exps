@@ -1,0 +1,17 @@
+# Ignore auto-bootstrapped build files from common template
+**/src/Makefile
+**/src/linkfile
+**/src/hdr.asm
+**/src/data.asm
+**/src/pvsneslibfont.bmp
+
+# Ignore compiled intermediate files and assembler output
+**/src/*.obj
+**/src/*.asm
+**/src/*.ps
+**/src/*.sym
+**/src/*.pic
+**/src/*.pal
+
+# Ignore built ROM files (optional, but standard for build artifacts)
+**/build/

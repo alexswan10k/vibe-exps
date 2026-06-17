@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro-SNES Live Dev Environment</title>
+    <!-- Outfit Font for premium modern retro typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #080a14;
+            --panel-bg: rgba(16, 20, 38, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-primary: #a855f7; /* Neon Purple */
+            --accent-cyan: #06b6d4;    /* Cyber Cyan */
+            --accent-red: #ef4444;     /* Error Red */
+            --accent-green: #10b981;   /* Success Green */
+            --accent-yellow: #f59e0b;  /* Warning Yellow */
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
+            color: var(--text-main);
+            font-family: 'Outfit', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Header Layout */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            background: rgba(8, 10, 20, 0.5);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        header h1 span.badge {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-cyan));
+            color: #fff;
+            box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+        }
+
+        .system-controls {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(6, 182, 212, 0.2));
+            border-color: var(--accent-primary);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(6, 182, 212, 0.3));
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+        }
+
+        /* Main Workspace Grid */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+            max-width: 1600px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Emulator Bezel Container */
+        .emulator-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(12px);
+        }
+
+        .bezel {
+            background: #11131e;
+            border: 12px solid #232533;
+            border-radius: 8px;
+            position: relative;
+            aspect-ratio: 256/224; /* Native SNES Aspect Ratio */
+            max-width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.8), 0 4px 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        #game {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Status bar on console bezel */
+        .console-led-strip {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background: #191b29;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border-bottom: 2px solid rgba(0,0,0,0.3);
+        }
+
+        .console-label {
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            font-weight: 800;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .led-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .led-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-muted);
+            transition: all 0.3s ease;
+        }
+
+        .led-dot.pulsing {
+            animation: pulse-animation 1.5s infinite;
+        }
+
+        @keyframes pulse-animation {
+            0% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 8px currentColor; }
+            100% { transform: scale(1); opacity: 0.8; }
+        }
+
+        /* Controller Reference Guide */
+        .controls-guide {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .controls-guide h3 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--accent-cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .keys-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.5rem;
+        }
+
+        .key-mapping {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(255, 255, 255, 0.01);
+            border-radius: 4px;
+        }
+
+        .key-badge {
+            background: #232533;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.7rem;
+            color: #fff;
+        }
+
+        /* Right Panel: Status & Build Logs */
+        .dashboard-side {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .status-widget {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            backdrop-filter: blur(12px);
+        }
+
+        .status-title {
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .status-value {
+            font-size: 1.25rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Terminal card for compilation logs */
+        .terminal-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            backdrop-filter: blur(12px);
+            min-height: 350px;
+        }
+
+        .terminal-header {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.75rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .terminal-title {
+            font-size: 0.75rem;
+            font-weight: 800;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .terminal-dots {
+            display: flex;
+            gap: 4px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .dot-red { background: var(--accent-red); }
+        .dot-yellow { background: var(--accent-yellow); }
+        .dot-green { background: var(--accent-green); }
+
+        .terminal-content {
+            flex: 1;
+            background: #05060c;
+            padding: 1rem;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 0.75rem;
+            line-height: 1.4;
+            overflow-y: auto;
+            color: #d1d5db;
+        }
+
+        .terminal-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .terminal-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .terminal-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .log-entry {
+            margin-bottom: 0.4rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .log-sys { color: var(--accent-cyan); }
+        .log-err { color: #f87171; }
+        .log-success { color: #34d399; }
+        .log-warn { color: var(--accent-yellow); }
+
+        /* Custom Hot-reload overlay */
+        .reload-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(8, 10, 20, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 5;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .reload-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .reload-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(168, 85, 247, 0.1);
+            border-top: 3px solid var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Retro-SNES DEV <span class="badge">Live Harness</span></h1>
+        <div class="system-controls">
+            <button class="btn" id="btn-reset">
+                Reset Core
+            </button>
+            <a href="/build/game.sfc" class="btn btn-primary" download="game.sfc">
+                Download ROM
+            </a>
+        </div>
+    </header>
+
+    <main>
+        <!-- Left: Emulator Core View -->
+        <section class="emulator-card">
+            <div class="console-led-strip">
+                <span class="console-label">System Bezel</span>
+                <div class="led-indicator" id="sys-led">
+                    <span class="led-dot" id="led-light" style="background-color: var(--accent-green)"></span>
+                    <span id="led-text">Online</span>
+                </div>
+            </div>
+
+            <!-- Console Screen (Aspect ratio bezel) -->
+            <div class="bezel">
+                <div id="game"></div>
+
+                <!-- Hot reload transition overlay -->
+                <div class="reload-overlay" id="reload-screen">
+                    <div class="reload-spinner"></div>
+                    <div style="font-weight: 600; font-size: 0.95rem;">Hot Reloading ROM...</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Booting new build</div>
+                </div>
+            </div>
+
+            <!-- Control Mapping -->
+            <div class="controls-guide">
+                <h3>SNES Controller Mappings</h3>
+                <div class="keys-grid">
+                    <div class="key-mapping"><span>D-Pad</span><span class="key-badge">Arrows</span></div>
+                    <div class="key-mapping"><span>A Button</span><span class="key-badge">Z</span></div>
+                    <div class="key-mapping"><span>B Button</span><span class="key-badge">X</span></div>
+                    <div class="key-mapping"><span>X Button</span><span class="key-badge">A</span></div>
+                    <div class="key-mapping"><span>Y Button</span><span class="key-badge">S</span></div>
+                    <div class="key-mapping"><span>L Trigger</span><span class="key-badge">Q</span></div>
+                    <div class="key-mapping"><span>R Trigger</span><span class="key-badge">W</span></div>
+                    <div class="key-mapping"><span>Start</span><span class="key-badge">Enter</span></div>
+                    <div class="key-mapping"><span>Select</span><span class="key-badge">Shift</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right: Status / Logs console -->
+        <section class="dashboard-side">
+            <div class="status-widget">
+                <div class="status-title">Orchestrator Status</div>
+                <div class="status-value" id="status-container">
+                    <span style="color: var(--accent-green); display: inline-flex; align-items: center; gap: 0.5rem;">
+                        <span style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--accent-green);"></span>
+                        Ready
+                    </span>
+                </div>
+            </div>
+
+            <div class="terminal-card">
+                <div class="terminal-header">
+                    <span class="terminal-title">Build Terminal</span>
+                    <div class="terminal-dots">
+                        <span class="dot dot-red"></span>
+                        <span class="dot dot-yellow"></span>
+                        <span class="dot dot-green"></span>
+                    </div>
+                </div>
+                <div class="terminal-content" id="log-terminal">
+                    <!-- Logs inserted here -->
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- EmulatorJS Configurations -->
+    <script type="text/javascript">
+        var EJS_player = '#game';
+        var EJS_core = 'snes';
+        var EJS_gameUrl = '/build/game.sfc?t=' + Date.now();
+        var EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+        
+        // Disable internal IndexedDB caching
+        var EJS_cacheConfig = {
+            enabled: false
+        };
+        
+        // Disable settings to boot game directly and instantly
+        var EJS_startOnLoaded = true;
+        var EJS_mouse = false;
+        var EJS_multitap = false;
+    </script>
+    <script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
+
+    <!-- Hot-reload and SSE event connector logic -->
+    <script type="text/javascript">
+        const terminal = document.getElementById('log-terminal');
+        const statusContainer = document.getElementById('status-container');
+        const ledLight = document.getElementById('led-light');
+        const ledText = document.getElementById('led-text');
+        const reloadScreen = document.getElementById('reload-screen');
+        const btnReset = document.getElementById('btn-reset');
+
+        // Log formatter helper
+        function log(message, type = 'sys') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerText = `[${timestamp}] ${message}`;
+            
+            terminal.appendChild(entry);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // Initialize display states
+        log('Initializing Live Test Harness...', 'sys');
+        log('Attempting connection to local Orchestrator...', 'sys');
+
+        // Check if page was loaded after a successful compile
+        if (sessionStorage.getItem('hotReloadSuccess') === 'true') {
+            sessionStorage.removeItem('hotReloadSuccess');
+            log('ROM hot-reloaded successfully. Emulator booted.', 'success');
+        }
+
+        // Connect to EventSource (SSE) served by Rust orchestrator
+        const eventSource = new EventSource('/events');
+
+        eventSource.onopen = function() {
+            log('Connected to Orchestrator event stream.', 'success');
+        };
+
+        eventSource.onerror = function() {
+            log('Lost connection to Orchestrator. Retrying...', 'warn');
+            statusContainer.innerHTML = `
+                <span style="color: var(--accent-red); display: inline-flex; align-items: center; gap: 0.5rem;">
+                    <span style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--accent-red); animation: pulse-animation 1s infinite;"></span>
+                    Offline
+                </span>
+            `;
+            ledLight.style.backgroundColor = 'var(--accent-red)';
+            ledText.innerText = 'Offline';
+        };
+
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'start') {
+                    // Update state to compiling
+                    log('Code modification detected. Starting compiler...', 'sys');
+                    statusContainer.innerHTML = `
+                        <span style="color: var(--accent-yellow); display: inline-flex; align-items: center; gap: 0.5rem;">
+                            <span class="pulsing" style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--accent-yellow); color: var(--accent-yellow);"></span>
+                            Compiling...
+                        </span>
+                    `;
+                    ledLight.style.backgroundColor = 'var(--accent-yellow)';
+                    ledText.innerText = 'Compiling';
+                }
+                
+                else if (data.type === 'success') {
+                    log('Compile complete. Build SUCCESS!', 'success');
+                    statusContainer.innerHTML = `
+                        <span style="color: var(--accent-green); display: inline-flex; align-items: center; gap: 0.5rem;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--accent-green);"></span>
+                            Build Ready
+                        </span>
+                    `;
+                    ledLight.style.backgroundColor = 'var(--accent-green)';
+                    ledText.innerText = 'Build Success';
+
+                    // Trigger Hot reload overlay
+                    reloadScreen.classList.add('active');
+                    sessionStorage.setItem('hotReloadSuccess', 'true');
+
+                    // Small delay to let user see transition before page reload
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1200);
+                }
+                
+                else if (data.type === 'error') {
+                    log('Compile FAILED! See logs below:', 'err');
+                    if (data.logs) {
+                        log(data.logs, 'err');
+                    }
+                    statusContainer.innerHTML = `
+                        <span style="color: var(--accent-red); display: inline-flex; align-items: center; gap: 0.5rem;">
+                            <span style="width: 10px; height: 10px; border-radius: 50%; background-color: var(--accent-red);"></span>
+                            Compile Error
+                        </span>
+                    `;
+                    ledLight.style.backgroundColor = 'var(--accent-red)';
+                    ledText.innerText = 'Error';
+                }
+            } catch (e) {
+                console.error("Failed to parse SSE event data:", e);
+            }
+        };
+
+        // Reset control button event
+        btnReset.addEventListener('click', () => {
+            log('Requesting Emulator reset...', 'sys');
+            if (window.EJS_EmulatorHelper) {
+                window.EJS_EmulatorHelper.restart();
+                log('Emulator reset successful.', 'success');
+            } else {
+                // Fallback reload page
+                window.location.reload();
+            }
+        });
+    </script>
+</body>
+</html>
