@@ -14,7 +14,7 @@
 extern char snesfont;
 
 // Level template structure (HUD and level layout)
-const char* level_template[MAP_HEIGHT] = {
+char level_template[MAP_HEIGHT][MAP_WIDTH + 1] = {
     "                                                                                                                        ",
     "  SUPER MARIO ASCII                                                                                                     ",
     "  SCORE: 000000   LIVES: 3                                                                                              ",
@@ -45,14 +45,23 @@ const char* level_template[MAP_HEIGHT] = {
     "               |      |     |   |                    |                  |             |   |                  |      ===="
 };
 
+// Game state enum
+typedef enum {
+    STATE_TITLE,
+    STATE_STORY,
+    STATE_PLAYING,
+    STATE_GAME_OVER,
+    STATE_GAME_WON
+} GameState;
+
+GameState current_state = STATE_TITLE;
+
 // Mutable level map loaded in WRAM
 char level_map[MAP_HEIGHT][MAP_WIDTH + 1];
 
 // Game variables
 u32 score = 0;
 u8 lives = 3;
-bool game_won = false;
-bool game_over_state = false;
 
 // Entity coordinates scaled by 256 for subpixel precision (fixed point)
 s16 mario_x, mario_y;
@@ -73,6 +82,27 @@ s16 mario_grid_x, mario_grid_y;
 s16 mario_last_x, mario_last_y;
 s16 goomba_grid_x, goomba_grid_y;
 s16 goomba_last_x, goomba_last_y;
+
+// Function prototypes
+void reset_game(void);
+void change_state(GameState new_state);
+void draw_screen(u16 cam_x);
+void update_hud_score(u32 val);
+void update_hud_lives(u8 val);
+bool is_solid(char c);
+char get_tile(s16 col, s16 row);
+void clear_screen(void);
+void handle_mario_physics(void);
+void handle_goomba_physics(void);
+void update_camera(void);
+
+// Clear the text console by writing spaces
+void clear_screen(void) {
+    u8 r;
+    for (r = 0; r < VIEW_HEIGHT; r++) {
+        consoleDrawText(0, r, "                                "); // 32 spaces
+    }
+}
 
 // HUD Updates
 void update_hud_score(u32 val) {
@@ -100,14 +130,84 @@ void draw_screen(u16 cam_x) {
     }
 }
 
+// Change Game State
+void change_state(GameState new_state) {
+    current_state = new_state;
+    clear_screen();
+    
+    if (new_state == STATE_TITLE) {
+        consoleDrawText(2, 4,  "============================");
+        consoleDrawText(2, 5,  "=                          =");
+        consoleDrawText(2, 6,  "=    SUPER MARIO ASCII     =");
+        consoleDrawText(2, 7,  "=                          =");
+        consoleDrawText(2, 8,  "=    A RETRO SNES QUEST    =");
+        consoleDrawText(2, 9,  "=                          =");
+        consoleDrawText(2, 10, "============================");
+        
+        consoleDrawText(6, 16, "PRESS START TO BEGIN");
+        consoleDrawText(3, 22, "(C) 2026 DEEPMIND RETRO");
+    } 
+    else if (new_state == STATE_STORY) {
+        consoleDrawText(2, 2,  "--- THE QUEST OF MARIO ---");
+        consoleDrawText(1, 5,  "THE MUSHROOM KINGDOM IS IN");
+        consoleDrawText(1, 6,  "GRAVE DANGER!");
+        consoleDrawText(1, 9,  "THE EVIL BOWSER HAS STOLEN");
+        consoleDrawText(1, 10, "THE GOLDEN COINS AND HELD");
+        consoleDrawText(1, 11, "PRINCESS PEACH CAPTIVE.");
+        consoleDrawText(1, 14, "MARIO, YOU ARE OUR ONLY HOPE!");
+        consoleDrawText(1, 15, "CROSS THE DANGEROUS PLAINS,");
+        consoleDrawText(1, 16, "STOMP THE GOOMBAS, AND");
+        consoleDrawText(1, 17, "RECOVER THE COINS!");
+        
+        consoleDrawText(4, 21, "PRESS START TO PLAY");
+    }
+    else if (new_state == STATE_PLAYING) {
+        draw_screen(camera_x);
+    }
+    else if (new_state == STATE_GAME_OVER) {
+        consoleDrawText(10, 10, "GAME OVER");
+        consoleDrawText(9, 12, "SCORE: ");
+        
+        u32 temp = score;
+        s8 i;
+        char score_str[7];
+        score_str[6] = 0;
+        for (i = 5; i >= 0; i--) {
+            score_str[i] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        consoleDrawText(16, 12, score_str);
+        
+        consoleDrawText(5, 16, "PRESS START TO RETRY");
+    }
+    else if (new_state == STATE_GAME_WON) {
+        consoleDrawText(6, 6, "CONGRATULATIONS!");
+        consoleDrawText(4, 9, "YOU SAVED PRINCESS PEACH");
+        consoleDrawText(4, 10, "AND RESTORED PEACE TO THE");
+        consoleDrawText(6, 11, "MUSHROOM KINGDOM!");
+        
+        consoleDrawText(9, 14, "SCORE: ");
+        
+        u32 temp = score;
+        s8 i;
+        char score_str[7];
+        score_str[6] = 0;
+        for (i = 5; i >= 0; i--) {
+            score_str[i] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        consoleDrawText(16, 14, score_str);
+        
+        consoleDrawText(4, 18, "PRESS START TO PLAY AGAIN");
+    }
+}
+
 // Reset level map and entities
-void reset_game() {
+void reset_game(void) {
     u8 r;
     u16 c;
     score = 0;
     lives = 3;
-    game_won = false;
-    game_over_state = false;
     
     // Copy template to active level map
     for (r = 0; r < MAP_HEIGHT; r++) {
@@ -147,9 +247,6 @@ void reset_game() {
 
     camera_x = 0;
     last_camera_x = 0;
-    
-    // Initial draw
-    draw_screen(camera_x);
 }
 
 // Check solid tile collision
@@ -165,7 +262,7 @@ char get_tile(s16 col, s16 row) {
 }
 
 // Collision resolution helper
-void handle_mario_physics() {
+void handle_mario_physics(void) {
     // Left/Right Inputs
     u16 keys = padsCurrent(0);
     if (keys & KEY_LEFT) {
@@ -265,7 +362,7 @@ void handle_mario_physics() {
         } else {
             lives = 0;
             update_hud_lives(lives);
-            game_over_state = true;
+            change_state(STATE_GAME_OVER);
         }
     }
 
@@ -281,11 +378,11 @@ void handle_mario_physics() {
         update_hud_score(score);
         draw_screen(camera_x);
     } else if (standing_tile == '>') {
-        game_won = true;
+        change_state(STATE_GAME_WON);
     }
 }
 
-void handle_goomba_physics() {
+void handle_goomba_physics(void) {
     if (!goomba_active) return;
 
     // Gravity
@@ -359,13 +456,13 @@ void handle_goomba_physics() {
             } else {
                 lives = 0;
                 update_hud_lives(lives);
-                game_over_state = true;
+                change_state(STATE_GAME_OVER);
             }
         }
     }
 }
 
-void update_camera() {
+void update_camera(void) {
     // Let camera track Mario
     if (mario_grid_x > camera_x + 20) {
         camera_x = mario_grid_x - 20;
@@ -395,27 +492,49 @@ int main(void) {
 
     // 3. Reset Game State (Initial Draw)
     reset_game();
+    change_state(STATE_TITLE);
 
     while (1) {
         // Wait for VBlank
         WaitForVBlank();
 
-        if (game_won) {
-            // Win screen
-            consoleDrawText(8, 12, "  LEVEL CLEAR!  ");
-            consoleDrawText(8, 14, "PRESS START TO RESET");
-            if (padsDown(0) & KEY_START) {
-                reset_game();
+        if (current_state == STATE_TITLE) {
+            if (padsCurrent(0) & KEY_START) {
+                while (padsCurrent(0) & KEY_START) {
+                    WaitForVBlank();
+                }
+                change_state(STATE_STORY);
             }
             continue;
         }
 
-        if (game_over_state) {
-            // Game over screen
-            consoleDrawText(10, 12, " GAME OVER ");
-            consoleDrawText(8, 14, "PRESS START TO RESET");
-            if (padsDown(0) & KEY_START) {
+        if (current_state == STATE_STORY) {
+            if (padsCurrent(0) & KEY_START) {
+                while (padsCurrent(0) & KEY_START) {
+                    WaitForVBlank();
+                }
                 reset_game();
+                change_state(STATE_PLAYING);
+            }
+            continue;
+        }
+
+        if (current_state == STATE_GAME_OVER) {
+            if (padsCurrent(0) & KEY_START) {
+                while (padsCurrent(0) & KEY_START) {
+                    WaitForVBlank();
+                }
+                change_state(STATE_TITLE);
+            }
+            continue;
+        }
+
+        if (current_state == STATE_GAME_WON) {
+            if (padsCurrent(0) & KEY_START) {
+                while (padsCurrent(0) & KEY_START) {
+                    WaitForVBlank();
+                }
+                change_state(STATE_TITLE);
             }
             continue;
         }
@@ -431,6 +550,11 @@ int main(void) {
         // Game simulation
         handle_mario_physics();
         handle_goomba_physics();
+
+        if (current_state != STATE_PLAYING) {
+            continue;
+        }
+
         update_camera();
 
         // Render pass
