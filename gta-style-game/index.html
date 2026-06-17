@@ -12,6 +12,14 @@
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
         <div id="hud">
+            <div id="top-left-hud">
+                <div id="mission-panel">
+                    <div id="mission-title">MISSION ACTIVE</div>
+                    <div id="mission-instruction">Answering payphone...</div>
+                    <div id="mission-timer">00:00</div>
+                </div>
+            </div>
+
             <div id="top-right-hud">
                 <div id="wanted-level">
                     <span class="star" id="star-1">★</span>
@@ -25,6 +33,13 @@
                     <div id="ammo">∞</div>
                 </div>
                 <div id="money">$00000000</div>
+            </div>
+
+            <div id="center-hud">
+                <div id="big-notification">
+                    <h1 id="notif-title">MISSION START</h1>
+                    <p id="notif-desc">Good Luck!</p>
+                </div>
             </div>
 
             <div id="bottom-left-hud">
@@ -42,7 +57,7 @@
             </div>
 
             <div id="controls-hint">
-                Controls: WASD (Move/Drive), Mouse (Aim), Left Click (Shoot), E (Enter/Exit), Space (Brake)
+                Controls: WASD (Move/Drive), Mouse (Aim), Left Click (Shoot), E (Enter/Exit/Answer), Space (Brake), 1-5 (Weapons), H (Horn)
             </div>
         </div>
 
@@ -65,6 +80,7 @@
     <script src="pedestrian.js"></script>
     <script src="player.js"></script>
     <script src="car.js"></script>
+    <script src="audio.js"></script>
     <script src="game.js"></script>
 </body>
 
