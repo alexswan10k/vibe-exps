@@ -119,7 +119,7 @@
           h('h2', null, 'My Speeches'),
           h('p', null, 'Manage and rehearse your speech deliveries offline')
         ),
-        h('div', { style: { display: 'flex', gap: '0.75rem' } },
+        h('div', { className: 'dashboard-header-actions' },
           h('button', { className: 'btn btn-secondary', onClick: triggerImport, title: 'Import Speeches Backup' },
             h('i', { className: 'fas fa-file-import' }), ' Import Collection'
           ),

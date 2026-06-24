@@ -197,6 +197,11 @@ body {
   margin-bottom: 2rem;
 }
 
+.dashboard-header-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
 .dashboard-title h2 {
   font-size: 2rem;
   font-weight: 800;
@@ -697,20 +702,13 @@ body {
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
 }
 
-/* Premium styled scrollbars for card face */
+/* Hide scrollbars for card face to keep sections distraction-free */
+.card-face {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
 .card-face::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.card-face::-webkit-scrollbar-track {
-  background: transparent;
-}
-.card-face::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-}
-.card-face::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  display: none !important;
 }
 
 .card-front {
@@ -1006,6 +1004,25 @@ input:checked + .slider:before {
 
 /* Media Query overrides */
 @media (max-width: 768px) {
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .dashboard-header-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .dashboard-header-actions .btn {
+    width: 100%;
+    font-size: 0.9rem;
+    padding: 0.625rem;
+  }
+
   .editor-view {
     flex-direction: column;
     height: auto;
