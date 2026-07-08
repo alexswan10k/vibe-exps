@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Alexander Swan — expert full-stack developer specializing in AI/ML, 3D visualization, and maintainable systems.">
+    <title>Alexander Swan — Software Engineer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="scroll-progress" id="scroll-progress" aria-hidden="true"></div>
+    <canvas id="starfield" aria-hidden="true"></canvas>
+    <div class="aurora" aria-hidden="true"></div>
+    <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
+
+    <header>
+        <nav>
+            <a href="#hero" class="logo" aria-label="Home">
+                <span class="logo-mark">λ</span>
+                <span class="logo-text">Alexander Swan</span>
+            </a>
+            <button class="burger-menu" id="burger-menu" aria-label="Toggle menu" aria-expanded="false">
+                <span></span><span></span><span></span>
+            </button>
+            <ul id="nav-menu">
+                <li><a href="#hero" data-section="hero">Home</a></li>
+                <li><a href="#experience" data-section="experience">Experience</a></li>
+                <li><a href="#technologies" data-section="technologies">Skills</a></li>
+                <li><a href="#projects" data-section="projects">Projects</a></li>
+                <li><a href="#education" data-section="education">Education</a></li>
+                <li><a href="#contact" data-section="contact" class="nav-cta">Contact</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section id="hero">
+            <div class="hero-inner">
+                <div class="hero-badge reveal">
+                    <span class="pulse-dot"></span>
+                    Available for select engagements
+                </div>
+                <h1 class="hero-title reveal">
+                    <span class="line">Alexander Swan</span>
+                </h1>
+                <p class="hero-role reveal">
+                    Full-stack engineer · AI / ML · 3D visualization
+                </p>
+                <p class="hero-lead reveal">
+                    15+ years shipping systems that stay simple under pressure —
+                    from volume raycasting security tools to event-sourced finance platforms.
+                </p>
+                <div class="hero-actions reveal">
+                    <a href="mailto:alex.lambdasafe@gmail.com" class="btn btn-primary magnetic">
+                        <i class="fas fa-paper-plane"></i> Hire me
+                    </a>
+                    <a href="#experience" class="btn btn-ghost magnetic">
+                        Explore journey <i class="fas fa-arrow-down"></i>
+                    </a>
+                </div>
+                <div class="hero-stats reveal">
+                    <div class="stat">
+                        <span class="stat-value" data-count="15">0</span><span class="stat-suffix">+</span>
+                        <span class="stat-label">Years shipping</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" data-count="9">0</span>
+                        <span class="stat-label">Companies</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-value" data-count="20">0</span><span class="stat-suffix">+</span>
+                        <span class="stat-label">Technologies</span>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-orbits" aria-hidden="true">
+                <div class="orbit-ring ring-1"></div>
+                <div class="orbit-ring ring-2"></div>
+                <div class="orbit-ring ring-3"></div>
+                <div class="orbit-core"></div>
+            </div>
+        </section>
+
+        <section id="experience">
+            <div class="section-head reveal">
+                <span class="section-kicker">Career</span>
+                <h2>Professional experience</h2>
+                <p class="section-sub">Click a role to expand — orbit the timeline of systems delivered.</p>
+            </div>
+
+            <div class="timeline" id="timeline">
+                <div class="timeline-track" aria-hidden="true"></div>
+
+                <article class="timeline-item reveal" data-accent="#ff6b35">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Oct 2022 – Nov 2024</span>
+                            <span class="node-company">Pangiam <em>(now BBAI)</em></span>
+                            <span class="node-tag">ML · Security · 3D</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Helped deliver an ML solution in the security space for finding objects in 3D volumes, visualizing results with volume raycasting techniques.</p>
+                        <div class="chip-row">
+                            <span class="chip">YOLO / DETR</span>
+                            <span class="chip">Volume Raycasting</span>
+                            <span class="chip">WebGPU</span>
+                            <span class="chip">TypeScript</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#4ecdc4">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">May 2024 – Sep 2024</span>
+                            <span class="node-company">Safe Passage (US)</span>
+                            <span class="node-tag">3D · Vue · npm</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Delivered a TypeScript npm Vue wrapper around a 3D volume raycasting library for viewing DICOS files.</p>
+                        <div class="chip-row">
+                            <span class="chip">Vue</span>
+                            <span class="chip">TypeScript</span>
+                            <span class="chip">DICOS</span>
+                            <span class="chip">3D Visualization</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#45b7d1">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Apr 2021 – Jul 2022</span>
+                            <span class="node-company">Redington</span>
+                            <span class="node-tag">Finance · Event sourcing</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Delivered portfolio performance calculations with .NET Core, CQRS, and event sourcing.</p>
+                        <div class="chip-row">
+                            <span class="chip">.NET Core</span>
+                            <span class="chip">CQRS</span>
+                            <span class="chip">Event Sourcing</span>
+                            <span class="chip">C#</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#f9ca24">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Oct 2020 – Present</span>
+                            <span class="node-company">Tumelo</span>
+                            <span class="node-tag">Frontend architecture</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Assisted frontend architecture transition from MVP to a scalable multi-tenant application.</p>
+                        <div class="chip-row">
+                            <span class="chip">React</span>
+                            <span class="chip">TypeScript</span>
+                            <span class="chip">Multi-tenant</span>
+                            <span class="chip">Architecture</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#6c5ce7">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Ongoing</span>
+                            <span class="node-company">LambdaSafe</span>
+                            <span class="node-tag">DSP · Scala · Java</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Building custom Voltage Modular modules in Scala and Java for DSP applications.</p>
+                        <div class="chip-row">
+                            <span class="chip">Scala</span>
+                            <span class="chip">Java</span>
+                            <span class="chip">DSP</span>
+                            <span class="chip">Voltage Modular</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#fd79a8">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Nov 2018 – Sep 2020</span>
+                            <span class="node-company">Leansquad</span>
+                            <span class="node-tag">Low-code · F#</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Construction of a low-code rapid application development platform in F# on .NET Core.</p>
+                        <div class="chip-row">
+                            <span class="chip">F#</span>
+                            <span class="chip">.NET Core</span>
+                            <span class="chip">Low-code</span>
+                            <span class="chip">RAD</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#00b894">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Apr 2017 – Nov 2018</span>
+                            <span class="node-company">Bud Systems</span>
+                            <span class="node-tag">Tech lead</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Technical lead working on an apprentice onboarding integration suite.</p>
+                        <div class="chip-row">
+                            <span class="chip">Tech Lead</span>
+                            <span class="chip">Integrations</span>
+                            <span class="chip">Onboarding</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#e17055">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Jul 2013 – Apr 2017</span>
+                            <span class="node-company">Funds Library</span>
+                            <span class="node-tag">Data-driven systems</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Worked on data-driven frontend and backend solutions for the funds industry.</p>
+                        <div class="chip-row">
+                            <span class="chip">Frontend</span>
+                            <span class="chip">Backend</span>
+                            <span class="chip">Data</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="timeline-item reveal" data-accent="#a29bfe">
+                    <button class="timeline-node" aria-expanded="false">
+                        <span class="node-dot"></span>
+                        <span class="node-meta">
+                            <span class="node-period">Apr 2012 – Jul 2013</span>
+                            <span class="node-company">OSys (Rolls-Royce)</span>
+                            <span class="node-tag">Health monitoring</span>
+                        </span>
+                        <i class="fas fa-chevron-down node-chevron"></i>
+                    </button>
+                    <div class="timeline-body">
+                        <p>Development on an equipment health monitoring product for industrial systems.</p>
+                        <div class="chip-row">
+                            <span class="chip">Health Monitoring</span>
+                            <span class="chip">Industrial</span>
+                            <span class="chip">Rolls-Royce</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section id="technologies">
+            <div class="section-head reveal">
+                <span class="section-kicker">Toolkit</span>
+                <h2>Technologies & skills</h2>
+                <p class="section-sub">Drag nodes · click to pin · filter by domain.</p>
+            </div>
+
+            <div class="skill-filters reveal" id="skill-filters" role="tablist">
+                <button class="filter-pill active" data-filter="all" role="tab" aria-selected="true">All</button>
+                <button class="filter-pill" data-filter="Backend" role="tab">Backend</button>
+                <button class="filter-pill" data-filter="Frontend" role="tab">Frontend</button>
+                <button class="filter-pill" data-filter="AI/ML" role="tab">AI / ML</button>
+                <button class="filter-pill" data-filter="Languages" role="tab">Languages</button>
+                <button class="filter-pill" data-filter="Other" role="tab">Other</button>
+            </div>
+
+            <div class="skills-layout reveal">
+                <div class="force-graph glass-panel">
+                    <svg class="graph-svg" viewBox="0 0 900 520" preserveAspectRatio="xMidYMid meet"></svg>
+                </div>
+                <aside class="skills-panel glass-panel">
+                    <div class="panel-glow" aria-hidden="true"></div>
+                    <div class="panel-content">
+                        <div class="panel-icon"><i class="fas fa-network-wired"></i></div>
+                        <h3 id="skills-panel-title">Explore the graph</h3>
+                        <p id="skills-panel-description">Hover or click a node to see how skills connect across the stack.</p>
+                        <div class="panel-legend">
+                            <span><i class="dot backend"></i> Backend</span>
+                            <span><i class="dot frontend"></i> Frontend</span>
+                            <span><i class="dot aiml"></i> AI/ML</span>
+                            <span><i class="dot languages"></i> Languages</span>
+                            <span><i class="dot other"></i> Other</span>
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <section id="projects">
+            <div class="section-head reveal">
+                <span class="section-kicker">R&amp;D</span>
+                <h2>Projects & open source</h2>
+                <p class="section-sub">Side quests that push the stack further.</p>
+            </div>
+
+            <div class="projects-bento" id="projects-grid">
+                <article class="project-card glass-panel reveal tilt" data-color="#ff6b35">
+                    <div class="project-card-bg"></div>
+                    <div class="project-card-top">
+                        <span class="project-icon"><i class="fas fa-cubes"></i></span>
+                        <span class="project-index">01</span>
+                    </div>
+                    <h3>Bigkit RAD + Visual Designer</h3>
+                    <p>Low-code rapid application development platform with drag-and-drop visual designer.</p>
+                    <div class="chip-row">
+                        <span class="chip">C#</span>
+                        <span class="chip">.NET Core</span>
+                        <span class="chip">React</span>
+                        <span class="chip">TypeScript</span>
+                        <span class="chip">SQL</span>
+                        <span class="chip">Docker</span>
+                    </div>
+                </article>
+
+                <article class="project-card glass-panel reveal tilt featured" data-color="#4ecdc4">
+                    <div class="project-card-bg"></div>
+                    <div class="project-card-top">
+                        <span class="project-icon"><i class="fas fa-x-ray"></i></span>
+                        <span class="project-index">02</span>
+                    </div>
+                    <h3>Synthetic DICOS with WebGPU</h3>
+                    <p>Generating synthetic medical imaging data for training AI models — GPU-accelerated in the browser.</p>
+                    <div class="chip-row">
+                        <span class="chip">WebGPU</span>
+                        <span class="chip">TypeScript</span>
+                        <span class="chip">Python</span>
+                        <span class="chip">Rust</span>
+                        <span class="chip">AI/ML</span>
+                    </div>
+                </article>
+
+                <article class="project-card glass-panel reveal tilt" data-color="#45b7d1">
+                    <div class="project-card-bg"></div>
+                    <div class="project-card-top">
+                        <span class="project-icon"><i class="fas fa-cube"></i></span>
+                        <span class="project-index">03</span>
+                    </div>
+                    <h3>3D Object Tracking</h3>
+                    <p>Object simulation in Unreal Engine 5 and Godot using raycast voxel projection and wgpu.</p>
+                    <div class="chip-row">
+                        <span class="chip">C++</span>
+                        <span class="chip">Unreal</span>
+                        <span class="chip">Godot</span>
+                        <span class="chip">WebGPU</span>
+                        <span class="chip">Rust</span>
+                    </div>
+                </article>
+
+                <article class="project-card glass-panel reveal tilt" data-color="#f9ca24">
+                    <div class="project-card-bg"></div>
+                    <div class="project-card-top">
+                        <span class="project-icon"><i class="fas fa-mobile-alt"></i></span>
+                        <span class="project-index">04</span>
+                    </div>
+                    <h3>Organizator</h3>
+                    <p>Android inventory manager — practical mobile tooling with a clean local data model.</p>
+                    <div class="chip-row">
+                        <span class="chip">Java</span>
+                        <span class="chip">Android</span>
+                        <span class="chip">SQLite</span>
+                        <span class="chip">Kotlin</span>
+                    </div>
+                </article>
+
+                <article class="project-card glass-panel reveal tilt" data-color="#6c5ce7">
+                    <div class="project-card-bg"></div>
+                    <div class="project-card-top">
+                        <span class="project-icon"><i class="fas fa-code-branch"></i></span>
+                        <span class="project-index">05</span>
+                    </div>
+                    <h3>Fable → Rust Transpiler</h3>
+                    <p>Open-source work toward transpiling F# to Rust — compiler design meets systems programming.</p>
+                    <div class="chip-row">
+                        <span class="chip">F#</span>
+                        <span class="chip">Rust</span>
+                        <span class="chip">Compilers</span>
+                        <span class="chip">OSS</span>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section id="education">
+            <div class="section-head reveal">
+                <span class="section-kicker">Foundation</span>
+                <h2>Education</h2>
+            </div>
+
+            <div class="edu-card glass-panel reveal tilt" id="edu-card">
+                <div class="edu-front">
+                    <div class="edu-icon"><i class="fas fa-graduation-cap"></i></div>
+                    <h3>University of Cardiff</h3>
+                    <p class="edu-degree">BEng Civil Engineering</p>
+                    <p class="edu-grade">2.2 (Hons.)</p>
+                    <p class="edu-year">2005 – 2008</p>
+                    <p class="edu-hint"><i class="fas fa-sync-alt"></i> Hover / tap to flip</p>
+                </div>
+                <div class="edu-back">
+                    <h4>Key learnings</h4>
+                    <ul>
+                        <li>Structural analysis &amp; design</li>
+                        <li>Materials science</li>
+                        <li>Project management</li>
+                        <li>Engineering mathematics</li>
+                    </ul>
+                    <div class="fun-fact">
+                        <i class="fas fa-lightbulb"></i>
+                        <p>Foundation for the problem-solving mindset used in software every day.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="contact">
+            <div class="contact-card glass-panel reveal">
+                <div class="contact-glow" aria-hidden="true"></div>
+                <span class="section-kicker">Next step</span>
+                <h2>Let's build something sharp</h2>
+                <p>Ready to ship maintainable systems with AI, ML, and 3D visualization in the mix?</p>
+                <div class="contact-actions">
+                    <a href="mailto:alex.lambdasafe@gmail.com" class="btn btn-primary magnetic">
+                        <i class="fas fa-envelope"></i> alex.lambdasafe@gmail.com
+                    </a>
+                    <button type="button" class="btn btn-ghost" id="copy-email" aria-label="Copy email">
+                        <i class="fas fa-copy"></i> <span>Copy email</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; <span id="year">2026</span> Alexander Swan · <a href="../alex-cv/index.html">Classic CV</a></p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
