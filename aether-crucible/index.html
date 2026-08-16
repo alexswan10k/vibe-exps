@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Aether Crucible — The Elemental Synthesizer</title>
+  <meta name="description" content="A standalone elemental physics action roguelike. Combine 6 primal elements to trigger explosive reactions and conquer the subterranean Crucible.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Main Canvas Viewport -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Floating Tooltip -->
+    <div id="tooltip"></div>
+
+    <!-- Mobile Virtual Controls -->
+    <div id="mobile-controls">
+      <div id="stick-move-zone" class="touch-stick-zone">
+        <div class="stick-base">
+          <div id="stick-move-knob" class="stick-knob"></div>
+        </div>
+      </div>
+
+      <div id="stick-aim-zone" class="touch-stick-zone">
+        <div class="stick-base">
+          <div id="stick-aim-knob" class="stick-knob"></div>
+        </div>
+      </div>
+
+      <div class="touch-actions-group">
+        <button id="touch-btn-dash" class="touch-btn" title="Dash (Space)">💨</button>
+        <button id="touch-btn-sec" class="touch-btn" title="Secondary Cast (Right Click)">✨</button>
+        <button id="touch-btn-flask" class="touch-btn" title="Flask Throw (Q/E)">🧪</button>
+      </div>
+    </div>
+
+    <!-- HUD Overlay -->
+    <div id="hud" class="hidden">
+      <!-- Top Bar -->
+      <div class="hud-top-bar hud-interactive">
+        <div class="sector-badge">
+          <span id="sector-title" class="sector-title">The Overgrown Spores</span>
+          <span id="room-counter" class="room-counter">Room 1</span>
+        </div>
+
+        <div class="hud-top-right">
+          <!-- Live Dungeon Minimap -->
+          <div id="minimap-container">
+            <canvas id="minimap-canvas" width="130" height="85"></canvas>
+            <div id="minimap-sector-tracker" class="minimap-tracker"></div>
+          </div>
+          <div class="resource-pill shards">
+            <span>💠</span>
+            <span id="shard-count">0</span>
+          </div>
+          <button id="codex-btn" class="hud-btn">📖 Codex (C)</button>
+        </div>
+      </div>
+
+      <!-- Boss Health Bar -->
+      <div id="boss-bar-container" class="hidden">
+        <div id="boss-name" class="boss-name">The Crucible Tyrant</div>
+        <div class="boss-hp-frame">
+          <div id="boss-hp-fill" class="boss-hp-fill" style="width: 100%;"></div>
+        </div>
+      </div>
+
+      <!-- Bottom Bar -->
+      <div class="hud-bottom-bar hud-interactive">
+        <!-- Player Status Bars (Health, Shield, Mana, Dash) -->
+        <div class="player-status-group">
+          <div class="status-bar-row">
+            <span class="status-label">HP</span>
+            <div class="bar-frame">
+              <div id="hp-fill" class="bar-fill hp-fill" style="width: 100%;"></div>
+              <div id="shield-overlay" class="shield-overlay" style="width: 0%;"></div>
+            </div>
+            <span id="hp-val" class="status-val">120 / 120</span>
+          </div>
+
+          <div class="status-bar-row">
+            <span class="status-label">MANA</span>
+            <div class="bar-frame">
+              <div id="mana-fill" class="bar-fill mana-fill" style="width: 100%;"></div>
+            </div>
+            <span id="mana-val" class="status-val">100 / 100</span>
+          </div>
+
+          <div id="dash-pips" class="dash-pips">
+            <div class="dash-pip ready"></div>
+            <div class="dash-pip ready"></div>
+          </div>
+        </div>
+
+        <!-- Elemental Deck (1-6) + Secondary & Flask Slots -->
+        <div class="element-deck">
+          <div id="elem-slot-pyros" class="element-slot pyros active" data-element="pyros" title="Pyros (Key 1)">
+            <span class="elem-icon">🔥</span>
+            <span class="elem-key">1</span>
+          </div>
+          <div id="elem-slot-hydros" class="element-slot hydros" data-element="hydros" title="Hydros (Key 2)">
+            <span class="elem-icon">💧</span>
+            <span class="elem-key">2</span>
+          </div>
+          <div id="elem-slot-voltos" class="element-slot voltos" data-element="voltos" title="Voltos (Key 3)">
+            <span class="elem-icon">⚡</span>
+            <span class="elem-key">3</span>
+          </div>
+          <div id="elem-slot-cryos" class="element-slot cryos" data-element="cryos" title="Cryos (Key 4)">
+            <span class="elem-icon">❄️</span>
+            <span class="elem-key">4</span>
+          </div>
+          <div id="elem-slot-toxis" class="element-slot toxis" data-element="toxis" title="Toxis (Key 5)">
+            <span class="elem-icon">☣️</span>
+            <span class="elem-key">5</span>
+          </div>
+          <div id="elem-slot-aether" class="element-slot aether" data-element="aether" title="Aether (Key 6)">
+            <span class="elem-icon">🌌</span>
+            <span class="elem-key">6</span>
+          </div>
+
+          <!-- Skills Rack -->
+          <div class="skills-rack">
+            <div id="secondary-slot" class="skill-slot" title="Secondary Transmutation (Right Click)">
+              <span class="skill-icon">✨</span>
+              <span class="skill-key">RMB</span>
+              <div id="secondary-cd" class="skill-cooldown-overlay"></div>
+            </div>
+            <div id="flask-slot" class="skill-slot" title="Alchemical Flask (Q / E)">
+              <span class="skill-icon">🧪</span>
+              <span class="skill-key">Q/E</span>
+              <div id="flask-cd" class="skill-cooldown-overlay"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Artifacts Rack -->
+        <div id="artifacts-rack" class="artifacts-rack"></div>
+      </div>
+    </div>
+
+    <!-- =====================================================================
+         MODALS & OVERLAYS
+         ===================================================================== -->
+
+    <!-- 1. Start Screen / Character Select -->
+    <div id="start-modal" class="modal-overlay">
+      <div class="modal-card">
+        <h1 class="modal-title">AETHER CRUCIBLE</h1>
+        <p class="modal-subtitle">Synthesize primal elements, trigger chain reactions, and conquer the subterranean Crucible.</p>
+
+        <div class="character-grid">
+          <!-- Pyromancer -->
+          <div class="character-card selected" data-archetype="pyromancer">
+            <div class="char-icon">🔥</div>
+            <div class="char-name">Ignis Vanguard</div>
+            <div class="char-desc">High vitality flame synthesist. Ignites toxic clouds and leaves incinerating trails.</div>
+            <div class="char-stats">
+              <span>HP: 125</span>
+              <span>SPD: Normal</span>
+              <span>Pyros + Toxis</span>
+            </div>
+          </div>
+
+          <!-- Storm Weaver -->
+          <div class="character-card" data-archetype="stormweaver">
+            <div class="char-icon">⚡</div>
+            <div class="char-name">Storm Weaver</div>
+            <div class="char-desc">Agile conduction adept. Chains high-voltage lightning through deluge fields and wet foes.</div>
+            <div class="char-stats">
+              <span>HP: 95</span>
+              <span>SPD: Fast</span>
+              <span>Voltos + Hydros</span>
+            </div>
+          </div>
+
+          <!-- Void Astrologer -->
+          <div class="character-card" data-archetype="astrologer">
+            <div class="char-icon">🌌</div>
+            <div class="char-name">Void Astrologer</div>
+            <div class="char-desc">Gravitational master. Freezes time and pulls enemies into catastrophic black hole implosions.</div>
+            <div class="char-stats">
+              <span>HP: 105</span>
+              <span>SPD: Agile</span>
+              <span>Cryos + Aether</span>
+            </div>
+          </div>
+        </div>
+
+        <button id="start-game-btn" class="btn-primary">DESCEND INTO THE CRUCIBLE</button>
+      </div>
+    </div>
+
+    <!-- 2. Transmutation / Upgrade Modal -->
+    <div id="upgrade-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h2 class="modal-title">ALCHEMICAL TRANSMUTATION</h2>
+        <p class="modal-subtitle">Choose an ancient relic to empower your primal synthesis.</p>
+        <div id="upgrade-cards-container" class="upgrade-cards-grid"></div>
+      </div>
+    </div>
+
+    <!-- 3. Codex / Elemental Reaction Matrix Modal -->
+    <div id="codex-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <button id="close-codex-btn" class="btn-close">✕</button>
+        <h2 class="modal-title">THE ALCHEMICAL CODEX</h2>
+        <p class="modal-subtitle">Elemental reactions trigger when two opposing or complementary elements collide.</p>
+        <div id="codex-grid" class="codex-table"></div>
+      </div>
+    </div>
+
+    <!-- 4. Game Over Modal -->
+    <div id="gameover-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h2 class="modal-title" style="color: #ef4444;">DISSOLVED IN THE CRUCIBLE</h2>
+        <p class="modal-subtitle">Your elemental form has dissipated into primordial dust.</p>
+        
+        <div style="display: flex; justify-content: center; gap: 30px; margin: 10px 0;">
+          <div><strong>Final Score:</strong> <span id="final-score" style="color: #f59e0b;">0</span></div>
+          <div><strong>Reactions:</strong> <span id="final-combos" style="color: #38bdf8;">0</span></div>
+          <div><strong>Best Run:</strong> <span id="high-score-val" style="color: #a855f7;">0</span></div>
+        </div>
+
+        <button id="retry-btn" class="btn-primary">TRY AGAIN</button>
+      </div>
+    </div>
+
+    <!-- 5. Victory Modal -->
+    <div id="victory-modal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h2 class="modal-title" style="color: #38bdf8;">MASTER OF THE PRIMORDIAL AETHER</h2>
+        <p class="modal-subtitle">You have conquered the 4 sectors and conquered the Primordial Chimera!</p>
+        
+        <div style="display: flex; justify-content: center; gap: 30px; margin: 10px 0;">
+          <div><strong>Total Score:</strong> <span id="victory-score" style="color: #f59e0b;">0</span></div>
+          <div><strong>Reactions Triggered:</strong> <span id="victory-combos" style="color: #38bdf8;">0</span></div>
+        </div>
+
+        <button id="victory-btn" class="btn-primary">CLAIM GLORY</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts in strict sequential non-module order -->
+  <script src="js/audio.js"></script>
+  <script src="js/elements.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/artifacts.js"></script>
+  <script src="js/entities.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
