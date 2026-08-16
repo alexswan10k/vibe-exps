@@ -392,11 +392,15 @@ class Game {
     this.projectiles = [];
     this.collectibles = [];
 
+    // Create Floor Graph
+    this.currentFloor = new FloorLayout(this.currentSector, 8);
+    this.currentRoom = this.currentFloor.getRoom(2, 2);
+
     // Create Player
     this.player = new Player(this.map.width / 2, this.map.height / 2, archetypeId);
 
-    // Setup first room
-    this.loadRoom('combat');
+    // Load active room
+    this.loadActiveRoom(null);
 
     if (window.soundSystem) {
       window.soundSystem.setSector(0);
@@ -404,35 +408,59 @@ class Game {
     }
   }
 
-  loadRoom(roomType) {
+  loadActiveRoom(doorDir = null) {
     this.particles.clear();
     this.enemies = [];
     this.projectiles = [];
     this.collectibles = [];
-    this.roomCleared = (roomType !== 'combat' && roomType !== 'boss');
 
-    // Generate Map
-    this.map.generateRoom(this.currentSector, roomType, this.currentRoomNumber);
+    const room = this.currentRoom;
+    this.roomCleared = !!room.cleared;
+    this.map.loadRoomFromNode(this.currentSector, room);
 
-    // Reset player position to center
-    this.player.x = this.map.width / 2;
-    this.player.y = this.map.height / 2;
+    // Position player intuitively at the opposite door threshold
+    const midC = Math.floor(this.map.cols / 2) * this.map.tileSize;
+    const midR = Math.floor(this.map.rows / 2) * this.map.tileSize;
 
-    if (roomType === 'combat') {
-      this.enemiesRemainingToSpawn = 5 + this.currentSector * 3 + this.currentRoomNumber * 2;
-      this.enemySpawnTimer = 0.5;
-      if (window.soundSystem) window.soundSystem.setTension(0.6);
-    } else if (roomType === 'boss') {
-      this.enemiesRemainingToSpawn = 0;
-      const boss = new Boss(this.map.width / 2, this.map.height / 2 - 100, this.currentSector);
-      this.enemies.push(boss);
-      if (window.soundSystem) {
-        window.soundSystem.setTension(1.0);
-        window.soundSystem.playBossRoar();
+    if (doorDir === 'north') {
+      this.player.x = midC;
+      this.player.y = this.map.height - this.map.tileSize * 1.6;
+    } else if (doorDir === 'south') {
+      this.player.x = midC;
+      this.player.y = this.map.tileSize * 1.6;
+    } else if (doorDir === 'east') {
+      this.player.x = this.map.tileSize * 1.6;
+      this.player.y = midR;
+    } else if (doorDir === 'west') {
+      this.player.x = this.map.width - this.map.tileSize * 1.6;
+      this.player.y = midR;
+    } else {
+      this.player.x = this.map.width / 2;
+      this.player.y = this.map.height / 2;
+    }
+
+    if (!room.cleared) {
+      if (room.roomType === 'combat') {
+        this.enemiesRemainingToSpawn = 5 + this.currentSector * 3;
+        this.enemySpawnTimer = 0.5;
+        if (window.soundSystem) window.soundSystem.setTension(0.6);
+      } else if (room.roomType === 'boss') {
+        this.enemiesRemainingToSpawn = 0;
+        const boss = new Boss(this.map.width / 2, this.map.height / 2 - 100, this.currentSector);
+        this.enemies.push(boss);
+        if (window.soundSystem) {
+          window.soundSystem.setTension(1.0);
+          window.soundSystem.playBossRoar();
+        }
+      } else {
+        this.enemiesRemainingToSpawn = 0;
+        this.map.unlockDoors();
+        if (window.soundSystem) window.soundSystem.setTension(0.1);
       }
     } else {
-      // Crucible / Elixir room
-      if (window.soundSystem) window.soundSystem.setTension(0.1);
+      this.enemiesRemainingToSpawn = 0;
+      this.map.unlockDoors();
+      if (window.soundSystem) window.soundSystem.setTension(0.15);
     }
   }
 
@@ -511,23 +539,34 @@ class Game {
     const elements = ['pyros', 'hydros', 'voltos', 'cryos', 'toxis', 'aether'];
     const elem = elements[Math.floor(Math.random() * elements.length)];
 
-    // Spawn at random edge of room away from player
-    let sx = 60 + Math.random() * (this.map.width - 120);
-    let sy = 60 + Math.random() * (this.map.height - 120);
+    // Sector enemy type pools
+    const sectorTypes = [
+      ['stalker', 'spitter', 'golem'],      // Sector 0
+      ['imp', 'automaton', 'golem'],        // Sector 1
+      ['wisp', 'automaton', 'golem'],       // Sector 2
+      ['phantom', 'wisp', 'stalker']        // Sector 3
+    ];
+    const typePool = sectorTypes[this.currentSector] || ['stalker', 'imp', 'wisp'];
+    const chosenType = typePool[Math.floor(Math.random() * typePool.length)];
 
-    const isRanged = Math.random() < 0.35;
-    const hp = 45 + this.currentSector * 20;
-    const speed = 120 + Math.random() * 50;
+    // Spawn at random edge of room away from player
+    let sx = 70 + Math.random() * (this.map.width - 140);
+    let sy = 70 + Math.random() * (this.map.height - 140);
+
+    const isRanged = (chosenType === 'spitter' || chosenType === 'automaton' || (chosenType === 'wisp' && Math.random() < 0.5));
+    const hp = 50 + this.currentSector * 24;
+    const speed = chosenType === 'golem' ? 90 : (chosenType === 'imp' ? 150 : 125);
+    const radius = chosenType === 'golem' ? 20 : 16;
 
     let enemy;
     if (isRanged) {
-      enemy = new RangedEnemy(sx, sy, 14, hp * 0.8, speed * 0.85, elem, 'Aether Sentry');
+      enemy = new RangedEnemy(sx, sy, radius, hp * 0.85, speed * 0.85, elem, `${biome.name} Sentry`, chosenType);
     } else {
-      enemy = new Enemy(sx, sy, 15, hp, speed, elem, 'Crucible Stalker');
+      enemy = new Enemy(sx, sy, radius, hp, speed, elem, `${biome.name} Fiend`, chosenType);
     }
 
     this.enemies.push(enemy);
-    this.particles.spawnBurst(sx, sy, 12, '#a855f7', 120);
+    this.particles.spawnBurst(sx, sy, 14, '#a855f7', 130);
   }
 
   onBossDefeated() {
@@ -535,11 +574,16 @@ class Game {
     this.map.unlockDoors();
 
     if (this.currentSector >= 3) {
-      // Final Boss Defeated — VICTORY!
       setTimeout(() => this.onVictory(), 2000);
     } else {
-      // Sector Cleared!
       if (window.soundSystem) window.soundSystem.playRoomClear();
+      setTimeout(() => {
+        this.currentSector++;
+        this.currentFloor = new FloorLayout(this.currentSector, 8);
+        this.currentRoom = this.currentFloor.getRoom(2, 2);
+        if (window.soundSystem) window.soundSystem.setSector(this.currentSector);
+        this.loadActiveRoom(null);
+      }, 3000);
     }
   }
 
@@ -580,23 +624,20 @@ class Game {
   }
 
   advanceToNextRoom(doorDir) {
-    this.currentRoomNumber++;
+    if (!this.currentFloor || !this.currentRoom) return;
 
-    if (this.currentRoomNumber % 5 === 0) {
-      // Boss Room
-      this.loadRoom('boss');
-    } else if (this.currentRoomNumber % 3 === 0) {
-      // Alchemical Crucible Upgrade Room
-      this.loadRoom('crucible');
-    } else {
-      // Standard Combat Room
-      this.loadRoom('combat');
-    }
+    let targetGx = this.currentRoom.gridX;
+    let targetGy = this.currentRoom.gridY;
 
-    if (this.currentRoomNumber > 5) {
-      this.currentSector = Math.min(3, this.currentSector + 1);
-      this.currentRoomNumber = 1;
-      if (window.soundSystem) window.soundSystem.setSector(this.currentSector);
+    if (doorDir === 'north') targetGy--;
+    if (doorDir === 'south') targetGy++;
+    if (doorDir === 'east') targetGx++;
+    if (doorDir === 'west') targetGx--;
+
+    const nextRoom = this.currentFloor.getRoom(targetGx, targetGy);
+    if (nextRoom) {
+      this.currentRoom = nextRoom;
+      this.loadActiveRoom(doorDir);
     }
   }
 
@@ -614,12 +655,16 @@ class Game {
     }
 
     // Room Clear Check
-    if (!this.roomCleared && this.map.roomType === 'combat' && this.enemiesRemainingToSpawn === 0 && this.enemies.length === 0) {
-      this.roomCleared = true;
-      this.map.unlockDoors();
-      if (window.soundSystem) {
-        window.soundSystem.playRoomClear();
-        window.soundSystem.setTension(0.15);
+    if (!this.roomCleared && this.enemiesRemainingToSpawn === 0 && this.enemies.filter(e => e.alive).length === 0) {
+      if (this.currentRoom.roomType === 'combat' || this.currentRoom.roomType === 'start') {
+        this.roomCleared = true;
+        this.currentRoom.cleared = true;
+        this.map.unlockDoors();
+        this.score += 350;
+        if (window.soundSystem) {
+          window.soundSystem.playRoomClear();
+          window.soundSystem.setTension(0.15);
+        }
       }
     }
 

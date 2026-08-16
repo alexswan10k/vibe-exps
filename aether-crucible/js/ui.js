@@ -92,6 +92,7 @@ class UIManager {
     }
 
     this.updateHUD();
+    this.renderMinimap();
   }
 
   updateHUD() {
@@ -179,8 +180,10 @@ class UIManager {
     if (sectorTitle) {
       sectorTitle.textContent = SECTOR_BIOMES[this.game.currentSector]?.name || 'The Crucible';
     }
-    if (roomCounter) {
-      roomCounter.textContent = `Room ${this.game.currentRoomNumber}`;
+    if (roomCounter && this.game.currentFloor) {
+      const visitedCount = Array.from(this.game.currentFloor.rooms.values()).filter(r => r.visited).length;
+      const totalCount = this.game.currentFloor.rooms.size;
+      roomCounter.textContent = `Sector ${this.game.currentSector + 1} (${visitedCount}/${totalCount} Rooms)`;
     }
     if (shardCount) {
       shardCount.textContent = this.game.shards;
@@ -267,6 +270,154 @@ class UIManager {
     });
 
     modal.classList.remove('hidden');
+  }
+
+  renderMinimap() {
+    const canvas = document.getElementById('minimap-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const floor = this.game.currentFloor;
+    const currentRoom = this.game.currentRoom;
+    if (!floor || !currentRoom) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Dark Map Background
+    ctx.fillStyle = 'rgba(7, 10, 18, 0.95)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const cellW = 20;
+    const cellH = 14;
+    const gap = 5;
+    const marginX = 8;
+    const marginY = 5;
+
+    // 1. Draw Door Connector Corridors between adjacent rooms
+    floor.rooms.forEach(room => {
+      if (!room.visited) return;
+      const rx = marginX + room.gridX * (cellW + gap);
+      const ry = marginY + room.gridY * (cellH + gap);
+
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2.5;
+
+      if (room.doors.north) {
+        ctx.beginPath();
+        ctx.moveTo(rx + cellW / 2, ry);
+        ctx.lineTo(rx + cellW / 2, ry - gap);
+        ctx.stroke();
+      }
+      if (room.doors.south) {
+        ctx.beginPath();
+        ctx.moveTo(rx + cellW / 2, ry + cellH);
+        ctx.lineTo(rx + cellW / 2, ry + cellH + gap);
+        ctx.stroke();
+      }
+      if (room.doors.east) {
+        ctx.beginPath();
+        ctx.moveTo(rx + cellW, ry + cellH / 2);
+        ctx.lineTo(rx + cellW + gap, ry + cellH / 2);
+        ctx.stroke();
+      }
+      if (room.doors.west) {
+        ctx.beginPath();
+        ctx.moveTo(rx, ry + cellH / 2);
+        ctx.lineTo(rx - gap, ry + cellH / 2);
+        ctx.stroke();
+      }
+    });
+
+    // 2. Draw Room Nodes
+    for (let gy = 0; gy < floor.gridSize; gy++) {
+      for (let gx = 0; gx < floor.gridSize; gx++) {
+        const room = floor.getRoom(gx, gy);
+        if (!room) continue;
+
+        const rx = marginX + gx * (cellW + gap);
+        const ry = marginY + gy * (cellH + gap);
+
+        const isCurrent = (currentRoom.gridX === gx && currentRoom.gridY === gy);
+
+        // Check if room is adjacent to any visited room
+        const isDiscovered = room.visited || [
+          floor.getRoom(gx, gy - 1),
+          floor.getRoom(gx, gy + 1),
+          floor.getRoom(gx + 1, gy),
+          floor.getRoom(gx - 1, gy)
+        ].some(n => n && n.visited);
+
+        if (room.visited) {
+          // Room Fill by Type
+          let fillColor = '#1e293b';
+          let icon = '';
+          if (room.roomType === 'start') { fillColor = '#0f766e'; icon = '🏠'; }
+          if (room.roomType === 'crucible') { fillColor = '#6d28d9'; icon = '⚗️'; }
+          if (room.roomType === 'elixir') { fillColor = '#047857'; icon = '🧪'; }
+          if (room.roomType === 'boss') { fillColor = '#b91c1c'; icon = '💀'; }
+          if (room.roomType === 'combat') { icon = room.cleared ? '✓' : '⚔️'; }
+
+          ctx.fillStyle = fillColor;
+          ctx.fillRect(rx, ry, cellW, cellH);
+
+          // Room Border
+          ctx.strokeStyle = isCurrent ? '#38bdf8' : (room.cleared ? '#22c55e' : 'rgba(255, 255, 255, 0.2)');
+          ctx.lineWidth = isCurrent ? 2 : 1;
+          ctx.strokeRect(rx, ry, cellW, cellH);
+
+          // Glowing pulse on current room
+          if (isCurrent) {
+            ctx.save();
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#38bdf8';
+            ctx.strokeStyle = '#38bdf8';
+            ctx.strokeRect(rx, ry, cellW, cellH);
+            ctx.restore();
+          }
+
+          // Room Icon
+          if (icon) {
+            ctx.fillStyle = '#fff';
+            ctx.font = '9px Outfit, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(icon, rx + cellW / 2, ry + cellH / 2 + 1);
+          }
+        } else if (isDiscovered) {
+          // Undiscovered adjacent room (Fog of War)
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+          ctx.fillRect(rx, ry, cellW, cellH);
+
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.strokeRect(rx, ry, cellW, cellH);
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+          ctx.font = '8px Outfit, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('?', rx + cellW / 2, ry + cellH / 2);
+        }
+      }
+    }
+
+    this.updateSectorTracker();
+  }
+
+  updateSectorTracker() {
+    const tracker = document.getElementById('minimap-sector-tracker');
+    if (!tracker || !this.game.currentFloor) return;
+
+    const currentRoom = this.game.currentRoom;
+    let label = 'Combat';
+    if (currentRoom.roomType === 'start') label = 'Entrance';
+    if (currentRoom.roomType === 'crucible') label = 'Crucible Font';
+    if (currentRoom.roomType === 'elixir') label = 'Elixir Shrine';
+    if (currentRoom.roomType === 'boss') label = 'Boss Chamber';
+
+    const status = currentRoom.cleared ? 'Cleared' : 'Hostile';
+    tracker.innerHTML = `<span style="color: #38bdf8;">${label}</span> • <span style="color: ${currentRoom.cleared ? '#4ade80' : '#ef4444'};">${status}</span>`;
   }
 
   renderCanvasUI(ctx) {
