@@ -1,49 +1,23 @@
 /**
- * Main entry point for the colony simulation game
+ * Bootstrap: start the game once the DOM is ready.
  */
-
-// Initialize the game when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded, initializing game...');
-    
     try {
-        // Check if all required classes are available
-        if (typeof Game === 'undefined') {
-            throw new Error('Game class not found. Make sure all scripts are loaded correctly.');
-        }
-        
-        // Create and start the game
-        console.log('Creating game instance...');
-        const game = new Game();
-        
-        // Make game globally accessible for debugging (optional)
-        window.game = game;
-        
-        console.log('Colony simulation initialized successfully');
-    } catch (error) {
-        console.error('Failed to initialize colony simulation:', error);
-        
-        // Show error message on the page
+        const canvas = document.getElementById('game-canvas');
+        if (!canvas) throw new Error('Canvas element not found.');
+        if (typeof Game === 'undefined') throw new Error('Game class missing — check script tags.');
+
+        window.game = new Game(canvas);
+    } catch (err) {
+        console.error('Failed to initialize colony simulation:', err);
+
         const errorDiv = document.createElement('div');
         errorDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            left: 20px;
-            background: #e74c3c;
-            color: white;
-            padding: 15px;
-            border-radius: 5px;
-            z-index: 10000;
-            max-width: 400px;
-        `;
-        errorDiv.innerHTML = `
-            <h3>Game Initialization Error</h3>
-            <p>${error.message}</p>
-            <p>Check the console for more details.</p>
-        `;
+            position: fixed; inset: auto 20px 20px auto; max-width: 420px;
+            background: #7c2418; color: #fff; padding: 14px 18px;
+            border-radius: 8px; z-index: 10000; font-family: monospace;
+            box-shadow: 0 6px 24px rgba(0,0,0,.5);`;
+        errorDiv.innerHTML = `<b>Failed to start</b><br>${err.message}`;
         document.body.appendChild(errorDiv);
-        
-        // Also log the full error stack
-        console.error('Full error:', error);
     }
 });

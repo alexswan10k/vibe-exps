@@ -1,159 +1,72 @@
 # Colony Simulation Game
 
-A modular colony management simulation game built with vanilla JavaScript, featuring resource gathering, crafting, and pawn AI.
+A colony management simulation in vanilla JavaScript — no build step, no
+dependencies. Mark trees for chopping, quarry rock, farm crops, haul goods to
+stockpiles, and keep your colonists fed and rested through the night.
+
+## 🎮 Gameplay
+
+- **Orders**: drag-select trees, iron deposits, rocky ground, or ripe plants —
+  colonists pathfind to them and do the work.
+- **Zones**: place *stockpile* zones (haulers bring loose goods there) and
+  *growing* zones (growers plant and harvest crops automatically).
+- **Build**: place blueprints for walls, doors, tables, beds and chairs.
+  Blueprints need materials delivered before a builder finishes them.
+- **Craft**: at a crafting table, cook meals from raw food or make tools
+  (tools speed up all work but wear out each day).
+- **Needs**: colonists eat when hungry (raw food or cooked meals), sleep in
+  beds at night, and starve if food runs out. Lose everyone and the colony falls.
+- **Time**: day/night cycle with pause and 1×/2×/4× speeds. New colonists may
+  join if you have food to spare.
+
+### Controls
+
+| Input | Action |
+| --- | --- |
+| Left click / drag | Use selected tool |
+| Right click / Esc | Cancel tool |
+| WASD / arrows | Pan camera |
+| Mouse wheel | Zoom to cursor |
+| Middle drag | Pan camera |
+| Space | Pause |
+| 1 / 2 / 3 | Game speed |
+
+## 🚀 Getting started
+
+Open `index.html` in any modern browser.
 
 ## 🏗️ Architecture
 
-This project uses a clean modular architecture with separation of concerns:
+Classic scripts loaded in dependency order (no modules, no tooling):
 
-### Core Files
-- **`types.js`** - JSDoc type definitions for better IDE support and documentation
-- **`utils.js`** - Utility functions for inventory management and common operations
-- **`entities.js`** - Game entity classes (Resource, Building, DroppedResource, Plant)
+| File | Responsibility |
+| --- | --- |
+| `config.js` | All tunables: balance rates, recipes, build costs, world-gen parameters |
+| `utils.js` | Seeded RNG, hashing, inventory helpers, math |
+| `noise.js` | Value noise + fBm for terrain generation |
+| `pathfinding.js` | A\* on the tile grid (8-directional, corner-cut safe, multi-goal) |
+| `entities.js` | Data classes: item stacks, trees, deposits, bushes, crops, buildings, zones |
+| `task-manager.js` | `JobBoard`: job posting, claiming, derived-job maintenance (haul/plant/harvest/deliver/craft) |
+| `pawn.js` | Colonist AI: needs, state machine, path following, job execution phases |
+| `world.js` | Terrain generation, passability, spatial registries, cached ground layer |
+| `renderer.js` | Canvas drawing: pre-rendered ground, depth-sorted sprites, night tint, ghosts |
+| `input-manager.js` | Declarative tool system, drag selection with live counts, pan/zoom, hotkeys |
+| `ui-manager.js` | DOM panels: time HUD, colonist cards, jobs, messages, tile inspector, priorities modal |
+| `game.js` | Orchestration: fixed-timestep loop, day cycle, migrants, game over |
+| `main.js` | Bootstrap with error overlay |
 
-### Manager Classes
-- **`input-manager.js`** - Handles all user input (mouse, keyboard, wheel events)
-- **`renderer.js`** - Manages all game rendering (map, resources, pawns, buildings)
-- **`ui-manager.js`** - Handles UI updates and DOM manipulation
-- **`task-manager.js`** - Manages task creation, assignment, and resource operations
+### Design notes
 
-### Game Logic
-- **`pawn.js`** - Pawn class with AI behavior and inventory management
-- **`game.js`** - Main Game class that orchestrates all managers
-- **`main.js`** - Entry point that initializes the game
-
-## 🎮 Gameplay Features
-
-- **Resource Management**: Gather wood, iron, stone, and food
-- **Pawn AI**: Intelligent colonists that automatically perform tasks
-- **Building System**: Construct walls, crafting tables, and storage areas
-- **Crafting System**: Create food and tools from gathered resources
-- **Task Queue**: Assign and manage work for your pawns
-- **Real-time Updates**: Live UI showing pawn status, resources, and tasks
-
-## 🚀 Getting Started
-
-1. **Prerequisites**: Modern web browser with JavaScript enabled
-2. **Setup**: Open `index.html` in your browser
-3. **Controls**:
-   - **Mouse**: Click and drag to select areas for tasks
-   - **Keyboard**: WASD or arrow keys to move camera
-   - **Mouse Wheel**: Zoom in/out
-   - **ESC or Right-click**: Cancel current action
-
-## 📁 File Structure
-
-```
-colony-sim/
-├── index.html          # Main HTML file
-├── styles.css          # Game styling
-├── terrain.png         # Sprite sheet for terrain
-├── types.js           # JSDoc type definitions
-├── utils.js           # Utility functions
-├── entities.js        # Game entity classes
-├── pawn.js            # Pawn AI and behavior
-├── input-manager.js   # Input handling system
-├── renderer.js        # Rendering system
-├── ui-manager.js      # UI management system
-├── task-manager.js    # Task and resource management
-├── game.js            # Main game orchestration
-├── main.js            # Application entry point
-└── README.md          # This file
-```
-
-## 🔧 Technical Details
-
-### Modular Design Benefits
-- **Maintainability**: Each module has a single responsibility
-- **Testability**: Individual components can be tested in isolation
-- **Extensibility**: New features can be added without affecting existing code
-- **Readability**: Clear separation makes code easier to understand
-
-### JSDoc Type System
-All classes and methods include comprehensive JSDoc comments with type annotations for:
-- Better IDE autocomplete and error detection
-- Automatic documentation generation
-- Improved code maintainability
-
-### Game Loop
-The game runs on a continuous loop that:
-1. Updates game state (pawn AI, plant growth, task completion)
-2. Renders the game world
-3. Updates the user interface
-
-## 🎯 Game Mechanics
-
-### Pawns
-- Have hunger, sleep, and carrying capacity needs
-- Automatically find and complete tasks from the queue
-- Can carry limited weight of resources
-- Will eat food and rest when needs are critical
-
-### Resources
-- **Trees**: Provide wood when chopped
-- **Iron Deposits**: Provide iron when mined
-- **Stone Terrain**: Can be mined for stone
-- **Plants**: Grow over time and provide food when harvested
-
-### Tasks
-- **Chop Trees**: Select tree areas to harvest wood
-- **Mine Iron**: Select iron deposits to gather iron
-- **Mine Stone**: Select stone tiles to mine stone
-- **Harvest Plants**: Select mature plants to gather food
-- **Build Structures**: Construct walls, tables, and storage areas
-
-### Crafting
-- **Food**: Requires 1 wood
-- **Tools**: Requires 2 iron + 1 wood
-
-## 🛠️ Development
-
-### Adding New Features
-1. Identify which manager should handle the new functionality
-2. Add the feature to the appropriate manager class
-3. Update the Game class if needed to integrate the new feature
-4. Add JSDoc type definitions for any new types
-
-### Code Style
-- Use JSDoc comments for all classes and public methods
-- Follow consistent naming conventions
-- Keep functions focused on single responsibilities
-- Use descriptive variable and function names
-
-## 📝 API Reference
-
-### Game Class
-Main orchestration class that manages the entire game.
-
-```javascript
-const game = new Game(config);
-```
-
-### Manager Classes
-Each manager handles a specific aspect of the game:
-
-```javascript
-// Input handling
-game.inputManager.handleMouseDown(event);
-
-// Rendering
-game.renderer.render();
-
-// UI updates
-game.uiManager.updateUI();
-
-// Task management
-game.taskManager.craftItem('food');
-```
-
-## 🤝 Contributing
-
-When contributing to this project:
-1. Follow the existing modular structure
-2. Add JSDoc comments to new code
-3. Test changes thoroughly
-4. Update this README if adding new features
-
-## 📄 License
-
-This project is open source and available under the MIT License.
+- **Everything is a job.** Chopping, hauling, planting, building and crafting
+  are posted to one board; pawns claim work matching their priority table
+  (0–4 per category). Derived jobs (deliver materials to blueprints, plant
+  empty growing cells, haul loose items) are re-posted periodically by the board.
+- **Paths, not straight lines.** Pawns walk real A\* routes around water,
+  forests and walls; walls genuinely block movement.
+- **Fixed-step simulation.** The world ticks at 60 Hz scaled by game speed,
+  while rendering stays tied to requestAnimationFrame.
+- **Cached ground rendering.** The terrain is drawn once to an offscreen
+  canvas and blitted per frame; entities draw on top depth-sorted.
+- Core logic is DOM-free and covered by a headless smoke test
+  (`node colony-sim/smoke-test.mjs`) that generates a world, checks pathfinding,
+  then simulates days of colony work: chop → haul → build → craft → farm.

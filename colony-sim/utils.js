@@ -1,131 +1,78 @@
 /**
- * Utility functions for inventory management and common operations
+ * Small shared helpers: seeded RNG, hashing, inventory ops, math.
  */
 
-/**
- * Add items to an inventory
- * @param {InventoryItem[]} inventory - The inventory array to modify
- * @param {string} tag - The item type to add
- * @param {number} quantity - The quantity to add (default: 1)
- */
-function addToInventory(inventory, tag, quantity = 1) {
-    const existingItem = inventory.find(item => item.tag === tag);
-    if (existingItem) {
-        existingItem.quantity += quantity;
-    } else {
-        inventory.push({ tag, quantity });
-    }
-}
-
-/**
- * Remove items from an inventory
- * @param {InventoryItem[]} inventory - The inventory array to modify
- * @param {string} tag - The item type to remove
- * @param {number} quantity - The quantity to remove (default: 1)
- * @returns {boolean} True if items were successfully removed
- */
-function removeFromInventory(inventory, tag, quantity = 1) {
-    const itemIndex = inventory.findIndex(item => item.tag === tag);
-    if (itemIndex > -1) {
-        const item = inventory[itemIndex];
-        item.quantity -= quantity;
-        if (item.quantity <= 0) {
-            inventory.splice(itemIndex, 1);
-        }
-        return true;
-    }
-    return false;
-}
-
-/**
- * Get the quantity of a specific item in an inventory
- * @param {InventoryItem[]} inventory - The inventory array to check
- * @param {string} tag - The item type to check
- * @returns {number} The quantity of the item (0 if not found)
- */
-function getInventoryQuantity(inventory, tag) {
-    const item = inventory.find(item => item.tag === tag);
-    return item ? item.quantity : 0;
-}
-
-/**
- * Check if an inventory has at least a certain quantity of an item
- * @param {InventoryItem[]} inventory - The inventory array to check
- * @param {string} tag - The item type to check
- * @param {number} quantity - The minimum quantity required (default: 1)
- * @returns {boolean} True if the inventory has enough of the item
- */
-function hasInventoryItem(inventory, tag, quantity = 1) {
-    return getInventoryQuantity(inventory, tag) >= quantity;
-}
-
-/**
- * Calculate distance between two points
- * @param {number} x1 - First point X coordinate
- * @param {number} y1 - First point Y coordinate
- * @param {number} x2 - Second point X coordinate
- * @param {number} y2 - Second point Y coordinate
- * @returns {number} The Euclidean distance between the points
- */
-function calculateDistance(x1, y1, x2, y2) {
-    return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-}
-
-/**
- * Clamp a value between min and max
- * @param {number} value - The value to clamp
- * @param {number} min - The minimum value
- * @param {number} max - The maximum value
- * @returns {number} The clamped value
- */
-function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-}
-
-/**
- * Check if a point is within a rectangular area
- * @param {number} x - X coordinate to check
- * @param {number} y - Y coordinate to check
- * @param {Area} area - The area to check against
- * @returns {boolean} True if the point is within the area
- */
-function isPointInArea(x, y, area) {
-    const minX = Math.min(area.start.x, area.end.x);
-    const maxX = Math.max(area.start.x, area.end.x);
-    const minY = Math.min(area.start.y, area.end.y);
-    const maxY = Math.max(area.start.y, area.end.y);
-
-    return x >= minX && x <= maxX && y >= minY && y <= maxY;
-}
-
-/**
- * Get the center point of an area
- * @param {Area} area - The area to get center of
- * @returns {Object} Center coordinates {x, y}
- */
-function getAreaCenter(area) {
-    return {
-        x: Math.floor((area.start.x + area.end.x) / 2),
-        y: Math.floor((area.start.y + area.end.y) / 2)
+/** Create a deterministic PRNG (mulberry32). */
+function makeRNG(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a |= 0; a = (a + 0x6D2B79F5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
 
-/**
- * Generate a random integer between min and max (inclusive)
- * @param {number} min - Minimum value
- * @param {number} max - Maximum value
- * @returns {number} Random integer
- */
-function randomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
+/** Deterministic pseudo-random value in [0,1) for a tile coordinate. */
+function hash2d(x, y, seed) {
+    let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(seed | 0, 2246822519);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-/**
- * Generate a random float between min and max
- * @param {number} min - Minimum value
- * @param {number} max - Maximum value
- * @returns {number} Random float
- */
-function randomFloat(min, max) {
-    return Math.random() * (max - min) + min;
+/** Euclidean distance. */
+function dist(x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    return Math.sqrt(dx * dx + dy * dy);
 }
+
+/** Chebyshev distance (king-move count). */
+function chebyshev(x1, y1, x2, y2) {
+    return Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1));
+}
+
+function clamp(v, min, max) {
+    return v < min ? min : v > max ? max : v;
+}
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+/** Map key for a tile coordinate. */
+function tileKey(x, y) {
+    return x + ',' + y;
+}
+
+/** Add quantity of an item type to an inventory array [{type, qty}]. */
+function invAdd(inv, type, qty) {
+    const slot = inv.find(s => s.type === type);
+    if (slot) slot.qty += qty;
+    else inv.push({ type, qty });
+}
+
+/** Remove quantity from inventory. Returns amount actually removed. */
+function invRemove(inv, type, qty) {
+    const idx = inv.findIndex(s => s.type === type);
+    if (idx === -1) return 0;
+    const slot = inv[idx];
+    const taken = Math.min(slot.qty, qty);
+    slot.qty -= taken;
+    if (slot.qty <= 0) inv.splice(idx, 1);
+    return taken;
+}
+
+function invCount(inv, type) {
+    const slot = inv.find(s => s.type === type);
+    return slot ? slot.qty : 0;
+}
+
+/** Format ticks-since-dawn as a clock string. */
+function formatClock(time01) {
+    const totalMin = Math.floor(time01 * 24 * 60);
+    const h = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const m = String(totalMin % 60).padStart(2, '0');
+    return h + ':' + m;
+}
+
+if (typeof module !== 'undefined') module.exports = { makeRNG, hash2d, dist, chebyshev, clamp, lerp, tileKey, invAdd, invRemove, invCount, formatClock };

@@ -1,170 +1,127 @@
 /**
- * Game entity classes
+ * Game entities: world objects, items on the ground, crops and zones.
+ * Plain data classes — behaviour lives in JobBoard / Pawn / World.
  */
+let ENTITY_ID = 1;
 
-/**
- * Represents a resource in the game world
- */
-class Resource {
-    /**
-     * @param {number} x - X coordinate
-     * @param {number} y - Y coordinate
-     * @param {string} type - Type of resource (tree, iron, etc.)
-     */
-    constructor(x, y, type) {
+/** A stack of items lying on the ground. */
+class ItemStack {
+    constructor(x, y, type, qty) {
+        this.id = ENTITY_ID++;
         this.x = x;
         this.y = y;
         this.type = type;
+        this.qty = qty;
     }
 }
 
-/**
- * Represents a building in the game world
- */
+/** A harvestable tree. Blocks movement. */
+class Tree {
+    constructor(x, y) {
+        this.id = ENTITY_ID++;
+        this.x = x;
+        this.y = y;
+        this.hp = CONFIG.work.chop;
+        this.variant = Math.floor(hash2d(x, y, 7) * 3); // visual variety
+    }
+}
+
+/** A surface iron deposit. Blocks movement. */
+class IronDeposit {
+    constructor(x, y) {
+        this.id = ENTITY_ID++;
+        this.x = x;
+        this.y = y;
+        this.hp = CONFIG.work.mineDeposit;
+        this.richness = 2 + Math.floor(hash2d(x, y, 13) * 3);
+    }
+}
+
+/** Wild berry bush: one-time food source. */
+class WildBush {
+    constructor(x, y) {
+        this.id = ENTITY_ID++;
+        this.x = x;
+        this.y = y;
+        this.yield = 3;
+    }
+}
+
+/** A planted crop that grows over time. */
+class Crop {
+    constructor(x, y) {
+        this.id = ENTITY_ID++;
+        this.x = x;
+        this.y = y;
+        this.growth = 0; // 0..100
+        this.growRate = 100 / (1.4 * CONFIG.dayTicks); // ripe in ~1.4 days
+    }
+
+    get mature() { return this.growth >= 100; }
+}
+
+/** A building or construction blueprint. */
 class Building {
     /**
-     * @param {number} x - X coordinate
-     * @param {number} y - Y coordinate
-     * @param {string} type - Type of building (wall, table, bed, chair, door, etc.)
+     * @param {string} type - key into CONFIG.builds
      */
-    constructor(x, y, type) {
-        this.x = x;
-        this.y = y;
+    constructor(type, x, y) {
+        const def = CONFIG.builds[type];
+        this.id = ENTITY_ID++;
         this.type = type;
-        this.owner = null; // For beds/chairs
-    }
-}
-
-class Bed extends Building {
-    constructor(x, y) {
-        super(x, y, 'bed');
-        this.restEffectiveness = 1.0;
-    }
-}
-
-class Chair extends Building {
-    constructor(x, y) {
-        super(x, y, 'chair');
-        this.comfort = 0.5;
-    }
-}
-
-class Door extends Building {
-    constructor(x, y) {
-        super(x, y, 'door');
-        this.isOpen = false;
-    }
-}
-
-/**
- * Represents a dropped resource on the ground
- */
-class DroppedResource {
-    /**
-     * @param {number} x - X coordinate
-     * @param {number} y - Y coordinate
-     * @param {string} type - Type of resource (wood, iron, stone, etc.)
-     * @param {number} quantity - Quantity of the resource (default 1)
-     */
-    constructor(x, y, type, quantity = 1) {
         this.x = x;
         this.y = y;
-        this.type = type;
-        this.quantity = quantity;
+        this.blueprint = true;          // true until constructed
+        this.cost = def.cost;
+        this.delivered = {};            // material -> qty delivered so far
+        this.progress = 0;              // ticks of construction done
+        this.owner = null;              // beds/chairs remember their user
+        for (const mat of Object.keys(def.cost)) this.delivered[mat] = 0;
     }
 
-    /**
-     * Get the maximum stack size for this resource type
-     * @returns {number} Maximum stack size
-     */
-    getMaxStackSize() {
-        return this.type === 'food' ? 50 : 25;
-    }
+    get def() { return CONFIG.builds[this.type]; }
 
-    /**
-     * Check if this stack can accept more of the same resource type
-     * @param {string} resourceType - Type of resource to add
-     * @param {number} amount - Amount to add
-     * @returns {boolean} Whether the stack can accept the resources
-     */
-    canStack(resourceType, amount = 1) {
-        return this.type === resourceType && this.quantity + amount <= this.getMaxStackSize();
-    }
-
-    /**
-     * Add resources to this stack
-     * @param {number} amount - Amount to add
-     * @returns {number} Amount actually added
-     */
-    addToStack(amount) {
-        const spaceAvailable = this.getMaxStackSize() - this.quantity;
-        const amountToAdd = Math.min(amount, spaceAvailable);
-        this.quantity += amountToAdd;
-        return amountToAdd;
-    }
-}
-
-/**
- * Represents a plant in the game world
- */
-class Plant {
-    /**
-     * @param {number} x - X coordinate
-     * @param {number} y - Y coordinate
-     * @param {number} growth - Initial growth level (0-100)
-     */
-    constructor(x, y, growth) {
-        this.x = x;
-        this.y = y;
-        this.growth = growth;
-    }
-
-    /**
-     * Update the plant's growth
-     */
-    update() {
-        if (this.growth < 100) {
-            this.growth += 0.5; // Increased growth rate for faster testing
+    /** Materials still needed before construction can begin. */
+    missingMaterials() {
+        const missing = {};
+        for (const [mat, need] of Object.entries(this.cost)) {
+            const gap = need - (this.delivered[mat] || 0);
+            if (gap > 0) missing[mat] = gap;
         }
+        return missing;
     }
 
-    /**
-     * Check if the plant is mature (ready for harvest)
-     * @returns {boolean} True if the plant is mature
-     */
-    isMature() {
-        return this.growth >= 50;
+    get materialsComplete() {
+        return Object.keys(this.missingMaterials()).length === 0;
     }
+
+    get built() { return !this.blueprint; }
 }
 
-/**
- * Represents a zone in the game world
- */
+/** Rectangular zone: stockpile or growing area. */
 class Zone {
-    constructor(x, y, width, height, type) {
+    /**
+     * @param {'stockpile'|'growing'} type
+     */
+    constructor(type, x, y, w, h) {
+        this.id = ENTITY_ID++;
+        this.type = type;
         this.x = x;
         this.y = y;
-        this.width = width;
-        this.height = height;
-        this.type = type;
+        this.w = w;
+        this.h = h;
     }
 
     contains(x, y) {
-        return x >= this.x && x < this.x + this.width &&
-            y >= this.y && y < this.y + this.height;
+        return x >= this.x && x < this.x + this.w && y >= this.y && y < this.y + this.h;
+    }
+
+    cells() {
+        const out = [];
+        for (let y = this.y; y < this.y + this.h; y++)
+            for (let x = this.x; x < this.x + this.w; x++) out.push({ x, y });
+        return out;
     }
 }
 
-class StockpileZone extends Zone {
-    constructor(x, y, width, height) {
-        super(x, y, width, height, 'stockpile');
-        this.filter = ['wood', 'stone', 'iron', 'food', 'tools']; // Allowed items
-    }
-}
-
-class GrowingZone extends Zone {
-    constructor(x, y, width, height) {
-        super(x, y, width, height, 'growing');
-        this.plantType = 'plant'; // Type of plant to grow
-    }
-}
+if (typeof module !== 'undefined') module.exports = { ItemStack, Tree, IronDeposit, WildBush, Crop, Building, Zone };
