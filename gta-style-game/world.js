@@ -341,6 +341,11 @@ class World {
                     if (tile === 'B_IND') style = 'industrial';
                     if (tile === 'B_SUB') style = 'suburb';
                     if (tile === 'B_OLD') style = 'brownstone';
+                    if (tile === 'B_VIC') style = 'victorian';
+                    if (tile === 'B_RAN') style = 'ranch';
+                    if (tile === 'B_OFF') style = 'office';
+                    if (tile === 'B_SHOP') style = 'shop';
+                    if (tile === 'B_CHU') style = 'church';
                     if (tile === 'B_BORDER') style = 'border';
 
                     this.buildings.push({
@@ -353,7 +358,7 @@ class World {
                         tileY: y,
                         spanX: 1,
                         spanY: 1,
-                        mergeable: style !== 'border'
+                        mergeable: style !== 'border' && style !== 'church'
                     });
                 }
             }
@@ -363,7 +368,7 @@ class World {
     // Greedily merge adjacent same-style single-tile buildings into bigger
     // footprints so the city doesn't read as a uniform grid of boxes.
     mergeBuildings() {
-        const MERGEABLE = ['standard', 'downtown', 'chinatown', 'industrial', 'suburb', 'brownstone'];
+        const MERGEABLE = ['standard', 'downtown', 'chinatown', 'industrial', 'suburb', 'brownstone', 'victorian', 'ranch', 'office', 'shop'];
         const singles = this.buildings.filter(b => b.mergeable && MERGEABLE.indexOf(b.style) !== -1);
         if (singles.length === 0) return;
         const rest = this.buildings.filter(b => !(b.mergeable && MERGEABLE.indexOf(b.style) !== -1));
