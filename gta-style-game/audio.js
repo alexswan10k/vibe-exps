@@ -44,6 +44,7 @@ class AudioSystem {
             this.ctx = new AudioCtx();
             this.setupEngineSound();
             this.setupDriftSound();
+            this.setupRainSound();
             this.setupRadioGain();
             this.startRadioTrack();
             console.log("Audio System Initialized successfully.");
@@ -126,6 +127,96 @@ class AudioSystem {
         this.radioGain = this.ctx.createGain();
         this.radioGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
         this.radioGain.connect(this.ctx.destination);
+    }
+
+    setupRainSound() {
+        if (!this.ctx) return;
+        const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 2, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        this.rainNoise = this.ctx.createBufferSource();
+        this.rainNoise.buffer = buffer;
+        this.rainNoise.loop = true;
+
+        this.rainFilter = this.ctx.createBiquadFilter();
+        this.rainFilter.type = 'bandpass';
+        this.rainFilter.frequency.setValueAtTime(5200, this.ctx.currentTime);
+        this.rainFilter.Q.setValueAtTime(0.6, this.ctx.currentTime);
+
+        this.rainGain = this.ctx.createGain();
+        this.rainGain.gain.setValueAtTime(0, this.ctx.currentTime);
+
+        this.rainNoise.connect(this.rainFilter);
+        this.rainFilter.connect(this.rainGain);
+        this.rainGain.connect(this.ctx.destination);
+        this.rainNoise.start(0);
+    }
+
+    updateRain(intensity) {
+        if (!this.ctx || !this.rainGain) return;
+        this.rainGain.gain.setTargetAtTime(Math.min(intensity * 0.055, 0.06), this.ctx.currentTime, 0.4);
+    }
+
+    playThunder() {
+        this.init();
+        if (!this.ctx || !this.enabled) return;
+        const noise = this.createNoiseNode(2.2);
+        if (!noise) return;
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(220, this.ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 1.8);
+
+        gain.gain.setValueAtTime(0.9, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.005, this.ctx.currentTime + 2.1);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+    }
+
+    playSplash() {
+        this.init();
+        if (!this.ctx || !this.enabled) return;
+        const noise = this.createNoiseNode(0.35);
+        if (!noise) return;
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(900, this.ctx.currentTime);
+        filter.Q.setValueAtTime(1.2, this.ctx.currentTime);
+
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+    }
+
+    playJackpot() {
+        this.init();
+        if (!this.ctx || !this.enabled) return;
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime + i * 0.09);
+            gain.gain.setValueAtTime(0.12, this.ctx.currentTime + i * 0.09);
+            gain.gain.exponentialRampToValueAtTime(0.005, this.ctx.currentTime + i * 0.09 + 0.22);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(this.ctx.currentTime + i * 0.09);
+            osc.stop(this.ctx.currentTime + i * 0.09 + 0.25);
+        });
     }
 
     nextStation() {

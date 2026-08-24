@@ -29,6 +29,11 @@ class WorldProp {
             return;
         }
 
+        if (this.type === 'fountain' || this.type === 'plane') {
+            // Monuments are indestructible
+            return;
+        }
+
         this.health -= damage;
         if (this.health <= 0) {
             this.destroyed = true;
@@ -236,6 +241,121 @@ class WorldProp {
             ctx.fillStyle = '#263238'; // cast iron legs
             ctx.fillRect(-15, -7, 3, 14);
             ctx.fillRect(12, -7, 3, 14);
+        } else if (this.type === 'fountain') {
+            // Stone basin
+            ctx.fillStyle = '#8E8E8E';
+            ctx.beginPath();
+            ctx.arc(0, 0, 26, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#616161';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            // Water
+            ctx.fillStyle = '#4FC3F7';
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI * 2);
+            ctx.fill();
+            // Expanding ripple ring
+            let rip = (time * 0.0012) % 1;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.55 * (1 - rip)})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 4 + rip * 15, 0, Math.PI * 2);
+            ctx.stroke();
+            // Center pillar + spinning water jets
+            ctx.fillStyle = '#757575';
+            ctx.beginPath();
+            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(200, 240, 255, 0.8)';
+            ctx.lineWidth = 2.5;
+            for (let i = 0; i < 6; i++) {
+                let a = (i / 6) * Math.PI * 2 + time * 0.001;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.quadraticCurveTo(Math.cos(a) * 9, Math.sin(a) * 9 - 6, Math.cos(a) * 14, Math.sin(a) * 14);
+                ctx.stroke();
+            }
+        } else if (this.type === 'plane') {
+            // Parked airliner - big!
+            // Fuselage
+            ctx.fillStyle = '#ECEFF1';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 62, 13, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#90A4AE';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            // Red nose cone
+            ctx.fillStyle = '#D32F2F';
+            ctx.beginPath();
+            ctx.arc(62, 0, 8, 0, Math.PI * 2);
+            ctx.fill();
+            // Cockpit glass
+            ctx.fillStyle = '#263238';
+            ctx.beginPath();
+            ctx.ellipse(52, 0, 7, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Window strip
+            ctx.fillStyle = '#546E7A';
+            for (let i = -50; i < 40; i += 8) {
+                ctx.fillRect(i, -3, 3, 3);
+            }
+            // Swept wings
+            ctx.fillStyle = '#CFD8DC';
+            ctx.beginPath();
+            ctx.moveTo(8, -6); ctx.lineTo(-34, -52); ctx.lineTo(-46, -50); ctx.lineTo(-12, -4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(8, 6); ctx.lineTo(-34, 52); ctx.lineTo(-46, 50); ctx.lineTo(-12, 4);
+            ctx.closePath();
+            ctx.fill();
+            // Engines
+            ctx.fillStyle = '#78909C';
+            ctx.beginPath();
+            ctx.ellipse(-18, -30, 9, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(-18, 30, 9, 5, 0, 0, Math.PI * 2);
+            ctx.fill();
+            // Tail fin
+            ctx.fillStyle = '#D32F2F';
+            ctx.beginPath();
+            ctx.moveTo(-56, -4); ctx.lineTo(-74, -26); ctx.lineTo(-64, -26); ctx.lineTo(-50, -6);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'umbrella') {
+            // Beach umbrella with gentle sway
+            ctx.rotate(Math.sin(time * 0.002 + this.swayOffset) * 0.08);
+            // Pole
+            ctx.fillStyle = '#6D4C41';
+            ctx.beginPath();
+            ctx.arc(0, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+            // Canopy wedges
+            for (let i = 0; i < 8; i++) {
+                ctx.fillStyle = i % 2 === 0 ? (this.color || '#EF5350') : '#FFFFFF';
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, 17, (i / 8) * Math.PI * 2, ((i + 1) / 8) * Math.PI * 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(0, 0, 17, 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (this.type === 'deckchair') {
+            // Striped deck chair
+            for (let i = -12; i < 12; i += 6) {
+                ctx.fillStyle = (i / 6) % 2 === 0 ? '#29B6F6' : '#FFFFFF';
+                ctx.fillRect(i, -6, 6, 12);
+            }
+            ctx.strokeStyle = '#8D6E63';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(-12, -7, 24, 14);
         }
 
         ctx.restore();

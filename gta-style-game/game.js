@@ -61,6 +61,35 @@ let notifTimer = 0;
 let stuntBannerTimer = 0;
 let radioBannerTimer = 0;
 
+// Death / Arrest State
+let gameState = 'playing'; // 'playing' | 'wasted' | 'busted'
+let gameStateTimer = 0;
+let invulnTimer = 0;
+let deathFee = 0;
+
+// Weather System
+let weatherState = 'clear';
+let weatherTimer = 35000;
+let weatherTarget = 0;
+let weatherIntensity = 0;
+let rainDrops = [];
+let lightningFlash = 0;
+let boltPoints = null;
+let boltLife = 0;
+
+// Police Helicopter
+let helicopter = null;
+
+// Service Cooldowns
+let gasCooldown = 0;
+let casinoCooldown = 0;
+
+// Ambient light (day/night cycle dimmed by storms)
+let ambient = 1.0;
+
+// Safe-driving score accumulator
+let safeDrivingTime = 0;
+
 function init() {
     canvas = document.getElementById('game-canvas');
     ctx = canvas.getContext('2d');
@@ -102,9 +131,11 @@ function init() {
 
     // Create diverse vehicles
     createCars();
+    createBoats();
+    initRainPool();
 
     // Create pedestrians
-    for (let i = 0; i < 55; i++) {
+    for (let i = 0; i < 80; i++) {
         pedestrians.push(new Pedestrian(Math.random() * worldSize.width, Math.random() * worldSize.height, worldSize));
     }
 
@@ -204,7 +235,7 @@ function createCars() {
 
     const carTypes = ['sedan', 'supercar', 'muscle', 'taxi', 'bike', 'sedan', 'supercar', 'muscle'];
 
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 64; i++) {
         let road = allRoads[Math.floor(Math.random() * allRoads.length)];
         let x, y, angle;
 
@@ -236,6 +267,31 @@ function createCars() {
     }
 }
 
+function createBoats() {
+    // Moored off the beach - steal one and take to the open sea!
+    const spots = [
+        { x: 50.4 * 96, y: 11 * 96, color: '#ECEFF1', angle: Math.PI },
+        { x: 50.4 * 96, y: 26 * 96, color: '#FF7043', angle: Math.PI },
+        { x: 52.2 * 96, y: 19 * 96, color: '#26C6DA', angle: 0 }
+    ];
+    for (let s of spots) {
+        cars.push(new Boat(s.x, s.y, s.angle, s.color));
+    }
+}
+
+function initRainPool() {
+    rainDrops = [];
+    for (let i = 0; i < 240; i++) {
+        rainDrops.push({
+            x: Math.random() * 2000,
+            y: Math.random() * 1000,
+            len: 12 + Math.random() * 14,
+            spd: 15 + Math.random() * 10,
+            drift: 2.2 + Math.random() * 1.6
+        });
+    }
+}
+
 function gameLoop(currentTime = 0) {
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
@@ -252,6 +308,7 @@ function gameLoop(currentTime = 0) {
     // Day/Night Cycle (0 = midnight, 0.5 = noon, 1.0 = midnight)
     timeOfDay = Math.abs((gameTime % DAY_LENGTH) / DAY_LENGTH);
     lightLevel = 0.25 + 0.75 * Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
+    ambient = lightLevel * (1 - 0.30 * weatherIntensity);
 
     update(deltaTime);
     draw();
@@ -264,6 +321,19 @@ function update(deltaTime) {
     if (typeof particleSystem !== 'undefined') {
         particleSystem.update(deltaTime);
     }
+
+    updateWeather(deltaTime);
+
+    // Wasted / Busted state: world freezes, overlay counts down to respawn
+    if (gameState !== 'playing') {
+        gameStateTimer -= deltaTime;
+        if (gameStateTimer <= 0) respawnPlayer();
+        updateCamera();
+        updateUI();
+        return;
+    }
+
+    if (invulnTimer > 0) invulnTimer--;
 
     const prevX = player.x;
     const prevY = player.y;
@@ -294,6 +364,29 @@ function update(deltaTime) {
     }
 
     player.update(keys, world.buildings);
+
+    // Drowning: deep water is deadly on foot
+    let pFootX = player.x + player.width / 2;
+    let pFootY = player.y + player.height / 2;
+    if (!player.inCar && isInDeepWater(pFootX, pFootY)) {
+        damagePlayer(0.9);
+        if (typeof particleSystem !== 'undefined' && Math.random() < 0.3) {
+            particleSystem.addWaterSplash(pFootX, pFootY);
+        }
+    }
+
+    // BUSTED: caught on foot by a slow-moving cop car
+    if (wantedLevel > 0 && !player.inCar) {
+        for (let car of cars) {
+            if (car.isPolice && !car.exploded && Math.abs(car.speed) < 1.6) {
+                let d = Math.sqrt((pFootX - car.x - car.width / 2) ** 2 + (pFootY - car.y - car.height / 2) ** 2);
+                if (d < 58) {
+                    startBusted();
+                    break;
+                }
+            }
+        }
+    }
 
     const worldSize = world.getWorldSize();
     allRoads = [
@@ -354,17 +447,21 @@ function update(deltaTime) {
     // Interactive Landmark Services
     updateLandmarkInteractions(px, py);
 
-    // Wanted Level & Police AI
+    // Wanted Level & Police Escalation
     if (wantedLevel > 0) {
         let policeCount = cars.filter(c => c.isPolice && !c.exploded).length;
-        if (policeCount < wantedLevel) {
+        let tankCount = cars.filter(c => c.type === 'tank' && !c.exploded).length;
+        if (policeCount < wantedLevel + 1) {
             let spawnX = player.x + (Math.random() > 0.5 ? 900 : -900);
             let spawnY = player.y + (Math.random() > 0.5 ? 900 : -900);
             spawnX = Math.max(50, Math.min(worldSize.width - 50, spawnX));
             spawnY = Math.max(50, Math.min(worldSize.height - 50, spawnY));
 
-            let pType = (wantedLevel >= 4) ? 'swat' : 'police';
+            let pType = 'police';
+            if (wantedLevel >= 5 && tankCount < 2) pType = 'tank';
+            else if (wantedLevel >= 4) pType = 'swat';
             let newPolice = new Car(spawnX, spawnY, 0, false, null, pType);
+            if (pType === 'tank') newPolice.isPolice = true;
             cars.push(newPolice);
         }
 
@@ -373,7 +470,46 @@ function update(deltaTime) {
                 car.destination = { x: player.x, y: player.y };
             }
         }
+
+        // Police gunfire & tank cannon shells
+        const pcx = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+        const pcy = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+        for (let car of cars) {
+            if (car.exploded || !car.isPolice || car.isPlayerCar || car.isBoat) continue;
+            const cx = car.x + car.width / 2;
+            const cy = car.y + car.height / 2;
+            const d = Math.sqrt((pcx - cx) ** 2 + (pcy - cy) ** 2);
+
+            if (car.type === 'tank') {
+                car.shellTimer = (car.shellTimer === undefined ? 150 : car.shellTimer) - 1;
+                if (car.shellTimer <= 0 && d < 560 && d > 90) {
+                    car.shellTimer = 150 + Math.random() * 90;
+                    let ang = Math.atan2(pcy - cy, pcx - cx) + (Math.random() - 0.5) * 0.06;
+                    weaponSystem.shootNPC(cx + Math.cos(ang) * 42, cy + Math.sin(ang) * 42, ang, 'shell');
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addSmoke(cx + Math.cos(ang) * 42, cy + Math.sin(ang) * 42);
+                    }
+                }
+            } else if (wantedLevel >= 2) {
+                car.gunTimer = (car.gunTimer === undefined ? 0 : car.gunTimer) - 1;
+                if (car.gunTimer <= 0 && d < 430) {
+                    car.gunTimer = 50 + Math.random() * 60;
+                    let tx = pcx, ty = pcy;
+                    if (player.inCar && player.car) {
+                        tx += player.car.vx * 12; // lead the target
+                        ty += player.car.vy * 12;
+                    }
+                    let ang = Math.atan2(ty - cy, tx - cx) + (Math.random() - 0.5) * 0.08;
+                    weaponSystem.shootNPC(cx + Math.cos(ang) * 26, cy + Math.sin(ang) * 26, ang, 'pistol');
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addSparks(cx + Math.cos(ang) * 26, cy + Math.sin(ang) * 26, 0, 0, 3);
+                    }
+                }
+            }
+        }
     }
+
+    updateHelicopter();
 
     updateCamera();
     updateScoring(prevX, prevY, deltaTime);
@@ -455,6 +591,8 @@ function update(deltaTime) {
 function updateLandmarkInteractions(px, py) {
     if (pnsCooldown > 0) pnsCooldown--;
     if (shopCooldown > 0) shopCooldown--;
+    if (gasCooldown > 0) gasCooldown--;
+    if (casinoCooldown > 0) casinoCooldown--;
 
     for (let lm of world.landmarks) {
         let dist = Math.sqrt((px - lm.bayX) ** 2 + (py - lm.bayY) ** 2);
@@ -500,6 +638,43 @@ function updateLandmarkInteractions(px, py) {
                 playerHealth = 100;
                 if (typeof audioSystem !== 'undefined') audioSystem.playPickup('health');
                 showMissionNotification("BURGER SHOT", "Delicious! Health Restored to 100%!", 2500);
+                keys['e'] = false;
+            }
+        } else if (lm.type === 'gas' && player.inCar && player.car && dist < 55 && gasCooldown === 0) {
+            const hint = document.getElementById('controls-hint');
+            if (hint) hint.textContent = "FUEL STATION: Stop in the bay to repair ($50)";
+            if (Math.abs(player.car.speed) < 0.6 && player.car.health < player.car.maxHealth && playerMoney >= 50) {
+                gasCooldown = 120;
+                playerMoney -= 50;
+                player.car.health = player.car.maxHealth;
+
+                if (typeof particleSystem !== 'undefined') {
+                    particleSystem.addSprayMist(player.car.x + player.car.width / 2, player.car.y + player.car.height / 2, '#66BB6A');
+                }
+                if (typeof audioSystem !== 'undefined') audioSystem.playSpray();
+                showMissionNotification("FUEL STATION", "Vehicle repaired for $50!", 2200);
+            }
+        } else if (lm.type === 'casino' && !player.inCar && dist < 45 && casinoCooldown === 0) {
+            const hint = document.getElementById('controls-hint');
+            if (hint) hint.textContent = "PINK PALACE CASINO: Press E to gamble $100";
+            if (keys['e'] && playerMoney >= 100) {
+                casinoCooldown = 90;
+                if (Math.random() < 0.47) {
+                    playerMoney += 150; // net +$50
+                    score += 150;
+                    if (typeof audioSystem !== 'undefined') {
+                        audioSystem.playJackpot();
+                        audioSystem.playPickup('cash');
+                    }
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addCashSparkles(px, py);
+                    }
+                    showMissionNotification("JACKPOT!", "The reels align! +$150!", 2500);
+                } else {
+                    playerMoney -= 100;
+                    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+                    showMissionNotification("HOUSE WINS", "The casino keeps your $100...", 2500);
+                }
                 keys['e'] = false;
             }
         }
@@ -573,6 +748,19 @@ function updateUI() {
 
     const moneyEl = document.getElementById('money');
     if (moneyEl) moneyEl.textContent = `$${playerMoney.toString().padStart(8, '0')}`;
+
+    // Clock & Weather
+    const clockEl = document.getElementById('clock');
+    if (clockEl) {
+        let totalMin = Math.floor(timeOfDay * 24 * 60);
+        let hh = Math.floor(totalMin / 60) % 24;
+        let mm = totalMin % 60;
+        clockEl.textContent = `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+    }
+    const weatherIconEl = document.getElementById('weather-icon');
+    if (weatherIconEl) {
+        weatherIconEl.textContent = { 'clear': '☀️', 'cloud': '⛅', 'rain': '🌧️', 'storm': '⛈️' }[weatherState] || '☀️';
+    }
 
     const healthBar = document.getElementById('health-bar');
     if (healthBar) {
@@ -674,6 +862,14 @@ function drawMinimap() {
         minimapCtx.fillRect(b.x, b.y, b.width, b.height);
     }
 
+    // Draw Runways & Aprons
+    if (world.runwayTiles) {
+        minimapCtx.fillStyle = '#3A3A3A';
+        for (let rw of world.runwayTiles) {
+            minimapCtx.fillRect(rw.x, rw.y, rw.width, rw.height);
+        }
+    }
+
     // Draw Landmarks with colored blips
     for (let lm of world.landmarks) {
         if (lm.type === 'pns') minimapCtx.fillStyle = '#FFD700'; // Gold wrench
@@ -681,16 +877,18 @@ function drawMinimap() {
         else if (lm.type === 'diner') minimapCtx.fillStyle = '#FF9900'; // Orange burger
         else if (lm.type === 'hospital') minimapCtx.fillStyle = '#FFFFFF'; // White cross
         else if (lm.type === 'police') minimapCtx.fillStyle = '#2979FF'; // Blue shield
+        else if (lm.type === 'gas') minimapCtx.fillStyle = '#66BB6A'; // Green fuel
+        else if (lm.type === 'casino') minimapCtx.fillStyle = '#FF4081'; // Pink casino
 
         minimapCtx.beginPath();
         minimapCtx.arc(lm.bayX, lm.bayY, 90, 0, Math.PI * 2);
         minimapCtx.fill();
     }
 
-    // Draw Cars
+    // Draw Cars & Boats
     for (let car of cars) {
         if (!car.isPlayerCar) {
-            minimapCtx.fillStyle = car.isPolice ? '#2979FF' : '#FF5555';
+            minimapCtx.fillStyle = car.isBoat ? '#26C6DA' : (car.isPolice ? '#2979FF' : '#FF5555');
             minimapCtx.fillRect(car.x, car.y, car.width, car.height);
         }
     }
@@ -700,6 +898,14 @@ function drawMinimap() {
     minimapCtx.beginPath();
     minimapCtx.arc(player.x + player.width / 2, player.y + player.height / 2, 70, 0, Math.PI * 2);
     minimapCtx.fill();
+
+    // Draw Helicopter blip (blinking)
+    if (helicopter && Math.floor(Date.now() / 300) % 2 === 0) {
+        minimapCtx.fillStyle = '#FF1744';
+        minimapCtx.beginPath();
+        minimapCtx.arc(helicopter.x, helicopter.y, 90, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
 
     // Mission blips
     if (currentMission) {
@@ -742,14 +948,14 @@ function drawMinimap() {
 }
 
 function draw() {
-    // Sky gradient background
-    const r = Math.floor(135 * lightLevel);
-    const g = Math.floor(206 * lightLevel);
-    const b = Math.floor(235 * lightLevel);
+    // Sky gradient background (dimmed by storms)
+    const r = Math.floor(135 * ambient);
+    const g = Math.floor(206 * ambient);
+    const b = Math.floor(235 * ambient);
 
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, `rgb(${r}, ${g}, ${b})`);
-    gradient.addColorStop(1, `rgb(${Math.floor(152 * lightLevel)}, ${Math.floor(251 * lightLevel)}, ${Math.floor(152 * lightLevel)})`);
+    gradient.addColorStop(1, `rgb(${Math.floor(152 * ambient)}, ${Math.floor(251 * ambient)}, ${Math.floor(152 * ambient)})`);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -919,8 +1125,11 @@ function draw() {
         }
     }
 
+    // 11b. Draw Police Helicopter (4+ stars)
+    drawHelicopter(ctx);
+
     // 12. Night Darkness & Headlight Beams
-    const darkness = 1.0 - lightLevel;
+    const darkness = 1.0 - ambient;
     if (darkness > 0.1) {
         ctx.fillStyle = `rgba(5, 5, 25, ${darkness * 0.82})`;
         ctx.fillRect(camera.x - 50, camera.y - 50, canvas.width + 100, canvas.height + 100);
@@ -951,6 +1160,32 @@ function draw() {
                 ctx.restore();
             }
         }
+
+        // Helicopter searchlight locked onto the player
+        if (helicopter) {
+            const hx = helicopter.x;
+            const hy = helicopter.y;
+            const px = player.x + player.width / 2;
+            const py = player.y + player.height / 2;
+            const ang = Math.atan2(py - hy, px - hx);
+            const beamLen = Math.sqrt((px - hx) ** 2 + (py - hy) ** 2);
+
+            ctx.save();
+            ctx.translate(hx, hy);
+            ctx.rotate(ang);
+            const spotGrad = ctx.createLinearGradient(0, 0, beamLen, 0);
+            spotGrad.addColorStop(0, `rgba(255, 255, 200, ${0.5 * Math.max(darkness, 0.25)})`);
+            spotGrad.addColorStop(1, 'rgba(255, 255, 200, 0)');
+            ctx.fillStyle = spotGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(beamLen, -110);
+            ctx.lineTo(beamLen, 110);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
         ctx.globalCompositeOperation = 'source-over';
     }
 
@@ -1039,6 +1274,46 @@ function draw() {
     }
 
     ctx.restore();
+
+    // 17. Weather Effects (screen space)
+    // Wet sheen over everything during rain
+    if (weatherIntensity > 0.05) {
+        ctx.fillStyle = `rgba(25, 45, 75, ${0.10 * weatherIntensity})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Rain streaks
+    if (weatherIntensity > 0.03) {
+        const activeCount = Math.floor(rainDrops.length * weatherIntensity);
+        ctx.strokeStyle = 'rgba(185, 215, 255, 0.42)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < activeCount; i++) {
+            let d = rainDrops[i];
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(d.x - d.drift * 2.2, d.y - d.len);
+        }
+        ctx.stroke();
+    }
+
+    // Lightning bolt
+    if (boltLife > 0 && boltPoints) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 230, 0.95)';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#BFE3FF';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        boltPoints.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Lightning flash
+    if (lightningFlash > 0.02) {
+        ctx.fillStyle = `rgba(240, 246, 255, ${lightningFlash * 0.5})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
 }
 
 function drawBuildings3D(ctx) {
@@ -1393,6 +1668,339 @@ function failMission(reason = "") {
         currentMission.target.exploded = true;
     }
     currentMission = null;
+}
+
+// ============ PLAYER DAMAGE & DEATH SYSTEM ============
+
+function damagePlayer(amount) {
+    if (gameState !== 'playing' || invulnTimer > 0) return;
+    if (playerArmor > 0) {
+        playerArmor -= amount;
+        if (playerArmor < 0) {
+            playerHealth += playerArmor;
+            playerArmor = 0;
+        }
+    } else {
+        playerHealth -= amount;
+    }
+    if (playerHealth <= 0) {
+        playerHealth = 0;
+        startWasted();
+    }
+}
+
+function startWasted() {
+    if (gameState !== 'playing') return;
+    gameState = 'wasted';
+    gameStateTimer = 4200;
+    deathFee = Math.min(playerMoney, 300);
+    if (player.inCar) player.exitCar();
+    showDeathOverlay('WASTED', `Hospital bills: -$${deathFee}`, 'wasted');
+    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+}
+
+function startBusted() {
+    if (gameState !== 'playing') return;
+    gameState = 'busted';
+    gameStateTimer = 4200;
+    deathFee = Math.min(playerMoney, 150);
+    if (player.inCar) player.exitCar();
+    wantedLevel = 0;
+    showDeathOverlay('BUSTED', `Bail & confiscated ammo: -$${deathFee}`, 'busted');
+    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+}
+
+function respawnPlayer() {
+    const isWasted = gameState === 'wasted';
+    const wantType = isWasted ? 'hospital' : 'police';
+
+    // Respawn at the nearest hospital or police HQ
+    let target = null, bestDist = Infinity;
+    for (let lm of world.landmarks) {
+        if (lm.type !== wantType) continue;
+        let d = (lm.bayX - player.x) ** 2 + (lm.bayY - player.y) ** 2;
+        if (d < bestDist) {
+            bestDist = d;
+            target = lm;
+        }
+    }
+
+    let spawn = target ? snapToNearestRoad(target.bayX, target.bayY) : { x: player.x, y: player.y };
+    player.x = spawn.x - player.width / 2;
+    player.y = spawn.y - player.height / 2;
+
+    playerMoney = Math.max(0, playerMoney - deathFee);
+    playerHealth = 100;
+    playerArmor = 0;
+    wantedLevel = 0;
+    helicopter = null;
+    playerAmmo[2] = Math.floor(playerAmmo[2] / 2);
+    playerAmmo[3] = Math.floor(playerAmmo[3] / 2);
+    playerAmmo[4] = Math.floor(playerAmmo[4] / 2);
+
+    invulnTimer = 240;
+    gameState = 'playing';
+    hideDeathOverlay();
+    showMissionNotification(
+        isWasted ? "DISCHARGED" : "RELEASED",
+        isWasted ? "Patched up at General Hospital. Stay sharp out there." : "The cops kept your ammo. Try to stay out of trouble."
+    );
+}
+
+function snapToNearestRoad(x, y) {
+    let best = null, bd = Infinity;
+    for (let r of [...world.horizontalRoads, ...world.verticalRoads]) {
+        let d = (r.x + r.width / 2 - x) ** 2 + (r.y + r.height / 2 - y) ** 2;
+        if (d < bd) {
+            bd = d;
+            best = r;
+        }
+    }
+    return best ? { x: best.x + best.width / 2, y: best.y + best.height / 2 } : { x, y };
+}
+
+function showDeathOverlay(title, subtitle, cls) {
+    const overlay = document.getElementById('death-overlay');
+    const titleEl = document.getElementById('death-title');
+    const subEl = document.getElementById('death-sub');
+    if (overlay && titleEl && subEl) {
+        titleEl.textContent = title;
+        subEl.textContent = subtitle;
+        overlay.className = cls;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideDeathOverlay() {
+    const overlay = document.getElementById('death-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+// ============ WATER HELPERS ============
+
+function isInDeepWater(px, py) {
+    if (typeof world === 'undefined' || !world.waterTiles) return false;
+    for (let w of world.waterTiles) {
+        if (px >= w.x && px <= w.x + w.width && py >= w.y && py <= w.y + w.height) {
+            return w.type === 'W';
+        }
+    }
+    return false;
+}
+
+// ============ WEATHER SYSTEM ============
+
+function updateWeather(deltaTime) {
+    weatherTimer -= deltaTime;
+
+    if (weatherTimer <= 0) {
+        if (weatherState === 'clear') {
+            weatherState = 'cloud';
+            weatherTarget = 0.35;
+            weatherTimer = 16000 + Math.random() * 10000;
+        } else if (weatherState === 'cloud') {
+            if (Math.random() < 0.65) {
+                weatherState = 'rain';
+                weatherTarget = 0.7;
+                weatherTimer = 24000 + Math.random() * 12000;
+            } else {
+                weatherState = 'clear';
+                weatherTarget = 0;
+                weatherTimer = 45000 + Math.random() * 25000;
+            }
+        } else if (weatherState === 'rain') {
+            if (Math.random() < 0.5) {
+                weatherState = 'storm';
+                weatherTarget = 1.0;
+                weatherTimer = 18000 + Math.random() * 12000;
+            } else {
+                weatherState = 'clear';
+                weatherTarget = 0;
+                weatherTimer = 45000 + Math.random() * 25000;
+            }
+        } else {
+            weatherState = 'clear';
+            weatherTarget = 0;
+            weatherTimer = 50000 + Math.random() * 30000;
+        }
+    }
+
+    // Smooth intensity easing toward the state's target
+    weatherIntensity += (weatherTarget - weatherIntensity) * 0.015;
+    if (weatherTarget === 0 && weatherIntensity < 0.01) weatherIntensity = 0;
+
+    // Rain ambience volume
+    if (typeof audioSystem !== 'undefined' && audioSystem.updateRain) {
+        audioSystem.updateRain(weatherIntensity);
+    }
+
+    // Lightning strikes during storms
+    lightningFlash *= 0.90;
+    if (boltLife > 0) boltLife--;
+    if (weatherState === 'storm' && weatherIntensity > 0.8 && Math.random() < 0.008) {
+        strikeLightning();
+    }
+
+    // Move rain drops (screen space)
+    const activeCount = Math.floor(rainDrops.length * weatherIntensity);
+    for (let i = 0; i < activeCount; i++) {
+        let d = rainDrops[i];
+        d.y += d.spd;
+        d.x += d.drift;
+        if (d.y > canvas.height + 20) {
+            d.y = -20 - Math.random() * 40;
+            d.x = Math.random() * (canvas.width + 80) - 40;
+        }
+        if (d.x > canvas.width + 40) d.x -= canvas.width + 80;
+    }
+}
+
+function strikeLightning() {
+    lightningFlash = 1;
+    boltLife = 7;
+    boltPoints = [];
+    let bx = Math.random() * canvas.width;
+    let by = 0;
+    const endY = canvas.height * (0.35 + Math.random() * 0.25);
+    boltPoints.push({ x: bx, y: by });
+    while (by < endY) {
+        by += 18 + Math.random() * 30;
+        bx += (Math.random() - 0.5) * 46;
+        boltPoints.push({ x: bx, y: Math.min(by, endY) });
+    }
+    if (typeof audioSystem !== 'undefined') {
+        setTimeout(() => audioSystem.playThunder(), 120 + Math.random() * 700);
+    }
+}
+
+// ============ POLICE HELICOPTER ============
+
+function updateHelicopter() {
+    const wanted = wantedLevel >= 4;
+
+    if (!helicopter && wanted && gameState === 'playing') {
+        helicopter = {
+            x: player.x + 500,
+            y: player.y - 420,
+            angle: 0,
+            rotor: 0,
+            orbit: Math.random() * Math.PI * 2,
+            gunTimer: 140
+        };
+        showMissionNotification("AIR SUPPORT", "Police chopper inbound. Keep moving!", 3000);
+    }
+
+    if (!helicopter) return;
+    const h = helicopter;
+    h.rotor += 0.9;
+
+    // Wanted level dropped: fly away and despawn
+    if (!wanted || gameState !== 'playing') {
+        h.x += 7;
+        h.y -= 5;
+        const ws = world.getWorldSize();
+        if (h.x > ws.width + 400 || h.y < -600) helicopter = null;
+        return;
+    }
+
+    // Circle strafing above the player
+    h.orbit += 0.006;
+    const tx = player.x + player.width / 2 + Math.cos(h.orbit) * 180;
+    const ty = player.y + player.height / 2 + Math.sin(h.orbit) * 180;
+    const dx = tx - h.x;
+    const dy = ty - h.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const sp = Math.min(d * 0.028, 5.2);
+    h.angle = Math.atan2(dy, dx);
+    h.x += dx / d * sp;
+    h.y += dy / d * sp;
+
+    // Door gunner bursts
+    h.gunTimer--;
+    if (h.gunTimer <= 0) {
+        h.gunTimer = 85 + Math.random() * 70;
+        const pcx = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+        const pcy = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+        const base = Math.atan2(pcy - h.y, pcx - h.x);
+        for (let i = -1; i <= 1; i++) {
+            weaponSystem.shootNPC(h.x, h.y, base + i * 0.09 + (Math.random() - 0.5) * 0.04, 'pistol');
+        }
+        if (typeof particleSystem !== 'undefined') {
+            particleSystem.addSparks(h.x + Math.cos(base) * 22, h.y + Math.sin(base) * 22, 0, 0, 4);
+        }
+    }
+}
+
+function drawHelicopter(ctx) {
+    if (!helicopter) return;
+    const h = helicopter;
+
+    // Ground shadow offset below the chopper
+    ctx.save();
+    ctx.translate(h.x + 55, h.y + 70);
+    ctx.scale(1, 0.55);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    ctx.rotate(h.angle);
+
+    // Tail boom
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(-38, -3, 30, 6);
+    // Tail fin
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(-44, -10, 6, 12);
+    // Spinning tail rotor
+    ctx.strokeStyle = '#90A4AE';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-41, -12 + Math.sin(h.rotor * 2) * 6);
+    ctx.lineTo(-41, 2 - Math.sin(h.rotor * 2) * 6);
+    ctx.stroke();
+
+    // Body
+    ctx.fillStyle = '#2E4053';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Cockpit glass
+    ctx.fillStyle = 'rgba(135, 206, 250, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(14, -2, 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Skids
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-12, 14); ctx.lineTo(14, 14);
+    ctx.moveTo(-8, 10); ctx.lineTo(-8, 14);
+    ctx.moveTo(10, 10); ctx.lineTo(10, 14);
+    ctx.stroke();
+
+    // Main rotor mast + spinning blades
+    ctx.fillStyle = '#455A64';
+    ctx.fillRect(-2, -2, 4, 4);
+    ctx.strokeStyle = 'rgba(210, 225, 235, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(h.rotor) * 46, Math.sin(h.rotor) * 46);
+    ctx.lineTo(-Math.cos(h.rotor) * 46, -Math.sin(h.rotor) * 46);
+    ctx.stroke();
+
+    // Blinking nav light
+    if (Math.floor(Date.now() / 220) % 2 === 0) {
+        ctx.fillStyle = '#FF1744';
+        ctx.beginPath();
+        ctx.arc(-20, -6, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
 }
 
 window.onload = init;

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTA 2D Open World</title>
+    <title>GTA 2D Open World — Grand Edition</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -25,8 +25,12 @@
                 </div>
             </div>
 
-            <!-- Top Right: Stars, Ammo, Cash -->
+            <!-- Top Right: Clock, Stars, Ammo, Cash -->
             <div id="top-right-hud">
+                <div id="clock-box">
+                    <span id="clock">12:00</span>
+                    <span id="weather-icon">☀️</span>
+                </div>
                 <div id="wanted-level">
                     <span class="star" id="star-1">★</span>
                     <span class="star" id="star-2">★</span>
@@ -58,6 +62,14 @@
                 </div>
             </div>
 
+            <!-- Wasted / Busted Fullscreen Overlay -->
+            <div id="death-overlay">
+                <div id="death-box">
+                    <h1 id="death-title">WASTED</h1>
+                    <p id="death-sub">Hospital bills: -$300</p>
+                </div>
+            </div>
+
             <!-- Bottom Left: Minimap & Health/Armor -->
             <div id="bottom-left-hud">
                 <div id="minimap-container">
@@ -75,7 +87,7 @@
 
             <!-- Bottom Right Controls Hint -->
             <div id="controls-hint">
-                WASD (Drive/Move) | Mouse Aim + Click (Shoot) | E (Enter/Shop/Phone) | R (Radio) | Space (Brake) | 1-5 (Weapons) | H (Horn)
+                WASD (Drive/Move) | Mouse Aim + Click (Shoot) | E (Enter/Shop/Phone) | R (Radio) | Space (Brake) | 1-5 (Weapons) | H (Horn) | 🚤 Boats at the Beach | 🎰 Casino in Chinatown
             </div>
         </div>
 

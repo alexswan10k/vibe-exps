@@ -1,4 +1,4 @@
-// World Data Generator with 6 Themed Districts, Water Shoreline, and Landmarks
+// World Data Generator - 9 Themed Districts, Airport, Stadium, Casino, Waterfront & Landmarks
 
 function generateCityGrid() {
     const cols = 56;
@@ -13,13 +13,16 @@ function generateCityGrid() {
         }
     }
 
-    // Determine district for each tile
+    // District map:
     // 1. Ocean & Beach: East coast (cols 48 to 55)
     // 2. Downtown: North-East (cols 28 to 47, rows 0 to 18)
     // 3. Port / Industrial: North-West (cols 0 to 27, rows 0 to 16)
     // 4. Central Park: Center-South (cols 20 to 36, rows 19 to 30)
-    // 5. Chinatown / Neon: Center-West (cols 0 to 19, rows 17 to 28)
+    // 5. Chinatown / Red Light: Center-West (cols 0 to 19, rows 17 to 28)
     // 6. Suburbs: South-West & South (cols 0 to 47, rows 29 to 39)
+    // 7. International Airport: South-East (cols 40-45, rows 29-37)
+    // 8. Liberty Bowl Stadium: South-West (cols 4-8, rows 28-32)
+    // 9. City Plaza: Central (cols 22-24, rows 18-19)
 
     // Build Road Network (Avenues every 6 tiles, with coastal boulevard)
     let hRoads = [3, 9, 15, 21, 27, 33, 38];
@@ -53,7 +56,7 @@ function generateCityGrid() {
             } else if (x === 50) {
                 grid[y][x] = 'W_COAST'; // Shoreline wave foam
             } else if (x === 48 || x === 49) {
-                grid[y][x] = 'SAND'; // Beach sand with palm trees & deck chairs
+                grid[y][x] = 'SAND'; // Beach sand with palm trees, umbrellas & deck chairs
             }
         }
     }
@@ -86,7 +89,7 @@ function generateCityGrid() {
         }
     }
 
-    // Chinatown District (cols 4 to 14, rows 18 to 20)
+    // Chinatown District (cols 4 to 14, rows 16 to 20)
     for (let y = 16; y <= 20; y++) {
         for (let x = 4; x <= 14; x++) {
             if (grid[y][x] !== 'H' && grid[y][x] !== 'V' && grid[y][x] !== 'C' && grid[y][x] !== 'T') {
@@ -104,9 +107,20 @@ function generateCityGrid() {
         }
     }
 
-    // Suburbs Residential (rows 29 to 37)
+    // City Plaza beside Burger Shot (cols 22-24, rows 18-19): paved square + fountains
+    for (let y = 18; y <= 19; y++) {
+        for (let x = 22; x <= 24; x++) {
+            if (grid[y][x] !== 'H' && grid[y][x] !== 'V' && grid[y][x] !== 'C' && grid[y][x] !== 'T') {
+                grid[y][x] = 'PLAZA';
+            }
+        }
+    }
+
+    // Suburbs Residential (rows 28 to 37) - skipping Airport & Stadium zones
     for (let y = 28; y <= 37; y++) {
         for (let x = 4; x <= 45; x++) {
+            if (y >= 28 && x >= 40) continue;      // Airport zone reserved
+            if (y <= 32 && x <= 8) continue;       // Stadium zone reserved
             if (grid[y][x] !== 'H' && grid[y][x] !== 'V' && grid[y][x] !== 'C' && grid[y][x] !== 'T') {
                 if (Math.random() < 0.15) {
                     grid[y][x] = 'POOL'; // Backyard swimming pool
@@ -116,6 +130,34 @@ function generateCityGrid() {
                     grid[y][x] = 'B_SUB'; // Suburban home
                 }
             }
+        }
+    }
+
+    // ===== LIBERTY INTERNATIONAL AIRPORT (cols 40-45, rows 29-37) =====
+    // Bounded by roads: row 33 (terminal access), row 38, col 39 & col 46
+    for (let y = 29; y <= 32; y++) {
+        for (let x = 40; x <= 45; x++) {
+            grid[y][x] = 'B_AIR'; // Airport buildings
+        }
+    }
+    grid[30][41] = 'TERMINAL'; // Big terminal spanning cols 41-44, rows 30-31
+    grid[32][40] = 'HANGAR';
+    grid[32][42] = 'HANGAR';
+    grid[32][44] = 'HANGAR';
+
+    for (let x = 40; x <= 45; x++) {
+        grid[34][x] = 'APRON';  // Aircraft parking apron
+        grid[35][x] = 'RUNWAY';
+        grid[36][x] = 'RUNWAY';
+        grid[37][x] = 'RUNWAY';
+    }
+    grid[36][40] = 'RAMP_E'; // Stunt ramp at runway start - launch towards the beach!
+
+    // ===== LIBERTY BOWL STADIUM (cols 4-8, rows 28-32) =====
+    grid[30][6] = 'STADIUM'; // Anchor tile - expands into one huge building in world.js
+    for (let y = 28; y <= 32; y++) {
+        for (let x = 4; x <= 8; x++) {
+            if (grid[y][x] !== 'STADIUM') grid[y][x] = 'STAD_FILL';
         }
     }
 
@@ -129,13 +171,20 @@ function generateCityGrid() {
     // 3. Burger Shot Diner (Central Plaza: x:22, y:20)
     grid[20][22] = 'DINER';
 
-    // 4. General Hospital (Suburbs / East: x:40, y:30)
-    grid[30][40] = 'HOSP';
+    // 4. General Hospital (Suburbs / East: x:37, y:30)
+    grid[30][37] = 'HOSP';
 
     // 5. Police Headquarters (North Port: x:16, y:8)
     grid[8][16] = 'PD';
 
-    // 6. Stunt Ramps in strategic spots
+    // 6. Pink Palace Casino (Chinatown Red Light district: x:12, y:19)
+    grid[19][12] = 'CASINO';
+
+    // 7. Fuel Stations (Suburbs: x:12, y:30 | Downtown edge: x:31, y:10)
+    grid[30][12] = 'GAS';
+    grid[10][31] = 'GAS';
+
+    // 8. Stunt Ramps in strategic spots
     grid[9][45] = 'RAMP_E';  // Ocean jump towards beach
     grid[21][20] = 'RAMP_E'; // Canal jump over park
     grid[15][14] = 'RAMP_W'; // Port alley jump
@@ -164,6 +213,9 @@ function getDistrictNameAt(worldX, worldY) {
     let row = Math.floor(worldY / 96);
 
     if (col >= 48) return "Ocean Beach & Marina";
+    if (row >= 29 && row <= 37 && col >= 40 && col < 48) return "Liberty International Airport";
+    if (row >= 28 && row <= 32 && col >= 4 && col <= 8) return "Liberty Bowl Stadium";
+    if (row >= 18 && row <= 19 && col >= 21 && col <= 25) return "Burger Shot Plaza";
     if (row <= 16 && col <= 20) return "Port Authority Docks";
     if (row <= 16 && col > 20) return "Downtown Financial District";
     if (row > 16 && row <= 27 && col <= 20) return "Chinatown & Red Light";

@@ -30,6 +30,9 @@ class Car {
         this.destination = null;
         this.stuckTimer = 0;
         this.positionHistory = [];
+        this.gunTimer = 0;
+        this.shellTimer = 150;
+        this.splashTick = 0;
     }
 
     setupVehicleStats(customColor) {
@@ -189,6 +192,35 @@ class Car {
             this.updatePlayerCar(keys, buildings, cars, worldSize);
         } else {
             this.updateAICar(buildings, cars, roads, trafficLights, worldSize);
+        }
+
+        // Deep water = sinking
+        this.checkWater();
+    }
+
+    checkWater() {
+        if (this.isAirborne || this.exploded) return;
+        if (typeof world === 'undefined' || !world.waterTiles) return;
+
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        let deep = false;
+        for (let w of world.waterTiles) {
+            if (cx >= w.x && cx <= w.x + w.width && cy >= w.y && cy <= w.y + w.height) {
+                deep = (w.type === 'W');
+                break;
+            }
+        }
+
+        if (deep) {
+            this.vx *= 0.86;
+            this.vy *= 0.86;
+            this.speed *= 0.86;
+            this.takeDamage(1.4); // Sinking!
+            this.splashTick++;
+            if (typeof particleSystem !== 'undefined' && this.splashTick % 6 === 0) {
+                particleSystem.addWaterSplash(cx, cy);
+            }
         }
     }
 
@@ -907,4 +939,193 @@ class Car {
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Car;
+}
+
+// Drivable Boat - moored off the beach, enter with E like a car.
+// Only moves on sea water (deep ocean + shoreline), bounces off land.
+class Boat {
+    constructor(x, y, angle = 0, color = '#F5F5F5') {
+        this.isBoat = true;
+        this.x = x;
+        this.y = y;
+        this.angle = angle;
+        this.width = 84;
+        this.height = 30;
+        this.speed = 0;
+        this.vx = 0;
+        this.vy = 0;
+        this.maxSpeed = 7.4;
+        this.acceleration = 0.13;
+        this.turnSpeed = 0.048;
+        this.health = 220;
+        this.maxHealth = 220;
+        this.exploded = false;
+        this.isAirborne = false;
+        this.airborneZ = 0;
+        this.isPlayerCar = false;
+        this.color = color;
+        this.bobOffset = Math.random() * Math.PI * 2;
+        this.wakeTick = 0;
+    }
+
+    launchStuntJump() { } // Boats don't do ramps
+
+    takeDamage(amount) {
+        if (this.exploded) return;
+        this.health -= amount;
+        if (this.health <= 0) {
+            this.exploded = true;
+            this.speed = 0;
+            if (typeof particleSystem !== 'undefined') {
+                particleSystem.addExplosion(this.x + this.width / 2, this.y + this.height / 2);
+            }
+            if (typeof audioSystem !== 'undefined') {
+                audioSystem.playExplosion();
+            }
+        }
+    }
+
+    update(keys) {
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
+        if (this.exploded) {
+            if (typeof particleSystem !== 'undefined' && Math.random() < 0.08) {
+                particleSystem.addSmoke(cx, cy);
+            }
+            return;
+        }
+
+        if (!this.isPlayerCar) {
+            this.vx = 0;
+            this.vy = 0;
+            return; // Moored - gentle bobbing handled in draw
+        }
+
+        // Player-controlled boat physics
+        let force = 0;
+        if (keys['w'] || keys['keyw'] || keys['arrowup']) {
+            force = this.acceleration;
+        } else if (keys['s'] || keys['keys'] || keys['arrowdown']) {
+            force = -this.acceleration * 0.7;
+        } else {
+            this.speed *= 0.985;
+        }
+        if (keys[' ']) force = -this.acceleration * 1.5;
+
+        this.speed += force;
+        this.speed = Math.max(-this.maxSpeed * 0.4, Math.min(this.maxSpeed, this.speed));
+
+        if (Math.abs(this.speed) > 0.3) {
+            if (keys['a'] || keys['keya'] || keys['arrowleft']) {
+                this.angle -= this.turnSpeed * Math.sign(this.speed);
+            }
+            if (keys['d'] || keys['keyd'] || keys['arrowright']) {
+                this.angle += this.turnSpeed * Math.sign(this.speed);
+            }
+        }
+
+        let nx = this.x + Math.cos(this.angle) * this.speed;
+        let ny = this.y + Math.sin(this.angle) * this.speed;
+
+        if (this.isOnWater(nx + this.width / 2, ny + this.height / 2)) {
+            this.x = nx;
+            this.y = ny;
+            this.vx = Math.cos(this.angle) * this.speed;
+            this.vy = Math.sin(this.angle) * this.speed;
+
+            // Wake trail
+            if (Math.abs(this.speed) > 2.5) {
+                this.wakeTick++;
+                if (this.wakeTick % 7 === 0 && typeof particleSystem !== 'undefined') {
+                    let sx = cx - Math.cos(this.angle) * this.width * 0.55;
+                    let sy = cy - Math.sin(this.angle) * this.width * 0.55;
+                    particleSystem.addWaterSplash(sx, sy);
+                }
+            }
+        } else {
+            // Bumped into land
+            this.speed *= -0.3;
+            if (typeof particleSystem !== 'undefined') {
+                particleSystem.addWaterSplash(nx + this.width / 2, ny + this.height / 2);
+            }
+            if (typeof audioSystem !== 'undefined' && Math.abs(this.speed) > 1) {
+                audioSystem.playSplash();
+            }
+        }
+    }
+
+    isOnWater(px, py) {
+        if (typeof world === 'undefined' || !world.waterTiles) return false;
+        for (let w of world.waterTiles) {
+            if (px >= w.x && px <= w.x + w.width && py >= w.y && py <= w.y + w.height) {
+                return w.type === 'W' || w.type === 'W_COAST';
+            }
+        }
+        return false;
+    }
+
+    draw(ctx, cameraX, cameraY) {
+        const t = Date.now();
+        const bob = Math.sin(t * 0.002 + this.bobOffset) * (this.isPlayerCar ? 0.6 : 1.6);
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
+        // Water shadow
+        ctx.save();
+        ctx.translate(cx + 4, cy + 4);
+        ctx.rotate(this.angle);
+        ctx.fillStyle = 'rgba(0, 20, 40, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.width / 2, this.height / 2 + 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(cx, cy + bob);
+        ctx.rotate(this.angle);
+
+        const hw = this.width / 2;
+        const hh = this.height / 2;
+        const disp = this.exploded ? '#3a2f28' : this.color;
+
+        // Pointed hull (+x is the bow)
+        ctx.fillStyle = disp;
+        ctx.beginPath();
+        ctx.moveTo(hw, 0);
+        ctx.quadraticCurveTo(hw * 0.45, -hh, -hw + 6, -hh);
+        ctx.lineTo(-hw + 6, hh);
+        ctx.quadraticCurveTo(hw * 0.45, hh, hw, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#263238';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        if (!this.exploded) {
+            // Deck stripe
+            ctx.fillStyle = '#B0BEC5';
+            ctx.fillRect(-hw + 10, -3, this.width - 26, 6);
+            // Cabin
+            ctx.fillStyle = '#546E7A';
+            ctx.fillRect(-hw + 16, -hh + 6, 22, this.height - 12);
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.9)';
+            ctx.fillRect(-hw + 19, -hh + 9, 16, 4);
+            ctx.fillRect(-hw + 19, hh - 13, 16, 4);
+            // Outboard motor
+            ctx.fillStyle = '#37474F';
+            ctx.fillRect(-hw - 2, -4, 7, 8);
+            // Blinking nav light
+            ctx.fillStyle = Math.floor(t / 300) % 2 === 0 ? '#FF5252' : '#69F0AE';
+            ctx.beginPath();
+            ctx.arc(-hw + 8, 0, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports.Boat = Boat;
 }

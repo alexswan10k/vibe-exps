@@ -46,10 +46,12 @@ class Bullet {
 
         // Check collisions with cars
         for (let car of cars) {
-            if (!car.exploded &&
-                this.x > car.x && this.x < car.x + car.width &&
+            if (car.exploded) continue;
+            // Cops never hit their own, and boats sit far out at sea
+            if (this.owner === 'enemy' && (car.isPolice || car.isBoat)) continue;
+            if (this.x > car.x && this.x < car.x + car.width &&
                 this.y > car.y && this.y < car.y + car.height) {
-                
+
                 if (this.isRPG) {
                     this.explode(cars, buildings);
                 } else {
@@ -60,6 +62,24 @@ class Bullet {
                     }
                     if (this.owner === 'player' && typeof wantedLevel !== 'undefined') {
                         if (wantedLevel === 0) wantedLevel = 1;
+                    }
+                }
+                return;
+            }
+        }
+
+        // Check collisions with the player (enemy fire only)
+        if (this.owner === 'enemy' && typeof player !== 'undefined' && !player.inCar &&
+            typeof damagePlayer === 'function') {
+            if (this.x > player.x && this.x < player.x + player.width &&
+                this.y > player.y && this.y < player.y + player.height) {
+                if (this.isRPG) {
+                    this.explode(cars, buildings);
+                } else {
+                    this.active = false;
+                    damagePlayer(this.damage);
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addSparks(this.x, this.y, 0, 0, 6);
                     }
                 }
                 return;
@@ -131,24 +151,13 @@ class Bullet {
         }
 
         // Splash damage to player
-        if (typeof player !== 'undefined' && !player.inCar) {
+        if (typeof player !== 'undefined' && !player.inCar && typeof damagePlayer === 'function') {
             let px = player.x + player.width / 2;
             let py = player.y + player.height / 2;
             let dist = Math.sqrt((px - this.x) ** 2 + (py - this.y) ** 2);
             if (dist < radius) {
                 let dmg = Math.floor((1 - dist / radius) * 60);
-                if (typeof playerArmor !== 'undefined' && playerArmor > 0) {
-                    playerArmor -= dmg;
-                    if (playerArmor < 0) {
-                        playerHealth += playerArmor;
-                        playerArmor = 0;
-                    }
-                } else if (typeof playerHealth !== 'undefined') {
-                    playerHealth -= dmg;
-                }
-                if (typeof playerHealth !== 'undefined' && playerHealth < 0) {
-                    playerHealth = 0;
-                }
+                damagePlayer(dmg);
             }
         }
     }
@@ -255,6 +264,17 @@ class WeaponSystem {
             return true;
         }
         return false;
+    }
+
+    // Independent NPC fire - never touches the player's ammo or fire-rate timer
+    shootNPC(x, y, angle, kind = 'pistol') {
+        if (kind === 'shell') {
+            this.bullets.push(new Bullet(x, y, angle, 8.5, 55, 'enemy', true));
+            if (typeof audioSystem !== 'undefined') audioSystem.playRPG();
+        } else {
+            this.bullets.push(new Bullet(x, y, angle, 13, 8, 'enemy', false));
+            if (typeof audioSystem !== 'undefined') audioSystem.playPistol();
+        }
     }
 
     meleeAttack(x, y, angle) {

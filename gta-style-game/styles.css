@@ -172,6 +172,30 @@ body {
     letter-spacing: 2px;
 }
 
+/* Clock & Weather */
+#clock-box {
+    background: rgba(15, 15, 20, 0.85);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+}
+
+#clock {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 20px;
+    font-weight: 900;
+    color: #FFD600;
+    letter-spacing: 1px;
+}
+
+#weather-icon {
+    font-size: 20px;
+}
+
 /* In-Car Radio Station Banner */
 #radio-banner {
     display: none;
@@ -351,6 +375,57 @@ body {
     background: rgba(0, 0, 0, 0.5);
     padding: 6px 14px;
     border-radius: 4px;
+}
+
+/* Wasted / Busted Overlay */
+#death-overlay {
+    display: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.88) 100%);
+    z-index: 5000;
+    justify-content: center;
+    align-items: center;
+    pointer-events: none;
+    animation: deathFade 1.2s ease-out;
+}
+
+@keyframes deathFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+#death-box {
+    text-align: center;
+}
+
+#death-title {
+    font-family: 'Impact', 'Arial Black', sans-serif;
+    font-size: 110px;
+    letter-spacing: 8px;
+    color: #D32F2F;
+    text-shadow: 0 0 30px rgba(211, 47, 47, 0.9), 4px 4px 0 #000;
+    margin-bottom: 10px;
+    animation: deathSlam 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#death-overlay.busted #death-title {
+    color: #2979FF;
+    text-shadow: 0 0 30px rgba(41, 121, 255, 0.9), 4px 4px 0 #000;
+}
+
+@keyframes deathSlam {
+    from { transform: scale(2.6); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+#death-sub {
+    font-size: 20px;
+    color: #ECEFF1;
+    letter-spacing: 1px;
 }
 
 /* Touch Controls */

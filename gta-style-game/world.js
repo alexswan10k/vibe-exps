@@ -16,8 +16,10 @@ class World {
         this.sandTiles = [];
         this.parkTiles = [];
         this.poolTiles = [];
+        this.plazaTiles = [];
+        this.runwayTiles = [];
         this.containerStacks = [];
-        this.landmarks = []; // Pay 'n' Spray, Ammu-Nation, Diner, Hospital, Police HQ
+        this.landmarks = []; // Pay 'n' Spray, Ammu-Nation, Diner, Hospital, Police HQ, Gas, Casino
         this.stuntRamps = [];
 
         this.convertToObjects();
@@ -43,6 +45,8 @@ class World {
         this.sandTiles = [];
         this.parkTiles = [];
         this.poolTiles = [];
+        this.plazaTiles = [];
+        this.runwayTiles = [];
         this.containerStacks = [];
         this.landmarks = [];
         this.stuntRamps = [];
@@ -70,7 +74,52 @@ class World {
                     this.parkTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, type: tile });
                 } else if (tile === 'POOL') {
                     this.poolTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize });
+                } else if (tile === 'PLAZA') {
+                    this.plazaTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize });
+                } else if (tile === 'RUNWAY') {
+                    this.runwayTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize });
+                } else if (tile === 'APRON') {
+                    this.runwayTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, apron: true });
+                } else if (tile === 'GAS') {
+                    // Fuel Station - repairs vehicles for cash
+                    this.landmarks.push({
+                        type: 'gas',
+                        name: "Fuel Station",
+                        icon: '⛽',
+                        x: gameX,
+                        y: gameY,
+                        width: cellSize,
+                        height: cellSize,
+                        bayX: gameX + cellSize / 2,
+                        bayY: gameY + cellSize / 2
+                    });
+                    this.buildings.push({ x: gameX + 20, y: gameY + 20, width: 26, height: 56, style: 'gas' });
+                } else if (tile === 'CASINO') {
+                    // Pink Palace Casino
+                    this.landmarks.push({
+                        type: 'casino',
+                        name: "Pink Palace Casino",
+                        icon: '🎰',
+                        x: gameX,
+                        y: gameY,
+                        width: cellSize,
+                        height: cellSize,
+                        bayX: gameX + cellSize / 2,
+                        bayY: gameY + cellSize / 2
+                    });
+                    this.buildings.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, style: 'casino' });
+                } else if (tile === 'HANGAR') {
+                    this.buildings.push({ x: gameX + 4, y: gameY + 4, width: cellSize - 8, height: cellSize - 8, style: 'hangar' });
+                } else if (tile === 'B_AIR') {
+                    this.buildings.push({ x: gameX + 6, y: gameY + 6, width: cellSize - 12, height: cellSize - 12, style: 'airport' });
+                } else if (tile === 'TERMINAL') {
+                    // Huge terminal spanning cols 41-44, rows 30-31
+                    this.buildings.push({ x: gameX, y: gameY, width: cellSize * 4, height: cellSize * 2, style: 'terminal' });
+                } else if (tile === 'STADIUM') {
+                    // Huge stadium spanning cols 4-8, rows 28-32
+                    this.buildings.push({ x: 4 * cellSize, y: 28 * cellSize, width: cellSize * 5, height: cellSize * 5, style: 'stadium' });
                 } else if (tile === 'CONT') {
+                    // 'STAD_FILL', 'E_DOCK' are open ground - intentionally ignored
                     this.containerStacks.push({ x: gameX, y: gameY, width: cellSize, height: cellSize });
                     // Container stacks act as solid buildings
                     this.buildings.push({
@@ -193,6 +242,39 @@ class World {
                 propsManager.addProp('tree_palm', sand.x + 20 + Math.random() * (cellSize - 40), sand.y + 20 + Math.random() * (cellSize - 40));
             }
         }
+
+        // 2b. Beach umbrellas & deck chairs
+        let umbrellaColors = ['#EF5350', '#AB47BC', '#FFCA28', '#29B6F6'];
+        let ui = 0;
+        for (let sand of this.sandTiles) {
+            if (Math.random() < 0.14) {
+                propsManager.addProp('umbrella',
+                    sand.x + 25 + Math.random() * (cellSize - 50),
+                    sand.y + 25 + Math.random() * (cellSize - 50),
+                    { color: umbrellaColors[ui++ % umbrellaColors.length] });
+            }
+            if (Math.random() < 0.09) {
+                propsManager.addProp('deckchair',
+                    sand.x + 20 + Math.random() * (cellSize - 40),
+                    sand.y + 20 + Math.random() * (cellSize - 40));
+            }
+        }
+
+        // 2c. Plaza fountains & benches
+        for (let pl of this.plazaTiles) {
+            if (((pl.x / cellSize) + (pl.y / cellSize)) % 3 === 0) {
+                propsManager.addProp('fountain', pl.x + cellSize / 2, pl.y + cellSize / 2);
+            }
+            if (Math.random() < 0.4) {
+                propsManager.addProp('bench', pl.x + 15 + Math.random() * (cellSize - 30), pl.y + 15 + Math.random() * (cellSize - 30));
+            }
+        }
+
+        // 2d. Parked airliner on the airport apron (with invisible collision box)
+        let planeX = 42.5 * cellSize;
+        let planeY = 34.5 * cellSize;
+        propsManager.addProp('plane', planeX, planeY, { angle: -0.05 });
+        this.buildings.push({ x: planeX - 80, y: planeY - 52, width: 160, height: 104, style: 'invisible' });
 
         // 3. Add Oak Trees & Benches in Central Park
         for (let park of this.parkTiles) {
@@ -317,6 +399,60 @@ class World {
             }
         }
 
+        // 3b. Draw City Plaza paving
+        for (let pl of this.plazaTiles) {
+            if (pl.x >= minX && pl.x <= maxX && pl.y >= minY && pl.y <= maxY) {
+                ctx.fillStyle = '#9E9E9E';
+                ctx.fillRect(pl.x, pl.y, pl.width, pl.height);
+                // Paving stone grid lines
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(pl.x + pl.width / 2, pl.y);
+                ctx.lineTo(pl.x + pl.width / 2, pl.y + pl.height);
+                ctx.moveTo(pl.x, pl.y + pl.height / 2);
+                ctx.lineTo(pl.x + pl.width, pl.y + pl.height / 2);
+                ctx.stroke();
+            }
+        }
+
+        // 3c. Draw Airport Runway & Apron
+        for (let rw of this.runwayTiles) {
+            if (rw.x >= minX && rw.x <= maxX && rw.y >= minY && rw.y <= maxY) {
+                if (rw.apron) {
+                    // Concrete apron with yellow taxi guide line
+                    ctx.fillStyle = '#4E4E4E';
+                    ctx.fillRect(rw.x, rw.y, rw.width, rw.height);
+                    ctx.strokeStyle = 'rgba(255, 214, 0, 0.55)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([14, 10]);
+                    ctx.beginPath();
+                    ctx.moveTo(rw.x + 8, rw.y + rw.height / 2);
+                    ctx.lineTo(rw.x + rw.width - 8, rw.y + rw.height / 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                } else {
+                    // Dark asphalt runway
+                    ctx.fillStyle = '#2C2C2C';
+                    ctx.fillRect(rw.x, rw.y, rw.width, rw.height);
+                    // White centerline dashes
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([26, 18]);
+                    ctx.beginPath();
+                    ctx.moveTo(rw.x + 6, rw.y + rw.height / 2);
+                    ctx.lineTo(rw.x + rw.width - 6, rw.y + rw.height / 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    // Threshold stripes on west end
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    for (let i = 8; i < rw.height - 8; i += 11) {
+                        ctx.fillRect(rw.x + 4, rw.y + i, 9, 5);
+                    }
+                }
+            }
+        }
+
         // 4. Draw Water (Ocean, Shoreline, and Central Pond) with Animated Waves
         for (let w of this.waterTiles) {
             if (w.x >= minX && w.x <= maxX && w.y >= minY && w.y <= maxY) {
@@ -398,6 +534,37 @@ class World {
                 ctx.font = 'bold 12px Arial';
                 ctx.textAlign = 'center';
                 ctx.fillText("BURGER SHOT ($20)", 0, -42);
+            } else if (lm.type === 'gas') {
+                // Green Fuel Station forecourt
+                ctx.fillStyle = `rgba(102, 187, 106, ${0.28 * flash})`;
+                ctx.beginPath();
+                ctx.arc(0, 0, 38, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#66BB6A';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#66BB6A';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText("⛽ FUEL & REPAIR ($50)", 0, -46);
+            } else if (lm.type === 'casino') {
+                // Pink Casino entrance glow
+                let pulse = Math.sin(time * 0.005) * 0.15 + 0.35;
+                ctx.fillStyle = `rgba(255, 64, 129, ${pulse})`;
+                ctx.beginPath();
+                ctx.arc(0, 0, 40, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#FF4081';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                ctx.fillStyle = Math.floor(time / 400) % 2 === 0 ? '#FF4081' : '#F8BBD0';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText("♦ CASINO ♦", 0, -48);
             }
             ctx.restore();
         }
