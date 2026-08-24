@@ -1,112 +1,144 @@
-// Game constants
-const CANVAS_WIDTH = 900;
-const CANVAS_HEIGHT = 700;
+// Game Core Engine, Rendering, District System, Landmarks, and Physics Loop
+
 const TARGET_FPS = 60;
 const FRAME_TIME = 1000 / TARGET_FPS;
 
 // Game variables
 let canvas, ctx;
 let keys = {};
-let camera = {
-    x: 0,
-    y: 0,
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT
-};
-let mouseX = 0;
-let mouseY = 0;
+let camera = { x: 0, y: 0, width: 900, height: 700 };
+let mouseX = 0, mouseY = 0;
 let isMouseDown = false;
 let world;
 let player;
 let pedestrians = [];
 let cars = [];
 let lastTime = 0;
-let fps = 0;
-let frameCount = 0;
-let lastFpsUpdate = 0;
+let fps = 0, frameCount = 0, lastFpsUpdate = 0;
 let gameTime = 0;
 let score = 0;
 let distanceTraveled = 0;
 let lastPlayerPos = { x: 0, y: 0 };
-let collisionCount = 0;
-let safeDrivingTime = 0;
-let allRoads = []; // Global roads array
 
 // UI & Minimap Variables
 let minimapCanvas, minimapCtx;
-const DAY_LENGTH = 60000; // 60 seconds per day cycle
-let timeOfDay = 0; // 0 = midnight, 0.5 = noon, 1.0 = midnight
-let lightLevel = 1;
+const DAY_LENGTH = 70000;
+let timeOfDay = 0.5;
+let lightLevel = 1.0;
 
 let playerHealth = 100;
 let playerArmor = 50;
 let wantedLevel = 0;
-let playerMoney = 500;
+let playerMoney = 800;
 
-// Weapon Inventory variables
+// Weapon Inventory
 let playerWeaponIndex = 1; // 0=Fists, 1=Pistol, 2=Shotgun, 3=Uzi, 4=RPG
 let playerAmmo = {
-    0: Infinity, // Fists
-    1: Infinity, // Pistol
-    2: 30,       // Shotgun
-    3: 150,      // Uzi
-    4: 6         // RPG
+    0: Infinity,
+    1: Infinity,
+    2: 30,
+    3: 180,
+    4: 6
 };
+
+// District Tracking
+let currentDistrict = "";
+let districtBannerTimer = 0;
+
+// Landmark Interaction Timers
+let pnsCooldown = 0;
+let shopCooldown = 0;
 
 // Mission variables
 let currentMission = null;
-let missionPayphone = { x: 788, y: 756, radius: 15, active: true };
+let missionPayphones = [
+    { x: 1050, y: 950, radius: 15, active: true },
+    { x: 3200, y: 1500, radius: 15, active: true },
+    { x: 1500, y: 2800, radius: 15, active: true }
+];
 let notifTimer = 0;
+let stuntBannerTimer = 0;
+let radioBannerTimer = 0;
 
-// Initialize game
+// Death / Arrest State
+let gameState = 'playing'; // 'playing' | 'wasted' | 'busted'
+let gameStateTimer = 0;
+let invulnTimer = 0;
+let deathFee = 0;
+
+// Weather System
+let weatherState = 'clear';
+let weatherTimer = 35000;
+let weatherTarget = 0;
+let weatherIntensity = 0;
+let rainDrops = [];
+let lightningFlash = 0;
+let boltPoints = null;
+let boltLife = 0;
+
+// Police Helicopter
+let helicopter = null;
+
+// Service Cooldowns
+let gasCooldown = 0;
+let casinoCooldown = 0;
+
+// Ambient light (day/night cycle dimmed by storms)
+let ambient = 1.0;
+
+// Safe-driving score accumulator
+let safeDrivingTime = 0;
+
 function init() {
     canvas = document.getElementById('game-canvas');
     ctx = canvas.getContext('2d');
-    
-    // Set dynamic sizing
+
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
     minimapCanvas = document.getElementById('minimap-canvas');
     if (minimapCanvas) {
-        minimapCanvas.width = 200;
-        minimapCanvas.height = 200;
+        minimapCanvas.width = 220;
+        minimapCanvas.height = 220;
         minimapCtx = minimapCanvas.getContext('2d');
     }
 
-    // Load world from embedded data
+    // Load world from procedural multi-district layout
     world = World.loadFromEmbedded();
-    console.log(world.toString()); // Display the world map in console
 
-    // Find a valid spawn point for player (nearest road to center)
+    // Spawn player near the closest road node to Downtown
     const worldSize = world.getWorldSize();
-    let centerX = worldSize.width / 2;
-    let centerY = worldSize.height / 2;
-    let spawnX = centerX;
-    let spawnY = centerY;
+    let spawnX = 6900;
+    let spawnY = 1700;
 
-    let allValidRoads = [...world.roads, ...world.horizontalRoads, ...world.verticalRoads, ...world.crossroads];
-    if (allValidRoads.length > 0) {
-        let bestRoad = allValidRoads[0];
-        let minDist = Infinity;
-        for (let r of allValidRoads) {
-            let dist = Math.pow(r.x + r.width / 2 - centerX, 2) + Math.pow(r.y + r.height / 2 - centerY, 2);
-            if (dist < minDist) {
-                minDist = dist;
-                bestRoad = r;
-            }
-        }
-        spawnX = bestRoad.x + bestRoad.width / 2;
-        spawnY = bestRoad.y + bestRoad.height / 2;
+    if (world.edges.length > 0) {
+        const np = world.nearestLanePoint(spawnX, spawnY);
+        if (np) { spawnX = np.x; spawnY = np.y; }
     }
 
     player = new Player(spawnX, spawnY, worldSize);
 
-    // Create cars
+    // Create diverse vehicles
     createCars();
 
+    // Uniform hash grid of static buildings for fast collision queries
+    world.buildingGrid = new Map();
+    const BG = 288;
+    for (const b of world.buildings) {
+        const x0 = Math.floor(b.x / BG), x1 = Math.floor((b.x + b.width) / BG);
+        const y0 = Math.floor(b.y / BG), y1 = Math.floor((b.y + b.height) / BG);
+        for (let byy = y0; byy <= y1; byy++) for (let bxx = x0; bxx <= x1; bxx++) {
+            const k = bxx + ',' + byy;
+            if (!world.buildingGrid.has(k)) world.buildingGrid.set(k, []);
+            world.buildingGrid.get(k).push(b);
+        }
+    }
+
+    createBoats();
+    initRainPool();
+
     // Create pedestrians
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
         pedestrians.push(new Pedestrian(Math.random() * worldSize.width, Math.random() * worldSize.height, worldSize));
     }
 
@@ -117,26 +149,33 @@ function init() {
         const code = e.code ? e.code.toLowerCase() : '';
         keys[key] = true;
         if (code) keys[code] = true;
-        
+
         // Weapon switching 1-5
         if (['1', '2', '3', '4', '5'].includes(key)) {
             playerWeaponIndex = parseInt(key) - 1;
-            if (typeof audioSystem !== 'undefined') audioSystem.playPunch(); // click sound
+            if (typeof audioSystem !== 'undefined') audioSystem.playPunch();
         }
 
-        // Horn key H
+        // In-Car Radio Switcher (R Key)
+        if (key === 'r') {
+            if (player.inCar && typeof audioSystem !== 'undefined') {
+                let stationName = audioSystem.nextStation();
+                showRadioBanner(stationName);
+            }
+        }
+
+        // Horn (H Key)
         if (key === 'h') {
             if (player.inCar && typeof audioSystem !== 'undefined') {
                 audioSystem.playHorn(true);
             }
         }
 
-        // Prevent scrolling with arrows and space
         if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
             e.preventDefault();
         }
     });
-    
+
     document.addEventListener('keyup', (e) => {
         if (!e.key) return;
         const key = e.key.toLowerCase();
@@ -144,7 +183,6 @@ function init() {
         keys[key] = false;
         if (code) keys[code] = false;
 
-        // Stop Horn
         if (key === 'h') {
             if (typeof audioSystem !== 'undefined') {
                 audioSystem.playHorn(false);
@@ -158,7 +196,7 @@ function init() {
         } else {
             playerWeaponIndex = (playerWeaponIndex - 1 + 5) % 5;
         }
-        if (typeof audioSystem !== 'undefined') audioSystem.playPunch(); // click sound
+        if (typeof audioSystem !== 'undefined') audioSystem.playPunch();
     });
 
     setupTouchControls();
@@ -171,9 +209,10 @@ function init() {
 
     canvas.addEventListener('mousedown', (e) => {
         isMouseDown = true;
+        if (typeof audioSystem !== 'undefined') audioSystem.init();
     });
 
-    canvas.addEventListener('mouseup', (e) => {
+    canvas.addEventListener('mouseup', () => {
         isMouseDown = false;
     });
 
@@ -189,55 +228,68 @@ function resizeCanvas() {
     camera.height = canvas.height;
 }
 
-// Create cars
 function createCars() {
-    const worldSize = world.getWorldSize();
-    const carColors = ['#0000FF', '#00FF00', '#FFFF00', '#FF00FF', '#00FFFF', '#FFA500', '#800080'];
+    const carTypes = ['sedan', 'supercar', 'muscle', 'taxi', 'bike', 'sedan', 'supercar', 'muscle'];
 
-    // Combine all road types for car placement
-    const allRoads = [
-        ...world.roads,
-        ...world.horizontalRoads,
-        ...world.verticalRoads,
-        ...world.crossroads
-    ];
+    for (let i = 0; i < 84; i++) {
+        // Spawn on a random road-graph edge, on the lane
+        const edge = world.edges[Math.floor(Math.random() * world.edges.length)];
+        const d = Math.random() * edge.len;
+        const p = world.pointAtDist(edge, d);
+        const dirSign = Math.random() < 0.5 ? 1 : -1;
+        const off = edge.w * 0.21 * dirSign;
+        const x = p.x + (-Math.sin(p.ang)) * off;
+        const y = p.y + (Math.cos(p.ang)) * off;
+        const angle = dirSign > 0 ? p.ang : p.ang + Math.PI;
 
-    // Create AI cars
-    for (let i = 0; i < 45; i++) {
-        let road = allRoads[Math.floor(Math.random() * allRoads.length)];
-        let x, y, angle;
+        let type = carTypes[Math.floor(Math.random() * carTypes.length)];
+        const car = new Car(x - 32, y - 16, angle, false, null, type);
+        car.edge = edge;
+        car.dir = dirSign;
+        car.dist = d;
+        cars.push(car);
+    }
 
-        // Determine if it's a horizontal or vertical road and position accordingly
-        if (road.type === 'horizontal' || road.width > road.height) {
-            // Horizontal road
-            x = road.x + Math.random() * road.width;
-            y = road.y + road.height / 2 - 12;
-            angle = Math.random() < 0.5 ? 0 : Math.PI; // Left or right
-        } else if (road.type === 'vertical' || road.height > road.width) {
-            // Vertical road
-            x = road.x + road.width / 2 - 22;
-            y = road.y + Math.random() * road.height;
-            angle = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2; // Up or down
-        } else {
-            // Crossroad
-            x = road.x + road.width / 2;
-            y = road.y + road.height / 2;
-            angle = 0;
+    // Spawn parked special vehicles near landmarks
+    for (let lm of world.landmarks) {
+        if (lm.type === 'hospital') {
+            cars.push(new Car(lm.bayX + 50, lm.bayY - 20, 0, false, '#FFF', 'ambulance'));
+        } else if (lm.type === 'police') {
+            cars.push(new Car(lm.bayX + 50, lm.bayY - 20, 0, false, '#212121', 'police'));
         }
-
-        cars.push(new Car(
-            x, y, angle, false,
-            carColors[Math.floor(Math.random() * carColors.length)]
-        ));
     }
 }
 
-// Game loop with performance optimization
+function createBoats() {
+    // Moored off the beach - steal one and take to the open sea!
+    const spots = [
+        // Berth 1: long clear channel north of the pier (used by the boat tutorial flow)
+        { x: 91.5 * 96, y: 41 * 96, color: '#ECEFF1', angle: -Math.PI / 2 },
+        { x: 93 * 96, y: 19 * 96, color: '#FF7043', angle: Math.PI },
+        { x: 92 * 96, y: 52 * 96, color: '#26C6DA', angle: -Math.PI / 2 }
+    ];
+    for (let s of spots) {
+        cars.push(new Boat(s.x, s.y, s.angle, s.color));
+    }
+}
+
+function initRainPool() {
+    rainDrops = [];
+    for (let i = 0; i < 240; i++) {
+        rainDrops.push({
+            x: Math.random() * 2000,
+            y: Math.random() * 1000,
+            len: 12 + Math.random() * 14,
+            spd: 15 + Math.random() * 10,
+            drift: 2.2 + Math.random() * 1.6
+        });
+    }
+}
+
 function gameLoop(currentTime = 0) {
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
 
-    // Calculate FPS
     frameCount++;
     if (currentTime - lastFpsUpdate >= 1000) {
         fps = frameCount;
@@ -245,85 +297,116 @@ function gameLoop(currentTime = 0) {
         lastFpsUpdate = currentTime;
     }
 
-    // Update game time
     gameTime += deltaTime;
 
-    // 0 = midnight, 0.5 = noon, 1.0 = midnight
+    // Day/Night Cycle (0 = midnight, 0.5 = noon, 1.0 = midnight)
     timeOfDay = Math.abs((gameTime % DAY_LENGTH) / DAY_LENGTH);
-    // Light is max (1.0) around 0.5, and min (0.2) around 0 and 1.0
-    lightLevel = 0.2 + 0.8 * Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
+    lightLevel = 0.25 + 0.75 * Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
+    ambient = lightLevel * (1 - 0.30 * weatherIntensity);
 
-    // Update game state
     update(deltaTime);
-
-    // Draw everything
     draw();
     drawMinimap();
 
     requestAnimationFrame(gameLoop);
 }
 
-// Update game state
 function update(deltaTime) {
     if (typeof particleSystem !== 'undefined') {
         particleSystem.update(deltaTime);
     }
 
-    // Store previous position for distance calculation
+    updateWeather(deltaTime);
+
+    // Wasted / Busted state: world freezes, overlay counts down to respawn
+    if (gameState !== 'playing') {
+        gameStateTimer -= deltaTime;
+        if (gameStateTimer <= 0) respawnPlayer();
+        updateCamera();
+        updateUI();
+        return;
+    }
+
+    if (invulnTimer > 0) invulnTimer--;
+
     const prevX = player.x;
     const prevY = player.y;
 
-    // Check for entering/exiting cars FIRST, before any position updates
+    // Enter / Exit Cars
     if (keys['e']) {
         if (player.inCar) {
             player.exitCar();
         } else {
-            // Try to enter nearest car
-            let entered = false;
             for (let car of cars) {
-                if (Math.abs(player.x + player.width / 2 - (car.x + car.width / 2)) < 50 &&
-                    Math.abs(player.y + player.height / 2 - (car.y + car.height / 2)) < 50) {
+                if (Math.abs(player.x + player.width / 2 - (car.x + car.width / 2)) < 55 &&
+                    Math.abs(player.y + player.height / 2 - (car.y + car.height / 2)) < 55) {
                     player.enterCar(car);
-                    entered = true;
+                    if (typeof audioSystem !== 'undefined') {
+                        let stName = audioSystem.radioStations[audioSystem.currentStation].name;
+                        showRadioBanner(stName);
+                    }
                     break;
                 }
             }
         }
-        keys['e'] = false; // Prevent continuous triggering
+        keys['e'] = false;
     }
 
-    // Check if player is in an exploded car
     if (player.inCar && player.car && player.car.exploded) {
         player.exitCar();
-        playerHealth -= 20; // Player takes damage from explosion!
-        if (playerHealth < 0) playerHealth = 0;
+        playerHealth = Math.max(0, playerHealth - 25);
     }
 
-    // Update player
     player.update(keys, world.buildings);
 
-    // Update cars
+    // Drowning: deep water is deadly on foot
+    let pFootX = player.x + player.width / 2;
+    let pFootY = player.y + player.height / 2;
+    if (!player.inCar && isInDeepWater(pFootX, pFootY)) {
+        damagePlayer(0.9);
+        if (typeof particleSystem !== 'undefined' && Math.random() < 0.3) {
+            particleSystem.addWaterSplash(pFootX, pFootY);
+        }
+    }
+
+    // BUSTED: caught on foot by a slow-moving cop car
+    if (wantedLevel > 0 && !player.inCar) {
+        for (let car of cars) {
+            if (car.isPolice && !car.exploded && Math.abs(car.speed) < 1.6) {
+                let d = Math.sqrt((pFootX - car.x - car.width / 2) ** 2 + (pFootY - car.y - car.height / 2) ** 2);
+                if (d < 58) {
+                    startBusted();
+                    break;
+                }
+            }
+        }
+    }
+
     const worldSize = world.getWorldSize();
-    // Update Global AllRoads array
-    allRoads = [
-        ...world.roads,
-        ...world.horizontalRoads,
-        ...world.verticalRoads,
-        ...world.crossroads
-    ];
 
     for (let car of cars) {
-        car.update(keys, world.buildings, cars, allRoads, world.trafficLights, worldSize);
+        car.update(keys, world.buildings, cars, null, world.trafficLights, worldSize);
+    }
+
+    // Remove cars that sank beneath the waves (never block shipping lanes)
+    for (let i = cars.length - 1; i >= 0; i--) {
+        if (cars[i].sunk) {
+            if (player.car === cars[i]) { player.exitCar(); }
+            cars.splice(i, 1);
+        }
+    }
+
+    // Props & Collectibles Manager update
+    if (typeof propsManager !== 'undefined') {
+        propsManager.update(player, cars, this);
     }
 
     // Weapons logic
     if (typeof weaponSystem !== 'undefined') {
         if (!player.inCar) {
-            // Only shoot / aim if mouse is down
             if (isMouseDown) {
                 let targetWorldX = mouseX + camera.x;
                 let targetWorldY = mouseY + camera.y;
-
                 let dx = targetWorldX - (player.x + player.width / 2);
                 let dy = targetWorldY - (player.y + player.height / 2);
                 let angle = Math.atan2(dy, dx);
@@ -340,46 +423,94 @@ function update(deltaTime) {
         } else {
             player.overrideAngle = null;
         }
-
         weaponSystem.update(deltaTime, world.buildings, cars, worldSize);
     }
 
-    // Update pedestrians
+    // Pedestrians
     for (let ped of pedestrians) {
-        ped.update(world.buildings, cars, player, allRoads);
+        ped.update(world.buildings, cars, player, null);
     }
 
-    // Wanted Level Police Logic
+    // District Tracking & HUD Banner
+    let px = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+    let py = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+    let distName = getDistrictNameAt(px, py);
+    if (distName !== currentDistrict) {
+        currentDistrict = distName;
+        showDistrictBanner(currentDistrict);
+    }
+
+    // Interactive Landmark Services
+    updateLandmarkInteractions(px, py);
+
+    // Wanted Level & Police Escalation
     if (wantedLevel > 0) {
         let policeCount = cars.filter(c => c.isPolice && !c.exploded).length;
-        if (policeCount < wantedLevel) {
-            // Spawn a police car near player
-            let spawnX = player.x + (Math.random() > 0.5 ? 800 : -800);
-            let spawnXClamped = Math.max(0, Math.min(worldSize.width, spawnX));
-            let spawnY = player.y + (Math.random() > 0.5 ? 800 : -800);
-            let spawnYClamped = Math.max(0, Math.min(worldSize.height, spawnY));
+        let tankCount = cars.filter(c => c.type === 'tank' && !c.exploded).length;
+        if (policeCount < wantedLevel + 1) {
+            let spawnX = player.x + (Math.random() > 0.5 ? 900 : -900);
+            let spawnY = player.y + (Math.random() > 0.5 ? 900 : -900);
+            spawnX = Math.max(50, Math.min(worldSize.width - 50, spawnX));
+            spawnY = Math.max(50, Math.min(worldSize.height - 50, spawnY));
 
-            let newPolice = new Car(spawnXClamped, spawnYClamped, 0, false, '#222222');
-            newPolice.isPolice = true;
-            newPolice.maxSpeed = 6 + wantedLevel * 0.5; // Faster based on wanted level
+            let pType = 'police';
+            if (wantedLevel >= 5 && tankCount < 2) pType = 'tank';
+            else if (wantedLevel >= 4) pType = 'swat';
+            let newPolice = new Car(spawnX, spawnY, 0, false, null, pType);
+            if (pType === 'tank') newPolice.isPolice = true;
             cars.push(newPolice);
         }
 
-        // Make police chase player
         for (let car of cars) {
             if (car.isPolice && !car.exploded) {
-                car.destination = { x: player.x, y: player.y }; // relentlessly pursue
+                car.destination = { x: player.x, y: player.y };
+            }
+        }
+
+        // Police gunfire & tank cannon shells
+        const pcx = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+        const pcy = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+        for (let car of cars) {
+            if (car.exploded || !car.isPolice || car.isPlayerCar || car.isBoat) continue;
+            const cx = car.x + car.width / 2;
+            const cy = car.y + car.height / 2;
+            const d = Math.sqrt((pcx - cx) ** 2 + (pcy - cy) ** 2);
+
+            if (car.type === 'tank') {
+                car.shellTimer = (car.shellTimer === undefined ? 150 : car.shellTimer) - 1;
+                if (car.shellTimer <= 0 && d < 560 && d > 90) {
+                    car.shellTimer = 150 + Math.random() * 90;
+                    let ang = Math.atan2(pcy - cy, pcx - cx) + (Math.random() - 0.5) * 0.06;
+                    weaponSystem.shootNPC(cx + Math.cos(ang) * 42, cy + Math.sin(ang) * 42, ang, 'shell');
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addSmoke(cx + Math.cos(ang) * 42, cy + Math.sin(ang) * 42);
+                    }
+                }
+            } else if (wantedLevel >= 2) {
+                car.gunTimer = (car.gunTimer === undefined ? 0 : car.gunTimer) - 1;
+                if (car.gunTimer <= 0 && d < 430) {
+                    car.gunTimer = 50 + Math.random() * 60;
+                    let tx = pcx, ty = pcy;
+                    if (player.inCar && player.car) {
+                        tx += player.car.vx * 12; // lead the target
+                        ty += player.car.vy * 12;
+                    }
+                    let ang = Math.atan2(ty - cy, tx - cx) + (Math.random() - 0.5) * 0.08;
+                    weaponSystem.shootNPC(cx + Math.cos(ang) * 26, cy + Math.sin(ang) * 26, ang, 'pistol');
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addSparks(cx + Math.cos(ang) * 26, cy + Math.sin(ang) * 26, 0, 0, 3);
+                    }
+                }
             }
         }
     }
 
-    // Update camera
-    updateCamera();
+    updateHelicopter();
 
-    // Update scoring system
+    updateCamera();
     updateScoring(prevX, prevY, deltaTime);
 
-    // Update active mission
+    // Active Mission Updates
     if (currentMission) {
         currentMission.timer -= deltaTime;
         if (currentMission.timer <= 0) {
@@ -388,23 +519,14 @@ function update(deltaTime) {
             if (currentMission.type === 'taxi') {
                 let pass = currentMission.passenger;
                 if (!pass.pickedUp) {
-                    let px = player.inCar && player.car ? player.car.x + player.car.width/2 : player.x + player.width/2;
-                    let py = player.inCar && player.car ? player.car.y + player.car.height/2 : player.y + player.height/2;
-                    let dx = px - pass.x;
-                    let dy = py - pass.y;
-                    let dist = Math.sqrt(dx*dx + dy*dy);
-                    
-                    if (player.inCar && player.car && dist < 55 && Math.abs(player.car.speed) < 0.8) {
+                    let d = Math.sqrt((px - pass.x) ** 2 + (py - pass.y) ** 2);
+                    if (player.inCar && player.car && d < 60 && Math.abs(player.car.speed) < 0.8) {
                         pass.pickedUp = true;
                         showMissionNotification("PASSENGER INSIDE", "Deliver them to the green target zone!");
                     }
                 } else {
-                    let px = player.inCar && player.car ? player.car.x + player.car.width/2 : player.x + player.width/2;
-                    let py = player.inCar && player.car ? player.car.y + player.car.height/2 : player.y + player.height/2;
-                    let dx = px - currentMission.destination.x;
-                    let dy = py - currentMission.destination.y;
-                    let dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist < currentMission.destination.size && Math.abs(player.car.speed) < 0.8) {
+                    let d = Math.sqrt((px - currentMission.destination.x) ** 2 + (py - currentMission.destination.y) ** 2);
+                    if (d < currentMission.destination.size && Math.abs(player.car.speed) < 0.8) {
                         passMission();
                     }
                 }
@@ -417,15 +539,6 @@ function update(deltaTime) {
                     passMission();
                 }
             }
-        }
-    }
-
-    // Notification banner timer
-    if (notifTimer > 0) {
-        notifTimer -= deltaTime;
-        if (notifTimer <= 0) {
-            const banner = document.getElementById('big-notification');
-            if (banner) banner.style.display = 'none';
         }
     }
 
@@ -450,7 +563,6 @@ function update(deltaTime) {
             audioSystem.updateEngine(0, false);
             audioSystem.updateDrift(0);
 
-            // Play sirens if police are actively chasing
             let activePolice = cars.find(c => c.isPolice && !c.exploded);
             if (activePolice && wantedLevel > 0) {
                 audioSystem.playSiren(true);
@@ -462,7 +574,7 @@ function update(deltaTime) {
 
     updateUI();
 
-    // Update traffic lights
+    // Traffic light timing
     for (let light of world.trafficLights) {
         light.timer++;
         if (light.timer > 300) {
@@ -472,60 +584,179 @@ function update(deltaTime) {
     }
 }
 
+function updateLandmarkInteractions(px, py) {
+    if (pnsCooldown > 0) pnsCooldown--;
+    if (shopCooldown > 0) shopCooldown--;
+    if (gasCooldown > 0) gasCooldown--;
+    if (casinoCooldown > 0) casinoCooldown--;
+
+    for (let lm of world.landmarks) {
+        let dist = Math.sqrt((px - lm.bayX) ** 2 + (py - lm.bayY) ** 2);
+
+        if (lm.type === 'pns' && player.inCar && player.car && dist < 45 && pnsCooldown === 0) {
+            // Pay 'n' Spray Trigger!
+            if (player.car.health < player.car.maxHealth || wantedLevel > 0) {
+                pnsCooldown = 180;
+                let newColor = ['#E53935', '#1E88E5', '#43A047', '#FDD835', '#8E24AA', '#00ACC1', '#FB8C00'][Math.floor(Math.random() * 7)];
+                player.car.color = newColor;
+                player.car.health = player.car.maxHealth;
+                wantedLevel = 0;
+
+                if (typeof particleSystem !== 'undefined') {
+                    particleSystem.addSprayMist(player.car.x + player.car.width / 2, player.car.y + player.car.height / 2, newColor);
+                }
+                if (typeof audioSystem !== 'undefined') {
+                    audioSystem.playSpray();
+                    audioSystem.playPickup('star');
+                }
+                showMissionNotification("PAY 'N' SPRAY", "Vehicle Repaired & Repainted! Wanted Level Cleared!", 3500);
+            }
+        } else if (lm.type === 'ammu' && !player.inCar && dist < 40) {
+            const hint = document.getElementById('controls-hint');
+            if (hint) hint.textContent = "AMMU-NATION: Press E to buy Combat Pack ($150)";
+            if (keys['e'] && shopCooldown === 0 && playerMoney >= 150) {
+                shopCooldown = 60;
+                playerMoney -= 150;
+                playerArmor = 100;
+                playerAmmo[2] += 20;
+                playerAmmo[3] += 100;
+                playerAmmo[4] += 3;
+                if (typeof audioSystem !== 'undefined') audioSystem.playPickup('weapon');
+                showMissionNotification("AMMU-NATION", "Combat Pack Purchased! Full Armor & Ammo!", 2500);
+                keys['e'] = false;
+            }
+        } else if (lm.type === 'diner' && !player.inCar && dist < 40) {
+            const hint = document.getElementById('controls-hint');
+            if (hint) hint.textContent = "BURGER SHOT: Press E to eat a Value Meal ($20)";
+            if (keys['e'] && shopCooldown === 0 && playerMoney >= 20) {
+                shopCooldown = 60;
+                playerMoney -= 20;
+                playerHealth = 100;
+                if (typeof audioSystem !== 'undefined') audioSystem.playPickup('health');
+                showMissionNotification("BURGER SHOT", "Delicious! Health Restored to 100%!", 2500);
+                keys['e'] = false;
+            }
+        } else if (lm.type === 'gas' && player.inCar && player.car && dist < 55 && gasCooldown === 0) {
+            const hint = document.getElementById('controls-hint');
+            if (hint) hint.textContent = "FUEL STATION: Stop in the bay to repair ($50)";
+            if (Math.abs(player.car.speed) < 0.6 && player.car.health < player.car.maxHealth && playerMoney >= 50) {
+                gasCooldown = 120;
+                playerMoney -= 50;
+                player.car.health = player.car.maxHealth;
+
+                if (typeof particleSystem !== 'undefined') {
+                    particleSystem.addSprayMist(player.car.x + player.car.width / 2, player.car.y + player.car.height / 2, '#66BB6A');
+                }
+                if (typeof audioSystem !== 'undefined') audioSystem.playSpray();
+                showMissionNotification("FUEL STATION", "Vehicle repaired for $50!", 2200);
+            }
+        } else if (lm.type === 'casino' && !player.inCar && dist < 45 && casinoCooldown === 0) {
+            const hint = document.getElementById('controls-hint');
+            if (hint) hint.textContent = "PINK PALACE CASINO: Press E to gamble $100";
+            if (keys['e'] && playerMoney >= 100) {
+                casinoCooldown = 90;
+                if (Math.random() < 0.47) {
+                    playerMoney += 150; // net +$50
+                    score += 150;
+                    if (typeof audioSystem !== 'undefined') {
+                        audioSystem.playJackpot();
+                        audioSystem.playPickup('cash');
+                    }
+                    if (typeof particleSystem !== 'undefined') {
+                        particleSystem.addCashSparkles(px, py);
+                    }
+                    showMissionNotification("JACKPOT!", "The reels align! +$150!", 2500);
+                } else {
+                    playerMoney -= 100;
+                    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+                    showMissionNotification("HOUSE WINS", "The casino keeps your $100...", 2500);
+                }
+                keys['e'] = false;
+            }
+        }
+    }
+}
+
+function showDistrictBanner(districtName) {
+    const banner = document.getElementById('district-banner');
+    const title = document.getElementById('district-name');
+    if (banner && title) {
+        title.textContent = districtName;
+        banner.style.display = 'block';
+        banner.classList.remove('fade-out');
+        setTimeout(() => {
+            if (banner) banner.style.display = 'none';
+        }, 3500);
+    }
+}
+
+function showRadioBanner(stationName) {
+    const radioEl = document.getElementById('radio-banner');
+    if (radioEl) {
+        radioEl.textContent = `📻 ${stationName}`;
+        radioEl.style.display = 'block';
+        clearTimeout(radioBannerTimer);
+        radioBannerTimer = setTimeout(() => {
+            if (radioEl) radioEl.style.display = 'none';
+        }, 2800);
+    }
+}
+
+function showStuntBonus(distFeet, airtimeSecs, rewardCash) {
+    playerMoney += rewardCash;
+    score += rewardCash;
+    const banner = document.getElementById('stunt-banner');
+    const desc = document.getElementById('stunt-desc');
+    if (banner && desc) {
+        desc.innerHTML = `Distance: <b>${distFeet}ft</b> | Airtime: <b>${airtimeSecs}s</b><br><span style="color:#00FF66">+$${rewardCash} REWARD</span>`;
+        banner.style.display = 'block';
+        clearTimeout(stuntBannerTimer);
+        stuntBannerTimer = setTimeout(() => {
+            if (banner) banner.style.display = 'none';
+        }, 3200);
+    }
+}
+
 function updateScoring(prevX, prevY, deltaTime) {
-    // Calculate distance traveled
     const currentX = player.x;
     const currentY = player.y;
     const distance = Math.sqrt((currentX - prevX) ** 2 + (currentY - prevY) ** 2);
 
     if (distance > 0) {
         distanceTraveled += distance;
-        // Award points for distance traveled
         score += Math.floor(distance * 0.1);
     }
 
-    // Award points for safe driving (no collisions)
     if (player.inCar && player.car) {
-        safeDrivingTime += deltaTime;
-        if (safeDrivingTime > 1000) { // Every second of safe driving
+        safeDrivingTime = (safeDrivingTime || 0) + deltaTime;
+        if (safeDrivingTime > 1000) {
             score += 10;
             safeDrivingTime = 0;
-        }
-    } else {
-        safeDrivingTime = 0;
-    }
-
-    // Bonus points for following traffic rules (being on roads)
-    if (player.inCar && player.car) {
-        const centerX = player.car.x + player.car.width / 2;
-        const centerY = player.car.y + player.car.height / 2;
-        let onRoad = false;
-
-        for (let road of allRoads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                onRoad = true;
-                break;
-            }
-        }
-
-        if (onRoad) {
-            score += 1; // Small bonus for staying on roads
         }
     }
 }
 
-// Update UI
 function updateUI() {
-    // Sync player position with car when in car
     if (player.inCar && player.car) {
         player.x = player.car.x + player.car.width / 2 - player.width / 2;
         player.y = player.car.y + player.car.height / 2 - player.height / 2;
     }
 
-    // Update HUD elements
     const moneyEl = document.getElementById('money');
     if (moneyEl) moneyEl.textContent = `$${playerMoney.toString().padStart(8, '0')}`;
+
+    // Clock & Weather
+    const clockEl = document.getElementById('clock');
+    if (clockEl) {
+        let totalMin = Math.floor(timeOfDay * 24 * 60);
+        let hh = Math.floor(totalMin / 60) % 24;
+        let mm = totalMin % 60;
+        clockEl.textContent = `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}`;
+    }
+    const weatherIconEl = document.getElementById('weather-icon');
+    if (weatherIconEl) {
+        weatherIconEl.textContent = { 'clear': '☀️', 'cloud': '⛅', 'rain': '🌧️', 'storm': '⛈️' }[weatherState] || '☀️';
+    }
 
     const healthBar = document.getElementById('health-bar');
     if (healthBar) {
@@ -540,10 +771,9 @@ function updateUI() {
     const armorBar = document.getElementById('armor-bar');
     if (armorBar) armorBar.style.width = `${Math.max(0, playerArmor)}%`;
 
-    // Update Weapon Box
     const weaponIconEl = document.getElementById('weapon-icon');
     const ammoEl = document.getElementById('ammo');
-    const weaponEmojis = ['👊', '🔫', '🎯', '🔥', '🚀']; // Fists, Pistol, Shotgun, Uzi, RPG
+    const weaponEmojis = ['👊', '🔫', '🎯', '🔥', '🚀'];
 
     if (weaponIconEl && typeof playerWeaponIndex !== 'undefined') {
         weaponIconEl.textContent = weaponEmojis[playerWeaponIndex];
@@ -553,24 +783,22 @@ function updateUI() {
         ammoEl.textContent = amt === Infinity ? '∞' : amt;
     }
 
-    // Update Mission Panel
+    // Mission Panel
     const missionPanel = document.getElementById('mission-panel');
     if (missionPanel) {
         if (currentMission) {
             missionPanel.style.display = 'block';
             document.getElementById('mission-title').textContent = currentMission.name;
-            
             let inst = "";
             if (currentMission.type === 'taxi') {
-                inst = currentMission.passenger.pickedUp ? "Deliver customer to green zone" : "Find passenger marked in green";
+                inst = currentMission.passenger.pickedUp ? "Deliver customer to green zone" : "Find passenger marked in magenta";
             } else if (currentMission.type === 'escape') {
-                inst = "Lose wanted level or survive wanted level 3!";
+                inst = "Survive wanted level 3 police chase!";
             } else if (currentMission.type === 'assassination') {
-                inst = "Destroy target maroon car (chase red arrow)";
+                inst = "Destroy maroon mob vehicle!";
             }
             document.getElementById('mission-instruction').textContent = inst;
 
-            // Timer display mm:ss
             let secsTotal = Math.max(0, Math.floor(currentMission.timer / 1000));
             let mins = Math.floor(secsTotal / 60);
             let secs = secsTotal % 60;
@@ -580,7 +808,7 @@ function updateUI() {
         }
     }
 
-    // Update Wanted Level Stars
+    // Wanted Stars
     for (let i = 1; i <= 5; i++) {
         const star = document.getElementById(`star-${i}`);
         if (star) {
@@ -596,253 +824,470 @@ function updateUI() {
 function drawMinimap() {
     if (!minimapCtx || !player) return;
 
-    // Clear minimap
-    minimapCtx.fillStyle = '#228B22'; // Grass color
+    minimapCtx.fillStyle = '#1B5E20'; // Base terrain green
     minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
 
     minimapCtx.save();
-
-    // Center minimap on player
     minimapCtx.translate(minimapCanvas.width / 2, minimapCanvas.height / 2);
 
-    // Scale down the world
-    const scale = 0.04;
+    const scale = 0.028;
     minimapCtx.scale(scale, scale);
     minimapCtx.translate(-player.x - player.width / 2, -player.y - player.height / 2);
 
-    // Draw roads
-    minimapCtx.fillStyle = '#444';
-    for (let road of allRoads) {
-        minimapCtx.fillRect(road.x, road.y, road.width, road.height);
+    // Viewport bounds in world coords - cull everything off-minimap
+    const halfW = (minimapCanvas.width / 2) / scale + 200;
+    const halfH = (minimapCanvas.height / 2) / scale + 200;
+    const pcx = player.x + player.width / 2, pcy = player.y + player.height / 2;
+    const inView = (x, y, w, h) => x + w > pcx - halfW && x < pcx + halfW && y + h > pcy - halfH && y < pcy + halfH;
+
+    // Draw Water
+    minimapCtx.fillStyle = '#023E8A';
+    for (let w of world.waterTiles) {
+        if (inView(w.x, w.y, w.width, w.height)) minimapCtx.fillRect(w.x, w.y, w.width, w.height);
     }
 
-    // Draw buildings
-    minimapCtx.fillStyle = '#8B4513';
+    // Draw Sand
+    minimapCtx.fillStyle = '#EED8AE';
+    for (let s of world.sandTiles) {
+        if (inView(s.x, s.y, s.width, s.height)) minimapCtx.fillRect(s.x, s.y, s.width, s.height);
+    }
+
+    // Draw Roads (graph edges as strokes)
+    minimapCtx.lineCap = 'round';
+    for (let e of world.edges) {
+        if (!inView(e.bbox.x0, e.bbox.y0, e.bbox.x1 - e.bbox.x0, e.bbox.y1 - e.bbox.y0)) continue;
+        minimapCtx.strokeStyle = e.bridge ? '#3E4C5A' : '#333333';
+        minimapCtx.lineWidth = Math.max(24, e.w * 0.9);
+        minimapCtx.beginPath();
+        minimapCtx.moveTo(e.pts[0][0], e.pts[0][1]);
+        for (let i = 1; i < e.pts.length; i++) minimapCtx.lineTo(e.pts[i][0], e.pts[i][1]);
+        minimapCtx.stroke();
+    }
+    minimapCtx.lineCap = 'butt';
+
+    // Draw Buildings
+    minimapCtx.fillStyle = '#555555';
     for (let b of world.buildings) {
-        minimapCtx.fillRect(b.x, b.y, b.width, b.height);
+        if (inView(b.x, b.y, b.width, b.height)) minimapCtx.fillRect(b.x, b.y, b.width, b.height);
     }
 
-    // Draw cars
-    minimapCtx.fillStyle = '#FF0000';
+    // Draw Runways & Aprons
+    if (world.runwayTiles) {
+        minimapCtx.fillStyle = '#3A3A3A';
+        for (let rw of world.runwayTiles) {
+            if (inView(rw.x, rw.y, rw.width, rw.height)) minimapCtx.fillRect(rw.x, rw.y, rw.width, rw.height);
+        }
+    }
+
+    // Draw Piers & Open Lots
+    if (world.pierTiles) {
+        minimapCtx.fillStyle = '#D7CCC8';
+        for (let p of world.pierTiles) if (inView(p.x, p.y, p.width, p.height)) minimapCtx.fillRect(p.x, p.y, p.width, p.height);
+    }
+    if (world.openTiles) {
+        for (let o of world.openTiles) {
+            if (!inView(o.x, o.y, o.width, o.height)) continue;
+            minimapCtx.fillStyle = o.kind === 'LOT' ? '#3E3E3E' : '#8D6E63';
+            minimapCtx.fillRect(o.x, o.y, o.width, o.height);
+        }
+    }
+
+    // Draw Landmarks with colored blips
+    for (let lm of world.landmarks) {
+        if (lm.type === 'pns') minimapCtx.fillStyle = '#FFD700'; // Gold wrench
+        else if (lm.type === 'ammu') minimapCtx.fillStyle = '#FF3333'; // Red gun
+        else if (lm.type === 'diner') minimapCtx.fillStyle = '#FF9900'; // Orange burger
+        else if (lm.type === 'hospital') minimapCtx.fillStyle = '#FFFFFF'; // White cross
+        else if (lm.type === 'police') minimapCtx.fillStyle = '#2979FF'; // Blue shield
+        else if (lm.type === 'gas') minimapCtx.fillStyle = '#66BB6A'; // Green fuel
+        else if (lm.type === 'casino') minimapCtx.fillStyle = '#FF4081'; // Pink casino
+
+        minimapCtx.beginPath();
+        minimapCtx.arc(lm.bayX, lm.bayY, 90, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
+    // Draw Cars & Boats
     for (let car of cars) {
         if (!car.isPlayerCar) {
+            minimapCtx.fillStyle = car.isBoat ? '#26C6DA' : (car.isPolice ? '#2979FF' : '#FF5555');
             minimapCtx.fillRect(car.x, car.y, car.width, car.height);
         }
     }
 
-    // Draw player
+    // Draw Player
     minimapCtx.fillStyle = '#00FFFF';
     minimapCtx.beginPath();
-    minimapCtx.arc(player.x + player.width / 2, player.y + player.height / 2, 60, 0, Math.PI * 2);
+    minimapCtx.arc(player.x + player.width / 2, player.y + player.height / 2, 70, 0, Math.PI * 2);
     minimapCtx.fill();
 
-    // Draw mission targets on minimap
+    // Draw Helicopter blip (blinking)
+    if (helicopter && Math.floor(Date.now() / 300) % 2 === 0) {
+        minimapCtx.fillStyle = '#FF1744';
+        minimapCtx.beginPath();
+        minimapCtx.arc(helicopter.x, helicopter.y, 90, 0, Math.PI * 2);
+        minimapCtx.fill();
+    }
+
+    // Mission blips
     if (currentMission) {
         if (currentMission.type === 'taxi') {
             let pass = currentMission.passenger;
             let dest = currentMission.destination;
             if (!pass.pickedUp) {
-                minimapCtx.fillStyle = '#FF00FF'; // passenger blip (magenta)
+                minimapCtx.fillStyle = '#FF00FF';
                 minimapCtx.beginPath();
-                minimapCtx.arc(pass.x, pass.y, 80, 0, Math.PI * 2);
+                minimapCtx.arc(pass.x, pass.y, 100, 0, Math.PI * 2);
                 minimapCtx.fill();
             } else {
-                minimapCtx.fillStyle = '#00FF00'; // destination blip (green)
+                minimapCtx.fillStyle = '#00FF00';
                 minimapCtx.beginPath();
-                minimapCtx.arc(dest.x, dest.y, 120, 0, Math.PI * 2);
+                minimapCtx.arc(dest.x, dest.y, 130, 0, Math.PI * 2);
                 minimapCtx.fill();
             }
         } else if (currentMission.type === 'assassination') {
             let target = currentMission.target;
             if (target && !target.exploded) {
-                minimapCtx.fillStyle = '#FF3333'; // target blip (red)
+                minimapCtx.fillStyle = '#FF1744';
                 minimapCtx.beginPath();
-                minimapCtx.arc(target.x + target.width/2, target.y + target.height/2, 90, 0, Math.PI * 2);
+                minimapCtx.arc(target.x + target.width / 2, target.y + target.height / 2, 110, 0, Math.PI * 2);
                 minimapCtx.fill();
             }
         }
-    } else if (typeof missionPayphone !== 'undefined' && missionPayphone.active) {
-        // Draw payphone blip
-        minimapCtx.fillStyle = '#FFFF00'; // payphone (yellow)
-        minimapCtx.beginPath();
-        minimapCtx.arc(missionPayphone.x, missionPayphone.y, 75, 0, Math.PI * 2);
-        minimapCtx.fill();
+    } else {
+        // Draw Payphone blips
+        minimapCtx.fillStyle = '#FFFF00';
+        for (let phone of missionPayphones) {
+            if (phone.active) {
+                minimapCtx.beginPath();
+                minimapCtx.arc(phone.x, phone.y, 80, 0, Math.PI * 2);
+                minimapCtx.fill();
+            }
+        }
     }
 
     minimapCtx.restore();
 }
 
-function createGrassPattern() {
-    const patternCanvas = document.createElement('canvas');
-    patternCanvas.width = 20;
-    patternCanvas.height = 20;
-    const patternCtx = patternCanvas.getContext('2d');
-
-    // Create grass pattern
-    patternCtx.fillStyle = '#228B22';
-    patternCtx.fillRect(0, 0, 20, 20);
-
-    // Add random grass blades
-    patternCtx.fillStyle = '#32CD32';
-    for (let i = 0; i < 8; i++) {
-        const x = Math.random() * 20;
-        const y = Math.random() * 20;
-        const width = 1 + Math.random() * 2;
-        const height = 3 + Math.random() * 4;
-        patternCtx.fillRect(x, y, width, height);
-    }
-
-    return patternCanvas;
-}
-
-// Draw everything
 function draw() {
-    // Generate sky color interpolating based on lightLevel
-    const r = Math.floor(135 * lightLevel);
-    const g = Math.floor(206 * lightLevel);
-    const b = Math.floor(235 * lightLevel);
+    // Sky gradient background (dimmed by storms)
+    const r = Math.floor(135 * ambient);
+    const g = Math.floor(206 * ambient);
+    const b = Math.floor(235 * ambient);
 
-    // Draw sky gradient background
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, `rgb(${r}, ${g}, ${b})`); // Sky blue scaled down
-    gradient.addColorStop(1, `rgb(${Math.floor(152 * lightLevel)}, ${Math.floor(251 * lightLevel)}, ${Math.floor(152 * lightLevel)})`); // Light green scaled
+    gradient.addColorStop(0, `rgb(${r}, ${g}, ${b})`);
+    gradient.addColorStop(1, `rgb(${Math.floor(152 * ambient)}, ${Math.floor(251 * ambient)}, ${Math.floor(152 * ambient)})`);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Save context and apply camera transform
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Draw grass texture
-    ctx.fillStyle = '#228B22';
-    const grassPattern = ctx.createPattern(createGrassPattern(), 'repeat');
-    ctx.fillStyle = grassPattern;
-    ctx.fillRect(-1000, -1000, 3000, 3000);
+    // 1. Draw Base Grass
+    ctx.fillStyle = '#2E7D32';
+    ctx.fillRect(camera.x - 100, camera.y - 100, canvas.width + 200, canvas.height + 200);
 
-    // Draw all road types with better graphics
-    const allRoads = [
-        ...world.roads,
-        ...world.horizontalRoads,
-        ...world.verticalRoads,
-        ...world.crossroads
-    ];
+    // 2. Draw Terrain (Beaches, Oceans with waves, Central Park, Swimming Pools)
+    world.drawTerrain(ctx, camera, gameTime, lightLevel);
 
-    // Draw sidewalks first (large concrete bases under the roads)
-    ctx.fillStyle = '#a0a0a0'; // Concrete sidewalk color
-    for (let road of allRoads) {
-        ctx.fillRect(road.x - 8, road.y - 8, road.width + 16, road.height + 16);
-    }
+    const viewMargin = 120;
+    const minX = camera.x - viewMargin;
+    const maxX = camera.x + camera.width + viewMargin;
+    const minY = camera.y - viewMargin;
+    const maxY = camera.y + camera.height + viewMargin;
 
-    // Draw curbs (darker concrete border)
-    ctx.fillStyle = '#7a7a7a';
-    for (let road of allRoads) {
-        ctx.fillRect(road.x - 2, road.y - 2, road.width + 4, road.height + 4);
-    }
-
-    // Draw asphalt (road bed)
-    ctx.fillStyle = '#222222'; // Dark asphalt
-    for (let road of allRoads) {
-        ctx.fillRect(road.x, road.y, road.width, road.height);
-    }
-
-    // Draw markings (yellow centerlines and white lanes)
-    for (let road of allRoads) {
-        ctx.lineWidth = 2;
-        if (road.type === 'horizontal' || road.width > road.height) {
-            // Double yellow line in the center
-            ctx.strokeStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.moveTo(road.x, road.y + road.height / 2 - 2);
-            ctx.lineTo(road.x + road.width, road.y + road.height / 2 - 2);
-            ctx.moveTo(road.x, road.y + road.height / 2 + 2);
-            ctx.lineTo(road.x + road.width, road.y + road.height / 2 + 2);
-            ctx.stroke();
-
-            // Dashed white lane dividers (left & right lanes)
-            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-            ctx.setLineDash([8, 12]);
-            ctx.beginPath();
-            // top half divider
-            ctx.moveTo(road.x, road.y + road.height * 0.25);
-            ctx.lineTo(road.x + road.width, road.y + road.height * 0.25);
-            // bottom half divider
-            ctx.moveTo(road.x, road.y + road.height * 0.75);
-            ctx.lineTo(road.x + road.width, road.y + road.height * 0.75);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        } else if (road.type === 'vertical' || road.height > road.width) {
-            // Double yellow line in the center
-            ctx.strokeStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.moveTo(road.x + road.width / 2 - 2, road.y);
-            ctx.lineTo(road.x + road.width / 2 - 2, road.y + road.height);
-            ctx.moveTo(road.x + road.width / 2 + 2, road.y);
-            ctx.lineTo(road.x + road.width / 2 + 2, road.y + road.height);
-            ctx.stroke();
-
-            // Dashed white lane dividers
-            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-            ctx.setLineDash([8, 12]);
-            ctx.beginPath();
-            // left half divider
-            ctx.moveTo(road.x + road.width * 0.25, road.y);
-            ctx.lineTo(road.x + road.width * 0.25, road.y + road.height);
-            // right half divider
-            ctx.moveTo(road.x + road.width * 0.75, road.y);
-            ctx.lineTo(road.x + road.width * 0.75, road.y + road.height);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        } else {
-            // Crossroads/Intersections
-            // Draw crosswalk stripes (zebra crossing) on all 4 entrances
-            ctx.fillStyle = 'rgba(255,255,255,0.55)';
-            let w = road.width;
-            let h = road.height;
-            // Zebra horizontal (top & bottom)
-            for (let i = 10; i < w - 10; i += 12) {
-                ctx.fillRect(road.x + i, road.y + 2, 6, 10);
-                ctx.fillRect(road.x + i, road.y + h - 12, 6, 10);
-            }
-            // Zebra vertical (left & right)
-            for (let i = 10; i < h - 10; i += 12) {
-                ctx.fillRect(road.x + 2, road.y + i, 10, 6);
-                ctx.fillRect(road.x + w - 12, road.y + i, 10, 6);
-            }
-        }
-    }
-
+    // 4. Draw Skid Marks
     if (typeof particleSystem !== 'undefined') {
         particleSystem.drawSkidMarks(ctx);
     }
 
-    // Draw buildings with 3D parallax extrusion
+    // 5. Draw Interactive Landmark Zone Markers
+    world.drawLandmarks(ctx, camera, gameTime);
+
+    // 6. Draw 3D Parallax Buildings
+    drawBuildings3D(ctx);
+
+    // 7. Draw Traffic Lights
+    for (let light of world.trafficLights) {
+        if (light.x < minX || light.x > maxX || light.y < minY || light.y > maxY) continue;
+
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(light.x, light.y);
+        ctx.lineTo(light.x, light.y - 35);
+        ctx.stroke();
+
+        ctx.fillStyle = '#222';
+        ctx.fillRect(light.x - 7, light.y - 32, 14, 26);
+
+        ctx.fillStyle = light.state === 'red' ? '#FF3333' : '#440000';
+        ctx.beginPath();
+        ctx.arc(light.x, light.y - 23, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = light.state === 'green' ? '#33FF33' : '#004400';
+        ctx.beginPath();
+        ctx.arc(light.x, light.y - 12, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // 8. Draw Props & World Pickups
+    if (typeof propsManager !== 'undefined') {
+        propsManager.draw(ctx, camera, gameTime, lightLevel);
+    }
+
+    // 9. Draw Cars
+    for (let car of cars) {
+        if (car.x >= minX && car.x <= maxX && car.y >= minY && car.y <= maxY) {
+            car.draw(ctx, camera.x, camera.y);
+
+            // Car entry indicator 'E'
+            if (!player.inCar && !car.exploded) {
+                let d = Math.sqrt((player.x + player.width / 2 - (car.x + car.width / 2)) ** 2 + (player.y + player.height / 2 - (car.y + car.height / 2)) ** 2);
+                if (d < 60) {
+                    ctx.fillStyle = '#FFFF00';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('E: Enter', car.x + car.width / 2, car.y - 12);
+                }
+            }
+        }
+    }
+
+    // 10. Draw Player
+    player.draw(ctx, camera.x, camera.y);
+
+    // 11. Draw Pedestrians
+    for (let ped of pedestrians) {
+        if (ped.x >= minX && ped.x <= maxX && ped.y >= minY && ped.y <= maxY) {
+            ped.draw(ctx);
+        }
+    }
+
+    // 11b. Draw Police Helicopter (4+ stars)
+    drawHelicopter(ctx);
+
+    // 12. Night Darkness & Headlight Beams
+    const darkness = 1.0 - ambient;
+    if (darkness > 0.1) {
+        ctx.fillStyle = `rgba(5, 5, 25, ${darkness * 0.82})`;
+        ctx.fillRect(camera.x - 50, camera.y - 50, canvas.width + 100, canvas.height + 100);
+
+        ctx.globalCompositeOperation = 'lighter';
+        for (let car of cars) {
+            if (car.x >= minX && car.x <= maxX && car.y >= minY && car.y <= maxY && !car.exploded) {
+                const lightLength = 280;
+                const lightWidth = 90;
+
+                ctx.save();
+                ctx.translate(car.x + car.width / 2, car.y + car.height / 2);
+                ctx.rotate(car.angle);
+
+                const grad = ctx.createLinearGradient(car.width / 2, 0, car.width / 2 + lightLength, 0);
+                grad.addColorStop(0, `rgba(255, 255, 210, ${0.45 * darkness})`);
+                grad.addColorStop(1, 'rgba(255, 255, 210, 0)');
+
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.moveTo(car.width / 2, -car.height / 2 + 4);
+                ctx.lineTo(car.width / 2 + lightLength, -lightWidth / 2);
+                ctx.lineTo(car.width / 2 + lightLength, lightWidth / 2);
+                ctx.lineTo(car.width / 2, car.height / 2 - 4);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+            }
+        }
+
+        // Helicopter searchlight locked onto the player
+        if (helicopter) {
+            const hx = helicopter.x;
+            const hy = helicopter.y;
+            const px = player.x + player.width / 2;
+            const py = player.y + player.height / 2;
+            const ang = Math.atan2(py - hy, px - hx);
+            const beamLen = Math.sqrt((px - hx) ** 2 + (py - hy) ** 2);
+
+            ctx.save();
+            ctx.translate(hx, hy);
+            ctx.rotate(ang);
+            const spotGrad = ctx.createLinearGradient(0, 0, beamLen, 0);
+            spotGrad.addColorStop(0, `rgba(255, 255, 200, ${0.5 * Math.max(darkness, 0.25)})`);
+            spotGrad.addColorStop(1, 'rgba(255, 255, 200, 0)');
+            ctx.fillStyle = spotGrad;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(beamLen, -110);
+            ctx.lineTo(beamLen, 110);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // 13. Explosions & Particles
+    if (typeof particleSystem !== 'undefined') {
+        particleSystem.drawEffects(ctx);
+    }
+
+    // 14. Weapon Projectiles
+    if (typeof weaponSystem !== 'undefined') {
+        weaponSystem.draw(ctx);
+    }
+
+    // 15. Draw Payphones
+    for (let phone of missionPayphones) {
+        if (phone.active && !currentMission) {
+            let flash = Math.sin(gameTime * 0.008) * 0.2 + 0.8;
+            ctx.fillStyle = `rgba(255, 215, 0, ${0.25 * flash})`;
+            ctx.beginPath();
+            ctx.arc(phone.x, phone.y, 25, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(phone.x - 8, phone.y - 12, 16, 24);
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(phone.x - 8, phone.y - 12, 16, 24);
+
+            ctx.fillStyle = '#000';
+            ctx.font = '10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('📞', phone.x, phone.y);
+
+            let dist = Math.sqrt((player.x + player.width / 2 - phone.x) ** 2 + (player.y + player.height / 2 - phone.y) ** 2);
+            if (dist < 40 && !player.inCar) {
+                ctx.fillStyle = '#FFFF99';
+                ctx.font = 'bold 12px Arial';
+                ctx.fillText('E: Answer Phone', phone.x, phone.y - 20);
+
+                if (keys['e']) {
+                    startRandomMission();
+                    keys['e'] = false;
+                }
+            }
+        }
+    }
+
+    // 16. Mission Target Indicators
+    if (currentMission) {
+        if (currentMission.type === 'taxi') {
+            let pass = currentMission.passenger;
+            let dest = currentMission.destination;
+            if (!pass.pickedUp) {
+                let bounce = Math.sin(gameTime * 0.01) * 6;
+                ctx.fillStyle = '#00FF00';
+                ctx.beginPath();
+                ctx.moveTo(pass.x, pass.y - 15 + bounce);
+                ctx.lineTo(pass.x - 6, pass.y - 24 + bounce);
+                ctx.lineTo(pass.x + 6, pass.y - 24 + bounce);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                let flash = Math.sin(gameTime * 0.008) * 0.2 + 0.6;
+                ctx.fillStyle = `rgba(0, 255, 0, ${0.2 * flash})`;
+                ctx.beginPath();
+                ctx.arc(dest.x, dest.y, dest.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#00FF00';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+            }
+        } else if (currentMission.type === 'assassination') {
+            let target = currentMission.target;
+            if (target && !target.exploded) {
+                let bounce = Math.sin(gameTime * 0.01) * 6;
+                ctx.fillStyle = '#FF1744';
+                ctx.beginPath();
+                ctx.moveTo(target.x + target.width / 2, target.y - 16 + bounce);
+                ctx.lineTo(target.x + target.width / 2 - 7, target.y - 25 + bounce);
+                ctx.lineTo(target.x + target.width / 2 + 7, target.y - 25 + bounce);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+    }
+
+    ctx.restore();
+
+    // 17. Weather Effects (screen space)
+    // Wet sheen over everything during rain
+    if (weatherIntensity > 0.05) {
+        ctx.fillStyle = `rgba(25, 45, 75, ${0.10 * weatherIntensity})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Rain streaks
+    if (weatherIntensity > 0.03) {
+        const activeCount = Math.floor(rainDrops.length * weatherIntensity);
+        ctx.strokeStyle = 'rgba(185, 215, 255, 0.42)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let i = 0; i < activeCount; i++) {
+            let d = rainDrops[i];
+            ctx.moveTo(d.x, d.y);
+            ctx.lineTo(d.x - d.drift * 2.2, d.y - d.len);
+        }
+        ctx.stroke();
+    }
+
+    // Lightning bolt
+    if (boltLife > 0 && boltPoints) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 230, 0.95)';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#BFE3FF';
+        ctx.shadowBlur = 18;
+        ctx.beginPath();
+        boltPoints.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    // Lightning flash
+    if (lightningFlash > 0.02) {
+        ctx.fillStyle = `rgba(240, 246, 255, ${lightningFlash * 0.5})`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+}
+
+function drawBuildings3D(ctx) {
     const camCenterX = camera.x + canvas.width / 2;
     const camCenterY = camera.y + canvas.height / 2;
+    const viewMargin = 120;
+    const minX = camera.x - viewMargin;
+    const maxX = camera.x + camera.width + viewMargin;
+    const minY = camera.y - viewMargin;
+    const maxY = camera.y + camera.height + viewMargin;
 
     for (let building of world.buildings) {
-        // Calculate camera-relative screen offset for 3D depth effect
+        if (building.x < minX || building.x > maxX || building.y < minY || building.y > maxY) continue;
+
         let screenX = (building.x + building.width / 2) - camCenterX;
         let screenY = (building.y + building.height / 2) - camCenterY;
 
-        // Projection factors (tweak to change building height)
-        let prFactor = 0.16; 
+        let prFactor = building.style === 'downtown' ? 0.22 : 0.14;
         let offsetX = screenX * prFactor;
         let offsetY = screenY * prFactor;
 
-        // Base Corners
         let b1x = building.x, b1y = building.y;
         let b2x = building.x + building.width, b2y = building.y;
         let b3x = building.x + building.width, b3y = building.y + building.height;
         let b4x = building.x, b4y = building.y + building.height;
 
-        // Roof Corners
         let r1x = b1x + offsetX, r1y = b1y + offsetY;
         let r2x = b2x + offsetX, r2y = b2y + offsetY;
         let r3x = b3x + offsetX, r3y = b3y + offsetY;
         let r4x = b4x + offsetX, r4y = b4y + offsetY;
 
-        // Draw Shadows of the walls and building
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        // Shadow
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
         ctx.beginPath();
         ctx.moveTo(b1x, b1y);
         ctx.lineTo(b2x, b2y);
@@ -853,10 +1298,16 @@ function draw() {
         ctx.closePath();
         ctx.fill();
 
-        // Render Walls (only walls facing the camera)
-        // Left Wall
+        // Shaded Walls
+        let wallColor = '#5D4037';
+        if (building.style === 'downtown') wallColor = '#263238';
+        if (building.style === 'chinatown') wallColor = '#B71C1C';
+        if (building.style === 'industrial') wallColor = '#455A64';
+        if (building.style === 'suburb') wallColor = '#795548';
+        if (building.style === 'brownstone') wallColor = '#4E342E';
+
         if (offsetX > 0) {
-            ctx.fillStyle = '#653c24'; // Shaded wall brown
+            ctx.fillStyle = wallColor;
             ctx.beginPath();
             ctx.moveTo(b1x, b1y);
             ctx.lineTo(b4x, b4y);
@@ -865,9 +1316,8 @@ function draw() {
             ctx.closePath();
             ctx.fill();
         }
-        // Right Wall
         if (offsetX < 0) {
-            ctx.fillStyle = '#422412'; // Darker shaded wall brown
+            ctx.fillStyle = '#1A1A1A';
             ctx.beginPath();
             ctx.moveTo(b2x, b2y);
             ctx.lineTo(b3x, b3y);
@@ -876,9 +1326,8 @@ function draw() {
             ctx.closePath();
             ctx.fill();
         }
-        // Top Wall
         if (offsetY > 0) {
-            ctx.fillStyle = '#7c4c30'; // Lighter brown wall
+            ctx.fillStyle = wallColor;
             ctx.beginPath();
             ctx.moveTo(b1x, b1y);
             ctx.lineTo(b2x, b2y);
@@ -887,9 +1336,8 @@ function draw() {
             ctx.closePath();
             ctx.fill();
         }
-        // Bottom Wall
         if (offsetY < 0) {
-            ctx.fillStyle = '#311a0d'; // Darkest brown wall
+            ctx.fillStyle = '#111111';
             ctx.beginPath();
             ctx.moveTo(b3x, b3y);
             ctx.lineTo(b4x, b4y);
@@ -899,11 +1347,35 @@ function draw() {
             ctx.fill();
         }
 
-        // Draw Roof
-        const roofGradient = ctx.createLinearGradient(r1x, r1y, r3x, r3y);
-        roofGradient.addColorStop(0, '#a55c32'); // Terracotta roof color
-        roofGradient.addColorStop(1, '#82421f');
-        ctx.fillStyle = roofGradient;
+        // Roof
+        if (building.style === 'downtown') {
+            // Cyan glass skyscraper roof
+            const roofGrad = ctx.createLinearGradient(r1x, r1y, r3x, r3y);
+            roofGrad.addColorStop(0, '#00ACC1');
+            roofGrad.addColorStop(1, '#006064');
+            ctx.fillStyle = roofGrad;
+        } else if (building.style === 'chinatown') {
+            // Red / Gold Pagoda roof
+            ctx.fillStyle = '#C62828';
+        } else if (building.style === 'industrial') {
+            // Corrugated metal gray
+            ctx.fillStyle = '#78909C';
+        } else if (building.style === 'suburb') {
+            ctx.fillStyle = '#D84315';
+        } else if (building.style === 'brownstone') {
+            ctx.fillStyle = '#6D4C41';
+        } else if (building.style === 'container') {
+            ctx.fillStyle = building.color || '#D32F2F';
+        } else if (building.style === 'pns') {
+            ctx.fillStyle = '#F57F17';
+        } else if (building.style === 'ammu') {
+            ctx.fillStyle = '#B71C1C';
+        } else if (building.style === 'diner') {
+            ctx.fillStyle = '#E65100';
+        } else {
+            ctx.fillStyle = '#8D6E63';
+        }
+
         ctx.beginPath();
         ctx.moveTo(r1x, r1y);
         ctx.lineTo(r2x, r2y);
@@ -912,256 +1384,56 @@ function draw() {
         ctx.closePath();
         ctx.fill();
 
-        // Roof Border
-        ctx.strokeStyle = '#5c2d14';
-        ctx.lineWidth = 2.5;
-        ctx.stroke();
-
-        // Roof Details: Helipad or Air Conditioner boxes
-        ctx.fillStyle = '#555';
-        ctx.fillRect(r1x + building.width * 0.3, r1y + building.height * 0.3, building.width * 0.4, building.height * 0.4);
-        ctx.strokeStyle = '#333';
-        ctx.strokeRect(r1x + building.width * 0.3, r1y + building.height * 0.3, building.width * 0.4, building.height * 0.4);
-        
-        // Helipad circle
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(r1x + building.width / 2, r1y + building.height / 2, building.width * 0.15, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('H', r1x + building.width / 2, r1y + building.height / 2);
-    }
-
-    // Draw traffic lights with enhanced graphics
-    for (let light of world.trafficLights) {
-        // Traffic light pole
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(light.x, light.y);
-        ctx.lineTo(light.x, light.y - 40);
-        ctx.stroke();
-
-        // Traffic light housing
-        ctx.fillStyle = '#333';
-        ctx.fillRect(light.x - 8, light.y - 35, 16, 30);
-
-        // Traffic light border
-        ctx.strokeStyle = '#555';
+        ctx.strokeStyle = '#222';
         ctx.lineWidth = 2;
-        ctx.strokeRect(light.x - 8, light.y - 35, 16, 30);
+        ctx.stroke();
 
-        // Red light
-        ctx.fillStyle = light.state === 'red' ? '#FF4444' : '#440000';
-        ctx.beginPath();
-        ctx.arc(light.x, light.y - 25, 5, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Green light
-        ctx.fillStyle = light.state === 'green' ? '#44FF44' : '#004400';
-        ctx.beginPath();
-        ctx.arc(light.x, light.y - 15, 5, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Add glow effect for active light
-        if (light.state === 'red') {
-            ctx.fillStyle = 'rgba(255, 68, 68, 0.3)';
+        // Downtown Helipad / AC
+        if (building.style === 'downtown') {
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
-            ctx.arc(light.x, light.y - 25, 8, 0, 2 * Math.PI);
-            ctx.fill();
-        } else if (light.state === 'green') {
-            ctx.fillStyle = 'rgba(68, 255, 68, 0.3)';
-            ctx.beginPath();
-            ctx.arc(light.x, light.y - 15, 8, 0, 2 * Math.PI);
-            ctx.fill();
-        }
-    }
-
-    // Draw cars
-    for (let car of cars) {
-        car.draw(ctx, camera.x, camera.y);
-
-        // Draw car entry indicator when player is close
-        if (!player.inCar && !car.exploded) {
-            const playerCenterX = player.x + player.width / 2;
-            const playerCenterY = player.y + player.height / 2;
-            const carCenterX = car.x + car.width / 2;
-            const carCenterY = car.y + car.height / 2;
-            const distance = Math.sqrt((playerCenterX - carCenterX) ** 2 + (playerCenterY - carCenterY) ** 2);
-
-            if (distance < 60) {
-                // Draw "E" indicator above car
-                ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
-                ctx.font = '16px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('E', car.x + car.width / 2, car.y - 10);
-            }
-        }
-    }
-
-    // Draw player
-    player.draw(ctx, camera.x, camera.y);
-
-    // Draw living pedestrians
-    for (let ped of pedestrians) {
-        ped.draw(ctx);
-    }
-
-    // Draw Darkness overlay if night
-    const darkness = 1.0 - lightLevel;
-    if (darkness > 0.1) { // 0.1 threshold to not draw if full day
-        ctx.fillStyle = `rgba(5, 5, 20, ${darkness * 0.85})`;
-        // Huge rect to cover camera
-        ctx.fillRect(camera.x - canvas.width, camera.y - canvas.height, canvas.width * 3, canvas.height * 3);
-
-        // Draw headlights over the darkness using lighter composition
-        ctx.globalCompositeOperation = 'lighter';
-        for (let car of cars) {
-            // Check if car is on screen
-            if (car.x > camera.x - car.width * 2 && car.x < camera.x + canvas.width + car.width * 2 &&
-                car.y > camera.y - car.height * 2 && car.y < camera.y + canvas.height + car.height * 2) {
-
-                // Headlight parameters
-                const lightLength = 300;
-                const lightWidth = 100;
-
-                ctx.save();
-                ctx.translate(car.x + car.width / 2, car.y + car.height / 2);
-                ctx.rotate(car.angle);
-
-                // Create gradient for headlight beam
-                const grad = ctx.createLinearGradient(car.width / 2, 0, car.width / 2 + lightLength, 0);
-                grad.addColorStop(0, `rgba(255, 255, 200, ${0.4 * darkness})`);
-                grad.addColorStop(1, 'rgba(255, 255, 200, 0)');
-
-                ctx.fillStyle = grad;
-                ctx.beginPath();
-                ctx.moveTo(car.width / 2, -car.height / 2 + 5);
-                ctx.lineTo(car.width / 2 + lightLength, -lightWidth / 2);
-                ctx.lineTo(car.width / 2 + lightLength, lightWidth / 2);
-                ctx.lineTo(car.width / 2, car.height / 2 - 5);
-                ctx.closePath();
-                ctx.fill();
-
-                ctx.restore();
-            }
-        }
-        ctx.globalCompositeOperation = 'source-over'; // reset
-    }
-
-    // Draw explosive/smoke effects OVER EVERYTHING else but under HUD
-    if (typeof particleSystem !== 'undefined') {
-        particleSystem.drawEffects(ctx);
-    }
-
-    // Draw bullets
-    if (typeof weaponSystem !== 'undefined') {
-        weaponSystem.draw(ctx);
-    }
-
-    // Draw Payphone
-    if (typeof missionPayphone !== 'undefined' && missionPayphone.active && !currentMission) {
-        let flash = Math.sin(Date.now() * 0.015) * 0.2 + 0.8;
-        ctx.fillStyle = `rgba(255, 215, 0, ${0.25 * flash})`;
-        ctx.beginPath();
-        ctx.arc(missionPayphone.x, missionPayphone.y, 30, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = '#FFFF00'; // yellow phone booth
-        ctx.fillRect(missionPayphone.x - 8, missionPayphone.y - 12, 16, 24);
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 1.8;
-        ctx.strokeRect(missionPayphone.x - 8, missionPayphone.y - 12, 16, 24);
-
-        ctx.fillStyle = '#000';
-        ctx.font = '10px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('📞', missionPayphone.x, missionPayphone.y);
-
-        let dist = Math.sqrt((player.x + player.width/2 - missionPayphone.x)**2 + (player.y + player.height/2 - missionPayphone.y)**2);
-        if (dist < 40 && !player.inCar) {
-            ctx.fillStyle = '#FFFF99';
+            ctx.arc(r1x + building.width / 2, r1y + building.height / 2, building.width * 0.18, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = '#FFF';
             ctx.font = 'bold 12px Arial';
-            ctx.fillText('E: Answer Phone', missionPayphone.x, missionPayphone.y - 20);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('H', r1x + building.width / 2, r1y + building.height / 2);
+        }
 
-            if (keys['e']) {
-                startRandomMission();
-                keys['e'] = false; // consume E
+        // Chinatown Neon Signs
+        if (building.style === 'chinatown') {
+            let neonFlash = Math.sin(gameTime * 0.01) * 0.3 + 0.7;
+            ctx.fillStyle = `rgba(255, 235, 59, ${neonFlash})`;
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('龙 DRAGON WOK 龙', r1x + building.width / 2, r1y + building.height / 2);
+        }
+
+        // Rooftop clutter on big merged footprints (AC units & vents)
+        if ((building.width > 150 || building.height > 150) && building.style !== 'container') {
+            const units = Math.min(4, Math.floor(building.width / 90) + Math.floor(building.height / 90));
+            for (let i = 0; i < units; i++) {
+                const ux = r1x + 18 + ((i * 61 + building.x) % Math.max(20, building.width - 46));
+                const uy = r1y + 16 + ((i * 43 + building.y) % Math.max(20, building.height - 40));
+                ctx.fillStyle = '#B0BEC5';
+                ctx.fillRect(ux, uy, 22, 16);
+                ctx.fillStyle = '#78909C';
+                ctx.fillRect(ux + 4, uy + 4, 14, 8);
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(ux, uy, 22, 16);
             }
         }
     }
-
-    // Draw active mission targets
-    if (currentMission) {
-        if (currentMission.type === 'taxi') {
-            let pass = currentMission.passenger;
-            let dest = currentMission.destination;
-            if (!pass.pickedUp) {
-                // Draw passenger
-                ctx.fillStyle = '#FF00FF'; // magenta shirt
-                ctx.beginPath();
-                ctx.arc(pass.x, pass.y, 6, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#FDBCB4'; // skin head
-                ctx.beginPath();
-                ctx.arc(pass.x, pass.y - 8, 4, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Blinking green indicator
-                let bounce = Math.sin(Date.now() * 0.015) * 6;
-                ctx.fillStyle = '#00FF00';
-                ctx.beginPath();
-                ctx.moveTo(pass.x, pass.y - 15 + bounce);
-                ctx.lineTo(pass.x - 5, pass.y - 23 + bounce);
-                ctx.lineTo(pass.x + 5, pass.y - 23 + bounce);
-                ctx.closePath();
-                ctx.fill();
-            } else {
-                // Draw destination zone
-                let flash = Math.sin(Date.now() * 0.012) * 0.2 + 0.6;
-                ctx.fillStyle = `rgba(0, 255, 0, ${0.2 * flash})`;
-                ctx.beginPath();
-                ctx.arc(dest.x, dest.y, dest.size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = `rgba(0, 255, 0, ${flash})`;
-                ctx.lineWidth = 2.5;
-                ctx.beginPath();
-                ctx.arc(dest.x, dest.y, dest.size, 0, Math.PI * 2);
-                ctx.stroke();
-
-                ctx.fillStyle = '#00FF00';
-                ctx.font = 'bold 12px Arial';
-                ctx.fillText('TARGET ZONE', dest.x, dest.y - dest.size - 5);
-            }
-        } else if (currentMission.type === 'assassination') {
-            let target = currentMission.target;
-            if (target && !target.exploded) {
-                let bounce = Math.sin(Date.now() * 0.015) * 6;
-                ctx.fillStyle = '#FF3333';
-                ctx.beginPath();
-                ctx.moveTo(target.x + target.width/2, target.y - 15 + bounce);
-                ctx.lineTo(target.x + target.width/2 - 6, target.y - 23 + bounce);
-                ctx.lineTo(target.x + target.width/2 + 6, target.y - 23 + bounce);
-                ctx.closePath();
-                ctx.fill();
-            }
-        }
-    }
-
-    // Restore context
-    ctx.restore();
 }
 
 function setupTouchControls() {
-    // Add click handler for the toggle button (works on desktop & mobile)
     const toggleBtn = document.getElementById('btn-toggle-touch');
     const touchPanel = document.getElementById('touch-controls');
-    
+
     if (toggleBtn && touchPanel) {
         toggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1181,7 +1453,6 @@ function setupTouchControls() {
     const maxDistance = 40;
 
     if (joystickZone) {
-        // Touch events
         joystickZone.addEventListener('touchstart', (e) => {
             e.preventDefault();
             joystickActive = true;
@@ -1199,20 +1470,6 @@ function setupTouchControls() {
             updateJoystick(touch.clientX - rect.left, touch.clientY - rect.top);
         }, { passive: false });
 
-        // Mouse events for joystick testing on desktop
-        joystickZone.addEventListener('mousedown', (e) => {
-            joystickActive = true;
-            const rect = joystickZone.getBoundingClientRect();
-            joystickOrigin = { x: rect.width / 2, y: rect.height / 2 };
-            updateJoystick(e.clientX - rect.left, e.clientY - rect.top);
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!joystickActive) return;
-            const rect = joystickZone.getBoundingClientRect();
-            updateJoystick(e.clientX - rect.left, e.clientY - rect.top);
-        });
-
         const resetJoystick = () => {
             joystickActive = false;
             joystickKnob.style.transform = `translate(0px, 0px)`;
@@ -1224,7 +1481,6 @@ function setupTouchControls() {
 
         joystickZone.addEventListener('touchend', resetJoystick);
         joystickZone.addEventListener('touchcancel', resetJoystick);
-        document.addEventListener('mouseup', resetJoystick);
 
         function updateJoystick(x, y) {
             let dx = x - joystickOrigin.x;
@@ -1248,7 +1504,6 @@ function setupTouchControls() {
     const bindButton = (id, key) => {
         const btn = document.getElementById(id);
         if (btn) {
-            // Touch
             btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 keys[key] = true;
@@ -1261,20 +1516,6 @@ function setupTouchControls() {
             };
             btn.addEventListener('touchend', resetBtn);
             btn.addEventListener('touchcancel', resetBtn);
-
-            // Mouse
-            btn.addEventListener('mousedown', (e) => {
-                keys[key] = true;
-                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.4)';
-            });
-            btn.addEventListener('mouseup', () => {
-                keys[key] = false;
-                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-            });
-            btn.addEventListener('mouseleave', () => {
-                keys[key] = false;
-                btn.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-            });
         }
     };
 
@@ -1284,11 +1525,9 @@ function setupTouchControls() {
 
 function updateCamera() {
     const worldSize = world.getWorldSize();
-    // Camera follows the player
     camera.x = player.x - canvas.width / 2;
     camera.y = player.y - canvas.height / 2;
 
-    // Keep camera within world bounds
     camera.x = Math.max(0, Math.min(worldSize.width - canvas.width, camera.x));
     camera.y = Math.max(0, Math.min(worldSize.height - canvas.height, camera.y));
 }
@@ -1302,6 +1541,9 @@ function showMissionNotification(title, desc, duration = 4000) {
         d.textContent = desc;
         banner.style.display = 'block';
         notifTimer = duration;
+        setTimeout(() => {
+            if (banner) banner.style.display = 'none';
+        }, duration);
     }
 }
 
@@ -1310,27 +1552,25 @@ function startRandomMission() {
     let type = missionTypes[Math.floor(Math.random() * missionTypes.length)];
 
     if (type === 'taxi') {
-        let allValidRoads = [...world.horizontalRoads, ...world.verticalRoads];
-        let randRoad = allValidRoads[Math.floor(Math.random() * allValidRoads.length)];
-        let passengerX = randRoad.x + randRoad.width / 2;
-        let passengerY = randRoad.y + randRoad.height / 2;
+        const randEdge = world.edges[Math.floor(Math.random() * world.edges.length)];
+        let p1 = world.pointAtDist(randEdge, Math.random() * randEdge.len);
+        const destEdge = world.edges[Math.floor(Math.random() * world.edges.length)];
+        let p2 = world.pointAtDist(destEdge, Math.random() * destEdge.len);
+        let passengerX = p1.x;
+        let passengerY = p1.y;
 
-        let destRoad = randRoad;
-        while (destRoad === randRoad) {
-            destRoad = allValidRoads[Math.floor(Math.random() * allValidRoads.length)];
-        }
-        let destX = destRoad.x + destRoad.width / 2;
-        let destY = destRoad.y + destRoad.height / 2;
+        let destX = p2.x;
+        let destY = p2.y;
 
         currentMission = {
             type: 'taxi',
-            name: 'TAXI DRIVER',
+            name: 'TAXI FARE',
             passenger: { x: passengerX, y: passengerY, pickedUp: false },
-            destination: { x: destX, y: destY, size: 40 },
+            destination: { x: destX, y: destY, size: 45 },
             timer: 60000,
             reward: 1200
         };
-        showMissionNotification("TAXI MISSION", "Pick up the magenta passenger waving on the street!");
+        showMissionNotification("TAXI MISSION", "Pick up passenger in magenta and drive to green target zone!");
     } else if (type === 'escape') {
         currentMission = {
             type: 'escape',
@@ -1339,28 +1579,27 @@ function startRandomMission() {
             reward: 1800
         };
         wantedLevel = 3;
-        showMissionNotification("POLICE CHASE", "Survive wanted level 3 police for 45 seconds!");
+        showMissionNotification("POLICE CHASE", "Lose wanted stars or survive 45 seconds!");
     } else if (type === 'assassination') {
         const worldSize = world.getWorldSize();
-        let spawnX = player.x + (Math.random() > 0.5 ? 600 : -600);
-        let spawnY = player.y + (Math.random() > 0.5 ? 600 : -600);
+        let spawnX = player.x + (Math.random() > 0.5 ? 700 : -700);
+        let spawnY = player.y + (Math.random() > 0.5 ? 700 : -700);
         spawnX = Math.max(100, Math.min(worldSize.width - 100, spawnX));
         spawnY = Math.max(100, Math.min(worldSize.height - 100, spawnY));
 
-        let targetCar = new Car(spawnX, spawnY, 0, false, '#800000');
-        targetCar.health = 220;
-        targetCar.maxSpeed = 5.2;
-        targetCar.isTarget = true;
+        let targetCar = new Car(spawnX, spawnY, 0, false, '#800000', 'muscle');
+        targetCar.health = 250;
+        targetCar.maxSpeed = 6.2;
         cars.push(targetCar);
 
         currentMission = {
             type: 'assassination',
-            name: 'MOB TIE-UP',
+            name: 'MOB HIT',
             target: targetCar,
             timer: 75000,
             reward: 2500
         };
-        showMissionNotification("ELIMINATE TARGET", "Find and destroy the maroon target car!");
+        showMissionNotification("ELIMINATE TARGET", "Find and destroy the maroon mob vehicle!");
     }
 }
 
@@ -1370,12 +1609,11 @@ function passMission() {
     score += currentMission.reward;
     showMissionNotification("MISSION PASSED!", `+$${currentMission.reward}`);
     if (typeof audioSystem !== 'undefined') audioSystem.playMissionPassed();
-    
-    // Auto-replenish ammo as a bonus!
-    playerAmmo[2] = Math.min(playerAmmo[2] + 8, 45);
-    playerAmmo[3] = Math.min(playerAmmo[3] + 40, 250);
+
+    playerAmmo[2] = Math.min(playerAmmo[2] + 12, 50);
+    playerAmmo[3] = Math.min(playerAmmo[3] + 60, 300);
     playerAmmo[4] = Math.min(playerAmmo[4] + 2, 8);
-    
+
     currentMission = null;
 }
 
@@ -1383,14 +1621,339 @@ function failMission(reason = "") {
     if (!currentMission) return;
     showMissionNotification("MISSION FAILED", reason || "Busted!");
     if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
-    
-    // Clear targets
+
     if (currentMission.type === 'assassination' && currentMission.target) {
-        currentMission.target.exploded = true; // remove target car
+        currentMission.target.exploded = true;
     }
-    
     currentMission = null;
 }
 
-// Start the game when page loads
+// ============ PLAYER DAMAGE & DEATH SYSTEM ============
+
+function damagePlayer(amount) {
+    if (gameState !== 'playing' || invulnTimer > 0) return;
+    if (playerArmor > 0) {
+        playerArmor -= amount;
+        if (playerArmor < 0) {
+            playerHealth += playerArmor;
+            playerArmor = 0;
+        }
+    } else {
+        playerHealth -= amount;
+    }
+    if (playerHealth <= 0) {
+        playerHealth = 0;
+        startWasted();
+    }
+}
+
+function startWasted() {
+    if (gameState !== 'playing') return;
+    gameState = 'wasted';
+    gameStateTimer = 4200;
+    deathFee = Math.min(playerMoney, 300);
+    if (player.inCar) player.exitCar();
+    showDeathOverlay('WASTED', `Hospital bills: -$${deathFee}`, 'wasted');
+    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+}
+
+function startBusted() {
+    if (gameState !== 'playing') return;
+    gameState = 'busted';
+    gameStateTimer = 4200;
+    deathFee = Math.min(playerMoney, 150);
+    if (player.inCar) player.exitCar();
+    wantedLevel = 0;
+    showDeathOverlay('BUSTED', `Bail & confiscated ammo: -$${deathFee}`, 'busted');
+    if (typeof audioSystem !== 'undefined') audioSystem.playMissionFailed();
+}
+
+function respawnPlayer() {
+    const isWasted = gameState === 'wasted';
+    const wantType = isWasted ? 'hospital' : 'police';
+
+    // Respawn at the nearest hospital or police HQ
+    let target = null, bestDist = Infinity;
+    for (let lm of world.landmarks) {
+        if (lm.type !== wantType) continue;
+        let d = (lm.bayX - player.x) ** 2 + (lm.bayY - player.y) ** 2;
+        if (d < bestDist) {
+            bestDist = d;
+            target = lm;
+        }
+    }
+
+    let spawn = target ? snapToNearestRoad(target.bayX, target.bayY) : { x: player.x, y: player.y };
+    player.x = spawn.x - player.width / 2;
+    player.y = spawn.y - player.height / 2;
+
+    playerMoney = Math.max(0, playerMoney - deathFee);
+    playerHealth = 100;
+    playerArmor = 0;
+    wantedLevel = 0;
+    helicopter = null;
+    playerAmmo[2] = Math.floor(playerAmmo[2] / 2);
+    playerAmmo[3] = Math.floor(playerAmmo[3] / 2);
+    playerAmmo[4] = Math.floor(playerAmmo[4] / 2);
+
+    invulnTimer = 240;
+    gameState = 'playing';
+    hideDeathOverlay();
+    showMissionNotification(
+        isWasted ? "DISCHARGED" : "RELEASED",
+        isWasted ? "Patched up at General Hospital. Stay sharp out there." : "The cops kept your ammo. Try to stay out of trouble."
+    );
+}
+
+function snapToNearestRoad(x, y) {
+    const np = world.nearestLanePoint(x, y);
+    return np ? { x: np.x, y: np.y } : { x, y };
+}
+
+function showDeathOverlay(title, subtitle, cls) {
+    const overlay = document.getElementById('death-overlay');
+    const titleEl = document.getElementById('death-title');
+    const subEl = document.getElementById('death-sub');
+    if (overlay && titleEl && subEl) {
+        titleEl.textContent = title;
+        subEl.textContent = subtitle;
+        overlay.className = cls;
+        overlay.style.display = 'flex';
+    }
+}
+
+function hideDeathOverlay() {
+    const overlay = document.getElementById('death-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+// ============ WATER HELPERS ============
+
+function isInDeepWater(px, py) {
+    if (typeof world === 'undefined' || !world.waterTiles) return false;
+    // Bridge decks are solid ground over water
+    if (world.onBridge && world.onBridge(px, py)) return false;
+    for (let w of world.waterTiles) {
+        if (px >= w.x && px <= w.x + w.width && py >= w.y && py <= w.y + w.height) {
+            return w.type === 'W';
+        }
+    }
+    return false;
+}
+
+// ============ WEATHER SYSTEM ============
+
+function updateWeather(deltaTime) {
+    weatherTimer -= deltaTime;
+
+    if (weatherTimer <= 0) {
+        if (weatherState === 'clear') {
+            weatherState = 'cloud';
+            weatherTarget = 0.35;
+            weatherTimer = 16000 + Math.random() * 10000;
+        } else if (weatherState === 'cloud') {
+            if (Math.random() < 0.65) {
+                weatherState = 'rain';
+                weatherTarget = 0.7;
+                weatherTimer = 24000 + Math.random() * 12000;
+            } else {
+                weatherState = 'clear';
+                weatherTarget = 0;
+                weatherTimer = 45000 + Math.random() * 25000;
+            }
+        } else if (weatherState === 'rain') {
+            if (Math.random() < 0.5) {
+                weatherState = 'storm';
+                weatherTarget = 1.0;
+                weatherTimer = 18000 + Math.random() * 12000;
+            } else {
+                weatherState = 'clear';
+                weatherTarget = 0;
+                weatherTimer = 45000 + Math.random() * 25000;
+            }
+        } else {
+            weatherState = 'clear';
+            weatherTarget = 0;
+            weatherTimer = 50000 + Math.random() * 30000;
+        }
+    }
+
+    // Smooth intensity easing toward the state's target
+    weatherIntensity += (weatherTarget - weatherIntensity) * 0.015;
+    if (weatherTarget === 0 && weatherIntensity < 0.01) weatherIntensity = 0;
+
+    // Rain ambience volume
+    if (typeof audioSystem !== 'undefined' && audioSystem.updateRain) {
+        audioSystem.updateRain(weatherIntensity);
+    }
+
+    // Lightning strikes during storms
+    lightningFlash *= 0.90;
+    if (boltLife > 0) boltLife--;
+    if (weatherState === 'storm' && weatherIntensity > 0.8 && Math.random() < 0.008) {
+        strikeLightning();
+    }
+
+    // Move rain drops (screen space)
+    const activeCount = Math.floor(rainDrops.length * weatherIntensity);
+    for (let i = 0; i < activeCount; i++) {
+        let d = rainDrops[i];
+        d.y += d.spd;
+        d.x += d.drift;
+        if (d.y > canvas.height + 20) {
+            d.y = -20 - Math.random() * 40;
+            d.x = Math.random() * (canvas.width + 80) - 40;
+        }
+        if (d.x > canvas.width + 40) d.x -= canvas.width + 80;
+    }
+}
+
+function strikeLightning() {
+    lightningFlash = 1;
+    boltLife = 7;
+    boltPoints = [];
+    let bx = Math.random() * canvas.width;
+    let by = 0;
+    const endY = canvas.height * (0.35 + Math.random() * 0.25);
+    boltPoints.push({ x: bx, y: by });
+    while (by < endY) {
+        by += 18 + Math.random() * 30;
+        bx += (Math.random() - 0.5) * 46;
+        boltPoints.push({ x: bx, y: Math.min(by, endY) });
+    }
+    if (typeof audioSystem !== 'undefined') {
+        setTimeout(() => audioSystem.playThunder(), 120 + Math.random() * 700);
+    }
+}
+
+// ============ POLICE HELICOPTER ============
+
+function updateHelicopter() {
+    const wanted = wantedLevel >= 4;
+
+    if (!helicopter && wanted && gameState === 'playing') {
+        helicopter = {
+            x: player.x + 500,
+            y: player.y - 420,
+            angle: 0,
+            rotor: 0,
+            orbit: Math.random() * Math.PI * 2,
+            gunTimer: 140
+        };
+        showMissionNotification("AIR SUPPORT", "Police chopper inbound. Keep moving!", 3000);
+    }
+
+    if (!helicopter) return;
+    const h = helicopter;
+    h.rotor += 0.9;
+
+    // Wanted level dropped: fly away and despawn
+    if (!wanted || gameState !== 'playing') {
+        h.x += 7;
+        h.y -= 5;
+        const ws = world.getWorldSize();
+        if (h.x > ws.width + 400 || h.y < -600) helicopter = null;
+        return;
+    }
+
+    // Circle strafing above the player
+    h.orbit += 0.006;
+    const tx = player.x + player.width / 2 + Math.cos(h.orbit) * 180;
+    const ty = player.y + player.height / 2 + Math.sin(h.orbit) * 180;
+    const dx = tx - h.x;
+    const dy = ty - h.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const sp = Math.min(d * 0.028, 5.2);
+    h.angle = Math.atan2(dy, dx);
+    h.x += dx / d * sp;
+    h.y += dy / d * sp;
+
+    // Door gunner bursts
+    h.gunTimer--;
+    if (h.gunTimer <= 0) {
+        h.gunTimer = 85 + Math.random() * 70;
+        const pcx = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+        const pcy = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+        const base = Math.atan2(pcy - h.y, pcx - h.x);
+        for (let i = -1; i <= 1; i++) {
+            weaponSystem.shootNPC(h.x, h.y, base + i * 0.09 + (Math.random() - 0.5) * 0.04, 'pistol');
+        }
+        if (typeof particleSystem !== 'undefined') {
+            particleSystem.addSparks(h.x + Math.cos(base) * 22, h.y + Math.sin(base) * 22, 0, 0, 4);
+        }
+    }
+}
+
+function drawHelicopter(ctx) {
+    if (!helicopter) return;
+    const h = helicopter;
+
+    // Ground shadow offset below the chopper
+    ctx.save();
+    ctx.translate(h.x + 55, h.y + 70);
+    ctx.scale(1, 0.55);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    ctx.rotate(h.angle);
+
+    // Tail boom
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(-38, -3, 30, 6);
+    // Tail fin
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(-44, -10, 6, 12);
+    // Spinning tail rotor
+    ctx.strokeStyle = '#90A4AE';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-41, -12 + Math.sin(h.rotor * 2) * 6);
+    ctx.lineTo(-41, 2 - Math.sin(h.rotor * 2) * 6);
+    ctx.stroke();
+
+    // Body
+    ctx.fillStyle = '#2E4053';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 24, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Cockpit glass
+    ctx.fillStyle = 'rgba(135, 206, 250, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(14, -2, 8, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Skids
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-12, 14); ctx.lineTo(14, 14);
+    ctx.moveTo(-8, 10); ctx.lineTo(-8, 14);
+    ctx.moveTo(10, 10); ctx.lineTo(10, 14);
+    ctx.stroke();
+
+    // Main rotor mast + spinning blades
+    ctx.fillStyle = '#455A64';
+    ctx.fillRect(-2, -2, 4, 4);
+    ctx.strokeStyle = 'rgba(210, 225, 235, 0.85)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(h.rotor) * 46, Math.sin(h.rotor) * 46);
+    ctx.lineTo(-Math.cos(h.rotor) * 46, -Math.sin(h.rotor) * 46);
+    ctx.stroke();
+
+    // Blinking nav light
+    if (Math.floor(Date.now() / 220) % 2 === 0) {
+        ctx.fillStyle = '#FF1744';
+        ctx.beginPath();
+        ctx.arc(-20, -6, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.restore();
+}
+
 window.onload = init;

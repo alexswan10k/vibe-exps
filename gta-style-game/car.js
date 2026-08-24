@@ -1,40 +1,187 @@
-// Car module
+// Vehicle Classes, Physics, AI, and 3D Stunt Jump Module
 
 class Car {
-    constructor(x, y, angle = 0, isPlayerCar = false, color = '#0000FF') {
+    constructor(x, y, angle = 0, isPlayerCar = false, color = null, type = 'sedan') {
         this.x = x;
         this.y = y;
-        this.width = 45 + Math.random() * 10;
-        this.height = 22 + Math.random() * 6;
         this.angle = angle;
+        this.isPlayerCar = isPlayerCar;
+        this.type = type; // 'sedan', 'supercar', 'muscle', 'taxi', 'bike', 'police', 'swat', 'ambulance', 'firetruck', 'tank'
+
+        // Apply type-specific stats and geometry
+        this.setupVehicleStats(color);
+
         this.speed = 0;
         this.vx = 0;
         this.vy = 0;
-        this.maxSpeed = 6;
-        this.acceleration = 0.15;
-        this.turnSpeed = 0.08; // Increased for tighter turns
-        this.color = color;
-        this.isPlayerCar = isPlayerCar;
-
-        // Damage mechanics
-        this.health = 100;
         this.exploded = false;
+        this.health = this.maxHealth;
+
+        // 3D Stunt Jump State
+        this.isAirborne = false;
+        this.airborneZ = 0;
+        this.airborneVz = 0;
+        this.jumpAirtime = 0;
+        this.jumpStartX = x;
+        this.jumpStartY = y;
 
         this.targetDirection = angle;
         this.lastIntersection = null;
         this.destination = null;
         this.stuckTimer = 0;
-        this.lastPosition = { x: x, y: y };
         this.positionHistory = [];
+        this.gunTimer = 0;
+        this.shellTimer = 150;
+        this.splashTick = 0;
+    }
+
+    setupVehicleStats(customColor) {
+        if (this.type === 'supercar') {
+            this.width = 48;
+            this.height = 22;
+            this.maxSpeed = 8.8;
+            this.acceleration = 0.24;
+            this.turnSpeed = 0.085;
+            this.maxHealth = 100;
+            this.color = customColor || ['#E53935', '#FB8C00', '#FDD835', '#00ACC1', '#8E24AA'][Math.floor(Math.random() * 5)];
+        } else if (this.type === 'muscle') {
+            this.width = 47;
+            this.height = 23;
+            this.maxSpeed = 7.6;
+            this.acceleration = 0.22;
+            this.turnSpeed = 0.075;
+            this.maxHealth = 130;
+            this.color = customColor || ['#1E88E5', '#43A047', '#3949AB', '#D81B60'][Math.floor(Math.random() * 4)];
+        } else if (this.type === 'taxi') {
+            this.width = 45;
+            this.height = 22;
+            this.maxSpeed = 6.2;
+            this.acceleration = 0.16;
+            this.turnSpeed = 0.078;
+            this.maxHealth = 110;
+            this.color = '#FFD600'; // Bright Yellow Cab
+        } else if (this.type === 'bike') {
+            this.width = 30;
+            this.height = 12;
+            this.maxSpeed = 8.2;
+            this.acceleration = 0.26;
+            this.turnSpeed = 0.095;
+            this.maxHealth = 60;
+            this.color = customColor || '#FF1744';
+        } else if (this.type === 'police') {
+            this.width = 46;
+            this.height = 22;
+            this.maxSpeed = 7.8;
+            this.acceleration = 0.20;
+            this.turnSpeed = 0.08;
+            this.maxHealth = 140;
+            this.color = '#212121';
+            this.isPolice = true;
+        } else if (this.type === 'swat') {
+            this.width = 54;
+            this.height = 26;
+            this.maxSpeed = 6.5;
+            this.acceleration = 0.16;
+            this.turnSpeed = 0.06;
+            this.maxHealth = 260;
+            this.color = '#263238';
+            this.isPolice = true;
+        } else if (this.type === 'ambulance') {
+            this.width = 52;
+            this.height = 25;
+            this.maxSpeed = 6.0;
+            this.acceleration = 0.15;
+            this.turnSpeed = 0.065;
+            this.maxHealth = 180;
+            this.color = '#FFFFFF';
+        } else if (this.type === 'firetruck') {
+            this.width = 62;
+            this.height = 26;
+            this.maxSpeed = 5.8;
+            this.acceleration = 0.14;
+            this.turnSpeed = 0.055;
+            this.maxHealth = 280;
+            this.color = '#D50000';
+        } else if (this.type === 'tank') {
+            this.width = 56;
+            this.height = 32;
+            this.maxSpeed = 5.0;
+            this.acceleration = 0.12;
+            this.turnSpeed = 0.05;
+            this.maxHealth = 600;
+            this.color = '#33691E'; // Army Olive
+        } else {
+            // Standard Sedan
+            this.width = 44 + Math.random() * 4;
+            this.height = 21 + Math.random() * 3;
+            this.maxSpeed = 6.4;
+            this.acceleration = 0.16;
+            this.turnSpeed = 0.075;
+            this.maxHealth = 100;
+            this.color = customColor || ['#1E88E5', '#43A047', '#F4511E', '#7E57C2', '#00897B', '#6D4C41', '#546E7A'][Math.floor(Math.random() * 7)];
+        }
+    }
+
+    launchStuntJump(rampAngle, speed) {
+        if (this.isAirborne) return;
+        this.isAirborne = true;
+        this.airborneZ = 2;
+        this.airborneVz = Math.min(speed * 0.85, 6.5);
+        this.jumpAirtime = 0;
+        this.jumpStartX = this.x;
+        this.jumpStartY = this.y;
+
+        // Boost velocity in ramp direction
+        let jumpForce = speed * 1.15;
+        this.vx = Math.cos(rampAngle) * jumpForce;
+        this.vy = Math.sin(rampAngle) * jumpForce;
+        this.angle = rampAngle;
+
+        if (this.isPlayerCar && typeof audioSystem !== 'undefined') {
+            audioSystem.playStunt();
+        }
     }
 
     update(keys, buildings, cars, roads, trafficLights, worldSize) {
         if (this.exploded) {
-            // Check if we need to spawn smoke
-            if (typeof particleSystem !== 'undefined' && Math.random() < 0.1) {
+            if (typeof particleSystem !== 'undefined' && Math.random() < 0.08) {
                 particleSystem.addSmoke(this.x + this.width / 2, this.y + this.height / 2);
             }
-            return; // Don't move if exploded
+            return;
+        }
+
+        // 3D Airborne Physics
+        if (this.isAirborne) {
+            this.jumpAirtime += 1 / 60;
+            this.airborneZ += this.airborneVz;
+            this.airborneVz -= 0.18; // gravity
+
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // Spawn smoke/sparks trail during flight
+            if (typeof particleSystem !== 'undefined' && Math.random() < 0.3) {
+                particleSystem.addSmoke(this.x + this.width / 2, this.y + this.height / 2);
+            }
+
+            if (this.airborneZ <= 0) {
+                // Landed!
+                this.isAirborne = false;
+                this.airborneZ = 0;
+                this.airborneVz = 0;
+
+                let dist = Math.sqrt((this.x - this.jumpStartX) ** 2 + (this.y - this.jumpStartY) ** 2);
+                if (this.isPlayerCar && dist > 120) {
+                    let bonusCash = Math.floor(dist * 2.5);
+                    if (typeof showStuntBonus !== 'undefined') {
+                        showStuntBonus(Math.floor(dist), this.jumpAirtime.toFixed(1), bonusCash);
+                    }
+                }
+                if (typeof particleSystem !== 'undefined') {
+                    particleSystem.addSparks(this.x + this.width / 2, this.y + this.height / 2, 0, 0, 15);
+                }
+            }
+            return;
         }
 
         if (this.health < 40 && typeof particleSystem !== 'undefined' && Math.random() < 0.2) {
@@ -46,34 +193,64 @@ class Car {
         } else {
             this.updateAICar(buildings, cars, roads, trafficLights, worldSize);
         }
+
+        // Deep water = sinking
+        this.checkWater();
+    }
+
+    checkWater() {
+        if (this.isAirborne || this.exploded) return;
+        if (typeof world === 'undefined' || !world.waterTiles) return;
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+        // Bridge decks span the water - no sinking on top of them
+        if (world.onBridge && world.onBridge(cx, cy)) return;
+        let deep = false;
+        for (let w of world.waterTiles) {
+            if (cx >= w.x && cx <= w.x + w.width && cy >= w.y && cy <= w.y + w.height) {
+                deep = (w.type === 'W');
+                break;
+            }
+        }
+
+        if (deep) {
+            this.vx *= 0.86;
+            this.vy *= 0.86;
+            this.speed *= 0.86;
+            this.takeDamage(1.4); // Sinking!
+            if (this.exploded) {
+                this.sunk = true; // Burnt hulls slip beneath the waves
+            }
+            this.splashTick++;
+            if (typeof particleSystem !== 'undefined' && this.splashTick % 6 === 0) {
+                particleSystem.addWaterSplash(cx, cy);
+            }
+        }
     }
 
     updatePlayerCar(keys, buildings, cars, worldSize) {
         let force = 0;
         let isBraking = false;
 
-        if (keys['w'] || keys['arrowup']) {
+        if (keys['w'] || keys['keyw'] || keys['arrowup']) {
             force = this.acceleration;
-        } else if (keys['s'] || keys['arrowdown']) {
+        } else if (keys['s'] || keys['keys'] || keys['arrowdown']) {
             force = -this.acceleration;
         } else {
-            // Apply slight natural deceleration
             this.vx *= 0.98;
             this.vy *= 0.98;
         }
 
         if (keys[' ']) {
-            force = -this.acceleration * 1.5;
+            force = -this.acceleration * 1.6;
             isBraking = true;
         }
 
-        // Only turn if moving
-        if (Math.abs(this.speed) > 0.5) {
-            let speedRatio = Math.min(this.speed / (this.maxSpeed * 0.5), 1.0); // Make turning responsive at lower speeds too
-            if (keys['a'] || keys['arrowleft']) {
+        if (Math.abs(this.speed) > 0.4) {
+            if (keys['a'] || keys['keya'] || keys['arrowleft']) {
                 this.angle -= this.turnSpeed * Math.sign(this.speed);
             }
-            if (keys['d'] || keys['arrowright']) {
+            if (keys['d'] || keys['keyd'] || keys['arrowright']) {
                 this.angle += this.turnSpeed * Math.sign(this.speed);
             }
         }
@@ -82,31 +259,25 @@ class Car {
         let lateralV = -this.vx * Math.sin(this.angle) + this.vy * Math.cos(this.angle);
 
         forwardV += force;
-
-        // Forward friction
         forwardV *= 0.98;
 
-        // Lateral friction (grip vs drifting)
-        let lateralGrip = isBraking ? 0.94 : 0.82; // Handbrake slides more
+        let lateralGrip = isBraking ? 0.94 : (this.type === 'muscle' ? 0.88 : 0.82);
         lateralV *= lateralGrip;
 
-        // Skid marks for drifting or braking
+        // Skid marks
         if (Math.abs(lateralV) > 1.2 || (isBraking && Math.abs(forwardV) > 1.5)) {
             let backWheelX = this.x + this.width / 2 - Math.cos(this.angle) * this.width * 0.35;
             let backWheelY = this.y + this.height / 2 - Math.sin(this.angle) * this.width * 0.35;
-
             if (typeof particleSystem !== 'undefined') {
                 particleSystem.addSkidMark(backWheelX, backWheelY, this.angle, this.height * 0.7, 0.4);
             }
         }
 
-        // Convert back to global velocity
         this.vx = forwardV * Math.cos(this.angle) - lateralV * Math.sin(this.angle);
         this.vy = forwardV * Math.sin(this.angle) + lateralV * Math.cos(this.angle);
 
         this.speed = Math.sign(forwardV) * Math.sqrt(this.vx * this.vx + this.vy * this.vy);
 
-        // Cap max speed
         if (Math.abs(this.speed) > this.maxSpeed) {
             let ratio = this.maxSpeed / Math.abs(this.speed);
             this.vx *= ratio;
@@ -126,26 +297,22 @@ class Car {
             if (collidingCar) {
                 this.resolveCarCollision(collidingCar);
             } else {
-                // Bounce back on collision with buildings
                 let impactSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
                 if (impactSpeed > 2) {
-                    this.takeDamage(impactSpeed * 5); // Take damage on crash
+                    this.takeDamage(impactSpeed * 4.5);
                     if (typeof audioSystem !== 'undefined') audioSystem.playCrash(impactSpeed);
                 }
-
                 this.vx *= -0.5;
                 this.vy *= -0.5;
                 this.speed *= -0.5;
             }
         }
 
-        // Keep car in world bounds
         this.x = Math.max(0, Math.min(worldSize.width - this.width, this.x));
         this.y = Math.max(0, Math.min(worldSize.height - this.height, this.y));
     }
 
     updateAICar(buildings, cars, roads, trafficLights, worldSize) {
-        // Track position history for stuck detection
         this.positionHistory.push({ x: this.x, y: this.y });
         if (this.positionHistory.length > 20) {
             this.positionHistory.shift();
@@ -153,87 +320,118 @@ class Car {
             const distanceMoved = Math.sqrt((this.x - firstPos.x) ** 2 + (this.y - firstPos.y) ** 2);
             if (distanceMoved < 10) {
                 this.stuckTimer++;
-                if (this.stuckTimer > 30) {
-                    this.handleStuckSituation(roads);
-                    return; // Skip standard update to allow unstucking
+                if (this.stuckTimer > 40) {
+                    this.handleStuckSituation();
+                    return;
                 }
             } else {
                 this.stuckTimer = 0;
             }
         }
 
-        let onRoad = this.isOnRoad(roads);
-        let currentRoad = this.getCurrentRoad(roads);
-
-        // Sensor logic (Obstacle Avoidance)
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
         let hasObstacleAhead = this.detectObstacleAhead(buildings, cars);
+        let maxCruise = this.maxSpeed * 0.62;
 
         let targetAccel = this.acceleration * 0.1;
-        let maxCruise = this.maxSpeed * 0.6; // AI drives a bit slower usually
 
+        // ---- Police: direct pursuit (unchanged) ----
         if (this.isPolice && !this.exploded && typeof player !== 'undefined') {
-            // Police AI: aggressively pursue player
-            maxCruise = this.maxSpeed;
+            let maxCruise = this.maxSpeed;
             targetAccel = this.acceleration * 0.4;
 
             let targetX = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
             let targetY = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
 
-            // Aim slightly ahead of player if they are moving
             if (player.inCar && player.car && Math.abs(player.car.speed) > 2) {
                 targetX += player.car.vx * 15;
                 targetY += player.car.vy * 15;
             }
 
-            let dx = targetX - (this.x + this.width / 2);
-            let dy = targetY - (this.y + this.height / 2);
+            let dx = targetX - centerX;
+            let dy = targetY - centerY;
             this.targetDirection = Math.atan2(dy, dx);
 
             if (hasObstacleAhead) {
-                this.speed *= 0.85; // Brake, but police are aggressive
+                this.speed *= 0.88;
             } else {
                 this.speed = Math.min(this.speed + targetAccel, maxCruise);
             }
         } else {
-            // Standard AI Logic
+            // ---- Civilian: follow the road graph ----
+            if (!world.nodeEdges) { this.speed *= 0.9; return; }
+
+            // Acquire or validate current edge
+            if (!this.edge || this.edge.dead) {
+                const ne = world.nearestEdge(centerX, centerY);
+                if (ne) {
+                    this.edge = ne.edge;
+                    this.dist = ne.dist;
+                    const p0 = world.pointAtDist(ne.edge, ne.dist);
+                    const p1 = world.pointAtDist(ne.edge, ne.dist + 30);
+                    const headingDot = Math.cos(this.angle - Math.atan2(p1.y - p0.y, p1.x - p0.x));
+                    this.dir = headingDot >= 0 ? 1 : -1;
+                } else {
+                    this.speed *= 0.95;
+                    return;
+                }
+            } else {
+                const proj = world.projectOnEdge(this.edge, centerX, centerY);
+                if (proj.off < 200) {
+                    this.dist = proj.dist;
+                } else if (proj.off < 480) {
+                    // Drifting off the lane: steer back toward the centerline
+                    const lp = world.pointAtDist(this.edge, this.dist);
+                    this.targetDirection = Math.atan2(lp.y - centerY, lp.x - centerX);
+                    this.speed = this.speed * 0.96 + 0.4;
+                    // skip normal cruise control this frame
+                    hasObstacleAhead = false;
+                } else {
+                    this.edge = null;
+                    return;
+                }
+            }
+
+            maxCruise = this.maxSpeed * 0.62;
+            if (this.edge) {
+                if (this.edge.kind === 'boulevard') maxCruise = this.maxSpeed * 0.68;
+                if (this.edge.kind === 'beltway') maxCruise = this.maxSpeed * 0.72;
+                if (this.edge.kind === 'highway') maxCruise = this.maxSpeed * 0.95;
+            }
+
+            if (this.edge) {
+                const remain = this.dir > 0 ? this.edge.len - this.dist : this.dist;
+                const endNodeId = this.dir > 0 ? this.edge.b : this.edge.a;
+                const light = world.nodeLight ? world.nodeLight.get(endNodeId) : null;
+                const redAhead = light && light.state === 'red' && remain < 150 && remain > 26;
+
+                if (remain < 28 && !redAhead) {
+                    // Arrived at node: pick the next edge
+                    this.pickNextEdge(endNodeId);
+                } else {
+                    // Aim for a look-ahead point on our lane
+                    const lookD = Math.max(0, Math.min(this.edge.len,
+                        this.dist + this.dir * (46 + Math.abs(this.speed) * 8)));
+                    const lp = world.pointAtDist(this.edge, lookD);
+                    const off = this.edge.w * 0.21 * this.dir; // right-hand lane
+                    const tx = lp.x + (-Math.sin(lp.ang)) * off;
+                    const ty = lp.y + (Math.cos(lp.ang)) * off;
+                    this.targetDirection = Math.atan2(ty - centerY, tx - centerX);
+
+                    if (redAhead) {
+                        maxCruise = remain < 70 ? 0 : this.maxSpeed * 0.12;
+                    }
+                }
+            }
+
             if (hasObstacleAhead) {
-                this.speed *= 0.8; // Brake for obstacle
+                this.speed *= 0.82;
             } else {
                 this.speed = Math.min(this.speed + targetAccel, maxCruise);
             }
-
-            if (onRoad && currentRoad) {
-                let atIntersection = this.isAtIntersection(currentRoad, roads);
-
-                if (atIntersection) {
-                    // Check traffic lights
-                    let light = trafficLights.find(l => Math.abs(l.x - (this.x + this.width / 2)) < 150 && Math.abs(l.y - (this.y + this.height / 2)) < 150);
-                    if (light && light.state === 'red') {
-                        // Very basic check to ensure light is generally in front of us
-                        let dx = light.x - this.x;
-                        let dy = light.y - this.y;
-                        let angleToLight = Math.atan2(dy, dx);
-                        let angleDiff = Math.abs(Math.atan2(Math.sin(this.angle - angleToLight), Math.cos(this.angle - angleToLight)));
-                        if (angleDiff < Math.PI / 3) {
-                            this.speed *= 0.7; // Brake for red light
-                        }
-                    }
-
-                    if (!this.lastIntersection) {
-                        this.lastIntersection = { x: Math.floor(this.x / 300) * 300, y: Math.floor(this.y / 300) * 300 };
-                        // Pick random valid direction
-                        this.targetDirection = this.chooseSmartDirection(currentRoad);
-                    }
-                } else {
-                    this.lastIntersection = null;
-                    this.stickToRightSide(currentRoad);
-                }
-            } else {
-                this.navigateToNearestRoad(roads);
-            }
         }
 
-        // Steer towards target direction
         if (Math.abs(this.speed) > 0.5) {
             let angleDiff = Math.atan2(Math.sin(this.targetDirection - this.angle), Math.cos(this.targetDirection - this.angle));
             if (Math.abs(angleDiff) > 0.05) {
@@ -241,14 +439,12 @@ class Car {
             }
         }
 
-        // Apply velocity vectors
         this.vx = Math.cos(this.angle) * this.speed;
         this.vy = Math.sin(this.angle) * this.speed;
 
         let newX = this.x + this.vx;
         let newY = this.y + this.vy;
 
-        // Final physical collisions
         if (!this.isCollidingWithBuildings(newX, newY, buildings) &&
             !this.isCollidingWithCars(newX, newY, cars)) {
             this.x = newX;
@@ -257,15 +453,14 @@ class Car {
             this.handleSmartCollision(buildings, cars, roads);
         }
 
-        // Keep in world bounds
         if (this.x < 0 || this.x > worldSize.width - this.width ||
             this.y < 0 || this.y > worldSize.height - this.height) {
-            this.handleBoundaryCollision(roads, worldSize); // pass worldSize properly here
+            this.handleBoundaryCollision(roads, worldSize);
         }
     }
 
     detectObstacleAhead(buildings, cars) {
-        let sensorDist = Math.max(this.speed * 12, 40); // Look ahead based on speed
+        let sensorDist = Math.max(this.speed * 12, 40);
         let centerX = this.x + this.width / 2;
         let centerY = this.y + this.height / 2;
 
@@ -282,7 +477,6 @@ class Car {
         let collisionLeft = this.isPointColliding(leftX, leftY, buildings, cars);
         let collisionRight = this.isPointColliding(rightX, rightY, buildings, cars);
 
-        // Nudge steering slightly if hitting an obstacle as an evasive maneuver
         if (collisionFront || collisionLeft || collisionRight) {
             if (collisionLeft && !collisionRight) {
                 this.angle += 0.02;
@@ -296,161 +490,133 @@ class Car {
         return collisionFront || collisionLeft || collisionRight;
     }
 
+    // Spatial lookup for static buildings - avoids scanning thousands per frame
+    nearbyBuildings(fallback, px, py, radius = 260) {
+        if (typeof world !== 'undefined' && world.buildingGrid) {
+            const BG = 288;
+            const res = [];
+            const x0 = Math.floor((px - radius) / BG), x1 = Math.floor((px + radius) / BG);
+            const y0 = Math.floor((py - radius) / BG), y1 = Math.floor((py + radius) / BG);
+            for (let by = y0; by <= y1; by++) for (let bx = x0; bx <= x1; bx++) {
+                const arr = world.buildingGrid.get(bx + ',' + by);
+                if (arr) for (let b of arr) if (res.indexOf(b) === -1) res.push(b);
+            }
+            return res;
+        }
+        return fallback || [];
+    }
+
     isPointColliding(px, py, buildings, cars) {
-        for (let b of buildings) {
+        const blist = this.nearbyBuildings(buildings, px, py, 160);
+        for (let b of blist) {
             if (px > b.x && px < b.x + b.width && py > b.y && py < b.y + b.height) {
                 return true;
             }
         }
         for (let car of cars) {
             if (car === this) continue;
-            // Police ignore player's car as an "obstacle" so they can ram it
             if (this.isPolice && car.isPlayerCar) continue;
 
             if (px > car.x - 10 && px < car.x + car.width + 10 &&
                 py > car.y - 10 && py < car.y + car.height + 10) {
-
-                // Only treat as obstacle if we are generally moving towards it
                 let angleToCar = Math.atan2(car.y - this.y, car.x - this.x);
                 let angleDiff = Math.abs(Math.atan2(Math.sin(angleToCar - this.angle), Math.cos(angleToCar - this.angle)));
                 if (angleDiff < Math.PI / 2) return true;
             }
         }
-
-        if (typeof player !== 'undefined' && !player.inCar && !this.isPolice) {
-            if (px > player.x - 10 && px < player.x + player.width + 10 &&
-                py > player.y - 10 && py < player.y + player.height + 10) {
-                return true;
-            }
-        }
         return false;
     }
 
-    stickToRightSide(currentRoad) {
-        if (!currentRoad) return;
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-
-        let normAngle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
-        let isFacingEast = Math.abs(normAngle) < Math.PI / 4;
-        let isFacingWest = Math.abs(normAngle) > Math.PI * 0.75;
-        let isFacingSouth = Math.abs(normAngle - Math.PI / 2) < Math.PI / 4;
-        let isFacingNorth = Math.abs(normAngle + Math.PI / 2) < Math.PI / 4;
-
-        if (currentRoad.type === 'horizontal' || currentRoad.width > currentRoad.height) {
-            // Horizontal
-            let targetY = currentRoad.y + currentRoad.height * 0.75; // Eastbound default
-            if (isFacingWest) targetY = currentRoad.y + currentRoad.height * 0.25;
-
-            const distY = centerY - targetY;
-            if (Math.abs(distY) > 5) {
-                const steer = distY > 0 ? -1 : 1;
-                this.angle += steer * this.turnSpeed * 0.2;
-            } else if (isFacingEast) {
-                this.targetDirection = 0;
-            } else if (isFacingWest) {
-                this.targetDirection = Math.PI;
-            }
-        } else if (currentRoad.type === 'vertical' || currentRoad.height > currentRoad.width) {
-            // Vertical
-            let targetX = currentRoad.x + currentRoad.width * 0.25; // Southbound default
-            if (isFacingNorth) targetX = currentRoad.x + currentRoad.width * 0.75;
-
-            const distX = centerX - targetX;
-            if (Math.abs(distX) > 5) {
-                const steer = distX > 0 ? -1 : 1;
-                this.angle += steer * this.turnSpeed * 0.2;
-            } else if (isFacingSouth) {
-                this.targetDirection = Math.PI / 2;
-            } else if (isFacingNorth) {
-                this.targetDirection = -Math.PI / 2;
-            }
+    // Pick the next edge at a node, avoiding U-turns where possible
+    pickNextEdge(nodeId) {
+        const cands = (world.nodeEdges.get(nodeId) || []).slice();
+        if (cands.length === 0) { this.edge = null; return; }
+        let next = null;
+        // Prefer not going straight back
+        for (let i = cands.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [cands[i], cands[j]] = [cands[j], cands[i]];
         }
-    }
-
-    chooseSmartDirection(currentRoad) {
-        // Randomly pick a valid 90-degree turn
-        let normAngle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
-        let currentDir = Math.round(normAngle / (Math.PI / 2)) * (Math.PI / 2); // snaps to 0, PI/2, -PI/2, PI
-
-        // Pick left, right, or straight. Don't U-turn.
-        let choices = [currentDir, currentDir + Math.PI / 2, currentDir - Math.PI / 2];
-        return choices[Math.floor(Math.random() * choices.length)];
-    }
-
-    navigateToNearestRoad(roads) {
-        let nearestRoad = this.findNearestRoad(roads);
-        if (nearestRoad) {
-            let targetX = nearestRoad.x + nearestRoad.width / 2;
-            let targetY = nearestRoad.y + nearestRoad.height / 2;
-            this.targetDirection = Math.atan2(targetY - (this.y + this.height / 2), targetX - (this.x + this.width / 2));
-            this.speed = Math.min(this.speed + this.acceleration * 0.1, this.maxSpeed * 0.5);
+        for (const e of cands) {
+            if (e === this.edge && cands.length > 1) continue;
+            next = e;
+            break;
         }
+        if (!next) { this.edge = null; return; }
+        this.edge = next;
+        this.dir = (next.a === nodeId) ? 1 : -1;
+        this.dist = this.dir > 0 ? 0 : next.len;
     }
 
+    // Bump recovery: nudge toward the clearest direction
     handleSmartCollision(buildings, cars, roads) {
-        // Did we hit another car or building?
         let impactSpeed = Math.abs(this.speed);
         if (impactSpeed > 2 && Math.random() > 0.8) {
             this.takeDamage(impactSpeed * 2);
         }
 
-        // Try different directions to find a clear path
-        const testDirections = [0, 0.2, -0.2, 0.4, -0.4, 0.6, -0.6];
-        let bestDirection = this.angle;
-        let bestDistance = 0;
+        // Prefer steering back toward our lane (or the nearest one)
+        let aim = null;
+        if (this.edge && typeof world !== 'undefined' && world.pointAtDist) {
+            aim = world.pointAtDist(this.edge, this.dist + this.dir * 60);
+        } else {
+            const np = world.nearestLanePoint(this.x + this.width / 2, this.y + this.height / 2);
+            if (np) aim = { x: np.x, y: np.y };
+        }
+        if (aim) {
+            const testAngle = Math.atan2(aim.y - (this.y + this.height / 2), aim.x - (this.x + this.width / 2));
+            const testX = this.x + Math.cos(testAngle) * Math.abs(this.speed) * 0.5;
+            const testY = this.y + Math.sin(testAngle) * Math.abs(this.speed) * 0.5;
+            if (!this.isCollidingWithBuildings(testX, testY, buildings) &&
+                !this.isCollidingWithCars(testX, testY, cars)) {
+                this.angle = testAngle;
+                this.targetDirection = testAngle;
+                this.speed = 1.2;
+                return;
+            }
+        }
 
-        for (let angleOffset of testDirections) {
+        const testDirections = [0.35, -0.35, 0.7, -0.7, 1.1, -1.1];
+        for (const angleOffset of testDirections) {
             const testAngle = this.angle + angleOffset;
             const testX = this.x + Math.cos(testAngle) * this.speed * 0.5;
             const testY = this.y + Math.sin(testAngle) * this.speed * 0.5;
-
             if (!this.isCollidingWithBuildings(testX, testY, buildings) &&
                 !this.isCollidingWithCars(testX, testY, cars)) {
-                const distanceFromCurrent = Math.abs(angleOffset);
-                if (distanceFromCurrent < bestDistance || bestDistance === 0) {
-                    bestDistance = distanceFromCurrent;
-                    bestDirection = testAngle;
-                }
+                this.angle = testAngle;
+                this.targetDirection = testAngle;
+                this.speed = 1.0;
+                return;
             }
         }
-
-        this.angle = bestDirection;
-        this.targetDirection = bestDirection; // ACTUALLY REMEMBER THE NEW DIRECTION
-
-        // Move forward into the clear path, DO NOT reverse
-        this.speed = 1.0;
-        this.vx = Math.cos(this.angle) * this.speed;
-        this.vy = Math.sin(this.angle) * this.speed;
+        this.speed = 0;
     }
 
-    handleStuckSituation(roads) {
-        // Try to get unstuck by finding a clear path
-        this.speed = 1.5;
-        this.angle += (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2); // 90 degree turn
-        this.targetDirection = this.angle;
+    handleStuckSituation() {
         this.stuckTimer = 0;
-
-        // If still stuck, try to move to nearest road
-        if (!this.isOnRoad(roads)) {
-            let nearestRoad = this.findNearestRoad(roads);
-            if (nearestRoad) {
-                let targetX = nearestRoad.x + nearestRoad.width / 2;
-                let targetY = nearestRoad.y + nearestRoad.height / 2;
-                this.angle = Math.atan2(targetY - this.y, targetX - this.x);
-            }
+        const p = world.nearestLanePoint(this.x + this.width / 2, this.y + this.height / 2);
+        if (!p) return;
+        const off = Math.hypot(this.x + this.width / 2 - p.x, this.y + this.height / 2 - p.y);
+        if (off > 260 || this.stuckHard >= 2) {
+            // Teleport back onto the lane - these cars are disposable
+            this.x = p.x - this.width / 2;
+            this.y = p.y - this.height / 2;
+            this.angle = p.ang;
+            this.targetDirection = p.ang;
+            this.speed = 2.0;
+            this.stuckHard = 0;
+        } else {
+            this.angle += (Math.random() > 0.5 ? 1 : -1) * Math.PI / 3;
+            this.speed = 1.5;
+            this.stuckHard = (this.stuckHard || 0) + 1;
         }
     }
+
 
     handleBoundaryCollision(roads, worldSize) {
         this.speed *= 0.5;
-
-        // Just reverse direction
         this.targetDirection = Math.atan2(Math.sin((this.angle + Math.PI)), Math.cos(this.angle + Math.PI));
         this.angle = this.targetDirection;
-
-        let halfWidth = this.width / 2;
-        let halfHeight = this.height / 2;
 
         if (this.x < 0) this.x = 0;
         if (this.x > worldSize.width - this.width) this.x = worldSize.width - this.width;
@@ -458,118 +624,9 @@ class Car {
         if (this.y > worldSize.height - this.height) this.y = worldSize.height - this.height;
     }
 
-    avoidNearbyCars(cars) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        let avoidanceForce = 0;
-
-        for (let car of cars) {
-            if (car === this) continue;
-
-            const otherCenterX = car.x + car.width / 2;
-            const otherCenterY = car.y + car.height / 2;
-            const distance = Math.sqrt((centerX - otherCenterX) ** 2 + (centerY - otherCenterY) ** 2);
-
-            // If car is too close, slow down and steer away
-            if (distance < 80 && distance > 0) {
-                const avoidanceAngle = Math.atan2(otherCenterY - centerY, otherCenterX - centerX);
-                const angleDiff = avoidanceAngle - this.angle;
-
-                // Steer away from nearby car
-                this.angle -= Math.sign(angleDiff) * this.turnSpeed * 0.3;
-                this.speed *= 0.8; // Slow down when close to other cars
-            }
-        }
-    }
-
-    handleCollision(buildings) {
-        let impactSpeed = Math.abs(this.speed);
-        if (impactSpeed > 2) {
-            this.takeDamage(impactSpeed * 3);
-        }
-
-        // Simple collision handling - bounce away
-        this.speed = -1.5; // Back up
-
-        // Try to steer away from buildings
-        if (Math.random() > 0.5) {
-            this.angle += 0.5;
-            this.targetDirection += 0.5;
-        } else {
-            this.angle -= 0.5;
-            this.targetDirection -= 0.5;
-        }
-    }
-
-    isOnRoad(roads) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        for (let road of roads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    getCurrentRoad(roads) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        for (let road of roads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                return road;
-            }
-        }
-        return null;
-    }
-
-    isAtIntersection(currentRoad, roads) {
-        if (currentRoad && currentRoad.type === 'crossroad') return true;
-
-        // An intersection is where multiple roads overlap (fallback for old layout).
-        let centerX = this.x + this.width / 2;
-        let centerY = this.y + this.height / 2;
-        let roadCount = 0;
-        for (let road of roads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                roadCount++;
-            }
-        }
-        return roadCount > 1;
-    }
-
-
-
-    findNearestRoad(roads) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        let nearestRoad = roads[0];
-        let minDistance = Infinity;
-
-        for (let road of roads) {
-            let distance;
-            if (road.type === 'horizontal' || road.width > road.height) {
-                // Horizontal road
-                distance = Math.abs(centerY - (road.y + road.height / 2));
-            } else {
-                // Vertical road or crossroad
-                distance = Math.abs(centerX - (road.x + road.width / 2));
-            }
-
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestRoad = road;
-            }
-        }
-
-        return nearestRoad;
-    }
-
     isCollidingWithBuildings(x, y, buildings) {
-        for (let building of buildings) {
+        const blist = this.nearbyBuildings(buildings, x + this.width / 2, y + this.height / 2, 300);
+        for (let building of blist) {
             if (x < building.x + building.width && x + this.width > building.x &&
                 y < building.y + building.height && y + this.height > building.y) {
                 return true;
@@ -601,6 +658,9 @@ class Car {
             if (typeof particleSystem !== 'undefined') {
                 particleSystem.addExplosion(this.x + this.width / 2, this.y + this.height / 2);
             }
+            if (typeof audioSystem !== 'undefined') {
+                audioSystem.playExplosion();
+            }
         }
     }
 
@@ -625,13 +685,11 @@ class Car {
 
         let rvx = other.vx - this.vx;
         let rvy = other.vy - this.vy;
-
         let velAlongNormal = rvx * nx + rvy * ny;
 
         if (velAlongNormal < 0) {
             let restitution = 0.45;
-            let impulseScalar = -(1 + restitution) * velAlongNormal;
-            impulseScalar /= 2;
+            let impulseScalar = -(1 + restitution) * velAlongNormal / 2;
 
             this.vx -= impulseScalar * nx;
             this.vy -= impulseScalar * ny;
@@ -642,7 +700,6 @@ class Car {
             other.speed = other.vx * Math.cos(other.angle) + other.vy * Math.sin(other.angle);
         }
 
-        // Push away to prevent sticking
         let overlap = (this.width / 2 + other.width / 2) - dist;
         if (overlap > 0) {
             this.x -= nx * overlap * 0.5;
@@ -653,41 +710,114 @@ class Car {
 
         let impactSpeed = Math.abs(velAlongNormal);
         if (impactSpeed > 1.2) {
-            this.takeDamage(impactSpeed * 3.5);
-            other.takeDamage(impactSpeed * 3.5);
+            // AI-vs-AI fender benders: cosmetic only, no attrition
+            const playerInvolved = this.isPlayerCar || other.isPlayerCar;
+            if (playerInvolved) {
+                this.takeDamage(impactSpeed * 3.5);
+                other.takeDamage(impactSpeed * 3.5);
+            } else {
+                this.takeDamage(impactSpeed * 0.4);
+                other.takeDamage(impactSpeed * 0.4);
+            }
             if (typeof audioSystem !== 'undefined') audioSystem.playCrash(impactSpeed);
-            
-            // Add crash sparks/particles
             if (typeof particleSystem !== 'undefined') {
-                for (let i = 0; i < 8; i++) {
-                    particleSystem.addSmoke((this.x + other.x) / 2 + this.width / 4, (this.y + other.y) / 2 + this.height / 4);
-                }
+                particleSystem.addDebris((this.x + other.x) / 2, (this.y + other.y) / 2, 6);
             }
         }
     }
 
     draw(ctx, cameraX, cameraY) {
         ctx.save();
-        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+        let cx = this.x + this.width / 2;
+        let cy = this.y + this.height / 2;
+
+        // Apply airborne visual scale & 3D shadow offset
+        let zScale = 1.0 + (this.airborneZ * 0.05);
+
+        // Ground shadow (drawn at ground level)
+        if (this.isAirborne) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(this.angle);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(-this.width / 2 + this.airborneZ * 4, -this.height / 2 + this.airborneZ * 4, this.width, this.height);
+            ctx.restore();
+        }
+
+        ctx.translate(cx, cy - this.airborneZ * 3);
+        ctx.scale(zScale, zScale);
         ctx.rotate(this.angle);
 
         let halfWidth = this.width / 2;
         let halfHeight = this.height / 2;
 
-        // Car shadow
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-        ctx.fillRect(-halfWidth + 2, -halfHeight + 2, this.width, this.height);
-
-        let displayColor = this.color;
-        if (this.exploded) {
-            displayColor = '#222222'; // Burnt husk
+        if (!this.isAirborne) {
+            // Normal shadow
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+            ctx.fillRect(-halfWidth + 2, -halfHeight + 2, this.width, this.height);
         }
 
-        // Car body with gradient (front/right to back/left)
+        let displayColor = this.exploded ? '#222222' : this.color;
+
+        if (this.type === 'bike') {
+            // Motorcycle Graphics
+            ctx.fillStyle = '#111';
+            // Front & Back Tires
+            ctx.fillRect(halfWidth - 8, -2.5, 8, 5);
+            ctx.fillRect(-halfWidth, -2.5, 8, 5);
+
+            // Bike Frame
+            ctx.fillStyle = displayColor;
+            ctx.fillRect(-halfWidth + 6, -3, this.width - 12, 6);
+
+            // Handlebars
+            ctx.fillStyle = '#C0C0C0';
+            ctx.fillRect(halfWidth - 9, -5.5, 2, 11);
+
+            // Rider Body on top of bike
+            if (!this.exploded) {
+                ctx.fillStyle = '#1565C0'; // Blue shirt
+                ctx.fillRect(-halfWidth + 8, -4, 10, 8);
+                ctx.fillStyle = '#FDBCB4'; // Skin head / Helmet
+                ctx.beginPath();
+                ctx.arc(-halfWidth + 12, 0, 3.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+            return;
+        }
+
+        if (this.type === 'tank') {
+            // Tank Body & Tracks
+            ctx.fillStyle = '#1B3012'; // Dark green treads
+            ctx.fillRect(-halfWidth, -halfHeight, this.width, 6);
+            ctx.fillRect(-halfWidth, halfHeight - 6, this.width, 6);
+
+            // Tank Hull
+            ctx.fillStyle = displayColor;
+            ctx.fillRect(-halfWidth + 4, -halfHeight + 5, this.width - 8, this.height - 10);
+            ctx.strokeStyle = '#1B3012';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-halfWidth + 4, -halfHeight + 5, this.width - 8, this.height - 10);
+
+            // Turret & Cannon Barrel
+            ctx.fillStyle = '#254E18';
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#1B3012';
+            ctx.fillRect(0, -2.5, halfWidth + 10, 5); // Long Cannon
+            ctx.restore();
+            return;
+        }
+
+        // Car Body Gradient
         const bodyGradient = ctx.createLinearGradient(halfWidth, -halfHeight, -halfWidth, halfHeight);
-        bodyGradient.addColorStop(0, this.shadeColor(displayColor, 20)); // Front
-        bodyGradient.addColorStop(0.5, displayColor); // Middle
-        bodyGradient.addColorStop(1, this.shadeColor(displayColor, -25)); // Rear
+        bodyGradient.addColorStop(0, this.shadeColor(displayColor, 20));
+        bodyGradient.addColorStop(0.5, displayColor);
+        bodyGradient.addColorStop(1, this.shadeColor(displayColor, -25));
         ctx.fillStyle = bodyGradient;
         ctx.fillRect(-halfWidth, -halfHeight, this.width, this.height);
 
@@ -698,25 +828,45 @@ class Car {
 
         // Wheels
         ctx.fillStyle = '#1c1c1c';
-        let wheelW = 10;
+        let wheelW = Math.max(7, Math.floor(this.width * 0.2));
         let wheelH = 4;
-        // Front-left
-        ctx.fillRect(halfWidth - 14, -halfHeight - 2, wheelW, wheelH);
-        // Front-right
-        ctx.fillRect(halfWidth - 14, halfHeight - 2, wheelW, wheelH);
-        // Rear-left
+        ctx.fillRect(halfWidth - wheelW - 4, -halfHeight - 2, wheelW, wheelH);
+        ctx.fillRect(halfWidth - wheelW - 4, halfHeight - 2, wheelW, wheelH);
         ctx.fillRect(-halfWidth + 6, -halfHeight - 2, wheelW, wheelH);
-        // Rear-right
         ctx.fillRect(-halfWidth + 6, halfHeight - 2, wheelW, wheelH);
 
         // Metallic rims
         ctx.fillStyle = '#a8a8a8';
-        ctx.fillRect(halfWidth - 12, -halfHeight - 1, 6, 2);
-        ctx.fillRect(halfWidth - 12, halfHeight - 1, 6, 2);
-        ctx.fillRect(-halfWidth + 8, -halfHeight - 1, 6, 2);
-        ctx.fillRect(-halfWidth + 8, halfHeight - 1, 6, 2);
+        ctx.fillRect(halfWidth - wheelW - 2, -halfHeight - 1, wheelW - 4, 2);
+        ctx.fillRect(halfWidth - wheelW - 2, halfHeight - 1, wheelW - 4, 2);
+        ctx.fillRect(-halfWidth + 8, -halfHeight - 1, wheelW - 4, 2);
+        ctx.fillRect(-halfWidth + 8, halfHeight - 1, wheelW - 4, 2);
 
         if (!this.exploded) {
+            // Supercar Racing Stripes
+            if (this.type === 'supercar') {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(-halfWidth, -3, this.width, 2);
+                ctx.fillRect(-halfWidth, 1, this.width, 2);
+                // Rear Spoiler
+                ctx.fillStyle = '#111111';
+                ctx.fillRect(-halfWidth - 3, -halfHeight + 2, 4, this.height - 4);
+            }
+
+            // Taxi Checkerboard Stripe
+            if (this.type === 'taxi') {
+                for (let i = -halfWidth + 4; i < halfWidth - 6; i += 6) {
+                    ctx.fillStyle = (i % 12 === 0) ? '#000' : '#FFF';
+                    ctx.fillRect(i, -halfHeight + 2, 3, 2);
+                    ctx.fillRect(i, halfHeight - 4, 3, 2);
+                }
+                // Taxi Roof Light
+                ctx.fillStyle = '#FFF';
+                ctx.fillRect(-4, -4, 8, 8);
+                ctx.fillStyle = '#FF9900';
+                ctx.fillRect(-3, -3, 6, 6);
+            }
+
             // Car roof
             const roofGradient = ctx.createLinearGradient(-halfWidth + 12, 0, halfWidth - 12, 0);
             roofGradient.addColorStop(0, this.shadeColor(displayColor, -10));
@@ -724,7 +874,7 @@ class Car {
             ctx.fillStyle = roofGradient;
             ctx.fillRect(-halfWidth + 12, -halfHeight + 2, this.width - 24, this.height - 4);
 
-            // Front Windshield (curved glass pointing East)
+            // Front Windshield
             ctx.fillStyle = 'rgba(135, 206, 250, 0.85)';
             ctx.beginPath();
             ctx.moveTo(halfWidth - 12, -halfHeight + 3);
@@ -740,42 +890,27 @@ class Car {
 
             // Side windows
             ctx.fillStyle = 'rgba(135, 206, 250, 0.75)';
-            ctx.fillRect(-halfWidth + 15, -halfHeight + 2, this.width - 32, 2); // left side window
-            ctx.fillRect(-halfWidth + 15, halfHeight - 4, this.width - 32, 2); // right side window
+            ctx.fillRect(-halfWidth + 15, -halfHeight + 2, this.width - 32, 2);
+            ctx.fillRect(-halfWidth + 15, halfHeight - 4, this.width - 32, 2);
 
-            // Headlights (Facing East/front)
+            // Headlights
             ctx.fillStyle = '#FFFFEE';
-            ctx.fillRect(halfWidth - 3, -halfHeight + 2, 4, 3); // Left headlight
-            ctx.fillRect(halfWidth - 3, halfHeight - 5, 4, 3); // Right headlight
-            
-            // Headlight inner glow
-            ctx.fillStyle = '#FFF';
-            ctx.fillRect(halfWidth - 2, -halfHeight + 3, 2, 1);
-            ctx.fillRect(halfWidth - 2, halfHeight - 4, 2, 1);
+            ctx.fillRect(halfWidth - 3, -halfHeight + 2, 4, 3);
+            ctx.fillRect(halfWidth - 3, halfHeight - 5, 4, 3);
 
-            // Brake lights / Taillights (Facing West/rear)
-            let isBraking = this.isPlayerCar && (keys[' '] || keys['s'] || keys['arrowdown']);
-            ctx.fillStyle = isBraking ? '#FF0000' : '#8B0000'; // brighter red when braking
-            ctx.fillRect(-halfWidth - 1, -halfHeight + 2, 2, 3); // Left taillight
-            ctx.fillRect(-halfWidth - 1, halfHeight - 5, 2, 3); // Right taillight
+            // Taillights
+            ctx.fillStyle = '#8B0000';
+            ctx.fillRect(-halfWidth - 1, -halfHeight + 2, 2, 3);
+            ctx.fillRect(-halfWidth - 1, halfHeight - 5, 2, 3);
 
-            // License plate
-            ctx.fillStyle = '#FFF';
-            ctx.fillRect(-halfWidth - 1, -3, 1, 6);
-            ctx.fillStyle = '#000';
-            ctx.font = '3px monospace';
-            ctx.fillText('GTA', -halfWidth, 2);
-        } else {
-            // Exploded roof
-            ctx.fillStyle = '#111';
-            ctx.fillRect(-halfWidth + 12, -halfHeight + 2, this.width - 24, this.height - 4);
-        }
-
-        // Sirens for police cars
-        if (this.isPolice && !this.exploded) {
-            let time = Date.now() / 150;
-            ctx.fillStyle = time % 2 < 1 ? '#FF0000' : '#0000FF'; // flashing red/blue
-            ctx.fillRect(-2, -3, 5, 6);
+            // Emergency Roof Beacons & Sirens
+            if (this.isPolice || this.type === 'ambulance' || this.type === 'firetruck') {
+                let flash = Math.floor(Date.now() / 150) % 2;
+                ctx.fillStyle = flash === 0 ? '#FF1744' : '#2979FF';
+                ctx.fillRect(-3, -halfHeight + 4, 6, this.height - 8);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(-1, -2, 2, 4);
+            }
         }
 
         ctx.restore();
@@ -793,7 +928,195 @@ class Car {
     }
 }
 
-// Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = Car;
+}
+
+// Drivable Boat - moored off the beach, enter with E like a car.
+// Only moves on sea water (deep ocean + shoreline), bounces off land.
+class Boat {
+    constructor(x, y, angle = 0, color = '#F5F5F5') {
+        this.isBoat = true;
+        this.x = x;
+        this.y = y;
+        this.angle = angle;
+        this.width = 84;
+        this.height = 30;
+        this.speed = 0;
+        this.vx = 0;
+        this.vy = 0;
+        this.maxSpeed = 7.4;
+        this.acceleration = 0.13;
+        this.turnSpeed = 0.048;
+        this.health = 220;
+        this.maxHealth = 220;
+        this.exploded = false;
+        this.isAirborne = false;
+        this.airborneZ = 0;
+        this.isPlayerCar = false;
+        this.color = color;
+        this.bobOffset = Math.random() * Math.PI * 2;
+        this.wakeTick = 0;
+    }
+
+    launchStuntJump() { } // Boats don't do ramps
+
+    takeDamage(amount) {
+        if (this.exploded) return;
+        this.health -= amount;
+        if (this.health <= 0) {
+            this.exploded = true;
+            this.speed = 0;
+            if (typeof particleSystem !== 'undefined') {
+                particleSystem.addExplosion(this.x + this.width / 2, this.y + this.height / 2);
+            }
+            if (typeof audioSystem !== 'undefined') {
+                audioSystem.playExplosion();
+            }
+        }
+    }
+
+    update(keys) {
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
+        if (this.exploded) {
+            if (typeof particleSystem !== 'undefined' && Math.random() < 0.08) {
+                particleSystem.addSmoke(cx, cy);
+            }
+            return;
+        }
+
+        if (!this.isPlayerCar) {
+            this.vx = 0;
+            this.vy = 0;
+            return; // Moored - gentle bobbing handled in draw
+        }
+
+        // Player-controlled boat physics
+        let force = 0;
+        if (keys['w'] || keys['keyw'] || keys['arrowup']) {
+            force = this.acceleration;
+        } else if (keys['s'] || keys['keys'] || keys['arrowdown']) {
+            force = -this.acceleration * 0.7;
+        } else {
+            this.speed *= 0.985;
+        }
+        if (keys[' ']) force = -this.acceleration * 1.5;
+
+        this.speed += force;
+        this.speed = Math.max(-this.maxSpeed * 0.4, Math.min(this.maxSpeed, this.speed));
+
+        if (Math.abs(this.speed) > 0.3) {
+            if (keys['a'] || keys['keya'] || keys['arrowleft']) {
+                this.angle -= this.turnSpeed * Math.sign(this.speed);
+            }
+            if (keys['d'] || keys['keyd'] || keys['arrowright']) {
+                this.angle += this.turnSpeed * Math.sign(this.speed);
+            }
+        }
+
+        let nx = this.x + Math.cos(this.angle) * this.speed;
+        let ny = this.y + Math.sin(this.angle) * this.speed;
+
+        if (this.isOnWater(nx + this.width / 2, ny + this.height / 2)) {
+            this.x = nx;
+            this.y = ny;
+            this.vx = Math.cos(this.angle) * this.speed;
+            this.vy = Math.sin(this.angle) * this.speed;
+
+            // Wake trail
+            if (Math.abs(this.speed) > 2.5) {
+                this.wakeTick++;
+                if (this.wakeTick % 7 === 0 && typeof particleSystem !== 'undefined') {
+                    let sx = cx - Math.cos(this.angle) * this.width * 0.55;
+                    let sy = cy - Math.sin(this.angle) * this.width * 0.55;
+                    particleSystem.addWaterSplash(sx, sy);
+                }
+            }
+        } else {
+            // Bumped into land
+            this.speed *= -0.3;
+            if (typeof particleSystem !== 'undefined') {
+                particleSystem.addWaterSplash(nx + this.width / 2, ny + this.height / 2);
+            }
+            if (typeof audioSystem !== 'undefined' && Math.abs(this.speed) > 1) {
+                audioSystem.playSplash();
+            }
+        }
+    }
+
+    isOnWater(px, py) {
+        if (typeof world === 'undefined' || !world.waterTiles) return false;
+        for (let w of world.waterTiles) {
+            if (px >= w.x && px <= w.x + w.width && py >= w.y && py <= w.y + w.height) {
+                return w.type === 'W' || w.type === 'W_COAST';
+            }
+        }
+        return false;
+    }
+
+    draw(ctx, cameraX, cameraY) {
+        const t = Date.now();
+        const bob = Math.sin(t * 0.002 + this.bobOffset) * (this.isPlayerCar ? 0.6 : 1.6);
+        const cx = this.x + this.width / 2;
+        const cy = this.y + this.height / 2;
+
+        // Water shadow
+        ctx.save();
+        ctx.translate(cx + 4, cy + 4);
+        ctx.rotate(this.angle);
+        ctx.fillStyle = 'rgba(0, 20, 40, 0.3)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, this.width / 2, this.height / 2 + 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(cx, cy + bob);
+        ctx.rotate(this.angle);
+
+        const hw = this.width / 2;
+        const hh = this.height / 2;
+        const disp = this.exploded ? '#3a2f28' : this.color;
+
+        // Pointed hull (+x is the bow)
+        ctx.fillStyle = disp;
+        ctx.beginPath();
+        ctx.moveTo(hw, 0);
+        ctx.quadraticCurveTo(hw * 0.45, -hh, -hw + 6, -hh);
+        ctx.lineTo(-hw + 6, hh);
+        ctx.quadraticCurveTo(hw * 0.45, hh, hw, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#263238';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        if (!this.exploded) {
+            // Deck stripe
+            ctx.fillStyle = '#B0BEC5';
+            ctx.fillRect(-hw + 10, -3, this.width - 26, 6);
+            // Cabin
+            ctx.fillStyle = '#546E7A';
+            ctx.fillRect(-hw + 16, -hh + 6, 22, this.height - 12);
+            ctx.fillStyle = 'rgba(135, 206, 250, 0.9)';
+            ctx.fillRect(-hw + 19, -hh + 9, 16, 4);
+            ctx.fillRect(-hw + 19, hh - 13, 16, 4);
+            // Outboard motor
+            ctx.fillStyle = '#37474F';
+            ctx.fillRect(-hw - 2, -4, 7, 8);
+            // Blinking nav light
+            ctx.fillStyle = Math.floor(t / 300) % 2 === 0 ? '#FF5252' : '#69F0AE';
+            ctx.beginPath();
+            ctx.arc(-hw + 8, 0, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports.Boat = Boat;
 }
