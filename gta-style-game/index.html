@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTA Style Game</title>
+    <title>GTA 2D Open World</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -12,7 +12,12 @@
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
         <div id="hud">
+            <!-- Top Left: District & Mission -->
             <div id="top-left-hud">
+                <div id="district-banner">
+                    <div id="district-label">LOCATION</div>
+                    <div id="district-name">Downtown Financial District</div>
+                </div>
                 <div id="mission-panel">
                     <div id="mission-title">MISSION ACTIVE</div>
                     <div id="mission-instruction">Answering payphone...</div>
@@ -20,6 +25,7 @@
                 </div>
             </div>
 
+            <!-- Top Right: Stars, Ammo, Cash -->
             <div id="top-right-hud">
                 <div id="wanted-level">
                     <span class="star" id="star-1">★</span>
@@ -35,6 +41,16 @@
                 <div id="money">$00000000</div>
             </div>
 
+            <!-- In-Car Radio Station Banner -->
+            <div id="radio-banner">📻 Head Radio (80s Synthwave)</div>
+
+            <!-- Insane Stunt Jump Banner -->
+            <div id="stunt-banner">
+                <h1>INSANE STUNT BONUS!</h1>
+                <div id="stunt-desc">Distance: <b>150ft</b> | Airtime: <b>1.8s</b><br><span style="color:#00FF66">+$500 REWARD</span></div>
+            </div>
+
+            <!-- Center Notifications -->
             <div id="center-hud">
                 <div id="big-notification">
                     <h1 id="notif-title">MISSION START</h1>
@@ -42,6 +58,7 @@
                 </div>
             </div>
 
+            <!-- Bottom Left: Minimap & Health/Armor -->
             <div id="bottom-left-hud">
                 <div id="minimap-container">
                     <canvas id="minimap-canvas"></canvas>
@@ -56,8 +73,9 @@
                 </div>
             </div>
 
+            <!-- Bottom Right Controls Hint -->
             <div id="controls-hint">
-                Controls: WASD (Move/Drive), Mouse (Aim), Left Click (Shoot), E (Enter/Exit/Answer), Space (Brake), 1-5 (Weapons), H (Horn)
+                WASD (Drive/Move) | Mouse Aim + Click (Shoot) | E (Enter/Shop/Phone) | R (Radio) | Space (Brake) | 1-5 (Weapons) | H (Horn)
             </div>
         </div>
 
@@ -66,14 +84,16 @@
             <div id="joystick-zone">
                 <div id="joystick-knob"></div>
             </div>
-            <div id="touch-look-zone"></div>
             <div class="action-buttons">
                 <div class="touch-btn action-btn" id="btn-action">E</div>
                 <div class="touch-btn action-btn" id="btn-brake" style="width: 80px; border-radius: 30px;">SPACE</div>
             </div>
         </div>
     </div>
+
+    <!-- Sequential script loading (Vanilla Standalone - No Modules/Bundlers) -->
     <script src="worldData.js"></script>
+    <script src="props.js"></script>
     <script src="world.js"></script>
     <script src="particles.js"></script>
     <script src="weapons.js"></script>

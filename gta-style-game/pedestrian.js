@@ -4,38 +4,48 @@ class Pedestrian {
         this.y = y;
         this.width = 14;
         this.height = 14;
-        this.speed = 0.5 + Math.random() * 0.5;
+        this.speed = 0.5 + Math.random() * 0.6;
         this.angle = Math.random() * Math.PI * 2;
         this.worldSize = worldSize;
-        this.state = 'walk'; // walk, flee, dead
-        this.health = 20;
-        this.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
+        this.state = 'walk'; // 'walk', 'sit', 'flee', 'dead'
+        this.health = 25;
         this.timer = 0;
+
+        // Visual Archetypes
+        let archetypes = [
+            { shirt: '#1E88E5', pants: '#0D47A1', hair: '#5D4037', type: 'citizen' },
+            { shirt: '#212121', pants: '#37474F', hair: '#212121', type: 'suit' }, // businessman
+            { shirt: '#D81B60', pants: '#4A148C', hair: '#FBC02D', type: 'tourist' },
+            { shirt: '#F4511E', pants: '#263238', hair: '#3E2723', type: 'gangster' },
+            { shirt: '#00ACC1', pants: '#FFF', hair: '#8D6E63', type: 'beachgoer' }
+        ];
+        this.outfit = archetypes[Math.floor(Math.random() * archetypes.length)];
     }
 
     update(buildings, cars, player, roads) {
         if (this.state === 'dead') return;
 
-        // Flee logic
-        // Check if player is shooting or nearby in a fast car
-        let dx = this.x - player.x;
-        let dy = this.y - player.y;
+        let px = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
+        let py = player.inCar && player.car ? player.car.y + player.car.height / 2 : player.y + player.height / 2;
+        let dx = this.x - px;
+        let dy = this.y - py;
         let distToPlayer = Math.sqrt(dx * dx + dy * dy);
 
-        if (distToPlayer < 200 && (player.inCar && Math.abs(player.car.speed) > 3 || (player.overrideAngle !== null))) {
+        // Flee logic: if player is shooting or driving fast nearby
+        if (distToPlayer < 220 && ((player.inCar && player.car && Math.abs(player.car.speed) > 2.8) || player.overrideAngle !== null)) {
             this.state = 'flee';
-            this.angle = Math.atan2(dy, dx); // run away from player
-            this.speed = 2.5;
+            this.angle = Math.atan2(dy, dx);
+            this.speed = 2.6;
         } else if (this.state === 'flee') {
             this.speed *= 0.99;
-            if (this.speed < 1) {
+            if (this.speed < 1.0) {
                 this.state = 'walk';
                 this.speed = 0.5 + Math.random() * 0.5;
             }
         } else {
             // Wandering
             this.timer++;
-            if (this.timer > 120) {
+            if (this.timer > 140) {
                 this.timer = 0;
                 this.angle += (Math.random() - 0.5) * Math.PI;
             }
@@ -44,7 +54,6 @@ class Pedestrian {
         let newX = this.x + Math.cos(this.angle) * this.speed;
         let newY = this.y + Math.sin(this.angle) * this.speed;
 
-        // rudimentary collision
         let collision = false;
         for (let b of buildings) {
             if (newX > b.x - 10 && newX < b.x + b.width + 10 &&
@@ -55,25 +64,23 @@ class Pedestrian {
         }
 
         if (collision) {
-            this.angle += Math.PI; // turnaround
+            this.angle += Math.PI * 0.8;
         } else {
             this.x = newX;
             this.y = newY;
         }
 
-        // Keep in bounds
-        this.x = Math.max(0, Math.min(this.worldSize.width - this.width, this.x));
-        this.y = Math.max(0, Math.min(this.worldSize.height - this.height, this.y));
+        this.x = Math.max(20, Math.min(this.worldSize.width - this.width - 20, this.x));
+        this.y = Math.max(20, Math.min(this.worldSize.height - this.height - 20, this.y));
 
-        // Check if hit by a car
+        // Check if run over by cars
         for (let car of cars) {
-            if (Math.abs(car.speed) > 1 && !car.exploded) {
-                // box check
-                if (this.x > car.x - 10 && this.x < car.x + car.width + 10 &&
-                    this.y > car.y - 10 && this.y < car.y + car.height + 10) {
+            if (Math.abs(car.speed) > 1.2 && !car.exploded && !car.isAirborne) {
+                if (this.x > car.x - 8 && this.x < car.x + car.width + 8 &&
+                    this.y > car.y - 8 && this.y < car.y + car.height + 8) {
                     this.die();
                     if (typeof particleSystem !== 'undefined') {
-                        particleSystem.addSmoke(this.x, this.y); // blood/dirt effect
+                        particleSystem.addDebris(this.x, this.y, 6, '#880000');
                     }
                     if (car.isPlayerCar && typeof wantedLevel !== 'undefined') {
                         if (wantedLevel < 2) wantedLevel = 2; // Hit and run
@@ -93,9 +100,14 @@ class Pedestrian {
 
     die() {
         this.state = 'dead';
-        this.color = '#880000'; // dead
         if (typeof audioSystem !== 'undefined') {
             audioSystem.playScream();
+        }
+
+        // Drop physical cash pickup on ground!
+        if (typeof propsManager !== 'undefined') {
+            let cashAmt = 30 + Math.floor(Math.random() * 70);
+            propsManager.addPickup('cash', this.x, this.y, cashAmt);
         }
     }
 
@@ -104,23 +116,37 @@ class Pedestrian {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle);
 
-        // Draw shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        // Ground shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.fillRect(-this.width / 2 + 1, -this.height / 2 + 1, this.width, this.height);
 
         if (this.state === 'dead') {
-            // Draw blood pool
-            ctx.fillStyle = '#880000';
+            // Blood pool on pavement
+            ctx.fillStyle = '#8B0000';
             ctx.beginPath();
-            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.arc(0, 0, 11, 0, Math.PI * 2);
             ctx.fill();
         } else {
-            // Draw person (shoulders/head)
-            ctx.fillStyle = this.color;
-            ctx.fillRect(-8, -this.width / 2 + 2, 16, this.width - 4);
-            ctx.fillStyle = '#FDBCB4';
+            // Walking animation legs
+            let legWalk = (this.state === 'flee' ? Math.sin(Date.now() * 0.03) : Math.sin(Date.now() * 0.015)) * 4;
+            ctx.fillStyle = this.outfit.pants;
+            ctx.fillRect(-5 + legWalk, -5, 5, 4);
+            ctx.fillRect(-5 - legWalk, 1, 5, 4);
+
+            // Shoulders & Shirt
+            ctx.fillStyle = this.outfit.shirt;
+            ctx.fillRect(-6, -6, 12, 12);
+
+            // Head
+            ctx.fillStyle = '#FDBCB4'; // skin
             ctx.beginPath();
-            ctx.arc(0, 0, 5, 0, Math.PI * 2);
+            ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hair
+            ctx.fillStyle = this.outfit.hair;
+            ctx.beginPath();
+            ctx.arc(-2, 0, 4, Math.PI / 2, 3 * Math.PI / 2);
             ctx.fill();
         }
 
