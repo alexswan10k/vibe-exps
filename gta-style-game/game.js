@@ -1272,7 +1272,9 @@ function drawBuildings3D(ctx) {
         let screenX = (building.x + building.width / 2) - camCenterX;
         let screenY = (building.y + building.height / 2) - camCenterY;
 
-        let prFactor = building.style === 'downtown' ? 0.22 : 0.14;
+        let prFactor = building.style === 'downtown' ? 0.22 :
+                        building.style === 'church' ? 0.24 :
+                        building.style === 'office' ? 0.20 : 0.14;
         let offsetX = screenX * prFactor;
         let offsetY = screenY * prFactor;
 
@@ -1305,6 +1307,11 @@ function drawBuildings3D(ctx) {
         if (building.style === 'industrial') wallColor = '#455A64';
         if (building.style === 'suburb') wallColor = '#795548';
         if (building.style === 'brownstone') wallColor = '#4E342E';
+        if (building.style === 'victorian') wallColor = '#90A4AE';
+        if (building.style === 'ranch') wallColor = '#D7CCA1';
+        if (building.style === 'office') wallColor = '#455A64';
+        if (building.style === 'shop') wallColor = '#A1887F';
+        if (building.style === 'church') wallColor = '#ECEFF1';
 
         if (offsetX > 0) {
             ctx.fillStyle = wallColor;
@@ -1364,6 +1371,19 @@ function drawBuildings3D(ctx) {
             ctx.fillStyle = '#D84315';
         } else if (building.style === 'brownstone') {
             ctx.fillStyle = '#6D4C41';
+        } else if (building.style === 'victorian') {
+            ctx.fillStyle = '#C2185B';
+        } else if (building.style === 'ranch') {
+            ctx.fillStyle = '#8D6E63';
+        } else if (building.style === 'office') {
+            const officeGrad = ctx.createLinearGradient(r1x, r1y, r3x, r3y);
+            officeGrad.addColorStop(0, '#546E7A');
+            officeGrad.addColorStop(1, '#263238');
+            ctx.fillStyle = officeGrad;
+        } else if (building.style === 'shop') {
+            ctx.fillStyle = '#FBC02D';
+        } else if (building.style === 'church') {
+            ctx.fillStyle = '#B0BEC5';
         } else if (building.style === 'container') {
             ctx.fillStyle = building.color || '#D32F2F';
         } else if (building.style === 'pns') {
@@ -1426,6 +1446,42 @@ function drawBuildings3D(ctx) {
                 ctx.lineWidth = 1;
                 ctx.strokeRect(ux, uy, 22, 16);
             }
+        }
+
+        // Church: steeple cross
+        if (building.style === 'church') {
+            const ccx2 = r1x + building.width / 2, ccy2 = r1y + building.height / 2;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(ccx2 - 3, ccy2 - 22, 6, 44);
+            ctx.fillRect(ccx2 - 12, ccy2 - 12, 24, 6);
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(ccx2 - 3, ccy2 - 22, 6, 44);
+        }
+
+        // Shop: striped awning along the front edge
+        if (building.style === 'shop') {
+            const stripeW = 14;
+            const stripes = Math.floor(building.width / stripeW);
+            for (let s = 0; s < stripes; s++) {
+                ctx.fillStyle = s % 2 === 0 ? '#E53935' : '#FAFAFA';
+                const ax = r1x + s * stripeW;
+                ctx.fillRect(ax, r1y, stripeW, 10);
+            }
+            ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(r1x, r1y, building.width * 0.98, 10);
+        }
+
+        // Victorian: white trim outline
+        if (building.style === 'victorian') {
+            ctx.strokeStyle = '#ECEFF1';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(r1x, r1y); ctx.lineTo(r2x, r2y);
+            ctx.lineTo(r3x, r3y); ctx.lineTo(r4x, r4y);
+            ctx.closePath();
+            ctx.stroke();
         }
     }
 }

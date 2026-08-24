@@ -168,19 +168,25 @@ function generateCity() {
     }
     // Brownstone Row
     for (let y = 42; y <= 49; y++) for (let x = 1; x <= 31; x++) {
-        if (grid[y][x] === 'B' && !mask[y][x]) paintVirgin(x, y, rand() < 0.75 ? 'B_OLD' : 'B_SUB');
+        if (grid[y][x] === 'B' && !mask[y][x]) {
+            const rb = rand();
+            paintVirgin(x, y, rb < 0.03 ? 'B_CHU' : rb < 0.75 ? 'B_OLD' : 'B_SUB');
+        }
     }
     // Downtown radial
     const dcx = 73, dcy = 17;
     for (let y = 1; y <= 33; y++) for (let x = 55; x <= 85; x++) {
         if (grid[y][x] !== 'B' || mask[y][x]) continue;
         const d = Math.sqrt((x - dcx) ** 2 + (y - dcy) ** 2);
-        if (d < 13.0 + rand() * 2.0) paintVirgin(x, y, 'B_DT');
-        else if (d < 17.0) paintVirgin(x, y, rand() < 0.55 ? 'B_DT' : 'B');
+        if (d < 13.0 + rand() * 2.0) paintVirgin(x, y, rand() < 0.28 ? 'B_OFF' : 'B_DT');
+        else if (d < 17.0) paintVirgin(x, y, rand() < 0.30 ? 'B_OFF' : rand() < 0.55 ? 'B_DT' : 'B');
     }
     // Little Italy
     for (let y = 39; y <= 51; y++) for (let x = 58; x <= 75; x++) {
-        if (grid[y][x] === 'B' && !mask[y][x] && rand() < 0.8) paintVirgin(x, y, rand() < 0.45 ? 'B_OLD' : 'B_CT');
+        if (grid[y][x] === 'B' && !mask[y][x] && rand() < 0.8) {
+            const r3 = rand();
+            paintVirgin(x, y, r3 < 0.45 ? 'B_SHOP' : r3 < 0.72 ? 'B_OLD' : 'B_CT');
+        }
     }
     // Suburbs
     for (let y = 52; y <= rows - 2; y++) for (let x = 1; x <= 74; x++) {
@@ -188,7 +194,12 @@ function generateCity() {
         if (x >= 75) continue;
         if (y <= 59 && x <= 13) continue;
         const n = rand();
-        paintVirgin(x, y, n < 0.12 ? 'POOL' : n < 0.30 ? 'GARDEN' : 'B_SUB');
+        paintVirgin(x, y,
+            n < 0.10 ? 'POOL' :
+            n < 0.22 ? 'GARDEN' :
+            n < 0.40 ? 'B_VIC' :
+            n < 0.50 ? 'B_RAN' :
+            n < 0.515 ? 'B_CHU' : 'B_SUB');
     }
     // Fabric filler
     for (let y = 1; y < rows - 1; y++) for (let x = 1; x < cols - 1; x++) {
@@ -199,7 +210,7 @@ function generateCity() {
         }
     }
     // Block flavor
-    const REPLACEABLE = ['B', 'B_DT', 'B_CT', 'B_IND', 'B_SUB', 'B_OLD', 'GARDEN', 'YARD', 'E_DOCK', 'CONT'];
+    const REPLACEABLE = ['B', 'B_DT', 'B_CT', 'B_IND', 'B_SUB', 'B_OLD', 'B_VIC', 'B_RAN', 'B_OFF', 'B_SHOP', 'B_CHU', 'GARDEN', 'YARD', 'E_DOCK', 'CONT'];
     const stampBlock = (cx, cy, w, h, tok) => {
         for (let y = cy; y < cy + h; y++) for (let x = cx; x < cx + w; x++) {
             if (grid[y] && REPLACEABLE.indexOf(grid[y][x]) !== -1 && !mask[y][x]) grid[y][x] = tok;
@@ -329,6 +340,47 @@ function generateCity() {
         }
     };
 
+    // ============ 5b. LANDMARKS scouted EARLY so roads can serve them ============
+    const nearMaskRoad = (x, y) => {
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+            if (mask[y + dy] && mask[y + dy][x + dx]) return true;
+        }
+        return false;
+    };
+    const reserveSpot = (tc, tr) => {
+        for (let ring = 0; ring <= 8; ring++) {
+            for (let dy = -ring; dy <= ring; dy++) {
+                for (let dx = -ring; dx <= ring; dx++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+                    const x = tc + dx, y = tr + dy;
+                    if (x < 1 || x >= cols - 1 || y < 1 || y >= rows - 1) continue;
+                    const t = grid[y][x];
+                    if (!(t === 'B' || OPEN_TOKENS.indexOf(t) !== -1)) continue;
+                    if (nearMaskRoad(x, y)) { grid[y][x] = 'RESERVED'; return { x, y }; }
+                }
+            }
+        }
+        return null;
+    };
+    const put = (spot, tok) => { if (spot) grid[spot.y][spot.x] = tok; };
+    const landmarkPOIs = [];
+    const scoutPOI = (name, tc, tr, tok) => {
+        const s = reserveSpot(tc, tr);
+        put(s, tok);
+        if (s) landmarkPOIs.push({ name, wx: s.x * CELL + CELL / 2, wy: s.y * CELL + CELL / 2 });
+    };
+    scoutPOI("Police HQ", 33, 13, 'PD');
+    scoutPOI("Ammu-Nation", 18, 35, 'AMMU');
+    scoutPOI("Pink Palace Casino", 24, 38, 'CASINO');
+    scoutPOI("Burger Shot", 48, 40, 'DINER');
+    scoutPOI("General Hospital", 66, 52, 'HOSP');
+    scoutPOI("Fuel Station", 21, 54, 'GAS');
+    scoutPOI("Fuel Station", 58, 19, 'GAS');
+    scoutPOI("Fuel Station", 69, 70, 'GAS');
+    scoutPOI("Pay 'n' Spray", 62, 11, 'PNS');
+    scoutPOI("Pay 'n' Spray", 38, 65, 'PNS');
+
+
     // ============ 6. BUILD THE ROAD GRAPH ============
     const nodes = [];           // {id, x, y, deg}
     const nodeIdByCell = new Map(); // "cx,cy" -> node id (orthogonal junctions)
@@ -402,18 +454,10 @@ function generateCity() {
         }
     }
 
-    // Snap curved arterials onto real junctions, then paint their corridors
-    const sunsetEnds = [snapToJunction(22, 14), snapToJunction(46, 57)];
-    const kingswayEnds = [snapToJunction(70, 60), snapToJunction(80, 33)];
-    const sunsetPts = splinePoints(
-        [sunsetEnds[0], [34, 17], [45, 25], [47, 37], [41, 47], sunsetEnds[1]], 42);
-    const kingswayPts = splinePoints(
-        [kingswayEnds[0], [63, 53], [57, 45], [61, 35], [71, 28], kingswayEnds[1]], 42);
-
+    // Paint curve corridors on the mask (after orth tracing so the junction
+    // scan only ever saw the orthogonal network)
     markCurve(vespucciPts, 46);
     markCurve(algonkinPts, 46);
-    markCurve(sunsetPts, 42);
-    markCurve(kingswayPts, 42);
     markCurve(ringPts, 52);
 
     // --- Curves -> graph (split at junction cells shared with the mask) ---
@@ -463,48 +507,96 @@ function generateCity() {
     };
     addCurveEdges(vespucciPts, 92, 'boulevard');
     addCurveEdges(algonkinPts, 92, 'boulevard');
-    addCurveEdges(sunsetPts, 84, 'boulevard');
-    addCurveEdges(kingswayPts, 84, 'boulevard');
     addCurveEdges(ringPts, 104, 'beltway');
 
-    // --- Organic connectors: bezier shortcuts between random junctions ---
-    const PROTECTED_RECTS = [
-        [74, 53, 87, 65],  // airport
-        [6, 53, 14, 61],   // stadium
-        [50, 41, 63, 49]   // park pond
-    ];
-    const inProtected = (x, y) => PROTECTED_RECTS.some(r =>
-        x >= r[0] * CELL && x <= r[2] * CELL && y >= r[1] * CELL && y <= r[3] * CELL);
-    let connectors = 0;
-    {
-        let tries = 0;
-        const pool = nodes.filter(n => n.deg > 0);
-        while (connectors < 11 && tries++ < 500) {
-            const A = pool[randi(0, pool.length - 1)];
-            const B = pool[randi(0, pool.length - 1)];
-            if (!A || !B || A === B) continue;
-            const d = Math.hypot(A.x - B.x, A.y - B.y);
-            if (d < 800 || d > 3400) continue;
-            const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
-            const pxn = -(B.y - A.y) / d, pyn = (B.x - A.x) / d;
-            const off = (rand() - 0.5) * d * 0.7;
-            const cxp = mx + pxn * off, cyp = my + pyn * off;
-            const pts = [];
-            const segs = Math.ceil(d / 46);
-            let water = 0, prot = 0;
-            for (let s = 0; s <= segs; s++) {
-                const t = s / segs, it = 1 - t;
-                const qx = it * it * A.x + 2 * it * t * cxp + t * t * B.x;
-                const qy = it * it * A.y + 2 * it * t * cyp + t * t * B.y;
-                pts.push([qx, qy]);
-                if (waterAt(Math.floor(qx / CELL), Math.floor(qy / CELL))) water++;
-                if (inProtected(qx, qy)) prot++;
-            }
-            if (prot > 8) continue;
-            if (water / pts.length > 0.62) continue;
-            const e = addEdge(A, B, pts, 84, 'street');
-            if (e) { e.connector = true; connectors++; }
+    // --- POI AVENUES inserted later (after safety net prep) ---
+
+    // --- POI AVENUES: every destination gets a road that visibly goes somewhere ---
+    const nearestNodeTo = (x, y, maxD) => {
+        let best = null, bd = maxD * maxD;
+        for (const n of nodes) {
+            const d = (n.x - x) ** 2 + (n.y - y) ** 2;
+            if (d < bd) { bd = d; best = n; }
         }
+        return best;
+    };
+    // Gather destination nodes: landmark spots + fixed anchors
+    const poiNodes = [];
+    const poiNames = [];
+    const addPOI = (name, wx, wy) => {
+        let n = nearestNodeTo(wx, wy, 340);
+        if (!n || (n.deg === 0 && poiNodes.some(p => p.node === n))) {
+            // floating node: stub-link it to the network
+            const near = nearestNodeTo(wx, wy, Infinity);
+            const stub = [[wx, wy], [near.x, near.y]];
+            const nn = { id: nodes.length, x: wx, y: wy, deg: 0 };
+            nodes.push(nn);
+            addEdge(nn, near, stub, 88, 'street');
+            n = nn;
+        }
+        poiNodes.push(n);
+        poiNames.push(name);
+    };
+    for (const lp of landmarkPOIs) addPOI(lp.name, lp.wx, lp.wy);
+    addPOI("Airport", 74.5 * CELL, 57 * CELL);
+    addPOI("Stadium Gate", 13.5 * CELL, 57 * CELL);
+    addPOI("Salty's Pier", 87 * CELL, 46.5 * CELL);
+    addPOI("Marina", 89.5 * CELL, 22 * CELL);
+    addPOI("Columbus Plaza", 44.5 * CELL, 41 * CELL);
+    addPOI("Downtown Heart", 70 * CELL, 14 * CELL);
+
+    // Curved avenue builder between two nodes
+    const linkAvenue = (A, B) => {
+        if (!A || !B || A.id === B.id) return null;
+        if (edges.some(e => (e.a === A.id && e.b === B.id) || (e.a === B.id && e.b === A.id))) return null;
+        const d = Math.hypot(A.x - B.x, A.y - B.y);
+        if (d < 140) return null;
+        const pxn = -(B.y - A.y) / d, pyn = (B.x - A.x) / d;
+        const off = (rand() - 0.5) * d * 0.34;   // gentle intentional bend
+        const cxp = (A.x + B.x) / 2 + pxn * off;
+        const cyp = (A.y + B.y) / 2 + pyn * off;
+        const pts = [];
+        const segs = Math.max(8, Math.ceil(d / 44));
+        for (let s = 0; s <= segs; s++) {
+            const t = s / segs, it = 1 - t;
+            pts.push([it * it * A.x + 2 * it * t * cxp + t * t * B.x,
+                      it * it * A.y + 2 * it * t * cyp + t * t * B.y]);
+        }
+        const e = addEdge(A, B, pts, 92, 'boulevard');
+        if (e) e.poi = true;
+        return e;
+    };
+
+    // Prim's MST over POI positions -> coherent skeleton where every road has purpose
+    let poiLinks = 0;
+    {
+        const linked = new Set([poiNodes[0].id]);
+        const remaining = poiNodes.slice(1);
+        while (remaining.length > 0) {
+            let bi = -1, bn = null, bd = Infinity;
+            for (const cand of remaining) {
+                for (const lid of linked) {
+                    const L = nodes[lid];
+                    const d = Math.hypot(L.x - cand.x, L.y - cand.y);
+                    if (d < bd) { bd = d; bi = remaining.indexOf(cand); bn = L; }
+                }
+            }
+            const target = remaining.splice(bi, 1)[0];
+            linkAvenue(bn, target);
+            linked.add(target.id);
+            poiLinks++;
+        }
+        // A few loop-closing chords so routes can cycle, not just tree-branch
+        let chords = 0, tries = 0;
+        while (chords < 4 && tries++ < 60) {
+            const A = poiNodes[randi(0, poiNodes.length - 1)];
+            const B = poiNodes[randi(0, poiNodes.length - 1)];
+            if (!A || !B || A.id === B.id) continue;
+            const d = Math.hypot(A.x - B.x, A.y - B.y);
+            if (d < 900 || d > 2600) continue;
+            if (linkAvenue(A, B)) chords++;
+        }
+        poiLinks += chords;
     }
 
     // --- Safety net: connect any leftover separate components ---
@@ -608,40 +700,6 @@ function generateCity() {
         if (grid[y][x] !== 'STADIUM') grid[y][x] = 'STAD_FILL';
     }
 
-    // ============ 10. LANDMARKS (near road mask) ============
-    const nearMaskRoad = (x, y) => {
-        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
-            if (mask[y + dy] && mask[y + dy][x + dx]) return true;
-        }
-        return false;
-    };
-    const reserveSpot = (tc, tr) => {
-        for (let ring = 0; ring <= 8; ring++) {
-            for (let dy = -ring; dy <= ring; dy++) {
-                for (let dx = -ring; dx <= ring; dx++) {
-                    if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
-                    const x = tc + dx, y = tr + dy;
-                    if (x < 1 || x >= cols - 1 || y < 1 || y >= rows - 1) continue;
-                    const t = grid[y][x];
-                    if (!(t === 'B' || OPEN_TOKENS.indexOf(t) !== -1)) continue;
-                    if (nearMaskRoad(x, y)) { grid[y][x] = 'RESERVED'; return { x, y }; }
-                }
-            }
-        }
-        return null;
-    };
-    const put = (spot, tok) => { if (spot) grid[spot.y][spot.x] = tok; };
-    put(reserveSpot(33, 13), 'PD');
-    put(reserveSpot(18, 35), 'AMMU');
-    put(reserveSpot(24, 38), 'CASINO');
-    put(reserveSpot(48, 40), 'DINER');
-    put(reserveSpot(66, 52), 'HOSP');
-    put(reserveSpot(21, 54), 'GAS');
-    put(reserveSpot(58, 19), 'GAS');
-    put(reserveSpot(69, 70), 'GAS');
-    put(reserveSpot(62, 11), 'PNS');
-    put(reserveSpot(38, 65), 'PNS');
-
     // ============ 11. STUNT RAMPS on bridge approaches ============
     const RAMP_PROPS = [];
     {
@@ -683,12 +741,11 @@ function generateCity() {
         edges: edges,
         ramps: RAMP_PROPS,
         roundabouts: roundabouts,
-        connectors: connectors,
+        poiLinks: poiLinks,
+        pois: poiNames,
         curveNames: [
             { name: "Vespucci Boulevard", pts: vespucciPts },
             { name: "Algonkin Avenue", pts: algonkinPts },
-            { name: "Sunset Drive", pts: sunsetPts },
-            { name: "Kingsway", pts: kingswayPts },
             { name: "The Grand Circle", pts: ringPts }
         ]
     };
