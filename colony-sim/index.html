@@ -1,4 +1,4 @@
-n<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -9,124 +9,106 @@ n<!DOCTYPE html>
 <body>
     <div id="game-container">
         <canvas id="game-canvas"></canvas>
-        <div id="mode-indicator">
-            <div class="mode-text">Mode: Idle</div>
-            <div class="mode-description">Click a command button to start</div>
-        </div>
-        <div id="cancel-hint">
-            Right-click or press ESC to cancel
-        </div>
-        <div id="ui-panel">
-            <div id="left-column">
-                <div id="pawn-info">
-                    <h3>Pawn Info</h3>
-                    <div id="pawn-list"></div>
-                </div>
-                <div id="commands">
-                    <h3>Commands</h3>
-                    <button id="chop-trees">Chop Trees</button>
-                    <button id="mine-iron">Mine Iron</button>
-                    <button id="mine-stone">Mine Stone</button>
-                    <button id="harvest-plants">Harvest Plants</button>
-                    
-                    <h4>Zones</h4>
-                    <button id="zone-stockpile">Stockpile Zone</button>
-                    <button id="zone-growing">Growing Zone</button>
 
-                    <h4>Build</h4>
-                    <button id="build-wall">Build Wall</button>
-                    <button id="build-door">Build Door</button>
-                    <button id="build-table">Build Table</button>
-                    <button id="build-bed">Build Bed</button>
-                    <button id="build-chair">Build Chair</button>
+        <!-- Tool mode indicator -->
+        <div id="mode-indicator" class="hud-chip">
+            <span id="mode-name">Inspect</span>
+            <span id="mode-hint">Pick an order below, or click a colonist</span>
+        </div>
 
-                    <h4>Craft</h4>
-                    <button id="craft-food">Craft Food</button>
-                    <button id="craft-tools">Craft Tools</button>
-                    
-                    <h4>Management</h4>
-                    <button id="toggle-priorities">Work Priorities</button>
-                </div>
+        <!-- Time HUD -->
+        <div id="time-hud" class="hud-chip">
+            <span id="hud-day">Day 1</span>
+            <span id="hud-clock">07:12</span>
+            <span class="hud-sep"></span>
+            <button id="speed-pause" title="Pause (Space)">⏸</button>
+            <button id="speed-1" class="active" title="Normal speed (1)">▶</button>
+            <button id="speed-2" title="Fast (2)">▶▶</button>
+            <button id="speed-4" title="Very fast (3)">▶▶▶</button>
+            <span class="hud-sep"></span>
+            <span title="Colonists">👥 <b id="stat-pop">0</b></span>
+        </div>
+
+        <!-- Tile inspector -->
+        <div id="tile-inspector"></div>
+
+        <!-- Command bar -->
+        <div id="command-bar">
+            <div class="cmd-group">
+                <h4>Orders</h4>
+                <button id="tool-chop">🪓 Chop trees</button>
+                <button id="tool-mine">⛏ Mine iron</button>
+                <button id="tool-mine-rock">⛰ Quarry rock</button>
+                <button id="tool-harvest">🌾 Harvest food</button>
             </div>
-            <div id="right-column">
-                <div id="task-queue">
-                    <h3>Task Queue <button id="toggle-task-queue" class="toggle-btn">▶</button></h3>
-                    <div id="task-list" class="collapsed"></div>
-                </div>
-                <div id="legend">
-                    <h3>Legend</h3>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #f39c12;"></div>
-                        <span>Pawn</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #27ae60;"></div>
-                        <span>Tree</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #95a5a6;"></div>
-                        <span>Iron</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #8e44ad;"></div>
-                        <span>Wall</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #e67e22;"></div>
-                        <span>Crafting Table</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #f4d03f;"></div>
-                        <span>Storage</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #2ecc71;"></div>
-                        <span>Grass</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #d35400;"></div>
-                        <span>Dirt</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #7f8c8d;"></div>
-                        <span>Stone</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #32CD32;"></div>
-                        <span>Plant</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #8b4513;"></div>
-                        <span>Dropped Wood</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #c0c0c0;"></div>
-                        <span>Dropped Iron</span>
-                    </div>
-                </div>
-                <div id="resources">
-                    <h3>Resources</h3>
-                    <div id="resource-list"></div>
-                </div>
-                <div id="crafted-items">
-                    <h3>Crafted Items</h3>
-                    <div id="crafted-list"></div>
-                </div>
-                <div id="tile-inventory">
-                    <h3>Tile Inventory</h3>
-                    <div class="resource-item">Hover over a tile</div>
-                </div>
+            <div class="cmd-group">
+                <h4>Zones</h4>
+                <button id="tool-zone-stockpile">📦 Stockpile</button>
+                <button id="tool-zone-growing">🌱 Growing</button>
+            </div>
+            <div class="cmd-group">
+                <h4>Build</h4>
+                <button id="tool-build-wall">▓ Wall</button>
+                <button id="tool-build-door">🚪 Door</button>
+                <button id="tool-build-table">🛠 Table</button>
+                <button id="tool-build-bed">🛏 Bed</button>
+                <button id="tool-build-chair">🪑 Chair</button>
+            </div>
+            <div class="cmd-group">
+                <h4>Craft</h4>
+                <button id="tool-craft-meal">🍲 Cook meals</button>
+                <button id="tool-craft-tools">🔧 Make tools</button>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <aside id="sidebar">
+            <section class="panel">
+                <h3>Colony</h3>
+                <div id="resource-list"></div>
+            </section>
+
+            <section class="panel">
+                <h3>Colonists</h3>
+                <div id="pawn-list"></div>
+            </section>
+
+            <section class="panel">
+                <h3>Jobs</h3>
+                <div id="job-list"></div>
+            </section>
+
+            <section class="panel grow">
+                <h3>Messages</h3>
+                <div id="message-list"></div>
+            </section>
+
+            <section class="panel">
+                <button id="btn-priorities" class="wide">⚙ Work priorities</button>
+            </section>
+        </aside>
+
+        <!-- Game over overlay -->
+        <div id="game-over">
+            <div class="game-over-box">
+                <h2>The colony has fallen</h2>
+                <p class="game-over-sub"></p>
+                <button id="close-game-over">Try again</button>
             </div>
         </div>
     </div>
-    <script src="types.js"></script>
+
+    <script src="config.js"></script>
     <script src="utils.js"></script>
+    <script src="noise.js"></script>
+    <script src="pathfinding.js"></script>
     <script src="entities.js"></script>
-    <script src="pawn.js"></script>
-    <script src="input-manager.js"></script>
-    <script src="renderer.js"></script>
-    <script src="ui-manager.js"></script>
     <script src="task-manager.js"></script>
+    <script src="pawn.js"></script>
+    <script src="world.js"></script>
+    <script src="renderer.js"></script>
+    <script src="input-manager.js"></script>
+    <script src="ui-manager.js"></script>
     <script src="game.js"></script>
     <script src="main.js"></script>
 </body>
