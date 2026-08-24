@@ -102,11 +102,12 @@ class Game {
     
     // Update game state
     update(deltaTime) {
+        // Grow population and distribute it (plus jobs) into buildings first,
+        // so tax/happiness calculations see up-to-date occupancy
+        this.updatePopulation(deltaTime);
+        
         // Update resources
         this.resourceManager.updateResources(this.grid.getAllBuildings(), deltaTime);
-        
-        // Update population and jobs
-        this.updatePopulation();
         
         // Check for resource shortages
         this.checkResourceShortages();
@@ -117,21 +118,46 @@ class Game {
         }
     }
     
-    // Update population
-    updatePopulation() {
-        const buildings = this.grid.getAllBuildings();
-        const totalPopulation = this.resourceManager.resources.population;
-        const totalJobs = this.resourceManager.resources.jobs;
+    // Grow population and distribute population/jobs into buildings.
+    // Population is persistent state: residents move in when there is housing,
+    // utilities and happiness; they leave when utilities fail.
+    updatePopulation(deltaTime) {
+        const res = this.resourceManager.resources;
         
-        // Reset all building populations and jobs
-        buildings.forEach(building => {
+        // --- Growth ---
+        const capacity = res.housingCapacity || 0;
+        const servicesOk = !res.power.shortage && !res.water.shortage;
+        
+        let target = 0;
+        if (servicesOk) {
+            // Happy citizens attract new residents; unhappy ones slow growth
+            target = res.happiness >= 35 ? capacity : Math.floor(capacity * 0.5);
+        }
+        // Without power/water everyone eventually leaves
+        
+        if (res.population < target) {
+            // Move-in rate scales with happiness (1-6 residents/sec)
+            const growthRate = 1 + (res.happiness / 100) * 5;
+            res.population = Math.min(target, res.population + growthRate * (deltaTime / 1000));
+        } else if (res.population > target) {
+            // Move-out at a fixed rate
+            const declineRate = 8;
+            res.population = Math.max(target, res.population - declineRate * (deltaTime / 1000));
+        }
+        
+        // --- Distribution ---
+        const buildings = this.grid.getAllBuildings();
+        const population = Math.floor(res.population);
+        
+        // Reset per-building assignments
+        for (const building of buildings) {
             building.population = 0;
             building.jobs = 0;
-        });
+        }
         
         // Assign population to residential buildings
-        let remainingPopulation = totalPopulation;
-        const residentialBuildings = buildings.filter(b => b.type.id === 'residential');
+        let remainingPopulation = population;
+        const residentialBuildings = buildings.filter(b => b.type.populationCapacity > 0);
         
         for (const building of residentialBuildings) {
             if (remainingPopulation <= 0) break;
@@ -143,9 +169,10 @@ class Game {
             remainingPopulation -= populationToAdd;
         }
         
-        // Assign jobs to commercial and industrial buildings
-        let remainingJobs = totalJobs;
-        const jobBuildings = buildings.filter(b => b.type.id === 'commercial' || b.type.id === 'industrial');
+        // Assign workforce to commercial/industrial jobs
+        const workforce = Math.floor(population * (window.WORKFORCE_RATIO || 0.6));
+        let remainingJobs = workforce;
+        const jobBuildings = buildings.filter(b => b.type.jobCapacity > 0);
         
         for (const building of jobBuildings) {
             if (remainingJobs <= 0) break;
@@ -156,25 +183,37 @@ class Game {
             building.assignJobs(jobsToAdd);
             remainingJobs -= jobsToAdd;
         }
+        
+        // Jobs filled = total assigned
+        res.jobs = workforce - remainingJobs;
     }
     
-    // Check for resource shortages
+    // Check for resource shortages (throttled so warnings don't spam)
     checkResourceShortages() {
+        const now = Date.now();
+        const throttleMs = 10000;
+        const shouldWarn = (key) => {
+            if (!this.lastWarningTimes) this.lastWarningTimes = {};
+            if (now - (this.lastWarningTimes[key] || 0) < throttleMs) return false;
+            this.lastWarningTimes[key] = now;
+            return true;
+        };
+        
         const resources = this.resourceManager.resources;
         
         // Check power shortage
-        if (resources.power.available < 0) {
+        if (resources.power.shortage && shouldWarn('power')) {
             this.showNotification('Power shortage! Build more power plants.', 'warning');
         }
         
         // Check water shortage
-        if (resources.water.available < 0) {
+        if (resources.water.shortage && shouldWarn('water')) {
             this.showNotification('Water shortage! Build more water plants.', 'warning');
         }
         
         // Check happiness
-        if (resources.happiness < 30) {
-            this.showNotification('Citizens are unhappy! Improve services.', 'warning');
+        if (resources.happiness < 30 && shouldWarn('happiness')) {
+            this.showNotification('Citizens are unhappy! Build parks and provide jobs.', 'warning');
         }
     }
     
@@ -368,6 +407,16 @@ class Game {
         try {
             const data = JSON.parse(saveData);
             
+            // Load grid (buildings) if present
+            if (data.grid) {
+                this.grid.deserialize(data.grid);
+                
+                // Clear cars since their paths reference stale building data
+                if (this.trafficManager) {
+                    this.trafficManager.cars = [];
+                }
+            }
+            
             // Load resources
             this.resourceManager.deserialize(data.resources);
             
@@ -496,6 +545,7 @@ class Game {
         this.state.gameSpeed = 1;
         this.state.selectedBuilding = null;
         this.state.notifications = [];
+        this.lastWarningTimes = {};
         
         // Update UI
         const pauseBtn = document.getElementById('pause-btn');

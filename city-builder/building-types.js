@@ -106,7 +106,7 @@ const POWER_PLANT = new BuildingType(
 const WATER_PLANT = new BuildingType(
     'water',
     'Water Plant',
-    '#3498db',
+    '#16a085',
     1500,
     40,
     10,
@@ -118,6 +118,23 @@ const WATER_PLANT = new BuildingType(
     40,
     -3,
     { width: 2, height: 2 }
+);
+
+const PARK = new BuildingType(
+    'park',
+    'Park',
+    '#27ae60',
+    200,
+    5,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    8,
+    { width: 1, height: 1 }
 );
 
 const ROAD = new BuildingType(
@@ -144,6 +161,7 @@ const BUILDING_TYPES = {
     industrial: INDUSTRIAL,
     power: POWER_PLANT,
     water: WATER_PLANT,
+    park: PARK,
     road: ROAD
 };
 
@@ -253,7 +271,7 @@ window.COMMERCIAL = COMMERCIAL;
 window.INDUSTRIAL = INDUSTRIAL;
 window.POWER_PLANT = POWER_PLANT;
 window.WATER_PLANT = WATER_PLANT;
-window.ROAD = ROAD;
+window.PARK = PARK;
 window.BUILDING_TYPES = BUILDING_TYPES;
 window.Building = Building;
 window.createBuilding = createBuilding;

@@ -78,50 +78,53 @@ class UIManager {
         // Update population display
         const populationValue = document.getElementById('population-value');
         if (populationValue) {
-            populationValue.textContent = Math.floor(resources.population);
+            populationValue.textContent = Math.floor(resources.population).toLocaleString();
         }
         
-        // Update power display
+        // Update jobs display
+        const jobsValue = document.getElementById('jobs-value');
+        if (jobsValue) {
+            jobsValue.textContent = `${Math.floor(resources.jobs)} / ${Math.floor(resources.jobCapacity || 0)}`;
+        }
+        
+        // Update power display (production vs consumption, red when short)
         const powerValue = document.getElementById('power-value');
         if (powerValue) {
-            powerValue.textContent = `${Math.floor(resources.power.available)} / ${Math.floor(resources.power.consumption)}`;
+            powerValue.textContent = `${Math.floor(resources.power.production)} / ${Math.floor(resources.power.consumption)}`;
+            powerValue.classList.toggle('shortage', !!resources.power.shortage);
         }
         
         // Update water display
         const waterValue = document.getElementById('water-value');
         if (waterValue) {
-            waterValue.textContent = `${Math.floor(resources.water.available)} / ${Math.floor(resources.water.consumption)}`;
+            waterValue.textContent = `${Math.floor(resources.water.production)} / ${Math.floor(resources.water.consumption)}`;
+            waterValue.classList.toggle('shortage', !!resources.water.shortage);
         }
         
-        // Update happiness display
+        // Update happiness display (red when low)
         const happinessValue = document.getElementById('happiness-value');
         if (happinessValue) {
             happinessValue.textContent = `${Math.floor(resources.happiness)}%`;
+            happinessValue.classList.toggle('shortage', resources.happiness < 35);
         }
     }
     
     // Handle money spent
     handleMoneySpent(data) {
-        // Update money display
+        // Update money display (the placement message already announces the cost)
         const moneyValue = document.getElementById('money-value');
         if (moneyValue) {
             moneyValue.textContent = `$${Math.floor(data.remaining).toLocaleString()}`;
         }
-        
-        // Show notification
-        this.game.showNotification(`Spent $${Math.floor(data.amount).toLocaleString()}`, 'info');
     }
     
     // Handle money added
     handleMoneyAdded(data) {
-        // Update money display
+        // Update money display (refund is announced by the removal message)
         const moneyValue = document.getElementById('money-value');
         if (moneyValue) {
             moneyValue.textContent = `$${Math.floor(data.total).toLocaleString()}`;
         }
-        
-        // Show notification
-        this.game.showNotification(`Earned $${Math.floor(data.amount).toLocaleString()}`, 'info');
     }
     
     // Handle building selected

@@ -4,10 +4,12 @@
 class ResourceManager {
     constructor() {
         // Initial resources
+        // Note: population is persistent state that grows/shrinks over time.
+        // Jobs = number of filled jobs (assigned to commercial/industrial buildings).
         this.resources = {
             money: 50000,
-            power: { available: 0, consumption: 0, production: 0 },
-            water: { available: 0, consumption: 0, production: 0 },
+            power: { available: 0, consumption: 0, production: 0, shortage: false },
+            water: { available: 0, consumption: 0, production: 0, shortage: false },
             population: 0,
             jobs: 0,
             happiness: 50
@@ -26,6 +28,9 @@ class ResourceManager {
         // Maximum history length
         this.maxHistoryLength = 100;
         
+        // History recording timer (record once per second of game time)
+        this.historyTimer = 0;
+        
         // Callbacks for resource changes
         this.callbacks = new Map();
         
@@ -43,17 +48,21 @@ class ResourceManager {
         this.resources.power.production = stats.totalPowerProduction;
         this.resources.power.consumption = stats.totalPowerConsumption;
         this.resources.power.available = Math.max(0, stats.totalPowerProduction - stats.totalPowerConsumption);
+        this.resources.power.shortage = stats.totalPowerProduction < stats.totalPowerConsumption;
         
         // Update water
         this.resources.water.production = stats.totalWaterProduction;
         this.resources.water.consumption = stats.totalWaterConsumption;
         this.resources.water.available = Math.max(0, stats.totalWaterProduction - stats.totalWaterConsumption);
+        this.resources.water.shortage = stats.totalWaterProduction < stats.totalWaterConsumption;
         
-        // Update population and jobs
-        this.resources.population = stats.totalPopulation;
-        this.resources.jobs = stats.totalJobs;
+        // Note: population and jobs are NOT recomputed from buildings here.
+        // They are persistent state managed by Game.growPopulation(), which
+        // distributes them into buildings. We just expose the capacities.
+        this.resources.housingCapacity = stats.housingCapacity;
+        this.resources.jobCapacity = stats.jobCapacity;
         
-        // Calculate money change
+        // Calculate money change (taxes scale with occupancy, set by Game)
         const moneyChange = stats.totalTaxRevenue - stats.totalMaintenanceCost;
         this.resources.money += moneyChange * (deltaTime / 1000); // Per second
         
@@ -63,8 +72,12 @@ class ResourceManager {
         // Update game time
         this.gameTime += deltaTime;
         
-        // Record history
-        this.recordHistory();
+        // Record history once per second of game time
+        this.historyTimer += deltaTime;
+        if (this.historyTimer >= 1000) {
+            this.historyTimer -= 1000;
+            this.recordHistory();
+        }
         
         // Notify callbacks
         this.notifyCallbacks('resourcesUpdated', {
@@ -83,6 +96,8 @@ class ResourceManager {
             totalWaterConsumption: 0,
             totalPopulation: 0,
             totalJobs: 0,
+            housingCapacity: 0,
+            jobCapacity: 0,
             totalTaxRevenue: 0,
             totalMaintenanceCost: 0,
             totalHappinessImpact: 0,
@@ -94,6 +109,8 @@ class ResourceManager {
             stats.totalPowerConsumption += building.type.powerConsumption;
             stats.totalWaterProduction += building.type.waterProduction;
             stats.totalWaterConsumption += building.type.waterConsumption;
+            stats.housingCapacity += building.type.populationCapacity;
+            stats.jobCapacity += building.type.jobCapacity;
             stats.totalPopulation += building.population;
             stats.totalJobs += building.jobs;
             
@@ -118,25 +135,28 @@ class ResourceManager {
     }
     
     // Calculate happiness based on various factors
+    // Runs AFTER Game has distributed population/jobs into buildings.
     calculateHappiness(stats) {
         let happiness = 50; // Base happiness
         
         // Impact from power availability
-        const powerRatio = stats.totalPowerConsumption > 0 ? 
-            stats.totalPowerProduction / stats.totalPowerConsumption : 1;
-        happiness += (powerRatio - 1) * 20;
+        if (stats.totalPowerConsumption > 0) {
+            happiness += this.resources.power.shortage ? -25 : 10;
+        }
         
         // Impact from water availability
-        const waterRatio = stats.totalWaterConsumption > 0 ? 
-            stats.totalWaterProduction / stats.totalWaterConsumption : 1;
-        happiness += (waterRatio - 1) * 20;
+        if (stats.totalWaterConsumption > 0) {
+            happiness += this.resources.water.shortage ? -25 : 10;
+        }
         
-        // Impact from job availability
-        const jobRatio = stats.totalPopulation > 0 ? 
-            stats.totalJobs / stats.totalPopulation : 1;
-        happiness += (jobRatio - 1) * 30;
+        // Impact from unemployment (workforce = share of population that wants work)
+        const workforce = this.resources.population * WORKFORCE_RATIO;
+        if (workforce >= 1) {
+            const employmentRate = Math.min(1, stats.totalJobs / workforce);
+            happiness -= (1 - employmentRate) * 30;
+        }
         
-        // Impact from building happiness
+        // Impact from buildings (parks positive, industrial negative)
         happiness += stats.totalHappinessImpact;
         
         // Clamp happiness between 0 and 100
@@ -218,6 +238,7 @@ class ResourceManager {
                 available: this.resources.power.available,
                 consumption: this.resources.power.consumption,
                 production: this.resources.power.production,
+                shortage: this.resources.power.shortage,
                 ratio: this.resources.power.consumption > 0 ? 
                     this.resources.power.production / this.resources.power.consumption : 1
             },
@@ -225,6 +246,7 @@ class ResourceManager {
                 available: this.resources.water.available,
                 consumption: this.resources.water.consumption,
                 production: this.resources.water.production,
+                shortage: this.resources.water.shortage,
                 ratio: this.resources.water.consumption > 0 ? 
                     this.resources.water.production / this.resources.water.consumption : 1
             },
@@ -253,8 +275,8 @@ class ResourceManager {
     reset() {
         this.resources = {
             money: 50000,
-            power: { available: 0, consumption: 0, production: 0 },
-            water: { available: 0, consumption: 0, production: 0 },
+            power: { available: 0, consumption: 0, production: 0, shortage: false },
+            water: { available: 0, consumption: 0, production: 0, shortage: false },
             population: 0,
             jobs: 0,
             happiness: 50
@@ -270,6 +292,7 @@ class ResourceManager {
         };
         
         this.gameTime = 0;
+        this.historyTimer = 0;
         this.lastUpdateTime = Date.now();
         
         this.notifyCallbacks('resourcesReset', null);
@@ -289,8 +312,20 @@ class ResourceManager {
         this.resources = data.resources;
         this.history = data.history;
         this.gameTime = data.gameTime;
+        
+        // Ensure fields added in later versions exist
+        this.resources.power.shortage = !!this.resources.power.shortage;
+        this.resources.water.shortage = !!this.resources.water.shortage;
+        
+        this.historyTimer = 0;
         this.lastUpdateTime = Date.now();
         
         this.notifyCallbacks('resourcesLoaded', null);
     }
 }
+
+// Share of population that wants a job
+const WORKFORCE_RATIO = 0.6;
+
+// Make globally available
+window.WORKFORCE_RATIO = WORKFORCE_RATIO;

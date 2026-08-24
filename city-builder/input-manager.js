@@ -31,6 +31,8 @@ class InputManager {
             dragStartY: 0,
             dragStartScreenX: 0, // Add explicit initialization
             dragStartScreenY: 0,
+            downScreenX: 0,
+            downScreenY: 0,
             initialCameraX: 0,
             initialCameraY: 0,
             initialZoom: 1,
@@ -91,12 +93,28 @@ class InputManager {
     // Handle mouse wheel
     handleWheel(event) {
         event.preventDefault();
-        if (!this.game.renderer || !this.game.renderer.state) return;
+        const renderer = this.game.renderer;
+        if (!renderer || !renderer.state) return;
+        
+        const camera = renderer.state.camera;
+        
+        // World point currently under the cursor (stays anchored while zooming)
+        const anchor = renderer.screenToWorld(this.mouse.x, this.mouse.y);
         
         const zoomSpeed = 0.1;
-        const delta = event.deltaY > 0 ? -zoomSpeed : zoomSpeed;
-        const newZoom = (this.game.renderer.state.camera.zoom || 1) + delta;
-        this.game.setCameraZoom(newZoom);
+        const direction = event.deltaY > 0 ? -1 : 1;
+        renderer.setCameraZoom(camera.zoom + direction * zoomSpeed);
+        
+        const newZoom = renderer.state.camera.zoom;
+        if (newZoom === camera.zoom) return;
+        
+        // Adjust the camera so the anchor point stays under the cursor
+        const width = renderer.app.renderer.width;
+        const height = renderer.app.renderer.height;
+        renderer.setCameraPosition(
+            anchor.x - (this.mouse.x - width / 2) / newZoom,
+            anchor.y - (this.mouse.y - height / 2) / newZoom
+        );
     }
 
     // Handle mouse down
@@ -104,6 +122,10 @@ class InputManager {
         this.updateMousePosition(event);
         this.mouse.isDown = true;
         this.mouse.button = event.button;
+        
+        // Remember where the press started so we can tell clicks from drags
+        this.uiState.downScreenX = this.mouse.x;
+        this.uiState.downScreenY = this.mouse.y;
         
         // Right click (button 2) always pans
         if (event.button === 2) {
@@ -249,6 +271,13 @@ class InputManager {
         this.mouse.lastClickX = this.mouse.x;
         this.mouse.lastClickY = this.mouse.y;
         
+        // Ignore clicks that ended far from where they started (i.e. camera pans)
+        const dragDistance = Math.hypot(
+            this.mouse.x - this.uiState.downScreenX,
+            this.mouse.y - this.uiState.downScreenY
+        );
+        if (dragDistance > 5) return;
+        
         // Check if clicking on a building
         const building = this.getBuildingAtPosition(this.mouse.worldX, this.mouse.worldY);
         if (building) {
@@ -310,6 +339,18 @@ class InputManager {
                 break;
             case '5':
                 this.selectBuildingType('water');
+                break;
+            case '6':
+                this.selectBuildingType('park');
+                break;
+            case 'r':
+            case 'R':
+                this.selectBuildingType('road');
+                break;
+            case 'x':
+            case 'X':
+            case 'Delete':
+                this.selectBuildingType('delete');
                 break;
             case ' ':
                 event.preventDefault();
@@ -384,6 +425,16 @@ class InputManager {
         const rect = this.canvas.getBoundingClientRect();
         this.mouse.x = event.clientX - rect.left;
         this.mouse.y = event.clientY - rect.top;
+        
+        // Normalise to the renderer's logical size in case the canvas is
+        // being stretched by CSS relative to its internal resolution
+        const renderer = this.game.renderer;
+        if (renderer && renderer.app && rect.width > 0 && rect.height > 0) {
+            const scaleX = renderer.app.renderer.width / rect.width;
+            const scaleY = renderer.app.renderer.height / rect.height;
+            this.mouse.x *= scaleX;
+            this.mouse.y *= scaleY;
+        }
         
         // Convert to world coordinates
         this.mouse.worldX = this.game.screenToWorldX(this.mouse.x);

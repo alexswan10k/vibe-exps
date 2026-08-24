@@ -23,13 +23,14 @@
                     <div id="building-selection">
                         <h3>Buildings</h3>
                         <div class="building-buttons">
-                            <button class="building-btn delete-btn" data-building="delete">Delete</button>
-                            <button class="building-btn" data-building="road">Road</button>
-                            <button class="building-btn" data-building="residential">Residential</button>
-                            <button class="building-btn" data-building="commercial">Commercial</button>
-                            <button class="building-btn" data-building="industrial">Industrial</button>
-                            <button class="building-btn" data-building="power">Power Plant</button>
-                            <button class="building-btn" data-building="water">Water Plant</button>
+                            <button class="building-btn delete-btn" data-building="delete" title="X">Delete (X)</button>
+                            <button class="building-btn" data-building="road" title="R">Road (R)</button>
+                            <button class="building-btn" data-building="residential" title="1">Residential (1)</button>
+                            <button class="building-btn" data-building="commercial" title="2">Commercial (2)</button>
+                            <button class="building-btn" data-building="industrial" title="3">Industrial (3)</button>
+                            <button class="building-btn" data-building="power" title="4">Power Plant (4)</button>
+                            <button class="building-btn" data-building="water" title="5">Water Plant (5)</button>
+                            <button class="building-btn" data-building="park" title="6">Park (6)</button>
                         </div>
                     </div>
                     
@@ -52,6 +53,10 @@
                         <div class="resource-item">
                             <span class="resource-label">Population:</span>
                             <span id="population-value" class="resource-value">0</span>
+                        </div>
+                        <div class="resource-item">
+                            <span class="resource-label">Jobs:</span>
+                            <span id="jobs-value" class="resource-value">0 / 0</span>
                         </div>
                         <div class="resource-item">
                             <span class="resource-label">Power:</span>

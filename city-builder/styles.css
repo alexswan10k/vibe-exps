@@ -165,6 +165,10 @@ body {
     font-weight: bold;
 }
 
+.resource-value.shortage {
+    color: #e74c3c;
+}
+
 #selected-building-info {
     margin-bottom: 20px;
 }
