@@ -4,10 +4,10 @@ A top-down 2D open-world crime sandbox, built with HTML5 Canvas and vanilla Java
 
 ## 🎮 What It Is
 
-- **9 districts** across a 5,376 × 3,840 px city: Downtown, Port Docks, Chinatown & Red Light, Central Park, City Plaza, Sunrise Suburbs, **Liberty International Airport**, **Liberty Bowl Stadium**, and the Ocean Beach & Marina
-- **64+ AI cars** driving with left-hand traffic rules, lane discipline and collision avoidance
-- **80 pedestrians** who flee gunfire, get run over, and drop cash
-- **Drivable boats** moored off the beach — take to the open sea (cars sink in deep water!)
+- A **huge 9,600 × 7,200 px procedurally generated island city** (100×75 blocks) with 20 named districts
+- **Node-and-spline road network**: roads are continuous curves defined between junction nodes — an organically wobbling **Grand Circle** beltway plus four named arterials (**Vespucci Boulevard**, **Algonkin Avenue**, **Sunset Drive**, **Kingsway**) and 11 bezier **connector shortcuts** weaving between districts. AI traffic follows lane offsets along the splines, turns at nodes, and stops for junction lights — bridges over water are fully drivable
+- An organic street grid with irregular blocks, dead-end yards, limited-access **highways**, roundabouts, and a winding **river** bridged 35 times
+- **84 AI cars** and **120 pedestrians**; drivable boats moored at the beach & marina
 - Full **WASTED / BUSTED** death-and-arrest loop with hospital & police-station respawns
 
 ## 🕹️ Controls
@@ -25,12 +25,12 @@ A top-down 2D open-world crime sandbox, built with HTML5 Canvas and vanilla Java
 ## ✨ What's Grand
 
 ### The Map
-- **Airport district**: huge glass terminal, hangars, aircraft parking apron, and a marked runway — with a parked airliner and a stunt ramp at the runway start for high-speed jumps toward the beach
-- **Liberty Bowl Stadium**: a massive multi-tile stadium with stands, running track and floodlit pitch
-- **Pink Palace Casino** in Chinatown: gamble $100 a pull (47% payout, neon included)
-- **Fuel Stations** ×2: stop in the bay to repair your ride for $50
-- **City Plaza**: paved square with animated fountains beside Burger Shot
-- Living beaches: palm trees, striped umbrellas, deck chairs
+- **The Grand Circle**: an elliptical beltway around downtown, crossing the Liberty River twice on stone bridges
+- **Curved boulevards** rendered as smooth carriageways with curbs, double-yellow centerlines and dashed lanes
+- Junction nodes with working **traffic lights** and three fountain **roundabouts**
+- Winding river with estuary island, riparian parks, wavy coastline, Salty's Pier, marina, Gull Island & Pelican Cay
+- Airport (terminal, hangars, airliner, runway ramp), Liberty Bowl Stadium, Pink Palace Casino, 3 fuel stations, 2 Pay 'n' Sprays
+- Merged superblocks, courtyards, parking lots, construction sites, container stacks
 
 ### Wanted Level Escalation
 - ★★ Cops open fire (drive-by pistol fire, target leading)
@@ -63,9 +63,9 @@ Living atmosphere cycle: ☀️ clear → ⛅ overcast → 🌧️ rain → ⛈�
 **Files:**
 - `index.html` / `styles.css` - Page shell, HUD, death overlays
 - `game.js` - Core loop, weather, helicopter, police escalation, missions, minimap
-- `worldData.js` - Procedural city grid generator & district naming
-- `world.js` - World parsing, terrain/landmark rendering, prop population
-- `car.js` - Vehicle physics/AI, water sinking, Boat class
+- `worldData.js` - Seeded organic city generator: splined curved roads, Grand Circle beltway, river & bridges, irregular grid, districts
+- `world.js` - World parsing, terrain/curve rendering, building merging, prop population
+- `car.js` - Vehicle physics/AI, highway speeds, water sinking, Boat class
 - `player.js` / `pedestrian.js` - On-foot characters
 - `weapons.js` - Bullets, RPG splash damage, NPC fire
 - `props.js` - Street props, fountains, airliner, collectibles

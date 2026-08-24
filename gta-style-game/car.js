@@ -201,9 +201,10 @@ class Car {
     checkWater() {
         if (this.isAirborne || this.exploded) return;
         if (typeof world === 'undefined' || !world.waterTiles) return;
-
         const cx = this.x + this.width / 2;
         const cy = this.y + this.height / 2;
+        // Bridge decks span the water - no sinking on top of them
+        if (world.onBridge && world.onBridge(cx, cy)) return;
         let deep = false;
         for (let w of world.waterTiles) {
             if (cx >= w.x && cx <= w.x + w.width && cy >= w.y && cy <= w.y + w.height) {
@@ -217,6 +218,9 @@ class Car {
             this.vy *= 0.86;
             this.speed *= 0.86;
             this.takeDamage(1.4); // Sinking!
+            if (this.exploded) {
+                this.sunk = true; // Burnt hulls slip beneath the waves
+            }
             this.splashTick++;
             if (typeof particleSystem !== 'undefined' && this.splashTick % 6 === 0) {
                 particleSystem.addWaterSplash(cx, cy);
@@ -316,8 +320,8 @@ class Car {
             const distanceMoved = Math.sqrt((this.x - firstPos.x) ** 2 + (this.y - firstPos.y) ** 2);
             if (distanceMoved < 10) {
                 this.stuckTimer++;
-                if (this.stuckTimer > 30) {
-                    this.handleStuckSituation(roads);
+                if (this.stuckTimer > 40) {
+                    this.handleStuckSituation();
                     return;
                 }
             } else {
@@ -325,15 +329,16 @@ class Car {
             }
         }
 
-        let onRoad = this.isOnRoad(roads);
-        let currentRoad = this.getCurrentRoad(roads);
+        const centerX = this.x + this.width / 2;
+        const centerY = this.y + this.height / 2;
         let hasObstacleAhead = this.detectObstacleAhead(buildings, cars);
+        let maxCruise = this.maxSpeed * 0.62;
 
         let targetAccel = this.acceleration * 0.1;
-        let maxCruise = this.maxSpeed * 0.65;
 
+        // ---- Police: direct pursuit (unchanged) ----
         if (this.isPolice && !this.exploded && typeof player !== 'undefined') {
-            maxCruise = this.maxSpeed;
+            let maxCruise = this.maxSpeed;
             targetAccel = this.acceleration * 0.4;
 
             let targetX = player.inCar && player.car ? player.car.x + player.car.width / 2 : player.x + player.width / 2;
@@ -344,8 +349,8 @@ class Car {
                 targetY += player.car.vy * 15;
             }
 
-            let dx = targetX - (this.x + this.width / 2);
-            let dy = targetY - (this.y + this.height / 2);
+            let dx = targetX - centerX;
+            let dy = targetY - centerY;
             this.targetDirection = Math.atan2(dy, dx);
 
             if (hasObstacleAhead) {
@@ -354,37 +359,76 @@ class Car {
                 this.speed = Math.min(this.speed + targetAccel, maxCruise);
             }
         } else {
-            if (hasObstacleAhead) {
-                this.speed *= 0.8;
-            } else {
-                this.speed = Math.min(this.speed + targetAccel, maxCruise);
-            }
+            // ---- Civilian: follow the road graph ----
+            if (!world.nodeEdges) { this.speed *= 0.9; return; }
 
-            if (onRoad && currentRoad) {
-                let atIntersection = this.isAtIntersection(currentRoad, roads);
-
-                if (atIntersection) {
-                    let light = trafficLights.find(l => Math.abs(l.x - (this.x + this.width / 2)) < 150 && Math.abs(l.y - (this.y + this.height / 2)) < 150);
-                    if (light && light.state === 'red') {
-                        let dx = light.x - this.x;
-                        let dy = light.y - this.y;
-                        let angleToLight = Math.atan2(dy, dx);
-                        let angleDiff = Math.abs(Math.atan2(Math.sin(this.angle - angleToLight), Math.cos(this.angle - angleToLight)));
-                        if (angleDiff < Math.PI / 3) {
-                            this.speed *= 0.7;
-                        }
-                    }
-
-                    if (!this.lastIntersection) {
-                        this.lastIntersection = { x: Math.floor(this.x / 300) * 300, y: Math.floor(this.y / 300) * 300 };
-                        this.targetDirection = this.chooseSmartDirection(currentRoad);
-                    }
+            // Acquire or validate current edge
+            if (!this.edge || this.edge.dead) {
+                const ne = world.nearestEdge(centerX, centerY);
+                if (ne) {
+                    this.edge = ne.edge;
+                    this.dist = ne.dist;
+                    const p0 = world.pointAtDist(ne.edge, ne.dist);
+                    const p1 = world.pointAtDist(ne.edge, ne.dist + 30);
+                    const headingDot = Math.cos(this.angle - Math.atan2(p1.y - p0.y, p1.x - p0.x));
+                    this.dir = headingDot >= 0 ? 1 : -1;
                 } else {
-                    this.lastIntersection = null;
-                    this.stickToRightSide(currentRoad);
+                    this.speed *= 0.95;
+                    return;
                 }
             } else {
-                this.navigateToNearestRoad(roads);
+                const proj = world.projectOnEdge(this.edge, centerX, centerY);
+                if (proj.off < 200) {
+                    this.dist = proj.dist;
+                } else if (proj.off < 480) {
+                    // Drifting off the lane: steer back toward the centerline
+                    const lp = world.pointAtDist(this.edge, this.dist);
+                    this.targetDirection = Math.atan2(lp.y - centerY, lp.x - centerX);
+                    this.speed = this.speed * 0.96 + 0.4;
+                    // skip normal cruise control this frame
+                    hasObstacleAhead = false;
+                } else {
+                    this.edge = null;
+                    return;
+                }
+            }
+
+            maxCruise = this.maxSpeed * 0.62;
+            if (this.edge) {
+                if (this.edge.kind === 'boulevard') maxCruise = this.maxSpeed * 0.68;
+                if (this.edge.kind === 'beltway') maxCruise = this.maxSpeed * 0.72;
+                if (this.edge.kind === 'highway') maxCruise = this.maxSpeed * 0.95;
+            }
+
+            if (this.edge) {
+                const remain = this.dir > 0 ? this.edge.len - this.dist : this.dist;
+                const endNodeId = this.dir > 0 ? this.edge.b : this.edge.a;
+                const light = world.nodeLight ? world.nodeLight.get(endNodeId) : null;
+                const redAhead = light && light.state === 'red' && remain < 150 && remain > 26;
+
+                if (remain < 28 && !redAhead) {
+                    // Arrived at node: pick the next edge
+                    this.pickNextEdge(endNodeId);
+                } else {
+                    // Aim for a look-ahead point on our lane
+                    const lookD = Math.max(0, Math.min(this.edge.len,
+                        this.dist + this.dir * (46 + Math.abs(this.speed) * 8)));
+                    const lp = world.pointAtDist(this.edge, lookD);
+                    const off = this.edge.w * 0.21 * this.dir; // right-hand lane
+                    const tx = lp.x + (-Math.sin(lp.ang)) * off;
+                    const ty = lp.y + (Math.cos(lp.ang)) * off;
+                    this.targetDirection = Math.atan2(ty - centerY, tx - centerX);
+
+                    if (redAhead) {
+                        maxCruise = remain < 70 ? 0 : this.maxSpeed * 0.12;
+                    }
+                }
+            }
+
+            if (hasObstacleAhead) {
+                this.speed *= 0.82;
+            } else {
+                this.speed = Math.min(this.speed + targetAccel, maxCruise);
             }
         }
 
@@ -446,8 +490,25 @@ class Car {
         return collisionFront || collisionLeft || collisionRight;
     }
 
+    // Spatial lookup for static buildings - avoids scanning thousands per frame
+    nearbyBuildings(fallback, px, py, radius = 260) {
+        if (typeof world !== 'undefined' && world.buildingGrid) {
+            const BG = 288;
+            const res = [];
+            const x0 = Math.floor((px - radius) / BG), x1 = Math.floor((px + radius) / BG);
+            const y0 = Math.floor((py - radius) / BG), y1 = Math.floor((py + radius) / BG);
+            for (let by = y0; by <= y1; by++) for (let bx = x0; bx <= x1; bx++) {
+                const arr = world.buildingGrid.get(bx + ',' + by);
+                if (arr) for (let b of arr) if (res.indexOf(b) === -1) res.push(b);
+            }
+            return res;
+        }
+        return fallback || [];
+    }
+
     isPointColliding(px, py, buildings, cars) {
-        for (let b of buildings) {
+        const blist = this.nearbyBuildings(buildings, px, py, 160);
+        for (let b of blist) {
             if (px > b.x && px < b.x + b.width && py > b.y && py < b.y + b.height) {
                 return true;
             }
@@ -466,110 +527,91 @@ class Car {
         return false;
     }
 
-    stickToRightSide(currentRoad) {
-        if (!currentRoad) return;
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-
-        let normAngle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
-        let isFacingEast = Math.abs(normAngle) < Math.PI / 4;
-        let isFacingWest = Math.abs(normAngle) > Math.PI * 0.75;
-        let isFacingSouth = Math.abs(normAngle - Math.PI / 2) < Math.PI / 4;
-        let isFacingNorth = Math.abs(normAngle + Math.PI / 2) < Math.PI / 4;
-
-        if (currentRoad.type === 'horizontal' || currentRoad.width > currentRoad.height) {
-            let targetY = currentRoad.y + currentRoad.height * 0.75;
-            if (isFacingWest) targetY = currentRoad.y + currentRoad.height * 0.25;
-
-            const distY = centerY - targetY;
-            if (Math.abs(distY) > 5) {
-                const steer = distY > 0 ? -1 : 1;
-                this.angle += steer * this.turnSpeed * 0.2;
-            } else if (isFacingEast) {
-                this.targetDirection = 0;
-            } else if (isFacingWest) {
-                this.targetDirection = Math.PI;
-            }
-        } else if (currentRoad.type === 'vertical' || currentRoad.height > currentRoad.width) {
-            let targetX = currentRoad.x + currentRoad.width * 0.25;
-            if (isFacingNorth) targetX = currentRoad.x + currentRoad.width * 0.75;
-
-            const distX = centerX - targetX;
-            if (Math.abs(distX) > 5) {
-                const steer = distX > 0 ? -1 : 1;
-                this.angle += steer * this.turnSpeed * 0.2;
-            } else if (isFacingSouth) {
-                this.targetDirection = Math.PI / 2;
-            } else if (isFacingNorth) {
-                this.targetDirection = -Math.PI / 2;
-            }
+    // Pick the next edge at a node, avoiding U-turns where possible
+    pickNextEdge(nodeId) {
+        const cands = (world.nodeEdges.get(nodeId) || []).slice();
+        if (cands.length === 0) { this.edge = null; return; }
+        let next = null;
+        // Prefer not going straight back
+        for (let i = cands.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [cands[i], cands[j]] = [cands[j], cands[i]];
         }
-    }
-
-    chooseSmartDirection(currentRoad) {
-        let normAngle = Math.atan2(Math.sin(this.angle), Math.cos(this.angle));
-        let currentDir = Math.round(normAngle / (Math.PI / 2)) * (Math.PI / 2);
-        let choices = [currentDir, currentDir + Math.PI / 2, currentDir - Math.PI / 2];
-        return choices[Math.floor(Math.random() * choices.length)];
-    }
-
-    navigateToNearestRoad(roads) {
-        let nearestRoad = this.findNearestRoad(roads);
-        if (nearestRoad) {
-            let targetX = nearestRoad.x + nearestRoad.width / 2;
-            let targetY = nearestRoad.y + nearestRoad.height / 2;
-            this.targetDirection = Math.atan2(targetY - (this.y + this.height / 2), targetX - (this.x + this.width / 2));
-            this.speed = Math.min(this.speed + this.acceleration * 0.1, this.maxSpeed * 0.5);
+        for (const e of cands) {
+            if (e === this.edge && cands.length > 1) continue;
+            next = e;
+            break;
         }
+        if (!next) { this.edge = null; return; }
+        this.edge = next;
+        this.dir = (next.a === nodeId) ? 1 : -1;
+        this.dist = this.dir > 0 ? 0 : next.len;
     }
 
+    // Bump recovery: nudge toward the clearest direction
     handleSmartCollision(buildings, cars, roads) {
         let impactSpeed = Math.abs(this.speed);
         if (impactSpeed > 2 && Math.random() > 0.8) {
             this.takeDamage(impactSpeed * 2);
         }
 
-        const testDirections = [0, 0.2, -0.2, 0.4, -0.4, 0.6, -0.6];
-        let bestDirection = this.angle;
-        let bestDistance = 0;
+        // Prefer steering back toward our lane (or the nearest one)
+        let aim = null;
+        if (this.edge && typeof world !== 'undefined' && world.pointAtDist) {
+            aim = world.pointAtDist(this.edge, this.dist + this.dir * 60);
+        } else {
+            const np = world.nearestLanePoint(this.x + this.width / 2, this.y + this.height / 2);
+            if (np) aim = { x: np.x, y: np.y };
+        }
+        if (aim) {
+            const testAngle = Math.atan2(aim.y - (this.y + this.height / 2), aim.x - (this.x + this.width / 2));
+            const testX = this.x + Math.cos(testAngle) * Math.abs(this.speed) * 0.5;
+            const testY = this.y + Math.sin(testAngle) * Math.abs(this.speed) * 0.5;
+            if (!this.isCollidingWithBuildings(testX, testY, buildings) &&
+                !this.isCollidingWithCars(testX, testY, cars)) {
+                this.angle = testAngle;
+                this.targetDirection = testAngle;
+                this.speed = 1.2;
+                return;
+            }
+        }
 
-        for (let angleOffset of testDirections) {
+        const testDirections = [0.35, -0.35, 0.7, -0.7, 1.1, -1.1];
+        for (const angleOffset of testDirections) {
             const testAngle = this.angle + angleOffset;
             const testX = this.x + Math.cos(testAngle) * this.speed * 0.5;
             const testY = this.y + Math.sin(testAngle) * this.speed * 0.5;
-
             if (!this.isCollidingWithBuildings(testX, testY, buildings) &&
                 !this.isCollidingWithCars(testX, testY, cars)) {
-                const distanceFromCurrent = Math.abs(angleOffset);
-                if (distanceFromCurrent < bestDistance || bestDistance === 0) {
-                    bestDistance = distanceFromCurrent;
-                    bestDirection = testAngle;
-                }
+                this.angle = testAngle;
+                this.targetDirection = testAngle;
+                this.speed = 1.0;
+                return;
             }
         }
-
-        this.angle = bestDirection;
-        this.targetDirection = bestDirection;
-        this.speed = 1.0;
-        this.vx = Math.cos(this.angle) * this.speed;
-        this.vy = Math.sin(this.angle) * this.speed;
+        this.speed = 0;
     }
 
-    handleStuckSituation(roads) {
-        this.speed = 1.5;
-        this.angle += (Math.random() > 0.5 ? Math.PI / 2 : -Math.PI / 2);
-        this.targetDirection = this.angle;
+    handleStuckSituation() {
         this.stuckTimer = 0;
-
-        if (!this.isOnRoad(roads)) {
-            let nearestRoad = this.findNearestRoad(roads);
-            if (nearestRoad) {
-                let targetX = nearestRoad.x + nearestRoad.width / 2;
-                let targetY = nearestRoad.y + nearestRoad.height / 2;
-                this.angle = Math.atan2(targetY - this.y, targetX - this.x);
-            }
+        const p = world.nearestLanePoint(this.x + this.width / 2, this.y + this.height / 2);
+        if (!p) return;
+        const off = Math.hypot(this.x + this.width / 2 - p.x, this.y + this.height / 2 - p.y);
+        if (off > 260 || this.stuckHard >= 2) {
+            // Teleport back onto the lane - these cars are disposable
+            this.x = p.x - this.width / 2;
+            this.y = p.y - this.height / 2;
+            this.angle = p.ang;
+            this.targetDirection = p.ang;
+            this.speed = 2.0;
+            this.stuckHard = 0;
+        } else {
+            this.angle += (Math.random() > 0.5 ? 1 : -1) * Math.PI / 3;
+            this.speed = 1.5;
+            this.stuckHard = (this.stuckHard || 0) + 1;
         }
     }
+
 
     handleBoundaryCollision(roads, worldSize) {
         this.speed *= 0.5;
@@ -582,67 +624,9 @@ class Car {
         if (this.y > worldSize.height - this.height) this.y = worldSize.height - this.height;
     }
 
-    isOnRoad(roads) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        for (let road of roads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    getCurrentRoad(roads) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        for (let road of roads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                return road;
-            }
-        }
-        return null;
-    }
-
-    isAtIntersection(currentRoad, roads) {
-        if (currentRoad && currentRoad.type === 'crossroad') return true;
-        let centerX = this.x + this.width / 2;
-        let centerY = this.y + this.height / 2;
-        let roadCount = 0;
-        for (let road of roads) {
-            if (centerX >= road.x && centerX <= road.x + road.width &&
-                centerY >= road.y && centerY <= road.y + road.height) {
-                roadCount++;
-            }
-        }
-        return roadCount > 1;
-    }
-
-    findNearestRoad(roads) {
-        const centerX = this.x + this.width / 2;
-        const centerY = this.y + this.height / 2;
-        let nearestRoad = roads[0];
-        let minDistance = Infinity;
-
-        for (let road of roads) {
-            let distance;
-            if (road.type === 'horizontal' || road.width > road.height) {
-                distance = Math.abs(centerY - (road.y + road.height / 2));
-            } else {
-                distance = Math.abs(centerX - (road.x + road.width / 2));
-            }
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestRoad = road;
-            }
-        }
-        return nearestRoad;
-    }
-
     isCollidingWithBuildings(x, y, buildings) {
-        for (let building of buildings) {
+        const blist = this.nearbyBuildings(buildings, x + this.width / 2, y + this.height / 2, 300);
+        for (let building of blist) {
             if (x < building.x + building.width && x + this.width > building.x &&
                 y < building.y + building.height && y + this.height > building.y) {
                 return true;
@@ -726,8 +710,15 @@ class Car {
 
         let impactSpeed = Math.abs(velAlongNormal);
         if (impactSpeed > 1.2) {
-            this.takeDamage(impactSpeed * 3.5);
-            other.takeDamage(impactSpeed * 3.5);
+            // AI-vs-AI fender benders: cosmetic only, no attrition
+            const playerInvolved = this.isPlayerCar || other.isPlayerCar;
+            if (playerInvolved) {
+                this.takeDamage(impactSpeed * 3.5);
+                other.takeDamage(impactSpeed * 3.5);
+            } else {
+                this.takeDamage(impactSpeed * 0.4);
+                other.takeDamage(impactSpeed * 0.4);
+            }
             if (typeof audioSystem !== 'undefined') audioSystem.playCrash(impactSpeed);
             if (typeof particleSystem !== 'undefined') {
                 particleSystem.addDebris((this.x + other.x) / 2, (this.y + other.y) / 2, 6);

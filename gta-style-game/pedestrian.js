@@ -55,11 +55,29 @@ class Pedestrian {
         let newY = this.y + Math.sin(this.angle) * this.speed;
 
         let collision = false;
-        for (let b of buildings) {
-            if (newX > b.x - 10 && newX < b.x + b.width + 10 &&
-                newY > b.y - 10 && newY < b.y + b.height + 10) {
-                collision = true;
-                break;
+        if (typeof world !== 'undefined' && world.buildingGrid) {
+            const BG = 288;
+            const bx0 = Math.floor((newX - 10) / BG), bx1 = Math.floor((newX + this.width + 10) / BG);
+            const by0 = Math.floor((newY - 10) / BG), by1 = Math.floor((newY + this.height + 10) / BG);
+            outer:
+            for (let byy = by0; byy <= by1; byy++) for (let bxx = bx0; bxx <= bx1; bxx++) {
+                const arr = world.buildingGrid.get(bxx + ',' + byy);
+                if (!arr) continue;
+                for (let b of arr) {
+                    if (newX > b.x - 10 && newX < b.x + b.width + 10 &&
+                        newY > b.y - 10 && newY < b.y + b.height + 10) {
+                        collision = true;
+                        break outer;
+                    }
+                }
+            }
+        } else {
+            for (let b of buildings) {
+                if (newX > b.x - 10 && newX < b.x + b.width + 10 &&
+                    newY > b.y - 10 && newY < b.y + b.height + 10) {
+                    collision = true;
+                    break;
+                }
             }
         }
 

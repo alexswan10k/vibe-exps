@@ -19,7 +19,6 @@ let gameTime = 0;
 let score = 0;
 let distanceTraveled = 0;
 let lastPlayerPos = { x: 0, y: 0 };
-let allRoads = [];
 
 // UI & Minimap Variables
 let minimapCanvas, minimapCtx;
@@ -107,35 +106,39 @@ function init() {
     // Load world from procedural multi-district layout
     world = World.loadFromEmbedded();
 
-    // Spawn player in Downtown
+    // Spawn player near the closest road node to Downtown
     const worldSize = world.getWorldSize();
-    let spawnX = 3300;
-    let spawnY = 1500;
+    let spawnX = 6900;
+    let spawnY = 1700;
 
-    let validRoads = [...world.horizontalRoads, ...world.verticalRoads];
-    if (validRoads.length > 0) {
-        let best = validRoads[0];
-        let minDist = Infinity;
-        for (let r of validRoads) {
-            let d = (r.x + r.width / 2 - spawnX) ** 2 + (r.y + r.height / 2 - spawnY) ** 2;
-            if (d < minDist) {
-                minDist = d;
-                best = r;
-            }
-        }
-        spawnX = best.x + best.width / 2;
-        spawnY = best.y + best.height / 2;
+    if (world.edges.length > 0) {
+        const np = world.nearestLanePoint(spawnX, spawnY);
+        if (np) { spawnX = np.x; spawnY = np.y; }
     }
 
     player = new Player(spawnX, spawnY, worldSize);
 
     // Create diverse vehicles
     createCars();
+
+    // Uniform hash grid of static buildings for fast collision queries
+    world.buildingGrid = new Map();
+    const BG = 288;
+    for (const b of world.buildings) {
+        const x0 = Math.floor(b.x / BG), x1 = Math.floor((b.x + b.width) / BG);
+        const y0 = Math.floor(b.y / BG), y1 = Math.floor((b.y + b.height) / BG);
+        for (let byy = y0; byy <= y1; byy++) for (let bxx = x0; bxx <= x1; bxx++) {
+            const k = bxx + ',' + byy;
+            if (!world.buildingGrid.has(k)) world.buildingGrid.set(k, []);
+            world.buildingGrid.get(k).push(b);
+        }
+    }
+
     createBoats();
     initRainPool();
 
     // Create pedestrians
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < 120; i++) {
         pedestrians.push(new Pedestrian(Math.random() * worldSize.width, Math.random() * worldSize.height, worldSize));
     }
 
@@ -226,35 +229,25 @@ function resizeCanvas() {
 }
 
 function createCars() {
-    const allRoads = [
-        ...world.roads,
-        ...world.horizontalRoads,
-        ...world.verticalRoads,
-        ...world.crossroads
-    ];
-
     const carTypes = ['sedan', 'supercar', 'muscle', 'taxi', 'bike', 'sedan', 'supercar', 'muscle'];
 
-    for (let i = 0; i < 64; i++) {
-        let road = allRoads[Math.floor(Math.random() * allRoads.length)];
-        let x, y, angle;
-
-        if (road.type === 'horizontal' || road.width > road.height) {
-            x = road.x + Math.random() * road.width;
-            y = road.y + road.height / 2 - 12;
-            angle = Math.random() < 0.5 ? 0 : Math.PI;
-        } else if (road.type === 'vertical' || road.height > road.width) {
-            x = road.x + road.width / 2 - 22;
-            y = road.y + Math.random() * road.height;
-            angle = Math.random() < 0.5 ? Math.PI / 2 : -Math.PI / 2;
-        } else {
-            x = road.x + road.width / 2;
-            y = road.y + road.height / 2;
-            angle = 0;
-        }
+    for (let i = 0; i < 84; i++) {
+        // Spawn on a random road-graph edge, on the lane
+        const edge = world.edges[Math.floor(Math.random() * world.edges.length)];
+        const d = Math.random() * edge.len;
+        const p = world.pointAtDist(edge, d);
+        const dirSign = Math.random() < 0.5 ? 1 : -1;
+        const off = edge.w * 0.21 * dirSign;
+        const x = p.x + (-Math.sin(p.ang)) * off;
+        const y = p.y + (Math.cos(p.ang)) * off;
+        const angle = dirSign > 0 ? p.ang : p.ang + Math.PI;
 
         let type = carTypes[Math.floor(Math.random() * carTypes.length)];
-        cars.push(new Car(x, y, angle, false, null, type));
+        const car = new Car(x - 32, y - 16, angle, false, null, type);
+        car.edge = edge;
+        car.dir = dirSign;
+        car.dist = d;
+        cars.push(car);
     }
 
     // Spawn parked special vehicles near landmarks
@@ -270,9 +263,10 @@ function createCars() {
 function createBoats() {
     // Moored off the beach - steal one and take to the open sea!
     const spots = [
-        { x: 50.4 * 96, y: 11 * 96, color: '#ECEFF1', angle: Math.PI },
-        { x: 50.4 * 96, y: 26 * 96, color: '#FF7043', angle: Math.PI },
-        { x: 52.2 * 96, y: 19 * 96, color: '#26C6DA', angle: 0 }
+        // Berth 1: long clear channel north of the pier (used by the boat tutorial flow)
+        { x: 91.5 * 96, y: 41 * 96, color: '#ECEFF1', angle: -Math.PI / 2 },
+        { x: 93 * 96, y: 19 * 96, color: '#FF7043', angle: Math.PI },
+        { x: 92 * 96, y: 52 * 96, color: '#26C6DA', angle: -Math.PI / 2 }
     ];
     for (let s of spots) {
         cars.push(new Boat(s.x, s.y, s.angle, s.color));
@@ -389,15 +383,17 @@ function update(deltaTime) {
     }
 
     const worldSize = world.getWorldSize();
-    allRoads = [
-        ...world.roads,
-        ...world.horizontalRoads,
-        ...world.verticalRoads,
-        ...world.crossroads
-    ];
 
     for (let car of cars) {
-        car.update(keys, world.buildings, cars, allRoads, world.trafficLights, worldSize);
+        car.update(keys, world.buildings, cars, null, world.trafficLights, worldSize);
+    }
+
+    // Remove cars that sank beneath the waves (never block shipping lanes)
+    for (let i = cars.length - 1; i >= 0; i--) {
+        if (cars[i].sunk) {
+            if (player.car === cars[i]) { player.exitCar(); }
+            cars.splice(i, 1);
+        }
     }
 
     // Props & Collectibles Manager update
@@ -432,7 +428,7 @@ function update(deltaTime) {
 
     // Pedestrians
     for (let ped of pedestrians) {
-        ped.update(world.buildings, cars, player, allRoads);
+        ped.update(world.buildings, cars, player, null);
     }
 
     // District Tracking & HUD Banner
@@ -834,39 +830,65 @@ function drawMinimap() {
     minimapCtx.save();
     minimapCtx.translate(minimapCanvas.width / 2, minimapCanvas.height / 2);
 
-    const scale = 0.035;
+    const scale = 0.028;
     minimapCtx.scale(scale, scale);
     minimapCtx.translate(-player.x - player.width / 2, -player.y - player.height / 2);
+
+    // Viewport bounds in world coords - cull everything off-minimap
+    const halfW = (minimapCanvas.width / 2) / scale + 200;
+    const halfH = (minimapCanvas.height / 2) / scale + 200;
+    const pcx = player.x + player.width / 2, pcy = player.y + player.height / 2;
+    const inView = (x, y, w, h) => x + w > pcx - halfW && x < pcx + halfW && y + h > pcy - halfH && y < pcy + halfH;
 
     // Draw Water
     minimapCtx.fillStyle = '#023E8A';
     for (let w of world.waterTiles) {
-        minimapCtx.fillRect(w.x, w.y, w.width, w.height);
+        if (inView(w.x, w.y, w.width, w.height)) minimapCtx.fillRect(w.x, w.y, w.width, w.height);
     }
 
     // Draw Sand
     minimapCtx.fillStyle = '#EED8AE';
     for (let s of world.sandTiles) {
-        minimapCtx.fillRect(s.x, s.y, s.width, s.height);
+        if (inView(s.x, s.y, s.width, s.height)) minimapCtx.fillRect(s.x, s.y, s.width, s.height);
     }
 
-    // Draw Roads
-    minimapCtx.fillStyle = '#333333';
-    for (let road of allRoads) {
-        minimapCtx.fillRect(road.x, road.y, road.width, road.height);
+    // Draw Roads (graph edges as strokes)
+    minimapCtx.lineCap = 'round';
+    for (let e of world.edges) {
+        if (!inView(e.bbox.x0, e.bbox.y0, e.bbox.x1 - e.bbox.x0, e.bbox.y1 - e.bbox.y0)) continue;
+        minimapCtx.strokeStyle = e.bridge ? '#3E4C5A' : '#333333';
+        minimapCtx.lineWidth = Math.max(24, e.w * 0.9);
+        minimapCtx.beginPath();
+        minimapCtx.moveTo(e.pts[0][0], e.pts[0][1]);
+        for (let i = 1; i < e.pts.length; i++) minimapCtx.lineTo(e.pts[i][0], e.pts[i][1]);
+        minimapCtx.stroke();
     }
+    minimapCtx.lineCap = 'butt';
 
     // Draw Buildings
     minimapCtx.fillStyle = '#555555';
     for (let b of world.buildings) {
-        minimapCtx.fillRect(b.x, b.y, b.width, b.height);
+        if (inView(b.x, b.y, b.width, b.height)) minimapCtx.fillRect(b.x, b.y, b.width, b.height);
     }
 
     // Draw Runways & Aprons
     if (world.runwayTiles) {
         minimapCtx.fillStyle = '#3A3A3A';
         for (let rw of world.runwayTiles) {
-            minimapCtx.fillRect(rw.x, rw.y, rw.width, rw.height);
+            if (inView(rw.x, rw.y, rw.width, rw.height)) minimapCtx.fillRect(rw.x, rw.y, rw.width, rw.height);
+        }
+    }
+
+    // Draw Piers & Open Lots
+    if (world.pierTiles) {
+        minimapCtx.fillStyle = '#D7CCC8';
+        for (let p of world.pierTiles) if (inView(p.x, p.y, p.width, p.height)) minimapCtx.fillRect(p.x, p.y, p.width, p.height);
+    }
+    if (world.openTiles) {
+        for (let o of world.openTiles) {
+            if (!inView(o.x, o.y, o.width, o.height)) continue;
+            minimapCtx.fillStyle = o.kind === 'LOT' ? '#3E3E3E' : '#8D6E63';
+            minimapCtx.fillRect(o.x, o.y, o.width, o.height);
         }
     }
 
@@ -969,92 +991,11 @@ function draw() {
     // 2. Draw Terrain (Beaches, Oceans with waves, Central Park, Swimming Pools)
     world.drawTerrain(ctx, camera, gameTime, lightLevel);
 
-    // 3. Draw Roads, Sidewalks, and Markings
     const viewMargin = 120;
     const minX = camera.x - viewMargin;
     const maxX = camera.x + camera.width + viewMargin;
     const minY = camera.y - viewMargin;
     const maxY = camera.y + camera.height + viewMargin;
-
-    // Sidewalks
-    ctx.fillStyle = '#A0A0A0';
-    for (let road of allRoads) {
-        if (road.x >= minX && road.x <= maxX && road.y >= minY && road.y <= maxY) {
-            ctx.fillRect(road.x - 8, road.y - 8, road.width + 16, road.height + 16);
-        }
-    }
-
-    // Curbs
-    ctx.fillStyle = '#757575';
-    for (let road of allRoads) {
-        if (road.x >= minX && road.x <= maxX && road.y >= minY && road.y <= maxY) {
-            ctx.fillRect(road.x - 2, road.y - 2, road.width + 4, road.height + 4);
-        }
-    }
-
-    // Dark Asphalt
-    ctx.fillStyle = '#212121';
-    for (let road of allRoads) {
-        if (road.x >= minX && road.x <= maxX && road.y >= minY && road.y <= maxY) {
-            ctx.fillRect(road.x, road.y, road.width, road.height);
-        }
-    }
-
-    // Road Markings (Yellow double lines & white dashed lane dividers)
-    for (let road of allRoads) {
-        if (road.x < minX || road.x > maxX || road.y < minY || road.y > maxY) continue;
-
-        ctx.lineWidth = 2;
-        if (road.type === 'horizontal' || road.width > road.height) {
-            ctx.strokeStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.moveTo(road.x, road.y + road.height / 2 - 2);
-            ctx.lineTo(road.x + road.width, road.y + road.height / 2 - 2);
-            ctx.moveTo(road.x, road.y + road.height / 2 + 2);
-            ctx.lineTo(road.x + road.width, road.y + road.height / 2 + 2);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-            ctx.setLineDash([8, 12]);
-            ctx.beginPath();
-            ctx.moveTo(road.x, road.y + road.height * 0.25);
-            ctx.lineTo(road.x + road.width, road.y + road.height * 0.25);
-            ctx.moveTo(road.x, road.y + road.height * 0.75);
-            ctx.lineTo(road.x + road.width, road.y + road.height * 0.75);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        } else if (road.type === 'vertical' || road.height > road.width) {
-            ctx.strokeStyle = '#FFD700';
-            ctx.beginPath();
-            ctx.moveTo(road.x + road.width / 2 - 2, road.y);
-            ctx.lineTo(road.x + road.width / 2 - 2, road.y + road.height);
-            ctx.moveTo(road.x + road.width / 2 + 2, road.y);
-            ctx.lineTo(road.x + road.width / 2 + 2, road.y + road.height);
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-            ctx.setLineDash([8, 12]);
-            ctx.beginPath();
-            ctx.moveTo(road.x + road.width * 0.25, road.y);
-            ctx.lineTo(road.x + road.width * 0.25, road.y + road.height);
-            ctx.moveTo(road.x + road.width * 0.75, road.y);
-            ctx.lineTo(road.x + road.width * 0.75, road.y + road.height);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        } else {
-            // Crossroads Zebra stripes
-            ctx.fillStyle = 'rgba(255,255,255,0.55)';
-            let w = road.width, h = road.height;
-            for (let i = 10; i < w - 10; i += 12) {
-                ctx.fillRect(road.x + i, road.y + 2, 6, 10);
-                ctx.fillRect(road.x + i, road.y + h - 12, 6, 10);
-            }
-            for (let i = 10; i < h - 10; i += 12) {
-                ctx.fillRect(road.x + 2, road.y + i, 10, 6);
-                ctx.fillRect(road.x + w - 12, road.y + i, 10, 6);
-            }
-        }
-    }
 
     // 4. Draw Skid Marks
     if (typeof particleSystem !== 'undefined') {
@@ -1363,6 +1304,7 @@ function drawBuildings3D(ctx) {
         if (building.style === 'chinatown') wallColor = '#B71C1C';
         if (building.style === 'industrial') wallColor = '#455A64';
         if (building.style === 'suburb') wallColor = '#795548';
+        if (building.style === 'brownstone') wallColor = '#4E342E';
 
         if (offsetX > 0) {
             ctx.fillStyle = wallColor;
@@ -1420,6 +1362,8 @@ function drawBuildings3D(ctx) {
             ctx.fillStyle = '#78909C';
         } else if (building.style === 'suburb') {
             ctx.fillStyle = '#D84315';
+        } else if (building.style === 'brownstone') {
+            ctx.fillStyle = '#6D4C41';
         } else if (building.style === 'container') {
             ctx.fillStyle = building.color || '#D32F2F';
         } else if (building.style === 'pns') {
@@ -1466,6 +1410,22 @@ function drawBuildings3D(ctx) {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('龙 DRAGON WOK 龙', r1x + building.width / 2, r1y + building.height / 2);
+        }
+
+        // Rooftop clutter on big merged footprints (AC units & vents)
+        if ((building.width > 150 || building.height > 150) && building.style !== 'container') {
+            const units = Math.min(4, Math.floor(building.width / 90) + Math.floor(building.height / 90));
+            for (let i = 0; i < units; i++) {
+                const ux = r1x + 18 + ((i * 61 + building.x) % Math.max(20, building.width - 46));
+                const uy = r1y + 16 + ((i * 43 + building.y) % Math.max(20, building.height - 40));
+                ctx.fillStyle = '#B0BEC5';
+                ctx.fillRect(ux, uy, 22, 16);
+                ctx.fillStyle = '#78909C';
+                ctx.fillRect(ux + 4, uy + 4, 14, 8);
+                ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(ux, uy, 22, 16);
+            }
         }
     }
 }
@@ -1592,17 +1552,15 @@ function startRandomMission() {
     let type = missionTypes[Math.floor(Math.random() * missionTypes.length)];
 
     if (type === 'taxi') {
-        let allValidRoads = [...world.horizontalRoads, ...world.verticalRoads];
-        let randRoad = allValidRoads[Math.floor(Math.random() * allValidRoads.length)];
-        let passengerX = randRoad.x + randRoad.width / 2;
-        let passengerY = randRoad.y + randRoad.height / 2;
+        const randEdge = world.edges[Math.floor(Math.random() * world.edges.length)];
+        let p1 = world.pointAtDist(randEdge, Math.random() * randEdge.len);
+        const destEdge = world.edges[Math.floor(Math.random() * world.edges.length)];
+        let p2 = world.pointAtDist(destEdge, Math.random() * destEdge.len);
+        let passengerX = p1.x;
+        let passengerY = p1.y;
 
-        let destRoad = randRoad;
-        while (destRoad === randRoad) {
-            destRoad = allValidRoads[Math.floor(Math.random() * allValidRoads.length)];
-        }
-        let destX = destRoad.x + destRoad.width / 2;
-        let destY = destRoad.y + destRoad.height / 2;
+        let destX = p2.x;
+        let destY = p2.y;
 
         currentMission = {
             type: 'taxi',
@@ -1748,15 +1706,8 @@ function respawnPlayer() {
 }
 
 function snapToNearestRoad(x, y) {
-    let best = null, bd = Infinity;
-    for (let r of [...world.horizontalRoads, ...world.verticalRoads]) {
-        let d = (r.x + r.width / 2 - x) ** 2 + (r.y + r.height / 2 - y) ** 2;
-        if (d < bd) {
-            bd = d;
-            best = r;
-        }
-    }
-    return best ? { x: best.x + best.width / 2, y: best.y + best.height / 2 } : { x, y };
+    const np = world.nearestLanePoint(x, y);
+    return np ? { x: np.x, y: np.y } : { x, y };
 }
 
 function showDeathOverlay(title, subtitle, cls) {
@@ -1780,6 +1731,8 @@ function hideDeathOverlay() {
 
 function isInDeepWater(px, py) {
     if (typeof world === 'undefined' || !world.waterTiles) return false;
+    // Bridge decks are solid ground over water
+    if (world.onBridge && world.onBridge(px, py)) return false;
     for (let w of world.waterTiles) {
         if (px >= w.x && px <= w.x + w.width && py >= w.y && py <= w.y + w.height) {
             return w.type === 'W';

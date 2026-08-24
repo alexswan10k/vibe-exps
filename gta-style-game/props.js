@@ -529,6 +529,34 @@ class PropsManager {
     clear() {
         this.props = [];
         this.pickups = [];
+        this._grid = null;
+    }
+
+    // Static bucket grid so car-vs-prop checks stay local
+    buildPropGrid() {
+        this._grid = new Map();
+        const BG = 288;
+        for (let prop of this.props) {
+            const x0 = Math.floor((prop.x - prop.width / 2) / BG), x1 = Math.floor((prop.x + prop.width / 2) / BG);
+            const y0 = Math.floor((prop.y - prop.height / 2) / BG), y1 = Math.floor((prop.y + prop.height / 2) / BG);
+            for (let byy = y0; byy <= y1; byy++) for (let bxx = x0; bxx <= x1; bxx++) {
+                const k = bxx + ',' + byy;
+                if (!this._grid.has(k)) this._grid.set(k, []);
+                this._grid.get(k).push(prop);
+            }
+        }
+    }
+
+    queryProps(px, py, radius) {
+        const BG = 288;
+        const res = [];
+        const x0 = Math.floor((px - radius) / BG), x1 = Math.floor((px + radius) / BG);
+        const y0 = Math.floor((py - radius) / BG), y1 = Math.floor((py + radius) / BG);
+        for (let byy = y0; byy <= y1; byy++) for (let bxx = x0; bxx <= x1; bxx++) {
+            const arr = this._grid.get(bxx + ',' + byy);
+            if (arr) for (let p of arr) if (res.indexOf(p) === -1) res.push(p);
+        }
+        return res;
     }
 
     update(player, cars, game) {
@@ -541,32 +569,44 @@ class PropsManager {
             }
         }
 
-        // Check car collisions with props
-        for (let prop of this.props) {
-            if (prop.destroyed) continue;
+        // Check car collisions with props (bucketed for performance)
+        if (!this._grid) this.buildPropGrid();
+        const BG = 288;
+        for (let car of cars) {
+            if (car.exploded) continue;
 
-            for (let car of cars) {
-                if (car.exploded) continue;
+            let cx = car.x + car.width / 2;
+            let cy = car.y + car.height / 2;
 
-                let cx = car.x + car.width / 2;
-                let cy = car.y + car.height / 2;
-                let dist = Math.sqrt((cx - prop.x) ** 2 + (cy - prop.y) ** 2);
+            // Gather candidate props from nearby buckets only
+            const x0 = Math.floor((cx - 140) / BG), x1 = Math.floor((cx + 140) / BG);
+            const y0 = Math.floor((cy - 140) / BG), y1 = Math.floor((cy + 140) / BG);
+            for (let byy = y0; byy <= y1; byy++) for (let bxx = x0; bxx <= x1; bxx++) {
+                const arr = this._grid.get(bxx + ',' + byy);
+                if (!arr) continue;
+                for (let prop of arr) {
+                    if (prop.destroyed) continue;
 
-                if (dist < (car.width / 2 + prop.width / 2)) {
-                    let speed = Math.abs(car.speed) || 1;
+                    let px = prop.x, py = prop.y;
+                    let dist = Math.sqrt((cx - px) ** 2 + (cy - py) ** 2);
+                    if (dist >= 140) continue;
 
-                    if (prop.type === 'ramp') {
-                        // Stunt Ramp Collision! Trigger Car Jump
-                        if (speed > 2.5 && !car.isAirborne) {
-                            car.launchStuntJump(prop.angle, speed);
-                        }
-                    } else if (speed > 1.2) {
-                        prop.hit(speed * 10, 'car', speed);
-                        if (prop.type === 'tree_palm' || prop.type === 'tree_oak') {
-                            // Tree slows car down heavily
-                            car.speed *= 0.5;
-                            car.vx *= 0.5;
-                            car.vy *= 0.5;
+                    if (dist < (car.width / 2 + prop.width / 2)) {
+                        let speed = Math.abs(car.speed) || 1;
+
+                        if (prop.type === 'ramp') {
+                            // Stunt Ramp Collision! Trigger Car Jump
+                            if (speed > 2.5 && !car.isAirborne) {
+                                car.launchStuntJump(prop.angle, speed);
+                            }
+                        } else if (speed > 1.2) {
+                            prop.hit(speed * 10, 'car', speed);
+                            if (prop.type === 'tree_palm' || prop.type === 'tree_oak') {
+                                // Tree slows car down heavily
+                                car.speed *= 0.5;
+                                car.vx *= 0.5;
+                                car.vy *= 0.5;
+                            }
                         }
                     }
                 }
