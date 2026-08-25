@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>BMX Simulator</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -12,14 +12,35 @@
     <div id="game-container">
         <canvas id="game-canvas" width="800" height="600"></canvas>
         <div id="hud">
-            <div id="lap-display">Lap: 1/3</div>
-            <div id="pos-display">Pos: 1/4</div>
-            <div id="time-display">Time: 0.00</div>
-            <div id="track-name">Track Name</div>
+            <div id="hud-left">
+                <div class="chip" id="lap-display">LAP 1/3</div>
+                <div class="chip" id="pos-display">POS 1/4</div>
+                <div class="chip big" id="time-display">0:00.00</div>
+            </div>
+            <div id="hud-right">
+                <div id="track-name">Track Name</div>
+                <canvas id="minimap"></canvas>
+            </div>
+        </div>
+        <div id="hud-bottom">
+            <div class="chip" id="speed-display">0 km/h</div>
+            <div class="chip dim" id="lastlap-display">LAST --:--.--</div>
+            <div class="chip dim" id="bestlap-display">BEST --:--.--</div>
         </div>
         <div id="crash-overlay" style="display: none;">CRASHED!</div>
-        <div id="message-overlay" style="display: none;">RACE OVER</div>
+        <div id="message-overlay" style="display: none;"></div>
 
+        <div id="results">
+            <h2 id="results-title">FINISHED!</h2>
+            <div id="results-rows"></div>
+            <p class="results-hint">ENTER next track &middot; ESC menu</p>
+            <div class="results-actions">
+                <button id="results-next">NEXT TRACK</button>
+                <button id="results-menu">MENU</button>
+            </div>
+        </div>
+
+        <div id="hint-bar">&uarr; pedal &middot; &darr; brake &middot; &larr;&rarr; steer &middot; SPACE hop (spin for boost) &middot; hit lips fast = big air &middot; berms add grip &middot; R reset &middot; M mute &middot; ESC menu</div>
 
         <div id="main-menu">
             <h1>URBAN BMX SIM</h1>
@@ -33,14 +54,17 @@
             <div id="joystick-knob"></div>
         </div>
         <div class="action-buttons">
-            <!-- Additional buttons could go here if needed -->
+            <button id="btn-hop" class="touch-btn hop-btn">HOP</button>
         </div>
     </div>
-    <button id="btn-toggle-touch">📱</button>
+    <button id="btn-toggle-touch">&#128241;</button>
 
 
     <script src="MathUtils.js"></script>
     <script src="Input.js"></script>
+    <script src="Audio.js"></script>
+    <script src="Particles.js"></script>
+    <script src="Terrain.js"></script>
     <script src="Tracks.js"></script>
     <script src="Bike.js"></script>
     <script src="AIController.js"></script>

@@ -2,7 +2,6 @@ body {
     margin: 0;
     padding: 0;
     background-color: #050505;
-    /* Dark background */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -17,8 +16,7 @@ body {
     position: relative;
     width: 100%;
     height: 100%;
-    background-color: #0d0d0d;
-    /* Outer space around the concrete */
+    background-color: #0b0c10;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -38,17 +36,85 @@ body {
     right: 20px;
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 20px;
-    font-size: 24px;
-    font-weight: bold;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
     pointer-events: none;
     z-index: 20;
 }
 
+.chip {
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    letter-spacing: 1px;
+}
+
+.chip.big {
+    font-size: 26px;
+}
+
+.chip.dim {
+    opacity: 0.85;
+}
+
+#hud-left {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+#hud-bottom {
+    position: absolute;
+    bottom: 15px;
+    left: 20px;
+    display: flex;
+    gap: 10px;
+    pointer-events: none;
+    z-index: 20;
+}
+
+#hint-bar {
+    position: absolute;
+    bottom: 15px;
+    right: 20px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.55);
+    text-align: right;
+    pointer-events: none;
+    z-index: 20;
+    max-width: 46%;
+}
+
+#hud-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+#track-name {
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9);
+    color: #ffeb3b;
+}
+
+#minimap {
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.5);
+}
+
 #crash-overlay {
     position: absolute;
-    top: 50%;
+    top: 42%;
     left: 50%;
     transform: translate(-50%, -50%);
     color: red;
@@ -62,15 +128,44 @@ body {
 
 #message-overlay {
     position: absolute;
-    top: 50%;
+    top: 38%;
     left: 50%;
     transform: translate(-50%, -50%);
     color: yellow;
-    font-size: 64px;
+    font-size: 96px;
     font-weight: bold;
-    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+    text-shadow: 0 0 24px rgba(0, 0, 0, 0.9), 4px 4px 0 #000;
     pointer-events: none;
-    z-index: 20;
+    z-index: 25;
+}
+
+#message-overlay.pop {
+    animation: pop 0.9s ease-out forwards;
+}
+
+#message-overlay.go {
+    color: #7CFC00;
+}
+
+@keyframes pop {
+    0% {
+        transform: translate(-50%, -50%) scale(2.2);
+        opacity: 0;
+    }
+
+    20% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+
+    80% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(0.9);
+        opacity: 0;
+    }
 }
 
 @keyframes blink {
@@ -84,6 +179,111 @@ body {
 
     100% {
         opacity: 1;
+    }
+}
+
+#results {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(5, 6, 10, 0.92);
+    border: 2px solid rgba(255, 235, 59, 0.7);
+    border-radius: 12px;
+    padding: 28px 36px;
+    min-width: 380px;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    z-index: 40;
+}
+
+#results h2 {
+    margin: 0;
+    font-size: 40px;
+    color: #ffeb3b;
+    text-shadow: 3px 3px 0 #d32f2f;
+    letter-spacing: 4px;
+}
+
+.result-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 7px 12px;
+    border-radius: 6px;
+    font-size: 19px;
+    font-weight: bold;
+}
+
+.result-row.you {
+    background: rgba(255, 235, 59, 0.14);
+    border: 1px solid rgba(255, 235, 59, 0.5);
+}
+
+.res-pos {
+    width: 28px;
+    text-align: right;
+    color: #aaa;
+}
+
+.res-chip {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.res-name {
+    flex: 1;
+}
+
+.results-stats {
+    display: flex;
+    gap: 22px;
+    margin-top: 6px;
+    font-size: 16px;
+    color: #ddd;
+}
+
+.stat-label {
+    color: #888;
+    margin-right: 6px;
+}
+
+.results-hint {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+.results-actions {
+    display: none;
+    gap: 12px;
+}
+
+.results-actions button {
+    background: linear-gradient(180deg, #555, #333);
+    border: 2px solid #777;
+    color: white;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 8px;
+}
+
+.results-actions button:hover {
+    background: linear-gradient(180deg, #ffeb3b, #fbc02d);
+    color: black;
+}
+
+@media (pointer: coarse) {
+    .results-actions {
+        display: flex;
     }
 }
 
@@ -119,6 +319,7 @@ body {
     flex-direction: column;
     gap: 15px;
     width: 400px;
+    max-width: 90vw;
 }
 
 .track-btn {
@@ -133,6 +334,16 @@ body {
     border-radius: 8px;
     transition: all 0.2s;
     text-transform: uppercase;
+    text-align: center;
+}
+
+.track-btn-best {
+    display: block;
+    font-size: 12px;
+    color: #ffeb3b;
+    text-transform: none;
+    letter-spacing: 1px;
+    margin-top: 4px;
 }
 
 .track-btn:hover {
@@ -141,6 +352,11 @@ body {
     transform: scale(1.05);
     border-color: #fff;
 }
+
+.track-btn:hover .track-btn-best {
+    color: #333;
+}
+
 /* Touch Controls */
 #touch-controls {
     display: none;
@@ -152,12 +368,7 @@ body {
     pointer-events: none;
     z-index: 100;
 }
-@media (max-width: 900px) {
-    #joystick-zone {
-        left: 50px;
-        bottom: 50px;
-    }
-}
+
 #joystick-zone {
     position: absolute;
     bottom: 30px;
@@ -171,6 +382,7 @@ body {
     touch-action: none;
     z-index: 200;
 }
+
 #joystick-knob {
     position: absolute;
     top: 50%;
@@ -182,22 +394,25 @@ body {
     transform: translate(-50%, -50%);
     pointer-events: none;
 }
+
 .action-buttons {
     position: absolute;
-    bottom: 20px;
-    right: 20px;
+    bottom: 30px;
+    right: 30px;
     display: flex;
     gap: 15px;
     pointer-events: auto;
     align-items: flex-end;
 }
+
 .touch-btn {
     background: rgba(255, 255, 255, 0.2);
     border: 2px solid rgba(255, 255, 255, 0.5);
-    border-radius: 10px;
+    border-radius: 50%;
     color: white;
-    font-size: 24px;
+    font-size: 20px;
     font-weight: bold;
+    font-family: inherit;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -205,14 +420,16 @@ body {
     touch-action: manipulation;
     cursor: pointer;
 }
+
+.hop-btn {
+    width: 84px;
+    height: 84px;
+}
+
 .touch-btn:active {
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 235, 59, 0.5);
     transform: scale(0.95);
 }
-.dpad-up { grid-column: 2; grid-row: 1; }
-.dpad-down { grid-column: 2; grid-row: 3; }
-.dpad-left { grid-column: 1; grid-row: 2; }
-.dpad-right { grid-column: 3; grid-row: 2; }
 
 #btn-toggle-touch {
     position: absolute;

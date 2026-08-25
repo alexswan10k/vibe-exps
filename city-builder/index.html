@@ -3,98 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>City Builder Game</title>
+    <title>City Builder</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="game-container">
-        <div id="game-header">
-            <h1>City Builder</h1>
-        </div>
-        
-        <div id="game-content">
-            <div id="game-canvas-container">
-                <div id="pixi-canvas"></div>
+    <div id="game-root">
+        <!-- Top HUD -->
+        <header id="hud">
+            <div class="hud-group brand">CITY<br>BUILDER</div>
+            <div class="hud-group">
+                <span class="hud-label" id="hud-date">Y1 M1 D1</span>
+                <span id="hud-money" class="money">$40,000</span>
+                <span id="hud-net" class="net positive">+$0/mo</span>
             </div>
-            
-            <div id="game-ui">
-                <div id="control-panel">
-                    <h2>Controls</h2>
-                    <div id="building-selection">
-                        <h3>Buildings</h3>
-                        <div class="building-buttons">
-                            <button class="building-btn delete-btn" data-building="delete">Delete</button>
-                            <button class="building-btn" data-building="road">Road</button>
-                            <button class="building-btn" data-building="residential">Residential</button>
-                            <button class="building-btn" data-building="commercial">Commercial</button>
-                            <button class="building-btn" data-building="industrial">Industrial</button>
-                            <button class="building-btn" data-building="power">Power Plant</button>
-                            <button class="building-btn" data-building="water">Water Plant</button>
-                        </div>
-                    </div>
-                    
-                    <div id="game-controls">
-                        <h3>Game Controls</h3>
-                        <button id="pause-btn">Pause</button>
-                        <button id="speed-btn">Speed: 1x</button>
-                        <button id="save-btn">Save</button>
-                        <button id="load-btn">Load</button>
-                    </div>
-                </div>
-                
-                <div id="info-panel">
-                    <h2>City Information</h2>
-                    <div id="resource-display">
-                        <div class="resource-item">
-                            <span class="resource-label">Money:</span>
-                            <span id="money-value" class="resource-value">$10,000</span>
-                        </div>
-                        <div class="resource-item">
-                            <span class="resource-label">Population:</span>
-                            <span id="population-value" class="resource-value">0</span>
-                        </div>
-                        <div class="resource-item">
-                            <span class="resource-label">Power:</span>
-                            <span id="power-value" class="resource-value">0 / 0</span>
-                        </div>
-                        <div class="resource-item">
-                            <span class="resource-label">Water:</span>
-                            <span id="water-value" class="resource-value">0 / 0</span>
-                        </div>
-                        <div class="resource-item">
-                            <span class="resource-label">Happiness:</span>
-                            <span id="happiness-value" class="resource-value">50%</span>
-                        </div>
-                    </div>
-                    
-                    <div id="selected-building-info">
-                        <h3>Selected Building</h3>
-                        <div id="building-details">
-                            <p>No building selected</p>
-                        </div>
-                    </div>
-                    
-                    <div id="notifications">
-                        <h3>Notifications</h3>
-                        <div id="notification-list"></div>
-                    </div>
+            <div class="hud-group">
+                <span class="hud-label">POP</span><span id="hud-pop" class="value">0</span>
+                <span class="hud-label">JOBS</span><span id="hud-jobs" class="value">0 / 0</span>
+                <span class="hud-label">HAPPY</span><span id="hud-happy" class="value good">55%</span>
+            </div>
+            <div class="hud-group demand">
+                <span class="hud-label">DEMAND</span>
+                <div class="demand-bars">
+                    <div class="demand-col"><div id="demand-res" class="demand-bar res"></div><span>R</span></div>
+                    <div class="demand-col"><div id="demand-com" class="demand-bar com"></div><span>C</span></div>
+                    <div class="demand-col"><div id="demand-ind" class="demand-bar ind"></div><span>I</span></div>
                 </div>
             </div>
+            <div class="hud-group overlay-picker" id="overlay-picker">
+                <button data-overlay="none" class="chip active">Map</button>
+                <button data-overlay="power" class="chip">Power</button>
+                <button data-overlay="water" class="chip">Water</button>
+                <button data-overlay="land" class="chip">Value</button>
+            </div>
+            <div class="hud-group speed">
+                <button id="btn-pause" class="chip" title="Space">II</button>
+                <button id="btn-speed-down" class="chip">&minus;</button>
+                <span id="speed-label" class="value">1x</span>
+                <button id="btn-speed-up" class="chip">+</button>
+            </div>
+        </header>
+
+        <div id="main">
+            <!-- Map -->
+            <div id="pixi-canvas"></div>
+
+            <!-- Side panel -->
+            <aside id="side-panel">
+                <section id="info">
+                    <h2>Inspector</h2>
+                    <div id="info-content"></div>
+                </section>
+                <section id="news">
+                    <h2>City News</h2>
+                    <div id="notifications"></div>
+                </section>
+                <section id="save-row">
+                    <button id="btn-save" class="wide-btn">Save</button>
+                    <button id="btn-load" class="wide-btn">Load</button>
+                    <button id="btn-reset" class="wide-btn danger">New City</button>
+                </section>
+            </aside>
         </div>
+
+        <!-- Bottom toolbar -->
+        <footer id="toolbar-wrap">
+            <div id="toolbar"></div>
+        </footer>
+
+        <div id="boot-error" class="hidden"></div>
     </div>
 
-    <!-- External Libraries -->
-    <script>console.log('=== HTML SCRIPTS LOADING ===');</script>
+    <!-- PixiJS (UMD build so the game works from file://) -->
     <script src="https://unpkg.com/pixi.js@7.4.0/dist/pixi.min.js"></script>
 
-    <!-- Game Modules -->
+    <!-- Game modules: order matters -->
+    <script src="utils.js"></script>
+    <script src="config.js"></script>
+    <script src="terrain.js"></script>
     <script src="building-types.js"></script>
-    <script src="grid-system.js"></script>
-    <script src="resource-manager.js"></script>
-    <script src="input-manager.js"></script>
-    <script src="ui-manager.js"></script>
+    <script src="city.js"></script>
+    <script src="services.js"></script>
+    <script src="economy.js"></script>
+    <script src="development.js"></script>
+    <script src="traffic.js"></script>
     <script src="renderer.js"></script>
-    <script src="traffic-manager.js"></script>
+    <script src="input.js"></script>
+    <script src="ui.js"></script>
     <script src="game.js"></script>
     <script src="main.js"></script>
 </body>

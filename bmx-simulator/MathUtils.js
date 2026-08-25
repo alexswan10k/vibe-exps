@@ -9,11 +9,19 @@ const MathUtils = {
         while (angle > Math.PI) angle -= Math.PI * 2;
         return angle;
     },
-    // Returns angle difference in range [-PI, PI]
     angleDiff: (a1, a2) => {
         let diff = a1 - a2;
         while (diff <= -Math.PI) diff += Math.PI * 2;
         while (diff > Math.PI) diff -= Math.PI * 2;
         return diff;
+    },
+    lerpAngle: (a, b, t) => a + MathUtils.angleDiff(b, a) * t,
+    randRange: (min, max) => min + Math.random() * (max - min),
+    formatTime: (t) => {
+        if (t == null || !isFinite(t)) return '--:--.--';
+        const m = Math.floor(t / 60);
+        const s = Math.floor(t % 60);
+        const c = Math.floor((t * 100) % 100);
+        return `${m}:${s.toString().padStart(2, '0')}.${c.toString().padStart(2, '0')}`;
     }
 };

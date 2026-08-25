@@ -1,31 +1,56 @@
 const Input = {
-    keys: {
-        ArrowUp: false,
-        ArrowDown: false,
-        ArrowLeft: false,
-        ArrowRight: false,
-        w: false,
-        a: false,
-        s: false,
-        d: false
+    keys: {},
+    pressed: new Set(),
+
+    actionMap: {
+        hop: ' ',
+        respawn: 'r',
+        mute: 'm',
+        menu: 'escape',
+        confirm: 'enter'
     },
 
     init() {
         window.addEventListener('keydown', (e) => {
-            if (this.keys.hasOwnProperty(e.key)) {
-                this.keys[e.key] = true;
+            const k = e.key.toLowerCase();
+            if (this.isTracked(k)) {
+                if (!e.repeat) this.pressed.add(k);
+                this.keys[k] = true;
                 e.preventDefault();
             }
         });
 
         window.addEventListener('keyup', (e) => {
-            if (this.keys.hasOwnProperty(e.key)) {
-                this.keys[e.key] = false;
+            const k = e.key.toLowerCase();
+            if (this.isTracked(k)) {
+                this.keys[k] = false;
                 e.preventDefault();
             }
         });
 
+        window.addEventListener('blur', () => {
+            this.keys = {};
+        });
+
         this.setupTouchControls();
+    },
+
+    isTracked(k) {
+        return ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd', ' '].includes(k) ||
+            Object.values(this.actionMap).includes(k);
+    },
+
+    consume(action) {
+        const k = this.actionMap[action];
+        if (k != null && this.pressed.has(k)) {
+            this.pressed.delete(k);
+            return true;
+        }
+        return false;
+    },
+
+    clearFrame() {
+        this.pressed.clear();
     },
 
     setupTouchControls() {
@@ -67,7 +92,7 @@ const Input = {
                 }
             }, { passive: false });
 
-            joystickZone.addEventListener('touchend', (e) => {
+            const endJoystick = (e) => {
                 e.preventDefault();
                 for (let i = 0; i < e.changedTouches.length; i++) {
                     if (e.changedTouches[i].identifier === joystickId) {
@@ -76,8 +101,35 @@ const Input = {
                         break;
                     }
                 }
-            }, { passive: false });
+            };
+            joystickZone.addEventListener('touchend', endJoystick, { passive: false });
+            joystickZone.addEventListener('touchcancel', endJoystick, { passive: false });
         }
+
+        const hopBtn = document.getElementById('btn-hop');
+        if (hopBtn) {
+            const down = (e) => {
+                e.preventDefault();
+                this.pressed.add(' ');
+            };
+            const up = (e) => {
+                e.preventDefault();
+            };
+            hopBtn.addEventListener('touchstart', down, { passive: false });
+            hopBtn.addEventListener('touchend', up, { passive: false });
+            hopBtn.addEventListener('touchcancel', up, { passive: false });
+            hopBtn.addEventListener('mousedown', down);
+            hopBtn.addEventListener('mouseup', up);
+        }
+
+        document.getElementById('results-next')?.addEventListener('click', (e) => {
+            e.currentTarget.blur();
+            this.pressed.add('enter');
+        });
+        document.getElementById('results-menu')?.addEventListener('click', (e) => {
+            e.currentTarget.blur();
+            this.pressed.add('escape');
+        });
     },
 
     updateJoystick(x, y, knob, center) {
@@ -109,8 +161,8 @@ const Input = {
         this.keys['d'] = false;
     },
 
-    isUp() { return this.keys.ArrowUp || this.keys.w; },
-    isDown() { return this.keys.ArrowDown || this.keys.s; },
-    isLeft() { return this.keys.ArrowLeft || this.keys.a; },
-    isRight() { return this.keys.ArrowRight || this.keys.d; }
+    isUp() { return this.keys['arrowup'] || this.keys['w']; },
+    isDown() { return this.keys['arrowdown'] || this.keys['s']; },
+    isLeft() { return this.keys['arrowleft'] || this.keys['a']; },
+    isRight() { return this.keys['arrowright'] || this.keys['d']; }
 };
