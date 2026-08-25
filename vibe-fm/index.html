@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vibe FM — the radio station of the vibe experiments</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>📻 VIBE FM</h1>
+      <p class="tagline">
+        every project in this repo is a radio station · 100% procedural · no
+        samples, no assets
+      </p>
+    </header>
+
+    <main class="radio-wrap">
+      <div class="cabinet">
+        <div class="faceplate">
+          <div class="dial" id="dial" title="click or drag to tune">
+            <div class="dial-ticks"></div>
+            <div class="dial-marks" id="dialMarks"></div>
+            <div class="needle" id="needle"></div>
+          </div>
+
+          <div class="readout-row">
+            <div class="readout">
+              <div class="freq" id="freq">--.-</div>
+              <div class="readout-main">
+                <div class="station-name" id="stationName">NO SIGNAL</div>
+                <div class="station-genre" id="stationGenre">power on to begin</div>
+              </div>
+            </div>
+            <div class="status-col">
+              <div class="onair" id="onair"><span class="lamp-dot"></span>ON AIR</div>
+              <canvas id="vu" width="280" height="52" aria-hidden="true"></canvas>
+            </div>
+          </div>
+
+          <div class="tagline-line" id="tagline">
+            the frequency of the vibe experiments
+          </div>
+
+          <div class="controls">
+            <button
+              id="powerBtn"
+              class="btn power"
+              title="Power (space)"
+              aria-pressed="false"
+            >
+              ⏻
+            </button>
+            <button id="prevBtn" class="btn" title="Previous station (←)">
+              ⏮
+            </button>
+            <button id="nextBtn" class="btn" title="Next station (→)">⏭</button>
+            <div class="volume">
+              <label for="volume">VOL</label>
+              <input
+                type="range"
+                id="volume"
+                min="0"
+                max="100"
+                value="70"
+              />
+            </div>
+            <a
+              class="visit"
+              id="visitLink"
+              href="#"
+              target="_blank"
+              rel="noopener"
+              hidden
+            >
+              open project ↗
+            </a>
+          </div>
+        </div>
+
+        <div class="ticker" aria-hidden="true">
+          <div class="ticker-track" id="tickerTrack"></div>
+        </div>
+      </div>
+
+      <div class="hint">
+        drag the dial · ← / → change stations · space powers on &amp; off ·
+        every tune is generated live in your browser
+      </div>
+    </main>
+
+    <section class="stations-section">
+      <h2>Channel guide</h2>
+      <div class="station-grid" id="stationGrid"></div>
+    </section>
+
+    <footer>
+      <p>
+        Vibe FM is part of the
+        <a href="../index.html">vibe experiments</a> — pure Web Audio, zero
+        audio files, zero dependencies. One engine, ten genres. What you hear
+        has never existed before and will never exist again.
+      </p>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>

@@ -1,305 +1,809 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Black-Scholes Option Pricing Calculator</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-            margin: 0;
-            padding: 20px;
-            color: #333;
-            display: flex;
-            justify-content: center;
-        }
-
-        .container {
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            padding: 30px;
-            max-width: 800px;
-            width: 100%;
-        }
-
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-            margin-bottom: 30px;
-        }
-
-        .calculator-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-        }
-
-        .input-section {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        label {
-            font-weight: 600;
-            font-size: 0.9em;
-            color: #555;
-        }
-
-        input {
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 1em;
-            transition: border-color 0.3s;
-        }
-
-        input:focus {
-            border-color: #3498db;
-            outline: none;
-        }
-
-        .results-section {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 20px;
-            border: 1px solid #e9ecef;
-        }
-
-        h2 {
-            margin-top: 0;
-            color: #2c3e50;
-            font-size: 1.5em;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-        }
-
-        .result-group {
-            margin-bottom: 20px;
-        }
-
-        .result-group h3 {
-            font-size: 1.2em;
-            color: #34495e;
-            margin-bottom: 10px;
-        }
-
-        .result-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
-
-        .result-label {
-            color: #666;
-        }
-
-        .result-value {
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
-        .price-highlight {
-            font-size: 1.3em;
-            color: #27ae60;
-        }
-
-        .greeks-section {
-            margin-top: 20px;
-        }
-
-        .greeks-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-
-        @media (max-width: 600px) {
-            .calculator-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Black–Scholes Calculator</title>
+<style>
+:root {
+    --bg: #0b1220;
+    --card: #111a2e;
+    --card2: #0e1626;
+    --border: #223047;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22d3ee;
+    --call: #34d399;
+    --put: #fb923c;
+    --bad: #f43f5e;
+    color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 24px 16px 40px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1160px; margin: 0 auto; }
+header { margin-bottom: 20px; }
+h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.02em; }
+.sub { margin: 0; color: var(--muted); font-size: 14px; }
+.grid { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 20px; align-items: start; }
+.card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+}
+.card h2 { margin: 0 0 14px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.card h3 { margin: 18px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.param { margin-bottom: 14px; }
+.param-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+.param-head label { font-size: 13px; font-weight: 600; color: var(--text); }
+.param-head label small { color: var(--muted); font-weight: 400; }
+input[type=number] {
+    width: 104px;
+    padding: 6px 8px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 14px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+input[type=number]:focus { outline: none; border-color: var(--accent); }
+input[type=number].bad { border-color: var(--bad); }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 22px; cursor: pointer; }
+.hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.warn { display: none; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.witem { font-size: 12.5px; padding: 8px 11px; border-radius: 8px; line-height: 1.4; }
+.witem.err { color: #fda4af; background: rgba(244, 63, 94, 0.09); border: 1px solid rgba(244, 63, 94, 0.35); }
+.witem.warn { color: #fcd34d; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.28); }
+.fielderr { display: none; color: var(--bad); font-size: 11.5px; margin-top: 3px; }
+.fielderr.show { display: block; }
+.phint { color: var(--muted); font-size: 11px; line-height: 1.4; margin-top: 3px; }
+.gdesc { display: block; color: var(--muted); font-size: 10.5px; font-weight: 400; margin-top: 1px; }
+.dim { opacity: 0.35; pointer-events: none; }
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tile { border-radius: 12px; padding: 12px 14px; border: 1px solid var(--border); background: var(--card2); }
+.tile.call { border-color: rgba(52, 211, 153, 0.35); }
+.tile.put { border-color: rgba(251, 146, 60, 0.35); }
+.tile-head { display: flex; justify-content: space-between; align-items: center; font-size: 11px; letter-spacing: 0.1em; }
+.tile.call .tile-head span:first-child { color: var(--call); }
+.tile.put .tile-head span:first-child { color: var(--put); }
+.badge {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    letter-spacing: 0.05em;
+}
+.big { font-size: 27px; font-weight: 700; margin: 6px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.tile-sub { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+.stat { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; border-bottom: 1px solid rgba(34, 48, 71, 0.6); }
+.stat span { color: var(--muted); }
+.stat b { font-weight: 600; font-variant-numeric: tabular-nums; }
+table.greeks { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.greeks th { text-align: right; color: var(--muted); font-weight: 600; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+table.greeks th:first-child { text-align: left; }
+table.greeks td { text-align: right; padding: 6px 4px; border-bottom: 1px solid rgba(34, 48, 71, 0.6); font-variant-numeric: tabular-nums; }
+table.greeks td:first-child { text-align: left; color: var(--muted); }
+.ivrow { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 13px; }
+.ivrow label { flex: 0 0 130px; color: var(--muted); }
+.ivrow input[type=number] { width: 96px; }
+.ivout { min-width: 72px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+button.mini {
+    padding: 5px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--accent);
+    font-size: 12px;
+    cursor: pointer;
+}
+button.mini:hover:not(:disabled) { border-color: var(--accent); }
+button.mini:disabled { opacity: 0.35; cursor: default; }
+.chartcard { margin-top: 20px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button {
+    padding: 7px 13px;
+    background: var(--card2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+.tabs button.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+canvas#chart { width: 100%; height: 360px; display: block; }
+@media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr; }
+}
+</style>
 </head>
 <body>
+<div class="wrap">
+<header>
+    <h1>Black–Scholes Calculator</h1>
+    <p class="sub">European options · Merton dividend extension · live greeks, payoff profiles &amp; implied vol solver</p>
+</header>
 
-<div class="container">
-    <h1>Black-Scholes Calculator</h1>
+<div class="grid">
+    <section class="card">
+        <h2>Parameters</h2>
+        <div class="param">
+            <div class="param-head"><label for="inS">Spot <small>S</small></label><input type="number" id="inS" step="0.01" value="100.00"></div>
+            <input type="range" id="slS" min="1" max="600" step="0.5">
+            <div class="phint">Price of the underlying right now (stock, index, …).</div>
+            <div class="fielderr" id="errS"></div>
+        </div>
+        <div class="param">
+            <div class="param-head"><label for="inK">Strike <small>K</small></label><input type="number" id="inK" step="0.01" value="100.00"></div>
+            <input type="range" id="slK" min="1" max="600" step="0.5">
+            <div class="phint">The price the option lets you buy (call) or sell (put) at.</div>
+            <div class="fielderr" id="errK"></div>
+        </div>
+        <div class="param">
+            <div class="param-head"><label for="inT">Maturity <small>T, years</small></label><input type="number" id="inT" step="0.01" value="1.00"></div>
+            <input type="range" id="slT" min="0.05" max="5" step="0.05">
+            <div class="phint">Years until expiry: 3 months = 0.25, 1 week ≈ 0.02. Enter 0 to see the payoff.</div>
+            <div class="fielderr" id="errT"></div>
+        </div>
+        <div class="param">
+            <div class="param-head"><label for="inV">Volatility <small>σ %</small></label><input type="number" id="inV" step="0.1" value="20.0"></div>
+            <input type="range" id="slV" min="1" max="200" step="0.5">
+            <div class="phint">Annualised size of price swings: 20 means 20%. Enter 0 for a deterministic outcome.</div>
+            <div class="fielderr" id="errV"></div>
+        </div>
+        <div class="param">
+            <div class="param-head"><label for="inR">Risk-free rate <small>r %</small></label><input type="number" id="inR" step="0.1" value="5.0"></div>
+            <input type="range" id="slR" min="-5" max="20" step="0.1">
+            <div class="phint">Annualised interest rate: 5 means 5%.</div>
+            <div class="fielderr" id="errR"></div>
+        </div>
+        <div class="param">
+            <div class="param-head"><label for="inQ">Dividend yield <small>q %</small></label><input type="number" id="inQ" step="0.1" value="0.0"></div>
+            <input type="range" id="slQ" min="0" max="20" step="0.1">
+            <div class="phint">Continuous dividend yield paid by the underlying; use 0 if none.</div>
+            <div class="fielderr" id="errQ"></div>
+        </div>
+        <div class="hint">Fields and sliders stay in sync — drag a slider or type either way.</div>
+    </section>
 
-    <div class="calculator-grid">
-        <!-- Inputs -->
-        <div class="input-section">
-            <h2>Parameters</h2>
-            <div class="form-group">
-                <label for="stockPrice">Stock Price (S)</label>
-                <input type="number" id="stockPrice" step="0.01" value="100.00">
+    <section class="card">
+        <h2>Results</h2>
+        <div id="warn"></div>
+        <div id="resultsBody">
+            <div class="tiles">
+                <div class="tile call">
+                    <div class="tile-head"><span>CALL</span><span class="badge" id="callBadge">ATM</span></div>
+                    <div class="big" id="callPrice">—</div>
+                    <div class="tile-sub"><span id="callIntr">intrinsic —</span><span id="callTv">time —</span></div>
+                </div>
+                <div class="tile put">
+                    <div class="tile-head"><span>PUT</span><span class="badge" id="putBadge">ATM</span></div>
+                    <div class="big" id="putPrice">—</div>
+                    <div class="tile-sub"><span id="putIntr">intrinsic —</span><span id="putTv">time —</span></div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="strikePrice">Strike Price (K)</label>
-                <input type="number" id="strikePrice" step="0.01" value="100.00">
+
+            <h3>Profile</h3>
+            <div class="hint" style="margin: -4px 0 8px;">Risk-neutral figures assuming lognormal prices — breakeven is where the option repays its cost at expiry.</div>
+            <div class="stats">
+                <div class="stat"><span>Forward price F</span><b id="fwd">—</b></div>
+                <div class="stat"><span>d₁ / d₂</span><b id="dds">—</b></div>
+                <div class="stat"><span>P(call finishes ITM)</span><b id="pcitm">—</b></div>
+                <div class="stat"><span>P(put finishes ITM)</span><b id="ppitm">—</b></div>
+                <div class="stat"><span>Call breakeven at expiry</span><b id="cbe">—</b></div>
+                <div class="stat"><span>Put breakeven at expiry</span><b id="pbe">—</b></div>
+                <div class="stat"><span>P(profit · long call)</span><b id="pcprof">—</b></div>
+                <div class="stat"><span>P(profit · long put)</span><b id="pprof">—</b></div>
             </div>
-            <div class="form-group">
-                <label for="timeToMaturity">Time to Expiration (T in years)</label>
-                <input type="number" id="timeToMaturity" step="0.01" value="1.00">
+
+            <h3>Greeks</h3>
+            <table class="greeks">
+                <thead><tr><th></th><th>Call</th><th>Put</th></tr></thead>
+                <tbody>
+                    <tr><td>Delta Δ<span class="gdesc">value change per $1 move in spot</span></td><td id="gcd">—</td><td id="gpd">—</td></tr>
+                    <tr><td>Gamma Γ<span class="gdesc">how fast delta itself changes per $1</span></td><td id="gcg">—</td><td id="gpg">—</td></tr>
+                    <tr><td>Theta Θ / day<span class="gdesc">value lost to each passing calendar day</span></td><td id="gct">—</td><td id="gpt">—</td></tr>
+                    <tr><td>Vega ν / vol pt<span class="gdesc">value change if volatility rises 1 point</span></td><td id="gcv">—</td><td id="gpv">—</td></tr>
+                    <tr><td>Rho ρ / rate pt<span class="gdesc">value change if rates rise 1 point</span></td><td id="gcr">—</td><td id="gpr">—</td></tr>
+                </tbody>
+            </table>
+
+            <h3>Implied Volatility Solver</h3>
+            <div class="hint" style="margin: -4px 0 8px;">Type what the option costs in the market to solve for the volatility the market is pricing in. Red results explain why that price is impossible — hover them for detail.</div>
+            <div class="ivrow">
+                <label for="mktCall">Market call price</label>
+                <input type="number" id="mktCall" step="0.01" placeholder="—">
+                <span class="ivout" id="ivCallOut">—</span>
+                <button class="mini" id="useIvCall" disabled type="button">→ σ</button>
             </div>
-            <div class="form-group">
-                <label for="volatility">Volatility (σ as %)</label>
-                <input type="number" id="volatility" step="0.1" value="20.0">
-            </div>
-            <div class="form-group">
-                <label for="riskFreeRate">Risk-Free Interest Rate (r as %)</label>
-                <input type="number" id="riskFreeRate" step="0.1" value="5.0">
-            </div>
-            <div class="form-group">
-                <label for="dividendYield">Dividend Yield (q as %)</label>
-                <input type="number" id="dividendYield" step="0.1" value="0.0">
+            <div class="ivrow">
+                <label for="mktPut">Market put price</label>
+                <input type="number" id="mktPut" step="0.01" placeholder="—">
+                <span class="ivout" id="ivPutOut">—</span>
+                <button class="mini" id="useIvPut" disabled type="button">→ σ</button>
             </div>
         </div>
+    </section>
+</div>
 
-        <!-- Results -->
-        <div class="results-section">
-            <h2>Results</h2>
-
-            <div class="result-group">
-                <h3>Option Prices</h3>
-                <div class="result-item">
-                    <span class="result-label">Call Price:</span>
-                    <span class="result-value price-highlight" id="callPrice">$0.00</span>
-                </div>
-                <div class="result-item">
-                    <span class="result-label">Put Price:</span>
-                    <span class="result-value price-highlight" id="putPrice">$0.00</span>
-                </div>
-            </div>
-
-            <div class="greeks-section">
-                <h3>The Greeks</h3>
-                <div class="greeks-grid">
-                    <div>
-                        <h4>Call Greeks</h4>
-                        <div class="result-item"><span class="result-label">Delta (Δ):</span><span class="result-value" id="callDelta">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Gamma (Γ):</span><span class="result-value" id="callGamma">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Theta (Θ):</span><span class="result-value" id="callTheta">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Vega (ν):</span><span class="result-value" id="callVega">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Rho (ρ):</span><span class="result-value" id="callRho">0.000</span></div>
-                    </div>
-                    <div>
-                        <h4>Put Greeks</h4>
-                        <div class="result-item"><span class="result-label">Delta (Δ):</span><span class="result-value" id="putDelta">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Gamma (Γ):</span><span class="result-value" id="putGamma">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Theta (Θ):</span><span class="result-value" id="putTheta">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Vega (ν):</span><span class="result-value" id="putVega">0.000</span></div>
-                        <div class="result-item"><span class="result-label">Rho (ρ):</span><span class="result-value" id="putRho">0.000</span></div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<section class="card chartcard">
+    <div class="tabs">
+        <button type="button" data-tab="payoff" class="active">Payoff / Value vs Spot</button>
+        <button type="button" data-tab="decay">Value Decay vs Time</button>
+        <button type="button" data-tab="delta">Deltas vs Spot</button>
     </div>
+    <div class="hint" id="chartHint" style="margin: -6px 0 10px;"></div>
+    <canvas id="chart"></canvas>
+</section>
 </div>
 
 <script>
-    // Standard Normal cumulative distribution function
-    function cnd(x) {
-        const a1 = 0.31938153, a2 = -0.356563782, a3 = 1.781477937, a4 = -1.821255978, a5 = 1.330274429;
-        const L = Math.abs(x);
-        const k = 1.0 / (1.0 + 0.2316419 * L);
-        const w = 1.0 - 1.0 / Math.sqrt(2 * Math.PI) * Math.exp(-L * L / 2) * (a1 * k + a2 * k * k + a3 * Math.pow(k, 3) + a4 * Math.pow(k, 4) + a5 * Math.pow(k, 5));
-        if (x < 0) {
-            return 1.0 - w;
+const SQRT2PI = Math.sqrt(2 * Math.PI);
+
+function cndTail(x) {
+    let a = 0;
+    for (let k = 120; k >= 1; k--) a = k / (x + a);
+    return Math.exp(-x * x / 2) / SQRT2PI / (x + a);
+}
+
+function cnd(x) {
+    if (x === 0) return 0.5;
+    if (Math.abs(x) >= 5) {
+        const q = cndTail(Math.abs(x));
+        return x > 0 ? 1 - q : q;
+    }
+    const q = x * x;
+    let term = x, sum = x, n = 1;
+    while (n < 600) {
+        term *= q / (2 * n + 1);
+        sum += term;
+        n++;
+        if (term === 0 || Math.abs(term) <= 1e-17 * Math.abs(sum)) break;
+    }
+    return 0.5 + Math.exp(-q / 2) / SQRT2PI * sum;
+}
+
+function pdfN(x) {
+    return Math.exp(-x * x / 2) / SQRT2PI;
+}
+
+function bsCore(S, K, T, v, r, q) {
+    if (T === 0 || v === 0) {
+        const discR = Math.exp(-r * T), discQ = Math.exp(-q * T);
+        const itmC = T > 0 ? S * discQ > K * discR : S > K;
+        const call = T > 0 ? Math.max(S * discQ - K * discR, 0) : Math.max(S - K, 0);
+        const put = T > 0 ? Math.max(K * discR - S * discQ, 0) : Math.max(K - S, 0);
+        return {
+            d1: itmC ? Infinity : -Infinity,
+            d2: itmC ? Infinity : -Infinity,
+            call, put,
+            callDelta: itmC ? 1 : 0,
+            putDelta: itmC ? 0 : -1,
+            gamma: 0,
+            callTheta: 0,
+            putTheta: 0,
+            vega: 0,
+            callRho: 0,
+            putRho: 0,
+            pCallItm: itmC ? 1 : 0,
+            pPutItm: itmC ? 0 : 1
+        };
+    }
+    const sqT = Math.sqrt(T);
+    const d1 = (Math.log(S / K) + (r - q + v * v / 2) * T) / (v * sqT);
+    const d2 = d1 - v * sqT;
+    const discR = Math.exp(-r * T), discQ = Math.exp(-q * T);
+    const Nd1 = cnd(d1), Nd2 = cnd(d2), phi = pdfN(d1);
+    return {
+        d1, d2,
+        call: S * discQ * Nd1 - K * discR * Nd2,
+        put: K * discR * cnd(-d2) - S * discQ * cnd(-d1),
+        callDelta: discQ * Nd1,
+        putDelta: discQ * (Nd1 - 1),
+        gamma: discQ * phi / (S * v * sqT),
+        callTheta: (-S * discQ * phi * v / (2 * sqT) - r * K * discR * Nd2 + q * S * discQ * Nd1) / 365,
+        putTheta: (-S * discQ * phi * v / (2 * sqT) + r * K * discR * cnd(-d2) - q * S * discQ * cnd(-d1)) / 365,
+        vega: S * discQ * phi * sqT / 100,
+        callRho: K * T * discR * Nd2 / 100,
+        putRho: -K * T * discR * cnd(-d2) / 100,
+        pCallItm: Nd2,
+        pPutItm: cnd(-d2)
+    };
+}
+
+function bsPrice(S, K, T, v, r, q, isCall) {
+    const core = bsCore(S, K, T, v, r, q);
+    return isCall ? core.call : core.put;
+}
+
+function ivSolve(mkt, S, K, T, r, q, isCall) {
+    const discR = Math.exp(-r * T), discQ = Math.exp(-q * T);
+    const intrinsic = isCall ? Math.max(S * discQ - K * discR, 0) : Math.max(K * discR - S * discQ, 0);
+    const cap = isCall ? S * discQ : K * discR;
+    if (!(mkt >= intrinsic - 1e-9)) return { state: 'low', bound: Math.max(intrinsic, 0) };
+    if (!(mkt < cap - 1e-9)) return { state: 'high', bound: cap };
+    if (T <= 0) return { state: 'none' };
+    let lo = 1e-6, hi = 1;
+    while (bsPrice(S, K, T, hi, r, q, isCall) < mkt && hi < 64) hi *= 2;
+    if (bsPrice(S, K, T, hi, r, q, isCall) < mkt) return { state: 'none' };
+    for (let i = 0; i < 200; i++) {
+        const mid = (lo + hi) / 2;
+        if (bsPrice(S, K, T, mid, r, q, isCall) < mkt) lo = mid; else hi = mid;
+    }
+    return { state: 'ok', iv: (lo + hi) / 2 };
+}
+
+const $ = id => document.getElementById(id);
+
+const PARAMS = [
+    { k: 'S', min: 1, max: 600 },
+    { k: 'K', min: 1, max: 600 },
+    { k: 'T', min: 0.05, max: 5 },
+    { k: 'V', min: 1, max: 200 },
+    { k: 'R', min: -5, max: 20 },
+    { k: 'Q', min: 0, max: 20 }
+];
+PARAMS.forEach(p => {
+    p.in = $('in' + p.k);
+    p.sl = $('sl' + p.k);
+    p.sl.min = p.min;
+    p.sl.max = p.max;
+    p.sl.step = p.k === 'T' ? 0.05 : p.k === 'R' || p.k === 'Q' ? 0.1 : 0.5;
+    p.sl.value = p.in.value;
+    p.in.addEventListener('input', () => {
+        const num = parseFloat(p.in.value);
+        if (!isNaN(num) && num >= p.min && num <= p.max) p.sl.value = num;
+        schedule();
+    });
+    p.sl.addEventListener('input', () => {
+        p.in.value = p.sl.value;
+        schedule();
+    });
+});
+
+const FIELD_RULES = [
+    { k: 'S', name: 'Spot', ok: n => n > 0, msg: 'must be greater than 0' },
+    { k: 'K', name: 'Strike', ok: n => n > 0, msg: 'must be greater than 0' },
+    { k: 'T', name: 'Maturity', ok: n => n >= 0, msg: 'cannot be negative (use 0 for expiry payoff)' },
+    { k: 'V', name: 'Volatility', ok: n => n >= 0, msg: 'cannot be negative' },
+    { k: 'R', name: 'Risk-free rate', ok: () => true, msg: '' },
+    { k: 'Q', name: 'Dividend yield', ok: () => true, msg: '' }
+];
+
+function readParams() {
+    const vals = {};
+    const errors = [];
+    const warnings = [];
+    FIELD_RULES.forEach(rule => {
+        const p = PARAMS.find(x => x.k === rule.k);
+        const errEl = $('err' + rule.k);
+        const num = parseFloat(p.in.value);
+        vals[rule.k] = num;
+        p.in.classList.remove('bad');
+        errEl.classList.remove('show');
+        let problem = null;
+        if (isNaN(num)) problem = `${rule.name}: enter a number`;
+        else if (!rule.ok(num)) problem = `${rule.name} ${rule.msg}`;
+        if (problem) {
+            p.in.classList.add('bad');
+            errEl.textContent = problem;
+            errEl.classList.add('show');
+            errors.push(problem);
         }
-        return w;
+    });
+    if (!errors.length) {
+        const v = vals.V / 100, r = vals.R / 100, q = vals.Q / 100;
+        if (vals.T > 0 && vals.T < 3 / 365) warnings.push('Under a day to expiry — theta and gamma are numerically unstable this close to the payoff date.');
+        if (vals.V === 0 && vals.T > 0) warnings.push('Zero volatility: the outcome is treated as deterministic, so vega, gamma and most greeks are zero.');
+        if (vals.V > 200) warnings.push('Volatility above 200% is unusual — check you entered percent, not a decimal.');
+        if (r < -0.05 || r > 0.25) warnings.push('Risk-free rate is far outside the normal range (-5% to +25%).');
+        if (q < -0.05 || q > 0.25) warnings.push('Dividend yield is far outside the normal range.');
+        if (vals.S / vals.K > 5 || vals.K / vals.S > 5) warnings.push('Spot and strike differ by more than 5x — option is extremely in/out of the money; greeks will be near zero.');
+    }
+    return { vals, errors, warnings };
+}
+
+function renderMessages(errors, warnings, canCompute) {
+    const box = $('warn');
+    box.innerHTML = '';
+    const add = (text, cls) => {
+        const div = document.createElement('div');
+        div.className = 'witem ' + cls;
+        div.textContent = text;
+        box.appendChild(div);
+    };
+    if (!canCompute) add('Fix the highlighted parameters above to see results.', 'err');
+    errors.forEach(t => add(t, 'err'));
+    warnings.forEach(t => add(t, 'warn'));
+    box.style.display = box.children.length ? 'flex' : 'none';
+}
+
+const fm = (x, dp = 2) => '$' + x.toFixed(dp);
+const pc = x => (x * 100).toFixed(1) + '%';
+
+function setBadge(el, itm) {
+    el.textContent = itm;
+}
+
+let last = null;
+
+function compute() {
+    const { vals, errors, warnings } = readParams();
+    const body = $('resultsBody');
+    renderMessages(errors, warnings, false);
+    if (errors.length) {
+        body.classList.add('dim');
+        last = null;
+        drawChart();
+        return;
+    }
+    body.classList.remove('dim');
+    renderMessages(errors, warnings, true);
+
+    const p = { S: vals.S, K: vals.K, T: vals.T, v: vals.V / 100, r: vals.R / 100, q: vals.Q / 100 };
+    const R = bsCore(p.S, p.K, p.T, p.v, p.r, p.q);
+    last = { p, R };
+
+    $('callPrice').textContent = fm(R.call, 4);
+    $('putPrice').textContent = fm(R.put, 4);
+    const ci = Math.max(p.S - p.K, 0), pi = Math.max(p.K - p.S, 0);
+    $('callIntr').textContent = 'intrinsic ' + fm(ci);
+    $('callTv').textContent = 'time ' + fm(Math.max(R.call - ci, 0));
+    $('putIntr').textContent = 'intrinsic ' + fm(pi);
+    $('putTv').textContent = 'time ' + fm(Math.max(R.put - pi, 0));
+    setBadge($('callBadge'), p.S > p.K ? 'ITM' : p.S < p.K ? 'OTM' : 'ATM');
+    setBadge($('putBadge'), p.S < p.K ? 'ITM' : p.S > p.K ? 'OTM' : 'ATM');
+
+    const fwd = p.S * Math.exp((p.r - p.q) * p.T);
+    $('fwd').textContent = fm(fwd, 4);
+    const fD = x => !isFinite(x) ? (x > 0 ? '+∞' : '−∞') : x.toFixed(4);
+    $('dds').textContent = fD(R.d1) + ' / ' + fD(R.d2);
+    $('pcitm').textContent = pc(R.pCallItm);
+    $('ppitm').textContent = pc(R.pPutItm);
+
+    const driftAdj = (p.r - p.q - p.v * p.v / 2) * p.T;
+    const cbe = p.K + R.call, pbe = p.K - R.put;
+    $('cbe').textContent = fm(cbe);
+    $('pbe').textContent = fm(pbe);
+    const deterministic = p.T === 0 || p.v === 0;
+    const detProb = target => fwd > target ? '100%' : fwd < target ? '0%' : '—';
+    const bsProb = d => isNaN(d) ? '—' : pc(cnd(d));
+    const dCbE = deterministic ? NaN : (Math.log(p.S / cbe) + driftAdj) / (p.v * Math.sqrt(p.T));
+    const dPbE = deterministic ? NaN : (Math.log(p.S / pbe) + driftAdj) / (p.v * Math.sqrt(p.T));
+    $('pcprof').textContent = cbe > 0 ? (deterministic ? detProb(cbe) : bsProb(dCbE)) : '—';
+    $('pprof').textContent = pbe > 0 ? (deterministic ? detProb(pbe) : bsProb(dPbE)) : '—';
+
+    $('gcd').textContent = R.callDelta.toFixed(4);
+    $('gpd').textContent = R.putDelta.toFixed(4);
+    $('gcg').textContent = R.gamma.toFixed(4);
+    $('gpg').textContent = R.gamma.toFixed(4);
+    $('gct').textContent = R.callTheta.toFixed(4);
+    $('gpt').textContent = R.putTheta.toFixed(4);
+    $('gcv').textContent = R.vega.toFixed(4);
+    $('gpv').textContent = R.vega.toFixed(4);
+    $('gcr').textContent = R.callRho.toFixed(4);
+    $('gpr').textContent = R.putRho.toFixed(4);
+
+    solveIv('Call', true);
+    solveIv('Put', false);
+    drawChart();
+}
+
+function solveIv(side, isCall) {
+    const input = $('mkt' + side);
+    const out = $('iv' + side + 'Out');
+    const btn = $('useIv' + side);
+    btn.disabled = true;
+    btn.dataset.iv = '';
+    const mkt = parseFloat(input.value);
+    out.title = '';
+    if (!last || isNaN(mkt)) {
+        out.textContent = '—';
+        out.style.color = '';
+        return;
+    }
+    if (mkt <= 0) {
+        out.textContent = 'enter price > 0';
+        out.style.color = 'var(--bad)';
+        return;
+    }
+    const { p } = last;
+    if (p.T === 0) {
+        out.textContent = 'no vol at expiry';
+        out.style.color = 'var(--bad)';
+        return;
+    }
+    const res = ivSolve(mkt, p.S, p.K, p.T, p.r, p.q, isCall);
+    if (res.state === 'ok') {
+        out.textContent = (res.iv * 100).toFixed(2) + '%';
+        out.style.color = '';
+        btn.disabled = false;
+        btn.dataset.iv = res.iv;
+        return;
+    }
+    out.style.color = 'var(--bad)';
+    if (res.state === 'low') {
+        out.textContent = 'below intrinsic';
+        out.title = `A ${side.toLowerCase()} can never trade under ${fm(res.bound)} (its discounted intrinsic value), so no volatility reproduces this price.`;
+    } else if (res.state === 'high') {
+        out.textContent = 'above max';
+        out.title = `Under this model a ${side.toLowerCase()} is bounded above by ${fm(res.bound)}, so no volatility reproduces this price. The market may be pricing a jump, or the input is wrong.`;
+    } else {
+        out.textContent = 'unsolvable';
+        out.title = 'The solver could not converge for this price with the current parameters.';
+    }
+}
+
+['Call', 'Put'].forEach(side => {
+    $('useIv' + side).addEventListener('click', e => {
+        const iv = parseFloat(e.currentTarget.dataset.iv);
+        if (isNaN(iv)) return;
+        $('inV').value = (iv * 100).toFixed(2);
+        $('slV').value = $('inV').value;
+        schedule();
+    });
+});
+$('mktCall').addEventListener('input', () => last && solveIv('Call', true));
+$('mktPut').addEventListener('input', () => last && solveIv('Put', false));
+
+let activeTab = 'payoff';
+const TAB_HINTS = {
+    payoff: 'Solid lines: payoff you keep at expiry if spot lands there. Dashed: what the option is worth today at that spot.',
+    decay: 'Option value as time runs out — right edge is today, left edge is expiry. The steepening drop is theta accelerating.',
+    delta: 'Delta across spot prices: near 1 the option moves like the stock, near 0 it moves like cash.'
+};
+function setChartHint() {
+    $('chartHint').textContent = TAB_HINTS[activeTab];
+}
+document.querySelectorAll('.tabs button').forEach(b => {
+    b.addEventListener('click', () => {
+        document.querySelectorAll('.tabs button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        activeTab = b.dataset.tab;
+        setChartHint();
+        drawChart();
+    });
+});
+
+function niceTicks(min, max, n) {
+    const span = max - min;
+    if (span <= 0 || !isFinite(span)) return [min];
+    let step = Math.pow(10, Math.floor(Math.log10(span / n)));
+    const err = span / n / step;
+    if (err >= 7.5) step *= 10;
+    else if (err >= 3.5) step *= 5;
+    else if (err >= 1.5) step *= 2;
+    const ticks = [];
+    for (let t = Math.ceil(min / step) * step; t <= max + step * 1e-6; t += step) ticks.push(t);
+    return ticks;
+}
+
+function fmtTick(v, step) {
+    const dp = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+    return v.toFixed(dp);
+}
+
+function drawChart() {
+    const canvas = $('chart');
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    if (!last) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Fix parameters to see charts', w / 2, h / 2);
+        return;
     }
 
-    // Standard Normal probability density function
-    function nd(x) {
-        return Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
-    }
+    const { p, R } = last;
 
-    function calculateBlackScholes() {
-        // Get input values
-        const S = parseFloat(document.getElementById('stockPrice').value);
-        const K = parseFloat(document.getElementById('strikePrice').value);
-        const T = parseFloat(document.getElementById('timeToMaturity').value);
-        const v = parseFloat(document.getElementById('volatility').value) / 100;
-        const r = parseFloat(document.getElementById('riskFreeRate').value) / 100;
-        const q = parseFloat(document.getElementById('dividendYield').value) / 100;
+    const padL = 58, padR = 16, padT = 30, padB = 30;
+    const pw = w - padL - padR, ph = h - padT - padB;
 
-        // Validation
-        if (isNaN(S) || isNaN(K) || isNaN(T) || isNaN(v) || isNaN(r) || isNaN(q) || S <= 0 || K <= 0 || T <= 0 || v <= 0) {
-            return; // Exit if inputs are invalid
+    let xmin, xmax, ymin, ymax, series, markers = [], hlines = [];
+    const CALL = '#34d399', PUT = '#fb923c';
+
+    if (activeTab === 'payoff') {
+        const lo = Math.min(p.S, p.K) * 0.55, hi = Math.max(p.S, p.K) * 1.45;
+        const n = 240;
+        const cp = [], pp = [], cv = [], pv = [];
+        for (let i = 0; i <= n; i++) {
+            const s = lo + (hi - lo) * i / n;
+            cp.push([s, Math.max(s - p.K, 0)]);
+            pp.push([s, Math.max(p.K - s, 0)]);
+            cv.push([s, bsPrice(s, p.K, p.T, p.v, p.r, p.q, true)]);
+            pv.push([s, bsPrice(s, p.K, p.T, p.v, p.r, p.q, false)]);
         }
-
-        // Calculate d1 and d2
-        const d1 = (Math.log(S / K) + (r - q + v * v / 2) * T) / (v * Math.sqrt(T));
-        const d2 = d1 - v * Math.sqrt(T);
-
-        // Calculate Call and Put Prices
-        const callPrice = S * Math.exp(-q * T) * cnd(d1) - K * Math.exp(-r * T) * cnd(d2);
-        const putPrice = K * Math.exp(-r * T) * cnd(-d2) - S * Math.exp(-q * T) * cnd(-d1);
-
-        // Calculate Greeks
-        // Delta
-        const callDelta = Math.exp(-q * T) * cnd(d1);
-        const putDelta = Math.exp(-q * T) * (cnd(d1) - 1);
-
-        // Gamma (Same for Call and Put)
-        const gamma = (Math.exp(-q * T) * nd(d1)) / (S * v * Math.sqrt(T));
-
-        // Theta (1 day decay, typically divided by 365)
-        const callTheta = (-Math.exp(-q * T) * (S * nd(d1) * v) / (2 * Math.sqrt(T))
-                          - r * K * Math.exp(-r * T) * cnd(d2)
-                          + q * S * Math.exp(-q * T) * cnd(d1)) / 365;
-
-        const putTheta = (-Math.exp(-q * T) * (S * nd(d1) * v) / (2 * Math.sqrt(T))
-                         + r * K * Math.exp(-r * T) * cnd(-d2)
-                         - q * S * Math.exp(-q * T) * cnd(-d1)) / 365;
-
-        // Vega (Change in price per 1% change in volatility, divide by 100)
-        const vega = (S * Math.exp(-q * T) * nd(d1) * Math.sqrt(T)) / 100;
-
-        // Rho (Change in price per 1% change in interest rate, divide by 100)
-        const callRho = (K * T * Math.exp(-r * T) * cnd(d2)) / 100;
-        const putRho = (-K * T * Math.exp(-r * T) * cnd(-d2)) / 100;
-
-        // Update UI
-        document.getElementById('callPrice').innerText = '$' + callPrice.toFixed(4);
-        document.getElementById('putPrice').innerText = '$' + putPrice.toFixed(4);
-
-        document.getElementById('callDelta').innerText = callDelta.toFixed(4);
-        document.getElementById('putDelta').innerText = putDelta.toFixed(4);
-
-        document.getElementById('callGamma').innerText = gamma.toFixed(4);
-        document.getElementById('putGamma').innerText = gamma.toFixed(4);
-
-        document.getElementById('callTheta').innerText = callTheta.toFixed(4);
-        document.getElementById('putTheta').innerText = putTheta.toFixed(4);
-
-        document.getElementById('callVega').innerText = vega.toFixed(4);
-        document.getElementById('putVega').innerText = vega.toFixed(4);
-
-        document.getElementById('callRho').innerText = callRho.toFixed(4);
-        document.getElementById('putRho').innerText = putRho.toFixed(4);
+        series = [
+            { pts: cp, color: CALL, width: 2, label: 'Call payoff' },
+            { pts: pp, color: PUT, width: 2, label: 'Put payoff' },
+            { pts: cv, color: CALL, width: 1.5, dash: [6, 4], label: 'Call value today' },
+            { pts: pv, color: PUT, width: 1.5, dash: [6, 4], label: 'Put value today' }
+        ];
+        markers = [
+            { x: p.S, label: 'S=' + p.S.toFixed(2), color: '#e2e8f0' },
+            { x: p.K, label: 'K=' + p.K.toFixed(2), color: '#64748b' }
+        ];
+        xmin = lo; xmax = hi;
+        let mn = 0, mx = 0;
+        series.forEach(s => s.pts.forEach(pt => { if (pt[1] < mn) mn = pt[1]; if (pt[1] > mx) mx = pt[1]; }));
+        const padY = (mx - mn) * 0.08 || 1;
+        ymin = mn - padY; ymax = mx + padY;
+    } else if (activeTab === 'decay') {
+        const tMax = Math.max(p.T, 0.05);
+        const n = 240;
+        const cv = [], pv = [];
+        for (let i = 0; i <= n; i++) {
+            const t = tMax * i / n;
+            cv.push([t, bsPrice(p.S, p.K, t, p.v, p.r, p.q, true)]);
+            pv.push([t, bsPrice(p.S, p.K, t, p.v, p.r, p.q, false)]);
+        }
+        series = [
+            { pts: cv.reverse(), color: CALL, width: 2, label: 'Call value' },
+            { pts: pv.reverse(), color: PUT, width: 2, label: 'Put value' }
+        ];
+        markers = [{ x: p.T, label: 'T=' + p.T.toFixed(2) + 'y', color: '#e2e8f0' }];
+        xmin = 0; xmax = tMax;
+        let mx = 0;
+        series.forEach(s => s.pts.forEach(pt => { if (pt[1] > mx) mx = pt[1]; }));
+        ymin = 0; ymax = mx * 1.06 || 1;
+    } else {
+        const lo = Math.min(p.S, p.K) * 0.55, hi = Math.max(p.S, p.K) * 1.45;
+        const n = 240;
+        const cd = [], pd = [];
+        for (let i = 0; i <= n; i++) {
+            const s = lo + (hi - lo) * i / n;
+            cd.push([s, bsCore(s, p.K, p.T, p.v, p.r, p.q).callDelta]);
+            pd.push([s, bsCore(s, p.K, p.T, p.v, p.r, p.q).putDelta]);
+        }
+        series = [
+            { pts: cd, color: CALL, width: 2, label: 'Call delta' },
+            { pts: pd, color: PUT, width: 2, label: 'Put delta' }
+        ];
+        hlines = [{ y: 0 }, { y: 0.5 }];
+        markers = [{ x: p.S, label: 'S=' + p.S.toFixed(2), color: '#e2e8f0' }];
+        xmin = lo; xmax = hi;
+        ymin = -1.08; ymax = 1.08;
     }
 
-    // Add event listeners to all inputs to recalculate on change
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(input => {
-        input.addEventListener('input', calculateBlackScholes);
+    const X = x => padL + (x - xmin) / (xmax - xmin) * pw;
+    const Y = y => padT + ph - (y - ymin) / (ymax - ymin) * ph;
+
+    ctx.font = '11px sans-serif';
+    const xTicks = niceTicks(xmin, xmax, 8);
+    const xStep = xTicks.length > 1 ? xTicks[1] - xTicks[0] : 1;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#94a3b8';
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+    xTicks.forEach(t => {
+        const px = X(t);
+        ctx.beginPath();
+        ctx.moveTo(px, padT);
+        ctx.lineTo(px, padT + ph);
+        ctx.stroke();
+        ctx.fillText(fmtTick(t, xStep), px, padT + ph + 6);
     });
 
-    // Initial calculation
-    calculateBlackScholes();
-</script>
+    const yIsMoney = activeTab !== 'delta';
+    const yTicks = niceTicks(ymin, ymax, 6);
+    const yStep = yTicks.length > 1 ? yTicks[1] - yTicks[0] : 1;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    yTicks.forEach(t => {
+        const py = Y(t);
+        ctx.beginPath();
+        ctx.moveTo(padL, py);
+        ctx.lineTo(padL + pw, py);
+        ctx.stroke();
+        ctx.fillText((yIsMoney ? '$' : '') + fmtTick(t, yStep), padL - 8, py);
+    });
 
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(padL, padT, pw, ph);
+
+    hlines.forEach(hl => {
+        const py = Y(hl.y);
+        if (py < padT || py > padT + ph) return;
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(padL, py);
+        ctx.lineTo(padL + pw, py);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    });
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(padL, padT, pw, ph);
+    ctx.clip();
+    series.forEach(s => {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.width;
+        ctx.setLineDash(s.dash || []);
+        ctx.beginPath();
+        s.pts.forEach((pt, i) => {
+            const px = X(pt[0]), py = Y(Math.min(Math.max(pt[1], ymin), ymax));
+            i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+    });
+    ctx.restore();
+
+    markers.forEach(m => {
+        if (m.x < xmin || m.x > xmax) return;
+        const px = X(m.x);
+        ctx.strokeStyle = m.color;
+        ctx.globalAlpha = 0.55;
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px, padT);
+        ctx.lineTo(px, padT + ph);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = m.color;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(m.label, px + 4, padT + 2);
+    });
+
+    let lx = padL + 8;
+    const ly = padT + 8;
+    ctx.textBaseline = 'middle';
+    ctx.font = '11px sans-serif';
+    series.forEach(s => {
+        if (!s.label) return;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = s.width;
+        ctx.setLineDash(s.dash || []);
+        ctx.beginPath();
+        ctx.moveTo(lx, ly);
+        ctx.lineTo(lx + 16, ly);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#cbd5e1';
+        ctx.textAlign = 'left';
+        ctx.fillText(s.label, lx + 21, ly);
+        lx += 21 + ctx.measureText(s.label).width + 16;
+    });
+}
+
+let rafPending = false;
+function schedule() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(() => {
+        rafPending = false;
+        compute();
+    });
+}
+
+window.addEventListener('resize', drawChart);
+setChartHint();
+compute();
+</script>
 </body>
 </html>
