@@ -1,40 +1,55 @@
-// Utility distribution: power and water flow through the road network
-// (pipes/cables run under roads). A building is serviced when a road tile
-// adjacent to it is reachable from a producing utility AND there is enough
-// production capacity. Scarce capacity is rationed first-come-first-served
-// in build order, so new buildings brown out first when you're underpowered.
+// Utility and Civic Services distribution:
+// - Power and water flow through the connected road/bridge network.
+// - Fire, Police, Health, and Education provide radial/network coverage to protect
+//   citizens, suppress crime, heal illness, and educate workers for high-tech towers.
+// - Funding multipliers from the municipal budget scale service capacities and effectiveness.
 
 class Services {
     constructor(city) {
         this.city = city;
-        this.poweredRoads = new Set();   // road tile indexes reachable from power plants
+        this.poweredRoads = new Set();
         this.wateredRoads = new Set();
         this.roadDistance = new Int16Array(city.width * city.height).fill(-1);
-        this.version = -1;               // city.servicesVersion last computed
+        this.version = -1;
 
-        // Aggregate stats (refreshed by update())
+        // Coverage maps (tile index -> boolean or level)
+        this.fireCoverage = new Uint8Array(city.width * city.height);
+        this.policeCoverage = new Uint8Array(city.width * city.height);
+        this.healthCoverage = new Uint8Array(city.width * city.height);
+        this.educationCoverage = new Uint8Array(city.width * city.height);
+
+        // Aggregate statistics
         this.powerProd = 0;
-        this.powerDemand = 0;   // potential demand from all built consumers
+        this.powerDemand = 0;
         this.powerServed = 0;
         this.waterProd = 0;
         this.waterDemand = 0;
         this.waterServed = 0;
-        this.brownouts = false; // connected buildings that couldn't get capacity
+        this.brownouts = false;
+        this.waterShort = false;
+
+        this.fireScore = 100;
+        this.policeScore = 100;
+        this.healthScore = 70;
+        this.educationScore = 50;
     }
 
-    update() {
+    update(economy) {
         const city = this.city;
-        if (this.version === city.servicesVersion) return;
-        this.version = city.servicesVersion;
+        const funding = (economy && economy.funding) || CONFIG.DEFAULT_FUNDING;
 
         this.poweredRoads.clear();
         this.wateredRoads.clear();
+        this.fireCoverage.fill(0);
+        this.policeCoverage.fill(0);
+        this.healthCoverage.fill(0);
+        this.educationCoverage.fill(0);
 
-        // --- Road graph ---
+        // --- Road graph (both roads and bridges) ---
         const roads = [];
         const isRoadIdx = new Set();
         for (const b of city.buildings.values()) {
-            if (b.type !== 'road') continue;
+            if (b.type !== 'road' && b.type !== 'bridge') continue;
             const idx = city.idx(b.x, b.y);
             roads.push(idx);
             isRoadIdx.add(idx);
@@ -49,18 +64,19 @@ class Services {
             return out;
         };
 
-        const roadAdj = new Map(); // roadIdx -> [neighbour roadIdx]
+        const roadAdj = new Map();
         for (const idx of roads) {
             const x = idx % city.width;
             const y = Math.floor(idx / city.width);
             roadAdj.set(idx, neighborsOf(x, y).filter(n => isRoadIdx.has(n)));
         }
 
-        // --- Flood each utility network along roads ---
-        const spreadFrom = (utilityType, targetSet) => {
+        // --- Utility Distribution (Power & Water) ---
+        const spreadFrom = (types, targetSet) => {
             const queue = [];
             for (const b of city.buildings.values()) {
-                if (b.type !== utilityType) continue;
+                if (!types.includes(b.type)) continue;
+                if (b.state === 'rubble') continue;
                 for (const adj of city.adjacentTiles(b)) {
                     if (!city.inBounds(adj.x, adj.y)) continue;
                     const idx = city.idx(adj.x, adj.y);
@@ -72,7 +88,8 @@ class Services {
             }
             while (queue.length > 0) {
                 const idx = queue.pop();
-                for (const n of roadAdj.get(idx)) {
+                const neighbors = roadAdj.get(idx) || [];
+                for (const n of neighbors) {
                     if (!targetSet.has(n)) {
                         targetSet.add(n);
                         queue.push(n);
@@ -81,14 +98,14 @@ class Services {
             }
         };
 
-        spreadFrom('power', this.poweredRoads);
-        spreadFrom('water', this.wateredRoads);
+        spreadFrom(['power', 'wind_turbine'], this.poweredRoads);
+        spreadFrom(['water', 'water_pump'], this.wateredRoads);
 
         // --- Distance to nearest road (drives development eligibility) ---
         const dist = this.roadDistance;
         dist.fill(-1);
         let frontier = [];
-        for (const r of roads) dist[r] = 0, frontier.push(r);
+        for (const r of roads) { dist[r] = 0; frontier.push(r); }
         let depth = 0;
         while (frontier.length > 0 && depth < CONFIG.DEV.ROAD_ACCESS_DIST) {
             const next = [];
@@ -106,13 +123,47 @@ class Services {
             depth++;
         }
 
-        // --- Pass 1: frontage reach and demand totals ---
+        // --- Civic Radial Coverage (Fire, Police, Health, Education) ---
+        const applyCivicCoverage = (type, coverageArray, baseRadius, fundingKey) => {
+            const mult = funding[fundingKey] !== undefined ? funding[fundingKey] : 1.0;
+            const effRadius = Math.max(2, Math.round(baseRadius * mult));
+
+            for (const b of city.buildings.values()) {
+                if (b.type !== type || b.state !== 'built') continue;
+                const cx = b.x + 0.5, cy = b.y + 0.5;
+                const rInt = Math.ceil(effRadius);
+
+                for (let dy = -rInt; dy <= rInt; dy++) {
+                    for (let dx = -rInt; dx <= rInt; dx++) {
+                        const tx = Math.floor(cx + dx);
+                        const ty = Math.floor(cy + dy);
+                        if (!city.inBounds(tx, ty)) continue;
+                        const d = Math.hypot(tx - cx, ty - cy);
+                        if (d <= effRadius) {
+                            const idx = city.idx(tx, ty);
+                            const val = Math.min(255, Math.round((1 - (d / (effRadius + 1))) * 100));
+                            coverageArray[idx] = Math.max(coverageArray[idx], val);
+                        }
+                    }
+                }
+            }
+        };
+
+        applyCivicCoverage('fire_station', this.fireCoverage, 18, 'fire');
+        applyCivicCoverage('police_station', this.policeCoverage, 20, 'police');
+        applyCivicCoverage('hospital', this.healthCoverage, 22, 'health');
+        applyCivicCoverage('school', this.educationCoverage, 20, 'education');
+
+        // --- Pass 1: Sum capacities and potential demand ---
         this.powerProd = 0;
         this.powerDemand = 0;
         this.waterProd = 0;
         this.waterDemand = 0;
-        this._infraPowerUse = 0;   // utilities' own consumption
+        this._infraPowerUse = 0;
         this._infraWaterUse = 0;
+
+        const powerFunding = funding.power !== undefined ? funding.power : 1.0;
+        const waterFunding = funding.water !== undefined ? funding.water : 1.0;
 
         for (const b of city.buildings.values()) {
             let touchesRoad = false;
@@ -128,31 +179,47 @@ class Services {
                 if (this.wateredRoads.has(idx)) onWaterGrid = true;
             }
 
+            const bIdx = city.idx(b.x, b.y);
+            b.fireCoverage = this.fireCoverage[bIdx] > 0;
+            b.policeCoverage = this.policeCoverage[bIdx] > 0;
+            b.healthCoverage = this.healthCoverage[bIdx] > 0;
+            b.educationCoverage = this.educationCoverage[bIdx] > 0;
+
             const def = INFRASTRUCTURE[b.type];
             if (def) {
-                b.connected = touchesRoad || b.type === 'road';
+                b.connected = touchesRoad || b.type === 'road' || b.type === 'bridge';
                 b.powered = true;
                 b.watered = true;
                 b._needsPower = undefined;
                 if (b.state !== 'built') continue;
-                this.powerProd += def.powerProduction || 0;
-                this.waterProd += def.waterProduction || 0;
-                this.powerDemand += def.powerConsumption || 0;
-                this.waterDemand += def.waterConsumption || 0;
-                this._infraPowerUse += def.powerConsumption || 0;
-                this._infraWaterUse += def.waterConsumption || 0;
+
+                if (def.powerProduction) {
+                    this.powerProd += Math.round(def.powerProduction * powerFunding);
+                }
+                if (def.waterProduction) {
+                    this.waterProd += Math.round(def.waterProduction * waterFunding);
+                }
+
+                const pUse = def.powerConsumption || 0;
+                const wUse = def.waterConsumption || 0;
+                this.powerDemand += pUse;
+                this.waterDemand += wUse;
+                this._infraPowerUse += pUse;
+                this._infraWaterUse += wUse;
                 continue;
             }
 
+            // Private zone building
             b.connected = touchesRoad;
             b._onPowerGrid = onPowerGrid;
             b._onWaterGrid = onWaterGrid;
+
             if (b.state !== 'built') {
-                // Construction sites are not yet drawing services
                 b.powered = true;
                 b.watered = true;
                 continue;
             }
+
             const lvl = levelDef(b.type, b.level);
             b._needsPower = lvl.power > 0;
             b._needsWater = lvl.water > 0;
@@ -160,18 +227,34 @@ class Services {
             if (b._needsWater) this.waterDemand += lvl.water;
         }
 
-        // --- Pass 2: ration scarce capacity in build order ---
+        // --- Pass 2: Ration power and water capacity ---
         let availPower = this.powerProd - this._infraPowerUse;
         let availWater = this.waterProd - this._infraWaterUse;
 
         this.powerServed = 0;
         this.waterServed = 0;
         this.brownouts = false;
+        this.waterShort = false;
+
+        let totalCivicNeeders = 0, fireCoveredCount = 0, policeCoveredCount = 0;
+        let totalHealthScore = 0, totalEqScore = 0, totalPopCount = 0;
 
         for (const b of city.buildings.values()) {
             if (b._needsPower === undefined) continue;
             if (b.state !== 'built') continue;
             const lvl = levelDef(b.type, b.level);
+
+            totalCivicNeeders++;
+            if (b.fireCoverage) fireCoveredCount++;
+            if (b.policeCoverage) policeCoveredCount++;
+
+            const bIdx = city.idx(b.x, b.y);
+            const popOrJobs = b.pop + b.jobs;
+            if (popOrJobs > 0) {
+                totalPopCount += popOrJobs;
+                totalHealthScore += (this.healthCoverage[bIdx] || 25) * popOrJobs;
+                totalEqScore += (this.educationCoverage[bIdx] || 20) * popOrJobs;
+            }
 
             if (!b.connected) {
                 b.powered = false;
@@ -198,9 +281,15 @@ class Services {
                 b.watered = true;
             } else {
                 b.watered = false;
-                this.brownouts = true;
+                this.waterShort = true;
             }
         }
+
+        // Compute aggregate municipal scores
+        this.fireScore = totalCivicNeeders > 0 ? Math.round((fireCoveredCount / totalCivicNeeders) * 100) : 100;
+        this.policeScore = totalCivicNeeders > 0 ? Math.round((policeCoveredCount / totalCivicNeeders) * 100) : 100;
+        this.healthScore = totalPopCount > 0 ? Math.round(totalHealthScore / totalPopCount) : 70;
+        this.educationScore = totalPopCount > 0 ? Math.round(totalEqScore / totalPopCount) : 50;
     }
 }
 

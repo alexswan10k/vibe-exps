@@ -1,7 +1,6 @@
-// Development engine: the heart of the simulation. Zoned land develops on
-// its own when there is market demand, road access and utility capacity.
-// Buildings rise from construction sites through levels, and are abandoned
-// (then demolished) when services fail.
+// Development engine: handles private zone construction and 4-tier upgrades.
+// Buildings rise from empty lots to cottages, mid-rises, and towering skyscrapers
+// when market demand, utilities, land value, and civic services (schools, hospitals, safety) align.
 
 class DevelopmentEngine {
     constructor() {
@@ -11,7 +10,7 @@ class DevelopmentEngine {
     tick(city, economy, services) {
         this.tickCounter++;
 
-        // Full scan for new construction sites at a relaxed cadence
+        // Scan for new construction sites at an active cadence
         if (this.tickCounter % CONFIG.DEV.CHECK_EVERY_TICKS === 0) {
             this.scanForNewDevelopments(city, economy, services);
         }
@@ -21,12 +20,14 @@ class DevelopmentEngine {
             const zone = window.ZONES[b.type];
             if (!zone) continue; // infrastructure is not managed here
 
+            if (b.onFire) continue; // fire engine handles burning buildings
+
             if (b.state === 'construction') {
                 b.progressTicks++;
                 if (b.progressTicks >= CONFIG.DEV.CONSTRUCTION_TICKS) {
                     b.state = 'built';
                     b.progressTicks = 0;
-                    city.buildingsVersion++;   // renderer + services refresh
+                    city.buildingsVersion++;
                     city.servicesVersion++;
                 }
             } else if (b.state === 'built' || b.state === 'abandoned') {
@@ -37,7 +38,9 @@ class DevelopmentEngine {
                 if (b.state === 'abandoned') {
                     b.abandonedTicks++;
                     if (b.abandonedTicks >= CONFIG.DEV.DEMOLISH_AFTER_TICKS) {
-                        city.removeBuilding(b); // zone remains; lot may redevelop
+                        b.state = 'rubble';
+                        b.abandonedTicks = 0;
+                        city.buildingsVersion++;
                     }
                 }
             }
@@ -47,8 +50,14 @@ class DevelopmentEngine {
     // --- New construction: find zoned empty lots worth developing ---
     scanForNewDevelopments(city, economy, services) {
         const lots = this.zonedEmptyLots(city);
+        if (lots.length === 0) return;
+
+        let builtThisScan = 0;
+        const maxSitesPerScan = 16;
 
         for (const idx of lots) {
+            if (builtThisScan >= maxSitesPerScan) break;
+
             const x = idx % city.width;
             const y = Math.floor(idx / city.width);
             const zoneId = city.zones[idx];
@@ -56,23 +65,19 @@ class DevelopmentEngine {
             if (!zoneKey) continue;
 
             // Road access within walking distance
-            if (services.roadDistance[idx] < 0 ||
-                services.roadDistance[idx] > CONFIG.DEV.ROAD_ACCESS_DIST) continue;
+            const dist = services.roadDistance[idx];
+            if (dist < 0 || dist > CONFIG.DEV.ROAD_ACCESS_DIST) continue;
 
-            // Market demand
+            // Market demand check
             if (economy.demand[zoneKey] < CONFIG.DEV.MIN_DEMAND_TO_BUILD) continue;
 
-            // Utilities must exist in the city before anything gets built
-            const hasUtilities = services.powerProd > 0 && services.waterProd > 0;
-            if (!hasUtilities) continue;
-
-            // Start construction!
+            // Start construction at Level 1!
             city.addBuilding(zoneKey, x, y, 1, 'construction');
+            builtThisScan++;
         }
     }
 
     zonedEmptyLots(city) {
-        // Cheap enough to recompute: zones are ≤ 4096 tiles, scan runs ~1/s
         const lots = [];
         for (let i = 0; i < city.zones.length; i++) {
             if (city.zones[i] === 0) continue;
@@ -90,12 +95,22 @@ class DevelopmentEngine {
         if (b.level >= maxLevel(b.type)) return;
 
         const nextLevel = b.level + 1;
+        const reqLandValue = CONFIG.DEV.LAND_VALUE_FOR_LEVEL[b.level] || 12;
+        const curLandValue = economy.landValue(b.x, b.y);
+
+        // Tier 4 high-density requirements
+        let civicPass = true;
+        if (nextLevel === 4) {
+            civicPass = b.policeCoverage && b.fireCoverage && (b.educationCoverage || services.educationScore >= CONFIG.DEV.MIN_EQ_FOR_LEVEL4);
+        }
+
         const eligible =
             economy.demand[b.type] >= CONFIG.DEV.MIN_DEMAND_TO_UPGRADE &&
-            b.connected && b.powered && b.watered &&
+            b.connected && b.powered && (b.level === 1 || b.watered) &&
             (b.pop + b.jobs) > 0 &&
+            civicPass &&
             this.occupancyRatio(b) >= CONFIG.DEV.UPGRADE_MIN_OCCUPANCY &&
-            economy.landValue(b.x, b.y) >= CONFIG.DEV.LAND_VALUE_FOR_LEVEL[b.level];
+            curLandValue >= reqLandValue;
 
         if (eligible) {
             b.progressTicks++;
@@ -121,7 +136,7 @@ class DevelopmentEngine {
         return cap > 0 ? used / cap : 0;
     }
 
-    // --- Abandonment: cut the services and the building dies ---
+    // --- Abandonment & Recovery ---
     trackServiceHealth(b) {
         const served = b.connected &&
             (!b._needsPower || b.powered) &&
@@ -132,11 +147,11 @@ class DevelopmentEngine {
                 b.unservedTicks -= CONFIG.DEV.UNSERVED_RECOVERY;
             }
             if (b.state === 'abandoned' && b.unservedTicks <= 0) {
-                // Repopulate an abandoned building once services return
                 b.state = 'built';
                 b.abandonedTicks = 0;
                 b.pop = 0;
                 b.jobs = 0;
+                window.game && window.game.city && (window.game.city.buildingsVersion++);
             }
             return;
         }
@@ -147,6 +162,7 @@ class DevelopmentEngine {
             b.abandonedTicks = 0;
             b.pop = 0;
             b.jobs = 0;
+            window.game && window.game.city && (window.game.city.buildingsVersion++);
         }
     }
 }

@@ -1,23 +1,12 @@
-// Input: tool-based interaction.
-//   select        click buildings to inspect; drag to pan
-//   bulldoze      drag to demolish
-//   road          drag to paint roads
-//   zone_*        drag a rectangle to rezone land
-//   dezone        drag a rectangle to clear zoning
-//   park/power    click to place infrastructure
+// Input: Tool-based user interaction.
+// - Pan & Zoom
+// - Drag-line road building
+// - Drag-rectangle zoning & dezoning
+// - Point-and-click infrastructure & civic placement
+// - Bulldoze demolition
+// - Mobile touch controls with active event listeners
 
-const TOOLS = {
-    SELECT: 'select',
-    BULLDOZE: 'bulldoze',
-    ROAD: 'road',
-    ZONE_R: 'zone_residential',
-    ZONE_C: 'zone_commercial',
-    ZONE_I: 'zone_industrial',
-    DEZONE: 'dezone',
-    PARK: 'park',
-    POWER: 'power',
-    WATER: 'water'
-};
+// TOOLS is defined in building-types.js
 
 class InputManager {
     constructor(game) {
@@ -28,9 +17,10 @@ class InputManager {
         this.hoverTile = null;
 
         this.mouse = { x: 0, y: 0, down: false, button: 0 };
-        this.dragMode = null;      // null | 'pan' | 'paint' | 'rect'
+        this.dragMode = null;      // null | 'pan' | 'paint' | 'rect' | 'road_line'
         this.dragStart = null;
         this.dragRect = null;
+        this.roadLine = null;
         this.lastPaintTile = null;
 
         this._bindEvents();
@@ -39,11 +29,16 @@ class InputManager {
     setTool(tool) {
         this.tool = tool;
         this.dragRect = null;
+        this.roadLine = null;
         if (this.game.ui) this.game.ui.refreshToolbar();
     }
 
     isPaintingZones() {
         return this.dragMode === 'rect';
+    }
+
+    isDraggingRoad() {
+        return this.dragMode === 'road_line';
     }
 
     // --- Coordinate helpers ---
@@ -69,7 +64,6 @@ class InputManager {
         this.hoverTile = { x: gx, y: gy, worldX: world.x, worldY: world.y };
     }
 
-    // --- Events ---
     _bindEvents() {
         this._onDown = (e) => this.onMouseDown(e);
         this._onMove = (e) => this.onMouseMove(e);
@@ -85,7 +79,7 @@ class InputManager {
         this.canvas.addEventListener('contextmenu', this._onContext);
         document.addEventListener('keydown', this._onKey);
 
-        // Basic touch: one finger acts like the mouse; two fingers pinch-zoom
+        // Touch event handlers with active listeners
         this._pinch = null;
         this._onTouchStart = (e) => this.onTouchStart(e);
         this._onTouchMove = (e) => this.onTouchMove(e);
@@ -111,10 +105,13 @@ class InputManager {
 
         switch (this.tool) {
             case TOOLS.SELECT:
-                // Decide on mouseup whether it was a click or a pan
                 this.startPan();
                 break;
             case TOOLS.ROAD:
+                this.dragMode = 'road_line';
+                this.dragStart = { x: tile.x, y: tile.y };
+                this.roadLine = { tiles: [{ x: tile.x, y: tile.y }] };
+                break;
             case TOOLS.BULLDOZE:
                 this.dragMode = 'paint';
                 this.lastPaintTile = null;
@@ -128,9 +125,8 @@ class InputManager {
                 this.dragStart = { x: tile.x, y: tile.y };
                 this.dragRect = { x: tile.x, y: tile.y, w: 1, h: 1 };
                 break;
-            case TOOLS.PARK:
-            case TOOLS.POWER:
-            case TOOLS.WATER:
+            default:
+                // Infrastructure and civic buildings
                 this.game.placeInfrastructure(this.tool, tile.x, tile.y);
                 break;
         }
@@ -141,7 +137,6 @@ class InputManager {
         if (!this.mouse.down) return;
 
         if (this.dragMode === 'pan') {
-            // movementX/Y are screen px; convert to the renderer's logical px
             const dx = (e.movementX || 0) * (this._scaleX || 1);
             const dy = (e.movementY || 0) * (this._scaleY || 1);
             this.game.renderer.moveCamera(dx, dy);
@@ -152,8 +147,7 @@ class InputManager {
         if (!tile) return;
 
         if (this.dragMode === 'paint') {
-            if (!this.lastPaintTile ||
-                this.lastPaintTile.x !== tile.x || this.lastPaintTile.y !== tile.y) {
+            if (!this.lastPaintTile || this.lastPaintTile.x !== tile.x || this.lastPaintTile.y !== tile.y) {
                 this.paintAt(tile);
             }
         } else if (this.dragMode === 'rect') {
@@ -162,6 +156,26 @@ class InputManager {
             const w = Math.abs(tile.x - this.dragStart.x) + 1;
             const h = Math.abs(tile.y - this.dragStart.y) + 1;
             this.dragRect = { x, y, w, h };
+        } else if (this.dragMode === 'road_line') {
+            // Straight orthogonal line between dragStart and current tile
+            const dx = tile.x - this.dragStart.x;
+            const dy = tile.y - this.dragStart.y;
+            const tiles = [];
+
+            if (Math.abs(dx) >= Math.abs(dy)) {
+                // Horizontal line
+                const step = dx >= 0 ? 1 : -1;
+                for (let x = this.dragStart.x; x !== tile.x + step; x += step) {
+                    tiles.push({ x, y: this.dragStart.y });
+                }
+            } else {
+                // Vertical line
+                const step = dy >= 0 ? 1 : -1;
+                for (let y = this.dragStart.y; y !== tile.y + step; y += step) {
+                    tiles.push({ x: this.dragStart.x, y });
+                }
+            }
+            this.roadLine = { tiles };
         }
     }
 
@@ -172,6 +186,8 @@ class InputManager {
         if (this.dragMode === 'rect' && this.dragRect) {
             const zoneKey = this.tool === TOOLS.DEZONE ? null : this.tool.replace('zone_', '');
             this.game.applyZoneRect(this.dragRect.x, this.dragRect.y, this.dragRect.w, this.dragRect.h, zoneKey);
+        } else if (this.dragMode === 'road_line' && this.roadLine) {
+            this.game.applyRoadLine(this.roadLine.tiles);
         } else if (this.tool === TOOLS.SELECT && this.dragMode === 'pan' && this.wasClick(e)) {
             if (e.button === 2) {
                 this.game.clearSelection();
@@ -183,6 +199,7 @@ class InputManager {
         this.mouse.down = false;
         this.dragMode = null;
         this.dragRect = null;
+        this.roadLine = null;
         this.dragStart = null;
     }
 
@@ -196,8 +213,12 @@ class InputManager {
         const tile = this.hoverTile;
         if (!tile) return;
         const b = this.game.city.buildingAt(tile.x, tile.y);
-        if (b) this.game.selectBuilding(b);
-        else this.game.clearSelection();
+        if (b) {
+            this.game.selectBuilding(b);
+            if (this.game.audio) this.game.audio.playClick();
+        } else {
+            this.game.clearSelection();
+        }
     }
 
     startPan() {
@@ -206,8 +227,7 @@ class InputManager {
 
     paintAt(tile) {
         this.lastPaintTile = { x: tile.x, y: tile.y };
-        if (this.tool === TOOLS.ROAD) this.game.paintRoad(tile.x, tile.y);
-        else if (this.tool === TOOLS.BULLDOZE) this.game.bulldozeAt(tile.x, tile.y);
+        if (this.tool === TOOLS.BULLDOZE) this.game.bulldozeAt(tile.x, tile.y);
     }
 
     onWheel(e) {
@@ -242,13 +262,14 @@ class InputManager {
             case '6': game.setTool(TOOLS.POWER); break;
             case '7': game.setTool(TOOLS.WATER); break;
             case 'o': case 'O': game.cycleOverlay(); break;
+            case 't': case 'T': game.cycleTimeOfDay(); break;
             case ' ': e.preventDefault(); game.togglePause(); break;
             case '+': case '=': game.stepSpeed(1); break;
             case '-': game.stepSpeed(-1); break;
         }
     }
 
-    // --- Touch ---
+    // --- Touch handling ---
     onTouchStart(e) {
         e.preventDefault();
         if (e.touches.length === 1) {
@@ -272,7 +293,6 @@ class InputManager {
             const prev = this.hoverTile ? { worldX: this.hoverTile.worldX, worldY: this.hoverTile.worldY } : null;
             this.updatePosition(t.clientX, t.clientY);
             if (this.dragMode === 'pan' && prev && prev.worldX !== undefined) {
-                // World-space delta between the two touch positions
                 this.game.renderer.moveCamera(
                     -(this.hoverTile.worldX - prev.worldX),
                     -(this.hoverTile.worldY - prev.worldY)
@@ -301,6 +321,7 @@ class InputManager {
             this.mouse.down = false;
             this.dragMode = null;
             this.dragRect = null;
+            this.roadLine = null;
         }
     }
 

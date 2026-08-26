@@ -1,6 +1,5 @@
-// Seeded RNG and small helpers
+// Seeded RNG and math helpers
 
-// mulberry32: fast, seedable, good enough distribution for terrain/features
 function makeRng(seed) {
     let a = seed >>> 0;
     return function () {
@@ -10,6 +9,10 @@ function makeRng(seed) {
         t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+}
+
+function makeRngSeed() {
+    return (Math.random() * 0xFFFFFFFF) >>> 0;
 }
 
 function clamp(value, min, max) {
@@ -29,6 +32,7 @@ function pickColor(colors, rng) {
 }
 
 window.makeRng = makeRng;
+window.makeRngSeed = makeRngSeed;
 window.clamp = clamp;
 window.lerp = lerp;
 window.randomOf = randomOf;
