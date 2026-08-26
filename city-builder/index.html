@@ -2,81 +2,147 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>City Builder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SimCity Classic — Urban Management Simulator</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="game-root">
         <!-- Top HUD -->
         <header id="hud">
-            <div class="hud-group brand">CITY<br>BUILDER</div>
+            <div class="hud-group brand">🏙️ SIMCITY<br>PRO</div>
+            
             <div class="hud-group">
-                <span class="hud-label" id="hud-date">Y1 M1 D1</span>
-                <span id="hud-money" class="money">$40,000</span>
+                <span class="hud-label" id="hud-date">📅 Y1 M1 D1</span>
+                <span id="hud-money" class="money">💵 $100,000</span>
                 <span id="hud-net" class="net positive">+$0/mo</span>
             </div>
+            
             <div class="hud-group">
-                <span class="hud-label">POP</span><span id="hud-pop" class="value">0</span>
-                <span class="hud-label">JOBS</span><span id="hud-jobs" class="value">0 / 0</span>
-                <span class="hud-label">HAPPY</span><span id="hud-happy" class="value good">55%</span>
+                <span class="hud-label">👥 POP</span><span id="hud-pop" class="value">0</span>
+                <span class="badge" id="hud-milestone">🏛️ Settlement</span>
+                <span class="hud-label">💼 JOBS</span><span id="hud-jobs" class="value">0 / 0</span>
+                <span class="hud-label">😊 HAPPY</span><span id="hud-happy" class="value good">65%</span>
             </div>
+            
             <div class="hud-group demand">
-                <span class="hud-label">DEMAND</span>
+                <span class="hud-label">RCI</span>
                 <div class="demand-bars">
                     <div class="demand-col"><div id="demand-res" class="demand-bar res"></div><span>R</span></div>
                     <div class="demand-col"><div id="demand-com" class="demand-bar com"></div><span>C</span></div>
                     <div class="demand-col"><div id="demand-ind" class="demand-bar ind"></div><span>I</span></div>
                 </div>
             </div>
+            
             <div class="hud-group overlay-picker" id="overlay-picker">
-                <button data-overlay="none" class="chip active">Map</button>
-                <button data-overlay="power" class="chip">Power</button>
-                <button data-overlay="water" class="chip">Water</button>
-                <button data-overlay="land" class="chip">Value</button>
+                <span class="hud-label">VIEW:</span>
+                <button data-overlay="none" class="chip active">🗺️ Map</button>
+                <button data-overlay="power" class="chip">⚡ Power</button>
+                <button data-overlay="water" class="chip">💧 Water</button>
+                <button data-overlay="land" class="chip">💎 Land</button>
+                <button data-overlay="fire" class="chip">🚒 Fire</button>
+                <button data-overlay="crime" class="chip">👮 Crime</button>
+                <button data-overlay="health" class="chip">🏥 Health</button>
+                <button data-overlay="education" class="chip">🎓 Edu</button>
+                <button data-overlay="traffic" class="chip">🚗 Traffic</button>
             </div>
+            
+            <div class="hud-group actions">
+                <button id="btn-budget" class="chip action-chip">💰 Budget</button>
+                <button id="btn-disasters" class="chip danger-chip">☄️ Disasters</button>
+                <button id="btn-lighting" class="chip">☀️ Day</button>
+                <button id="btn-audio" class="chip active">🔊 Audio</button>
+            </div>
+            
             <div class="hud-group speed">
-                <button id="btn-pause" class="chip" title="Space">II</button>
-                <button id="btn-speed-down" class="chip">&minus;</button>
+                <button id="btn-pause" class="chip" title="Pause (Space)">⏸️</button>
+                <button id="btn-speed-down" class="chip" title="Speed Down">⏪</button>
                 <span id="speed-label" class="value">1x</span>
-                <button id="btn-speed-up" class="chip">+</button>
+                <button id="btn-speed-up" class="chip" title="Speed Up">⏩</button>
             </div>
         </header>
 
+        <!-- SimCity News Ticker -->
+        <div id="news-ticker">
+            <span class="ticker-badge">📢 SIM NEWS</span>
+            <span id="ticker-text">Welcome Mayor! Zone residential areas near roads and supply electricity to begin.</span>
+        </div>
+
         <div id="main">
-            <!-- Map -->
+            <!-- Map Canvas -->
             <div id="pixi-canvas"></div>
 
             <!-- Side panel -->
             <aside id="side-panel">
+                <section id="minimap-section">
+                    <h2>🗺️ City Overview</h2>
+                    <div id="minimap-wrap">
+                        <canvas id="minimap-canvas"></canvas>
+                    </div>
+                </section>
                 <section id="info">
-                    <h2>Inspector</h2>
+                    <h2>🔍 Inspector</h2>
                     <div id="info-content"></div>
                 </section>
+                <section id="vitals-section">
+                    <h2>📊 Municipal Vitals</h2>
+                    <div id="city-vitals"></div>
+                </section>
                 <section id="news">
-                    <h2>City News</h2>
+                    <h2>📜 City Log</h2>
                     <div id="notifications"></div>
                 </section>
                 <section id="save-row">
-                    <button id="btn-save" class="wide-btn">Save</button>
-                    <button id="btn-load" class="wide-btn">Load</button>
-                    <button id="btn-reset" class="wide-btn danger">New City</button>
+                    <button id="btn-save" class="wide-btn">💾 Save</button>
+                    <button id="btn-load" class="wide-btn">📂 Load</button>
+                    <button id="btn-reset" class="wide-btn danger">🏞️ New Territory</button>
                 </section>
             </aside>
         </div>
 
-        <!-- Bottom toolbar -->
+        <!-- Bottom category & tool bar -->
         <footer id="toolbar-wrap">
             <div id="toolbar"></div>
         </footer>
 
+        <!-- Budget & Ordinances Modal -->
+        <div id="budget-modal" class="modal-overlay hidden">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h2>💰 Municipal Financial Ledger</h2>
+                    <button id="btn-close-budget" class="close-btn">&times;</button>
+                </div>
+                <div id="budget-body" class="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- Disasters Modal -->
+        <div id="disaster-modal" class="modal-overlay hidden">
+            <div class="modal-dialog">
+                <div class="modal-header">
+                    <h2>🚨 Emergency & Disaster Command</h2>
+                    <button id="btn-close-disaster" class="close-btn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:12px; color:var(--muted); margin-bottom:8px;">
+                        Trigger natural disasters to test the resilience of your city services and emergency responders.
+                    </p>
+                    <div class="disaster-buttons">
+                        <button id="disaster-fire" class="disaster-action-btn">🔥 Spontaneous Fire Outbreak</button>
+                        <button id="disaster-meteor" class="disaster-action-btn">☄️ Meteor Strike Impact</button>
+                        <button id="disaster-tornado" class="disaster-action-btn">🌪️ Tornado Touchdown</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="boot-error" class="hidden"></div>
     </div>
 
-    <!-- PixiJS (UMD build so the game works from file://) -->
+    <!-- PixiJS (UMD build for local file:// compatibility) -->
     <script src="https://unpkg.com/pixi.js@7.4.0/dist/pixi.min.js"></script>
 
-    <!-- Game modules: order matters -->
+    <!-- Game modules in strict dependency order -->
     <script src="utils.js"></script>
     <script src="config.js"></script>
     <script src="terrain.js"></script>
@@ -84,8 +150,10 @@
     <script src="city.js"></script>
     <script src="services.js"></script>
     <script src="economy.js"></script>
-    <script src="development.js"></script>
+    <script src="disasters.js"></script>
+    <script src="audio.js"></script>
     <script src="traffic.js"></script>
+    <script src="development.js"></script>
     <script src="renderer.js"></script>
     <script src="input.js"></script>
     <script src="ui.js"></script>

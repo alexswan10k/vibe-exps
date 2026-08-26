@@ -1,203 +1,74 @@
-# City Builder Game
+# SimCity Classic — Urban Management Simulator
 
-## Overview
-A simple 2D city management game where players place buildings, manage resources, and watch their city grow. This game will be built using HTML5 Canvas and JavaScript, following the modular approach seen in other projects like the Colony Simulator.
+A rich, standalone HTML5 Canvas / PixiJS city management simulation inspired by classic SimCity. Build sprawling metropolises, manage public safety, budget municipal taxes, enact city ordinances, deal with natural disasters, and watch living traffic and Sims roam your streets.
 
-## Game Features
+## Features
 
-### Core Mechanics
-- **Building Placement System**
-  - Grid-based city layout
-  - Multiple building types (residential, commercial, industrial, utilities)
-  - Building cost and maintenance requirements
-  - Visual feedback for valid/invalid placement
+### 1. 4-Tier Zoning & Development
+- **Residential (Green)**: Small Cottages &rarr; Townhouse Rows &rarr; Brick Apartment Complexes &rarr; Luxury High-Rise Towers.
+- **Commercial (Blue)**: Corner Stores &rarr; Shopping Arcades &rarr; Commercial Plazas &rarr; Corporate Glass Skyscrapers.
+- **Industrial (Orange)**: Workshops &rarr; Factory Yards &rarr; Heavy Manufacturing &rarr; Advanced High-Tech Complexes.
+- Dynamic autonomous growth and upgrades driven by RCI market demand, land value, occupancy, and public services (education, healthcare, police coverage).
 
-- **Resource Management**
-  - Money (city budget)
-  - Power supply and consumption
-  - Water supply and consumption
-  - Population happiness
+### 2. Comprehensive Civic Services & Utilities
+- **Power**: Coal Power Plants (high output, pollution) and Wind Turbines (clean green power, 1x1 footprint).
+- **Water**: Water Towers and River/Coastal Water Pump Stations.
+- **Public Safety**: Fire Departments (dispatch fire trucks to active blazes) and Police Precincts (suppress crime and raise land value).
+- **Healthcare & Education**: General Hospitals (boost life expectancy and health index) and Community Schools (raise literacy EQ to unlock tier-4 high-tech towers).
+- **Civic Landmarks**: City Hall and City Parks.
+- **Infrastructure**: Roads and Wooden/Steel Bridges over rivers with automatic bridge detection.
 
-- **Population Growth**
-  - Population increases with residential buildings
-  - Population affected by job availability and services
-  - Visual population indicators
+### 3. Economy, Taxes & Municipal Governance
+- **Interactive Financial Ledger**: Independent tax rate sliders for Residential, Commercial, and Industrial zones (0% to 20%).
+- **City Ordinances**: Enact policies such as *Free Public Transit*, *Smoke Detector Mandate*, *Neighborhood Watch*, *Clean Energy Subsidies*, and *Tourism Promotion*.
+- **City Milestones**: Progress from a humble *Settlement* through *Hamlet*, *Village*, *Town*, *City*, *Metropolis*, and *Megalopolis* with cash rewards and unlocks.
 
-- **Zoning System**
-  - Residential zones for housing
-  - Commercial zones for businesses
-  - Industrial zones for manufacturing
-  - Utility zones for power plants and water facilities
+### 4. Emergencies & Disasters
+- **Fire Simulation**: Spontaneous fires in unwatered, unserved, or high-density areas; fire propagation to adjacent structures; automatic fire truck dispatch and water cannon extinguishing.
+- **Disaster Command**: Manually trigger *Meteor Strikes*, *Tornados*, or *Fire Outbreaks* to stress-test your emergency responders.
+- **Blackouts & Brownouts**: Rolling power outages when grid capacity is exceeded.
 
-### Building Types
-1. **Residential Buildings**
-   - Houses, apartments, skyscrapers
-   - Provide housing for population
-   - Require power and water
-   - Generate tax revenue
+### 5. Living City & Sound Effects
+- **Living Traffic**: Sedans, Taxis, City Buses, Freight Trucks, and Emergency Responders (Fire Trucks with flashing siren strobe lights, Police Cruisers).
+- **Sims (Pedestrians)**: Pedestrians strolling along sidewalks and visiting parks.
+- **Lighting Ambiance**: Day, Sunset, and Night visual modes with glowing windows and streetlights.
+- **Web Audio Sound Effects**: 100% offline procedural synthesizer (clicks, build thuds, road laying, demolition crunches, cash registers, sirens, explosions, and milestone fanfares).
 
-2. **Commercial Buildings**
-   - Shops, offices, malls
-   - Provide jobs
-   - Require power and water
-   - Generate tax revenue
+### 6. Diagnostic Overlays & Minimap
+- **9 Diagnostic Overlays**: Power Grid, Water Pipes, Land Value, Fire Hazard, Crime Rate, Health Index, Education EQ, and Traffic Density.
+- **Interactive Minimap**: Real-time overview of the 64x64 territory with a clickable viewport box.
+- **SimCity News Ticker**: Dynamic witty news ticker with citizen quotes and breaking emergency alerts.
 
-3. **Industrial Buildings**
-   - Factories, warehouses
-   - Provide jobs
-   - Require power and water
-   - May decrease happiness
-   - Generate tax revenue
+---
 
-4. **Utility Buildings**
-   - Power plants
-   - Water treatment plants
-   - Provide essential services to other buildings
+## Controls & Shortcuts
 
-### User Interface
-- **Main Game Canvas**
-  - Top-down view of the city
-  - Grid overlay for building placement
-  - Building sprites/representations
+| Action | Shortcut / Mouse |
+|---|---|
+| **Inspect / Select** | `Q` or Click building |
+| **Build Road / Bridge** | `R` (Click & Drag straight line) |
+| **Zone Residential** | `1` (Click & Drag rectangle) |
+| **Zone Commercial** | `2` (Click & Drag rectangle) |
+| **Zone Industrial** | `3` (Click & Drag rectangle) |
+| **Dezone / Clear** | `4` (Click & Drag rectangle) |
+| **City Park** | `5` |
+| **Coal Power Plant** | `6` |
+| **Water Tower** | `7` |
+| **Demolish / Bulldoze** | `X` or `Delete` |
+| **Cycle Overlay** | `O` |
+| **Toggle Day / Sunset / Night** | `T` |
+| **Pause / Resume** | `Space` |
+| **Speed Up / Down** | `+` / `-` |
+| **Pan Camera** | Drag with Right/Middle Mouse or Left Drag in Inspect mode |
+| **Zoom In / Out** | Mouse Wheel or Touch Pinch |
 
-- **Control Panel**
-  - Building selection toolbar
-  - Resource meters (money, power, water, population, happiness)
-  - Game speed controls
-  - Save/Load functionality
+---
 
-- **Information Panel**
-  - Selected building information
-  - City statistics
-  - Notifications and alerts
+## Running the Game
 
-## Technical Architecture
+Simply double-click `index.html` to open directly in any modern web browser. No build steps, bundlers, or servers required!
 
-### File Structure
+To run the automated headless simulation test suite:
+```bash
+node smoke-test.mjs
 ```
-city-builder/
-├── index.html          # Main game page
-├── styles.css          # Game styling
-├── script.js           # Main game logic
-├── game.js             # Game state and core mechanics
-├── renderer.js         # Canvas rendering
-├── input-manager.js    # User input handling
-├── building-types.js   # Building definitions
-├── grid-system.js      # City grid logic
-└── ui-manager.js       # UI components and controls
-```
-
-### Core Classes
-1. **Game Class**
-   - Manages overall game state
-   - Handles game loop
-   - Coordinates other systems
-
-2. **CityGrid Class**
-   - Manages the city grid
-   - Handles building placement
-   - Checks for valid placement
-
-3. **Building Class**
-   - Base class for all buildings
-   - Defines properties and behaviors
-   - Handles building-specific logic
-
-4. **ResourceManager Class**
-   - Manages all game resources
-   - Handles resource production/consumption
-   - Updates resource meters
-
-5. **Renderer Class**
-   - Handles canvas rendering
-   - Draws city grid and buildings
-   - Manages visual effects
-
-6. **UIManager Class**
-   - Manages UI components
-   - Handles user interactions
-   - Updates information displays
-
-## Implementation Roadmap
-
-### Phase 1: Basic Framework
-- [ ] Set up HTML structure with canvas
-- [ ] Create basic CSS styling
-- [ ] Implement game loop
-- [ ] Create grid system
-- [ ] Add basic building placement
-
-### Phase 2: Core Mechanics
-- [ ] Implement resource system (money, power, water)
-- [ ] Add building types with different properties
-- [ ] Create resource consumption/production logic
-- [ ] Implement basic population system
-
-### Phase 3: Game Features
-- [ ] Add zoning system
-- [ ] Implement population growth mechanics
-- [ ] Create building cost and maintenance
-- [ ] Add happiness system
-
-### Phase 4: Polish and Enhancements
-- [ ] Improve visual presentation
-- [ ] Add sound effects (optional)
-- [ ] Implement save/load functionality
-- [ ] Add game speed controls
-- [ ] Create notifications system
-
-## Success Metrics
-- Functional city building game with all core features
-- Smooth performance with reasonable city sizes
-- Intuitive user interface
-- Engaging gameplay loop
-
-## Dependencies
-- HTML5 Canvas API
-- JavaScript ES6+
-- React (from CDN) for UI components - BUT DO NOT USE JSX, call components directly
-- No other external libraries (to keep it lightweight)
-
-## Technical Recommendations
-
-### UI Framework
-For the GUI components (control panels, information displays, building selection), use React loaded from CDN. However, follow the pattern used in other projects like the Meal Planner:
-- **Do NOT use JSX** - Instead, call React components directly using `React.createElement()`
-- This approach keeps the code compatible with standard JavaScript while leveraging React's component model
-- Use React for state management of UI elements like resource meters, building selection, and notifications
-
-### Game Engine
-For the main game loop and city rendering:
-- **Primary recommendation**: Use HTML5 Canvas API directly
-  - Most performant for grid-based city rendering
-  - Full control over drawing operations
-  - No additional dependencies needed
-  - Well-suited for this type of 2D game
-
-- **Alternative consideration**: Consider a lightweight 2D game library like Phaser.js if the project becomes more complex
-  - Better suited for sprite-based animations and particle effects
-  - More built-in functionality for game mechanics
-  - Would require adding an external dependency
-
-### Architecture Pattern
-Follow the modular approach seen in the Colony Simulator:
-- Separate concerns into different modules (game logic, rendering, input, UI)
-- Use a central game state manager
-- Implement an event system for communication between components
-- Keep the UI layer separate from the game logic layer
-
-### Performance Considerations
-- For larger cities, implement object pooling for buildings
-- Use spatial partitioning for collision detection and rendering optimization
-- Consider implementing a dirty rectangle system for canvas updates
-- Optimize resource calculations by only updating changed values
-
-## Design Considerations
-- Keep the code modular and maintainable
-- Follow the existing code style from other projects
-- Optimize for performance with larger cities
-- Make the interface responsive and user-friendly
-- Ensure React components are properly unmounted to prevent memory leaks
-- Use React's state management for UI elements, but keep game state separate
-
-We want to try using pixijs through react https://react.pixijs.io/

@@ -1,15 +1,15 @@
-// City model: terrain, zones, buildings and tile occupancy.
+// City model: terrain, zones, buildings, tile occupancy, and emergency states.
 // Pure data + queries; simulation systems operate on it.
 
 class Building {
-    constructor(id, typeId, x, y, level, variant) {
+    constructor(id, typeId, x, y, level = 1, variant = 0) {
         this.id = id;
-        this.type = typeId;        // 'road' | 'park' | 'power' | 'water' | 'residential' | 'commercial' | 'industrial'
+        this.type = typeId;        // 'road' | 'bridge' | 'park' | 'power' | 'wind_turbine' | 'water' | 'water_pump' | 'fire_station' | 'police_station' | 'hospital' | 'school' | 'city_hall' | 'residential' | 'commercial' | 'industrial'
         this.x = x;
         this.y = y;
-        this.level = level;        // zone buildings: 1..3
+        this.level = level;        // zone buildings: 1..4
         this.variant = variant;    // visual variation seed
-        this.state = 'built';      // 'construction' | 'built' | 'abandoned'
+        this.state = 'built';      // 'construction' | 'built' | 'abandoned' | 'rubble'
         this.progressTicks = 0;    // toward construction/upgrade completion
         this.unservedTicks = 0;    // consecutive ticks without required services
         this.abandonedTicks = 0;
@@ -18,6 +18,14 @@ class Building {
         this.powered = true;
         this.watered = true;
         this.connected = true;
+
+        // Emergency & public safety states
+        this.onFire = false;
+        this.fireTicks = 0;
+        this.fireCoverage = false;
+        this.policeCoverage = false;
+        this.healthCoverage = false;
+        this.educationCoverage = false;
     }
 }
 
@@ -60,6 +68,10 @@ class City {
 
     isBuildable(x, y) {
         return this.inBounds(x, y) && this.terrain[this.idx(x, y)] !== TERRAIN.WATER;
+    }
+
+    isWater(x, y) {
+        return this.inBounds(x, y) && this.terrain[this.idx(x, y)] === TERRAIN.WATER;
     }
 
     // --- Zones ---
@@ -153,6 +165,11 @@ class City {
         return result;
     }
 
+    isRoadTile(x, y) {
+        const b = this.buildingAt(x, y);
+        return !!(b && (b.type === 'road' || b.type === 'bridge'));
+    }
+
     clear() {
         this.zones.fill(0);
         this.buildings.clear();
@@ -168,11 +185,12 @@ class City {
         for (const b of this.buildings.values()) {
             buildings.push({
                 t: b.type, x: b.x, y: b.y, l: b.level, v: b.variant,
-                s: b.state, p: Math.round(b.pop), j: Math.round(b.jobs)
+                s: b.state, p: Math.round(b.pop), j: Math.round(b.jobs),
+                f: b.onFire ? 1 : 0
             });
         }
         return {
-            version: 2,
+            version: 3,
             width: this.width,
             height: this.height,
             seed: this.seed,
@@ -195,6 +213,7 @@ class City {
             b.variant = d.v || 0;
             b.pop = d.p || 0;
             b.jobs = d.j || 0;
+            b.onFire = d.f === 1;
         }
         city.nextBuildingId = data.nextBuildingId || (city.buildings.size + 1);
         return city;
