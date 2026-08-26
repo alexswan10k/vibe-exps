@@ -2589,6 +2589,44 @@ function RowBtns({ onUp, onDown, onDel, upDis, downDis }) {
     );
 }
 
+// Floating editing pill. Lives inside .viz-body which clears the selection on
+// pointerdown — stop propagation here so clicks INSIDE the pill never kill it.
+function FPill({ style, children }) {
+    return (
+        <div className="fpill" style={style} onPointerDown={e => e.stopPropagation()}>
+            {children}
+        </div>
+    );
+}
+
+// Editable comma-separated id list (e.g. Note over A,B). Keeps the raw text as a
+// local draft while focused so separators survive typing; the parsed array is what
+// reaches the document. Re-syncs when the list changes externally (rename etc).
+function JoinField({ list, onLive, onCommitPre, placeholder, style }) {
+    const u = useUndoablePre(onCommitPre);
+    const joined = (list || []).join(',');
+    const [snap, setSnap] = useState({ base: joined, draft: null });
+    if (snap.base !== joined) setSnap({ base: joined, draft: null });
+    return (
+        <input
+            className="sin"
+            value={snap.draft != null ? snap.draft : joined}
+            placeholder={placeholder || ''}
+            style={style}
+            onFocus={u.grab}
+            onChange={e => {
+                u.grab();
+                const v = e.target.value;
+                setSnap({ base: joined, draft: v });
+                onLive(v.split(',').map(x => x.trim()).filter(Boolean));
+                u.arm();
+            }}
+            onBlur={() => { u.flush(); setSnap(s => ({ ...s, draft: null })); }}
+            onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); }}
+        />
+    );
+}
+
 function useUndoablePre(onCommitPre) {
     const pre = useRef(null);
     const timer = useRef(null);
@@ -2683,6 +2721,9 @@ function SeqSheet({ data, api }) {
                 <div className="scard-h">
                     <span>Participants</span>
                     <span className="grow"></span>
+                    <UCheck label="autonumber" checked={!!data.autonumber} title="Number the messages automatically"
+                        onLive={v => api.edit(d => { d.autonumber = v; })}
+                        onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                     <button type="button" onClick={() => api.edit(d => {
                         let i = d.participants.length + 1;
                         while (d.participants.some(p => p.id === 'P' + i)) i++;
@@ -2705,7 +2746,19 @@ function SeqSheet({ data, api }) {
                             upDis={i === 0} downDis={i === participants.length - 1}
                             onUp={() => api.edit(d => { const t = d.participants[i - 1]; d.participants[i - 1] = d.participants[i]; d.participants[i] = t; }, true)}
                             onDown={() => api.edit(d => { const t = d.participants[i + 1]; d.participants[i + 1] = d.participants[i]; d.participants[i] = t; }, true)}
-                            onDel={() => api.edit(d => { d.participants.splice(i, 1); }, true)}
+                            onDel={() => api.edit(d => {
+                                // same semantics as the visual editor: remove the participant
+                                // and every item that references it, so no dangling ids remain
+                                const pid = d.participants[i] && d.participants[i].id;
+                                if (!pid) return;
+                                d.participants.splice(i, 1);
+                                d.items = (d.items || []).filter(it => {
+                                    if (it.kind === 'msg') return it.from !== pid && it.to !== pid;
+                                    if (it.kind === 'note') return !(it.who || []).includes(pid);
+                                    if (it.kind === 'act') return it.who !== pid;
+                                    return true;
+                                });
+                            }, true)}
                         />
                     </div>
                 ))}
@@ -2758,9 +2811,9 @@ function SeqSheet({ data, api }) {
                                 options={[{ value: 'over', label: 'over' }, { value: 'left', label: 'left of' }, { value: 'right', label: 'right of' }]}
                                 onLive={v => api.edit(d => { d.items[i].pos = v; })}
                                 onCommitPre={{ snap: api.snap, push: api.pushPre }} />
-                            <UField style={{ width: 120, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11.5 }} value={(it.who || []).join(',')}
+                            <JoinField style={{ width: 120, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11.5 }} list={it.who}
                                 placeholder="A,B"
-                                onLive={v => api.edit(d => { d.items[i].who = v.split(',').map(x => x.trim()).filter(Boolean); })}
+                                onLive={arr => api.edit(d => { if (d.items[i]) d.items[i].who = arr; })}
                                 onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                             <UField style={{ flex: 1, minWidth: 120 }} value={it.text} placeholder="note text"
                                 onLive={v => api.edit(d => { d.items[i].text = v; })}
@@ -3054,12 +3107,17 @@ function clampPill(x, y, hostW) {
     return { left: Math.max(6, Math.min(x, hostW - 320)), top: Math.max(4, y) };
 }
 
-function PieVisual({ data, api }) {
+function PieVisual({ data, api, stamp }) {
     const hostRef = useRef(null);
     const [sel, setSel] = useState(-1);
     const dragRef = useRef(null);
     const [, tickState] = useReducer(v => v + 1, 0);
-    useEffect(() => { setSel(-1); }, [data]);
+    // keep the selection across in-place edits; drop it if the slice disappeared
+    // or the whole document was replaced
+    useEffect(() => { setSel(-1); }, [stamp]);
+    useEffect(() => {
+        setSel(prev => (prev >= 0 && (!data.slices || !data.slices[prev])) ? -1 : prev);
+    }, [data]);
     const size = useHostSize(hostRef, 520, 430);
     const w = size.w, h = size.h;
     const cx = w / 2, cy = h / 2 + 10;
@@ -3120,7 +3178,7 @@ function PieVisual({ data, api }) {
         const mid = (bounds[selSlice] + bounds[selSlice + 1]) / 2;
         const [px, py] = polarPt(cx, cy, R * 0.62, mid);
         pill = (
-            <div className="fpill" style={clampPill(px + 14, py - 16, w)}>
+            <FPill style={clampPill(px + 14, py - 16, w)}>
                 <UField style={{ width: 110 }} value={slices[selSlice].label} placeholder="label"
                     onLive={v => api.edit(d => { if (d.slices[selSlice]) d.slices[selSlice].label = v; })}
                     onCommitPre={{ snap: api.snap, push: api.pushPre }} />
@@ -3129,7 +3187,7 @@ function PieVisual({ data, api }) {
                     onKeyDown={e => e.stopPropagation()} />
                 <button type="button" className="mini-btn del" title="Delete slice"
                     onClick={() => { api.edit(d => { d.slices.splice(selSlice, 1); }, true); setSel(-1); }}>✕</button>
-            </div>
+            </FPill>
         );
     }
 
@@ -3165,12 +3223,21 @@ function PieVisual({ data, api }) {
     );
 }
 
-function GanttVisual({ data, api }) {
+function GanttVisual({ data, api, stamp }) {
     const hostRef = useRef(null);
     const [sel, setSel] = useState(null);
     const dragRef = useRef(null);
     const [, tickState] = useReducer(v => v + 1, 0);
-    useEffect(() => { setSel(null); }, [data]);
+    // keep the selection across in-place edits; drop it if the task disappeared
+    // or the whole document was replaced
+    useEffect(() => { setSel(null); }, [stamp]);
+    useEffect(() => {
+        setSel(prev => {
+            if (!prev) return prev;
+            const sec = data.sections && data.sections[prev.si];
+            return sec && sec.tasks && sec.tasks[prev.ti] ? prev : null;
+        });
+    }, [data]);
     const size = useHostSize(hostRef, 720, 470);
     const W = size.w;
     const DAY = 86400000;
@@ -3261,7 +3328,7 @@ function GanttVisual({ data, api }) {
         const py = selRow.y - 8;
         const task = data.sections[selRow.si] && data.sections[selRow.si].tasks[selRow.ti];
         pill = task ? (
-            <div className="fpill" style={clampPill(px, py, W)}>
+            <FPill style={clampPill(px, py, W)}>
                 <UField style={{ width: 118 }} value={task.label} placeholder="task name"
                     onLive={val => api.edit(d => { const hh = d.sections[selRow.si] && d.sections[selRow.si].tasks[selRow.ti]; if (hh) hh.label = val; })}
                     onCommitPre={{ snap: api.snap, push: api.pushPre }} />
@@ -3276,7 +3343,7 @@ function GanttVisual({ data, api }) {
                     onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                 <button type="button" className="mini-btn del" title="Delete task"
                     onClick={() => { api.edit(d => { const sec = d.sections[selRow.si]; if (sec) sec.tasks.splice(selRow.ti, 1); }, true); setSel(null); }}>✕</button>
-            </div>
+            </FPill>
         ) : null;
     }
     function zoneRight(v) { return v.ed; }
@@ -3379,7 +3446,7 @@ function seqArrowStyle(arrow) {
     return SEQ_ARROW_STYLE.solid;
 }
 
-function SeqVisual({ data, api }) {
+function SeqVisual({ data, api, stamp }) {
     const hostRef = useRef(null);
     const [sel, setSel] = useState(null);
     const [ghostY, setGhostY] = useState(null);
@@ -3387,7 +3454,17 @@ function SeqVisual({ data, api }) {
     const hotColRef = useRef(null);
     const [gapHover, setGapHover] = useState(null);
     const [, tickState] = useReducer(v => v + 1, 0);
-    useEffect(() => { setSel(null); }, [data]);
+    // Selection survives edits (the data object is replaced on every change) —
+    // only drop it when the selected item/participant no longer exists, or when
+    // the whole document was replaced (stamp: typed source, template, undo…).
+    useEffect(() => { setSel(null); }, [stamp]);
+    useEffect(() => {
+        setSel(prev => {
+            if (!prev) return prev;
+            if (prev.type === 'item') return data.items && data.items[prev.idx] ? prev : null;
+            return data.participants && data.participants[prev.pi] ? prev : null;
+        });
+    }, [data]);
     const size = useHostSize(hostRef, 760, 500);
     const W = size.w;
     const L = seqLayout(data, W);
@@ -3509,7 +3586,7 @@ function SeqVisual({ data, api }) {
         if (it.kind === 'msg') {
             const pOpts = L.parts.map(p => ({ value: p.id, label: p.id }));
             pill = (
-                <div className="fpill" style={pos}>
+                <FPill style={pos}>
                     <USelect style={{ width: 74 }} value={it.from} options={pOpts}
                         onLive={v => api.edit(d => { if (d.items[g.i]) d.items[g.i].from = v; })}
                         onCommitPre={{ snap: api.snap, push: api.pushPre }} />
@@ -3524,28 +3601,28 @@ function SeqVisual({ data, api }) {
                         onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                     <button type="button" className="mini-btn del" title="Delete"
                         onClick={() => { api.edit(d => { d.items.splice(g.i, 1); }, true); setSel(null); }}>✕</button>
-                </div>
+                </FPill>
             );
         } else if (it.kind === 'note') {
             pill = (
-                <div className="fpill" style={pos}>
+                <FPill style={pos}>
                     <USelect style={{ width: 84 }} value={it.pos} options={[{ value: 'over', label: 'over' }, { value: 'left', label: 'left of' }, { value: 'right', label: 'right of' }]}
                         onLive={v => api.edit(d => { if (d.items[g.i]) d.items[g.i].pos = v; })}
                         onCommitPre={{ snap: api.snap, push: api.pushPre }} />
-                    <UField mono style={{ width: 86 }} value={(it.who || []).join(',')} placeholder="A,B"
-                        onLive={v => api.edit(d => { if (d.items[g.i]) d.items[g.i].who = v.split(',').map(x => x.trim()).filter(Boolean); })}
+                    <JoinField style={{ width: 86 }} list={it.who} placeholder="A,B"
+                        onLive={arr => api.edit(d => { if (d.items[g.i]) d.items[g.i].who = arr; })}
                         onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                     <UField style={{ width: 120 }} value={it.text} placeholder="note"
                         onLive={v => api.edit(d => { if (d.items[g.i]) d.items[g.i].text = v; })}
                         onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                     <button type="button" className="mini-btn del" title="Delete"
                         onClick={() => { api.edit(d => { d.items.splice(g.i, 1); }, true); setSel(null); }}>✕</button>
-                </div>
+                </FPill>
             );
         } else if (it.kind === 'act') {
             const pOpts = L.parts.map(p => ({ value: p.id, label: p.id }));
             pill = (
-                <div className="fpill" style={pos}>
+                <FPill style={pos}>
                     <span style={{ fontSize: 11, color: 'var(--muted)' }}>{it.on ? 'activate' : 'deactivate'}</span>
                     <USelect style={{ width: 80 }} value={it.who} options={pOpts}
                         onLive={v => api.edit(d => { if (d.items[g.i]) d.items[g.i].who = v; })}
@@ -3554,7 +3631,7 @@ function SeqVisual({ data, api }) {
                         onClick={() => api.edit(d => { if (d.items[g.i]) d.items[g.i].on = !d.items[g.i].on; }, true)}>⇄</button>
                     <button type="button" className="mini-btn del" title="Delete"
                         onClick={() => { api.edit(d => { d.items.splice(g.i, 1); }, true); setSel(null); }}>✕</button>
-                </div>
+                </FPill>
             );
         }
     }
@@ -3562,7 +3639,7 @@ function SeqVisual({ data, api }) {
     if (selPart) {
         const px = L.cols[selPart.id] != null ? L.cols[selPart.id] : 100;
         pill = (
-            <div className="fpill" style={clampPill(px - 90, 44, W)}>
+            <FPill style={clampPill(px - 90, 44, W)}>
                 <UField style={{ width: 64 }} mono value={selPart.id} placeholder="id"
                     onLive={v => {
                         const nid = v.trim().replace(/[^\w.\-]/g, '');
@@ -3594,7 +3671,7 @@ function SeqVisual({ data, api }) {
                     onCommitPre={{ snap: api.snap, push: api.pushPre }} />
                 <button type="button" className="mini-btn del" title="Delete participant and its messages"
                     onClick={() => { delPart(selPart.id); setSel(null); }}>✕</button>
-            </div>
+            </FPill>
         );
     }
 
@@ -3714,9 +3791,9 @@ function SeqVisual({ data, api }) {
                             zones.push({ i: zi, top: (a + b) / 2 - 6, mid: (a + b) / 2 });
                         }
                         return zones.map(z => (
-                            <g key={'ins' + z.i}>
-                                <rect className="s-ins" x={0} y={z.top} width={W} height={12}
-                                    onMouseEnter={() => setGapHover(z.i)} onMouseLeave={() => setGapHover(null)} />
+                            <g key={'ins' + z.i}
+                                onMouseEnter={() => setGapHover(z.i)} onMouseLeave={() => setGapHover(null)}>
+                                <rect className="s-ins" x={0} y={z.top} width={W} height={12} />
                                 {gapHover === z.i && (<g>
                                     <circle className="s-ins-btn" cx={22} cy={z.mid} r={9}
                                         onClick={() => { setGapHover(null); insertMsgAt(z.i); }} />
@@ -3736,7 +3813,7 @@ function SeqVisual({ data, api }) {
 
 const VIEW_PREFS = {};
 
-function ModeShell({ mode, data, api }) {
+function ModeShell({ mode, data, api, stamp }) {
     const M = C.MODES[mode];
     const [view, setView] = useState(VIEW_PREFS[mode] || 'visual');
     useEffect(() => { VIEW_PREFS[mode] = view; }, [mode, view]);
@@ -3751,7 +3828,7 @@ function ModeShell({ mode, data, api }) {
                 <button className={view === 'rows' ? 'on' : ''} onClick={() => setView('rows')}>Rows</button>
             </div>
             {view === 'visual' && Visual
-                ? <Visual data={data} api={api} />
+                ? <Visual data={data} api={api} stamp={stamp} />
                 : (
                     <div className="sheet-shell" style={{ background: 'var(--bg)', padding: '14px 18px 40px' }}>
                         <div className="sheet-inner">
@@ -3806,6 +3883,11 @@ function App() {
     const syncTimer = useRef(null);
     const [pvHtml, setPvHtml] = useState('');
     const [pvErr, setPvErr] = useState('');
+    // bumped whenever a whole document is replaced (typed source, template, clear,
+    // undo/redo, boot) — visuals use it to drop stale selections, while ordinary
+    // in-place edits keep their selection alive
+    const [docStamp, setDocStamp] = useState(0);
+    const bumpStamp = useCallback(() => setDocStamp(v => v + 1), []);
 
     useEffect(() => { helpOpenRef.current = helpOpen; }, [helpOpen]);
 
@@ -3856,8 +3938,9 @@ function App() {
             boardRef.current.setModel(s.data);
         }
         editSrcRef.current = 'ui';
+        bumpStamp();
         bump();
-    }, []);
+    }, [bumpStamp]);
 
     const doUndo = useCallback(() => {
         if (!histRef.current.length) return;
@@ -3904,9 +3987,10 @@ function App() {
         lastGoodRef.current = M.gen(data);
         setSync({ state: 'ok', err: '', warn: res.warnings.length ? '⚠ ' + res.warnings.length + ' ignored' : '' });
         editSrcRef.current = 'code';
+        bumpStamp();
         bump();
         return true;
-    }, []);
+    }, [bumpStamp]);
 
     const renderPreviewNow = useCallback(async () => {
         const ta = taRef.current;
@@ -3979,9 +4063,10 @@ function App() {
             docsRef.current[m] = { data: res.data };
         }
         editSrcRef.current = 'ui';
+        bumpStamp();
         bump();
         return true;
-    }, [pushToast]);
+    }, [pushToast, bumpStamp]);
 
     const loadTemplate = useCallback(key => {
         const M = C.MODES[modeRef.current];
@@ -4312,7 +4397,7 @@ function App() {
                 </div>
 
                 {!isFc && curData && (
-                    <ModeShell mode={mode} data={curData} api={sheetApi} />
+                    <ModeShell mode={mode} data={curData} api={sheetApi} stamp={docStamp} />
                 )}
 
                 <aside className="right-panel">
@@ -4344,6 +4429,7 @@ function App() {
                                 docsRef.current[m] = { data: fresh };
                             }
                             editSrcRef.current = 'ui';
+                            bumpStamp();
                             bump();
                             pushToast('cleared — Ctrl+Z to undo');
                         }}>Clear</button>
