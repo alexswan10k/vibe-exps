@@ -1,0 +1,11 @@
+# Dependencies — never commit, any depth
+node_modules/
+.npm-cache/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
