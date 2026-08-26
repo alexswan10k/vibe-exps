@@ -22,7 +22,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **LambdaSafe Sales Page**: Sales page for LambdaSafe
 - **Meal Planner**: A meal planning application
 - **Matrix Transformations**: Interactive visualization of 2D and 3D matrix transformations
-- **Mermaid Studio**: A visual multi-mode Mermaid editor (React via CDN) — draggable canvas for graphs, sequence lanes, gantt bars and pie slices, all two-way synced with the source
+- **Mermaid Studio**: A visual multi-mode Mermaid editor (React via CDN) — draggable canvases for flowcharts, class/ER/state diagrams plus sequence lanes, gantt bars and pie slices, all two-way synced with the source
 - **Modular Synth**: A modular synthesizer
 - **Multi Note Todo**: A multi-note todo list
 - **Particle Fireworks**: A particle fireworks simulation
