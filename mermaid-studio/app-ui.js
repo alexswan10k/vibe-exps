@@ -1268,6 +1268,229 @@ function PieSheet({
     className: "sheet-note"
   }, "Percentages are computed by mermaid itself \u2014 absolute values are fine.")));
 }
+function JourneySheet({ data, api }) {
+  const secs = data.sections || [];
+  const scoreOpts = [0,1,2,3,4,5].map(n => ({ value: String(n), label: String(n) + (n===5?' \u2605 ideal': n===1?' \u2639 poor':'') }));
+  const addSection = () => api.edit(d => {
+    let k = d.sections.length + 1;
+    while (d.sections.some(s => s.name === 'Section ' + k)) k++;
+    d.sections.push({ name: 'Section ' + k, tasks: [] });
+  }, true);
+  const addTask = (si) => api.edit(d => {
+    const sec = d.sections[si];
+    if (!sec) return;
+    sec.tasks.push({ label: 'New step', score: 3, actors: sec.tasks[0] ? [...(sec.tasks[0].actors||[])] : ['Me'] });
+  }, true);
+  return React.createElement("div", null,
+    React.createElement("div", { className: "scard" },
+      React.createElement("div", { className: "scard-h" },
+        React.createElement("span", null, "Journey"),
+        React.createElement("span", { className: "grow" }),
+        React.createElement("button", { type: "button", onClick: addSection }, "+ Section")
+      ),
+      React.createElement("div", { className: "trow" },
+        React.createElement("span", { style: { fontSize: 11, color: 'var(--muted)', width: 44 } }, "Title"),
+        React.createElement(UField, {
+          style: { flex: 1, minWidth: 160 },
+          value: data.title || '',
+          placeholder: "My journey",
+          onLive: v => api.edit(d => { d.title = v; }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        })
+      )
+    ),
+    secs.map((sec, si) => React.createElement("div", { className: "scard", key: si },
+      React.createElement("div", { className: "scard-h" },
+        React.createElement("input", {
+          className: "sin",
+          style: { padding: '2px 7px', fontWeight: 600, flex: 1 },
+          value: sec.name,
+          placeholder: "section name",
+          onFocus: e => e.target.dataset.pre = api.snap(),
+          onChange: e => api.edit(d => { d.sections[si].name = e.target.value; }),
+          onBlur: e => { if (e.target.dataset.pre) { api.pushPre(e.target.dataset.pre); delete e.target.dataset.pre; } },
+          onKeyDown: e => { if (e.key === 'Enter') e.target.blur(); e.stopPropagation(); }
+        }),
+        React.createElement("button", { type: "button", onClick: () => addTask(si) }, "+ Step"),
+        React.createElement("button", { type: "button", className: "danger", onClick: () => api.edit(d => { d.sections.splice(si,1); }, true) }, "Delete")
+      ),
+      sec.tasks.length === 0 && React.createElement("div", { className: "sheet-empty" }, "No steps yet \u2014 add one above."),
+      sec.tasks.map((t, ti) => React.createElement("div", { className: "trow", key: ti },
+        React.createElement(UField, {
+          style: { flex: 1, minWidth: 140 },
+          value: t.label,
+          placeholder: "step label",
+          onLive: v => api.edit(d => { d.sections[si].tasks[ti].label = v; }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        }),
+        React.createElement(USelect, {
+          style: { width: 96 },
+          value: String(t.score),
+          options: scoreOpts,
+          onLive: v => api.edit(d => { d.sections[si].tasks[ti].score = parseInt(v,10); }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        }),
+        React.createElement(JoinField, {
+          style: { width: 140 },
+          list: t.actors || [],
+          placeholder: "Me, Cat",
+          onLive: arr => api.edit(d => { d.sections[si].tasks[ti].actors = arr; }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        }),
+        React.createElement(RowBtns, {
+          upDis: ti===0,
+          downDis: ti===sec.tasks.length-1,
+          onUp: () => api.edit(d => { const a=d.sections[si].tasks; const tmp=a[ti-1]; a[ti-1]=a[ti]; a[ti]=tmp; }, true),
+          onDown: () => api.edit(d => { const a=d.sections[si].tasks; const tmp=a[ti+1]; a[ti+1]=a[ti]; a[ti]=tmp; }, true),
+          onDel: () => api.edit(d => { d.sections[si].tasks.splice(ti,1); }, true)
+        })
+      ))
+    )),
+    React.createElement("div", { className: "sheet-note" }, "Score 5 = delighted, 1 = frustrated. Tasks with the same actor share colours in the visual.")
+  );
+}
+function JourneyVisual({ data, api, stamp }) {
+  const hostRef = useRef(null);
+  const [sel, setSel] = useState(null);
+  const dragRef = useRef(null);
+  const [, tickState] = useReducer(v => v+1, 0);
+  useEffect(() => { setSel(null); }, [stamp]);
+  useEffect(() => {
+    setSel(prev => {
+      if (!prev) return prev;
+      const sec = data.sections && data.sections[prev.si];
+      return sec && sec.tasks && sec.tasks[prev.ti] ? prev : null;
+    });
+  }, [data]);
+  const size = useHostSize(hostRef, 720, 420);
+  const W = size.w;
+  const H = size.h;
+  const flat = [];
+  (data.sections||[]).forEach((sec, si) => (sec.tasks||[]).forEach((t, ti) => flat.push({ t, si, ti, secName: sec.name })));
+  const PADL = 56, PADR = 18, PADT = 22, PADB = 48;
+  const plotW = Math.max(W - PADL - PADR, 60);
+  const plotH = Math.max(H - PADT - PADB, 100);
+  const step = flat.length > 1 ? plotW / (flat.length - 1) : plotW;
+  const yOf = s => PADT + (5 - Math.max(0, Math.min(5, s))) / 5 * plotH;
+  const xOf = idx => PADL + (flat.length===1 ? plotW/2 : idx * step);
+  const colors = ['#22d3ee','#34d399','#fbbf24','#fb7185','#a78bfa','#38bdf8','#f472b6','#84cc16'];
+  const actorSet = {};
+  flat.forEach(f => (f.t.actors||[]).forEach(a => { if (!actorSet[a]) actorSet[a]=colors[Object.keys(actorSet).length % colors.length]; }));
+  const startScoreDrag = (idx, e) => {
+    e.stopPropagation();
+    flat[idx] && setSel({ si: flat[idx].si, ti: flat[idx].ti });
+    const idx0 = idx;
+    const rect = hostRef.current.getBoundingClientRect();
+    const preSnap = api.snap();
+    let armed = false;
+    dragRef.current = { idx0 };
+    const move = ev => {
+      if (!armed) { armed=true; api.pushPre(preSnap); }
+      const y = ev.clientY - rect.top;
+      const rel = (y - PADT) / Math.max(plotH,1);
+      const sc = Math.max(0, Math.min(5, Math.round(5 - rel*5)));
+      api.edit(d => {
+        const sec = d.sections[flat[idx0].si];
+        if (sec && sec.tasks[flat[idx0].ti]) sec.tasks[flat[idx0].ti].score = sc;
+      });
+      tickState();
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      dragRef.current = null;
+      tickState();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  let pill = null;
+  if (sel) {
+    const flatIdx = flat.findIndex(f => f.si===sel.si && f.ti===sel.ti);
+    const f = flat[flatIdx];
+    const task = f && data.sections[f.si] && data.sections[f.si].tasks[f.ti];
+    if (task && flatIdx>=0) {
+      const px = xOf(flatIdx);
+      const py = yOf(task.score);
+      pill = React.createElement(FPill, { style: clampPill(px+14, py-28, W) },
+        React.createElement(UField, {
+          style: { width: 120 },
+          value: task.label,
+          placeholder: "step",
+          onLive: v => api.edit(d => { const s=d.sections[sel.si]; if(s && s.tasks[sel.ti]) s.tasks[sel.ti].label=v; }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        }),
+        React.createElement(USelect, {
+          style: { width: 86 },
+          value: String(task.score),
+          options: [0,1,2,3,4,5].map(n=>({value:String(n), label:String(n)})),
+          onLive: v => api.edit(d => { const s=d.sections[sel.si]; if(s && s.tasks[sel.ti]) s.tasks[sel.ti].score=parseInt(v,10); }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        }),
+        React.createElement(JoinField, {
+          style: { width: 110 },
+          list: task.actors||[],
+          placeholder: "actors",
+          onLive: arr => api.edit(d => { const s=d.sections[sel.si]; if(s && s.tasks[sel.ti]) s.tasks[sel.ti].actors=arr; }),
+          onCommitPre: { snap: api.snap, push: api.pushPre }
+        }),
+        React.createElement("button", { type: "button", className: "mini-btn del", title: "Delete step", onClick: () => { api.edit(d=>{ const s=d.sections[sel.si]; if(s) s.tasks.splice(sel.ti,1); }, true); setSel(null); } }, "\u2715")
+      );
+    }
+  }
+  const sectBands = [];
+  let acc = 0;
+  (data.sections||[]).forEach((sec, si) => {
+    const n = (sec.tasks||[]).length;
+    if (!n) return;
+    const x0 = xOf(acc) - step*0.5;
+    const x1 = xOf(acc+n-1) + step*0.5;
+    sectBands.push({ x0: Math.max(PADL, x0), x1: Math.min(W-PADR, x1), name: sec.name, si });
+    acc += n;
+  });
+  return React.createElement("div", { style: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } },
+    React.createElement("div", { className: "viz-head", style: { borderBottom: 'none', paddingBottom: 0 } },
+      React.createElement("button", { type: "button", onClick: () => api.edit(d=>{ let k=d.sections.length+1; while(d.sections.some(s=>s.name==='Section '+k)) k++; d.sections.push({name:'Section '+k, tasks:[]}); }, true) }, "+ Section"),
+      React.createElement("button", { type: "button", onClick: () => {
+        if (!data.sections.length) api.edit(d=>d.sections.push({name:'Section 1', tasks:[{label:'New step', score:3, actors:['Me']}]}), true);
+        else {
+          const last = data.sections.length-1;
+          api.edit(d=>d.sections[last].tasks.push({label:'New step', score:3, actors: d.sections[last].tasks[0]?[...(d.sections[last].tasks[0].actors||['Me'])]:['Me']}), true);
+        }
+      }}, "+ Step"),
+      React.createElement("span", { style: { fontSize: 11, marginLeft: 8 } }, "drag dots vertically to score \u00B7 click dot to edit")
+    ),
+    React.createElement("div", { className: "viz-body", ref: hostRef, onPointerDown: () => setSel(null) },
+      React.createElement("svg", { width: W, height: H },
+        sectBands.map((b,i) => React.createElement("g", { key: 'sb'+i },
+          React.createElement("rect", { className: "g-sec-band", x: b.x0, y: PADT, width: b.x1-b.x0, height: plotH, fill: i%2?'rgba(34,211,238,.04)':'rgba(148,163,184,.04)' }),
+          React.createElement("text", { x: (b.x0+b.x1)/2, y: PADT-6, textAnchor: "middle", fill: "#7f96b4", fontSize: 11, fontWeight: 700 }, b.name)
+        )),
+        [0,1,2,3,4,5].map(s => React.createElement("g", { key: 'gl'+s },
+          React.createElement("line", { className: "g-tick", x1: PADL, y1: yOf(s), x2: W-PADR, y2: yOf(s) }),
+          React.createElement("text", { className: "g-tick-txt", x: PADL-8, y: yOf(s)+3, textAnchor: "end" }, String(s))
+        )),
+        flat.length>1 && React.createElement("polyline", {
+          fill: "none", stroke: "#5b7292", strokeWidth: 1.6, strokeDasharray: "0",
+          points: flat.map((f,i)=> xOf(i)+","+yOf(f.t.score)).join(' ')
+        }),
+        flat.map((f,i) => {
+          const x = xOf(i), y = yOf(f.t.score);
+          const selHere = sel && sel.si===f.si && sel.ti===f.ti;
+          const actorDots = (f.t.actors||[]).slice(0,3);
+          return React.createElement("g", { key: i, onPointerDown: e => { e.stopPropagation(); setSel({si:f.si, ti:f.ti}); } },
+            React.createElement("circle", { cx: x, cy: y, r: selHere?9:7, fill: "#131f36", stroke: selHere?"#22d3ee":"#4a6079", strokeWidth: selHere?2:1.4, style: { cursor: 'grab', filter: selHere?'drop-shadow(0 0 6px rgba(34,211,238,.5))':'' }, onPointerDown: e => startScoreDrag(i, e) }),
+            React.createElement("text", { x: x, y: y+4, textAnchor: "middle", fill: "#e2e8f0", fontSize: 9, fontWeight: 700, pointerEvents: "none" }, String(f.t.score)),
+            actorDots.map((a,ai) => React.createElement("circle", { key: ai, cx: x-8+ai*8, cy: y+16, r: 4, fill: actorSet[a]||'#8fa6c4', stroke: "#0b1220", strokeWidth: 1 })),
+            React.createElement("text", { x: x, y: H-14, textAnchor: "middle", fill: "#c3cfdd", fontSize: 10, fontWeight: 600 }, f.t.label.length>14?f.t.label.slice(0,13)+'\u2026':f.t.label)
+          );
+        })
+      ),
+      !flat.length && React.createElement("div", { className: "viz-empty" }, "No steps yet \u2014 add a section and a step above."),
+      pill
+    )
+  );
+}
 function useHostSize(ref, minW, h) {
   const [size, setSize] = useState({
     w: Math.max(minW, 900),
@@ -2615,12 +2838,17 @@ function ModeShell({
   }), mode === 'pie' && /*#__PURE__*/React.createElement(PieSheet, {
     data: data,
     api: api
+  }), mode === 'journey' && /*#__PURE__*/React.createElement(JourneySheet, {
+    data: data,
+    api: api
   }))));
 }
 C.MODES.sequence.Visual = SeqVisual;
 C.MODES.gantt.Visual = GanttVisual;
 C.MODES.pie.Visual = PieVisual;
-const MODE_LIST = ['flowchart', 'sequence', 'gantt', 'pie'];
+C.MODES.journey = C.MODES.journey || (window.MSMODES && window.MSMODES.journey) || null;
+if (C.MODES.journey) C.MODES.journey.Visual = JourneyVisual;
+const MODE_LIST = ['flowchart', 'sequence', 'gantt', 'pie', 'journey'];
 function App() {
   const docsRef = useRef({});
   const [ver, bump] = useReducer(v => v + 1, 0);
@@ -3241,7 +3469,7 @@ function App() {
     }
   }, [ver, mode, scheduleSave, schedulePreview]);
   const isFc = mode === 'flowchart';
-  const isCanvas = mode === 'flowchart' || !!(window.MSMODES && window.MSMODES[mode]);
+  const isCanvas = mode === 'flowchart' || !!(C.MODES[mode] && C.MODES[mode].kind === 'canvas');
   const boardFor = function(m) {
     return m === 'flowchart' ? boardRef.current : window.__ENTITY_BOARDS && window.__ENTITY_BOARDS[m] || null;
   };
@@ -3652,11 +3880,11 @@ function App() {
     onClick: () => setHelpOpen(false)
   }, "\u2715 Close"), /*#__PURE__*/React.createElement("h2", null, "\uD83E\uDDDC Mermaid Studio"), /*#__PURE__*/React.createElement("div", {
     className: "hsub"
-  }, "Seven diagram modes, each perfectly in sync between a visual editor and Mermaid text \u2014 edit either side, both stay true."), /*#__PURE__*/React.createElement("div", {
+  }, "Eight diagram modes, each perfectly in sync between a visual editor and Mermaid text \u2014 edit either side, both stay true."), /*#__PURE__*/React.createElement("div", {
     className: "help-cols"
   }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h4", null, "Modes"), /*#__PURE__*/React.createElement("ul", {
     className: "syn"
-  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83E\uDEA2 Graph"), " \u2014 drag-and-drop flowchart canvas (all shapes, subgraphs, colours)"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83D\uDCAC Sequence"), " \u2014 participants & message rows, notes, dividers, activations"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83D\uDCCA Gantt"), " \u2014 sections & task bars with dates, durations, \u201Cafter\u201D chains, milestones"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83E\uDD67 Pie"), " \u2014 labelled slices with values"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83C\uDFDB Class"), " \u2014 classes, relations, namespaces, notes"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83D\uDDC4 ER"), " \u2014 entities, attributes, cardinalities"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\u2699\uFE0F State"), " \u2014 states, transitions, composites, notes")), /*#__PURE__*/React.createElement("h4", null, "Graph canvas"), /*#__PURE__*/React.createElement("table", {
+  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83E\uDEA2 Graph"), " \u2014 drag-and-drop flowchart canvas (all shapes, subgraphs, colours)"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83D\uDCAC Sequence"), " \u2014 participants & message rows, notes, dividers, activations"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83D\uDCCA Gantt"), " \u2014 sections & task bars with dates, durations, \u201Cafter\u201D chains, milestones"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83E\uDD67 Pie"), " \u2014 labelled slices with values"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83C\uDFDB Class"), " \u2014 classes, relations, namespaces, notes"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83D\uDDC4 ER"), " \u2014 entities, attributes, cardinalities"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\u2699\uFE0F State"), " \u2014 states, transitions, composites, notes"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("b", null, "\uD83E\uDDED Journey"), " \u2014 sections, tasks scored 1-5 with actors")), /*#__PURE__*/React.createElement("h4", null, "Graph canvas"), /*#__PURE__*/React.createElement("table", {
     className: "keys"
   }, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("kbd", null, "drag"), " node"), /*#__PURE__*/React.createElement("td", null, "move (snaps when enabled)")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("kbd", null, "drag"), " rim dot"), /*#__PURE__*/React.createElement("td", null, "draw an edge")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("kbd", null, "dbl-click")), /*#__PURE__*/React.createElement("td", null, "relabel node / edge / group")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("kbd", null, "Shift"), "+drag empty"), /*#__PURE__*/React.createElement("td", null, "rubber-band select")), /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", null, /*#__PURE__*/React.createElement("kbd", null, "Space"), "+drag \xB7 wheel"), /*#__PURE__*/React.createElement("td", null, "pan \xB7 zoom"))), /*#__PURE__*/React.createElement("h4", null, "Everywhere"), /*#__PURE__*/React.createElement("table", {
     className: "keys"
@@ -3664,7 +3892,7 @@ function App() {
     className: "syn"
   }, /*#__PURE__*/React.createElement("li", null, "Visual edits rewrite the source instantly."), /*#__PURE__*/React.createElement("li", null, "Typing in the source re-parses after a short pause and updates the visual side."), /*#__PURE__*/React.createElement("li", null, "Each mode keeps its own document \u2014 switching tabs never loses work. Undo history works across modes too."), /*#__PURE__*/React.createElement("li", null, "In Graph mode positions are remembered by node id; newcomers arrive near their neighbours and \u2728 Auto layout re-arranges cleanly.")), /*#__PURE__*/React.createElement("h4", null, "Supported syntax"), /*#__PURE__*/React.createElement("ul", {
     className: "syn"
-  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "flowchart TB|LR|BT|RL"), ", all node shapes, ", /*#__PURE__*/React.createElement("code", null, "-->"), " ", /*#__PURE__*/React.createElement("code", null, "---"), " ", /*#__PURE__*/React.createElement("code", null, "-.->"), " ", /*#__PURE__*/React.createElement("code", null, "==>"), " with ", /*#__PURE__*/React.createElement("code", null, "|labels|"), ", ", /*#__PURE__*/React.createElement("code", null, "&"), " chaining, ", /*#__PURE__*/React.createElement("code", null, "subgraph"), ", ", /*#__PURE__*/React.createElement("code", null, "classDef/class/style")), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "sequenceDiagram"), ": participant/actor, all eight arrows, ", /*#__PURE__*/React.createElement("code", null, "Note over/left/right"), ", activate/deactivate, autonumber"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "gantt"), ": sections, tasks with ", /*#__PURE__*/React.createElement("code", null, "done/active/crit/milestone"), ", aliases, dates or ", /*#__PURE__*/React.createElement("code", null, "after"), " deps, durations, dateFormat/axisFormat/excludes"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "pie"), ": quoted labels, values, showData, title"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "classDiagram"), " — classes, members, relations, namespaces, notes, direction"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "erDiagram"), " — entities, attributes, identifying/non-identifying relations"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "stateDiagram-v2"), " — states, transitions, composites, choice/fork/join, notes")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "flowchart TB|LR|BT|RL"), ", all node shapes, ", /*#__PURE__*/React.createElement("code", null, "-->"), " ", /*#__PURE__*/React.createElement("code", null, "---"), " ", /*#__PURE__*/React.createElement("code", null, "-.->"), " ", /*#__PURE__*/React.createElement("code", null, "==>"), " with ", /*#__PURE__*/React.createElement("code", null, "|labels|"), ", ", /*#__PURE__*/React.createElement("code", null, "&"), " chaining, ", /*#__PURE__*/React.createElement("code", null, "subgraph"), ", ", /*#__PURE__*/React.createElement("code", null, "classDef/class/style")), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "sequenceDiagram"), ": participant/actor, all eight arrows, ", /*#__PURE__*/React.createElement("code", null, "Note over/left/right"), ", activate/deactivate, autonumber"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "gantt"), ": sections, tasks with ", /*#__PURE__*/React.createElement("code", null, "done/active/crit/milestone"), ", aliases, dates or ", /*#__PURE__*/React.createElement("code", null, "after"), " deps, durations, dateFormat/axisFormat/excludes"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "pie"), ": quoted labels, values, showData, title"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "classDiagram"), " — classes, members, relations, namespaces, notes, direction"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "erDiagram"), " — entities, attributes, identifying/non-identifying relations"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "stateDiagram-v2"), " — states, transitions, composites, choice/fork/join, notes"), /*#__PURE__*/React.createElement("li", null, /*#__PURE__*/React.createElement("code", null, "journey"), " — sections, tasks “task” : score : actors, title")), /*#__PURE__*/React.createElement("div", {
     className: "muted-note"
   }, "Gracefully ignored on import: linkStyle/click, nested subgraphs (flattened), loop/alt blocks. Everything exports back as clean canonical Mermaid. Work autosaves to this browser."))))));
 }

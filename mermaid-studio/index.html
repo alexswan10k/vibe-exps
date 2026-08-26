@@ -411,6 +411,7 @@ ul.syn code { color: var(--accent); font-size: 11.5px; }
 <script src="js/mode-class.js"></script>
 <script src="js/mode-er.js"></script>
 <script src="js/mode-state.js"></script>
+<script src="js/mode-journey.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -2490,10 +2491,19 @@ window.StudioCore.Board = Board;
   'use strict';
   var extra = window.MSMODES || {};
   Object.keys(extra).forEach(function (k) {
-    extra[k].kind = 'canvas';
-    C.MODES[k] = extra[k];
+    if (!extra[k].kind) extra[k].kind = 'canvas';
+    if (C.MODES[k]) {
+      var keepVisual = C.MODES[k].Visual;
+      var keepSheet = C.MODES[k].Sheet;
+      Object.assign(C.MODES[k], extra[k]);
+      if (keepVisual) C.MODES[k].Visual = keepVisual;
+      if (keepSheet) C.MODES[k].Sheet = keepSheet;
+      if (!C.MODES[k].kind) C.MODES[k].kind = extra[k].kind;
+    } else {
+      C.MODES[k] = extra[k];
+    }
   });
-  MODE_LIST.push.apply(MODE_LIST, Object.keys(extra));
+  MODE_LIST.push.apply(MODE_LIST, Object.keys(extra).filter(function(k){ return MODE_LIST.indexOf(k)===-1; }));
 })();
 </script>
 </body>
