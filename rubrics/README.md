@@ -43,8 +43,12 @@ rubrics/
 Use the helper that stages only one test+one model so siblings don't exist:
 
 ```bash
-# enumerate (no model = list)
-rubrics/run-rubric.sh minecraft-clone
+# interactive (default in a terminal): pick test → pick model by number (or type text to filter) → confirm & run
+rubrics/run-rubric.sh                 # full menu
+rubrics/run-rubric.sh minecraft-clone # straight to the model menu
+
+# enumerate without the menu (also what happens automatically when piped / in CI)
+rubrics/run-rubric.sh minecraft-clone --list   # submissions + every harness model, ✔ done / ○ not run
 rubrics/run-rubric.sh --list          # all tests + models
 
 # tmp isolation (default) — no microsandbox install needed

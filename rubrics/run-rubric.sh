@@ -35,10 +35,12 @@ Usage: rubrics/run-rubric.sh <test-slug> [model-name] [options] [-- <agent comma
 Args:
   <test-slug>   e.g. minecraft-clone
   [model-name]  e.g. my-model (lowercase, no spaces)
-                If omitted, enumerates models for the test.
+                If omitted, enumerates existing submissions AND lists every
+                model the installed harnesses (opencode/pi) can execute,
+                marked ✔ done / ○ not run for this test.
 
 Options:
-  -l, --list      List tests / models and exit (also default when no model given)
+  -l, --list      List tests / models and exit (non-interactive; bypasses the menu)
   --all           Run <agent command> for every model in <test> (requires <test> and -- <cmd>)
   --harness NAME  Start an interactive agent session in isolated stage: pi | opencode
                   Optionally with model: pi:provider/model or opencode:provider/model
@@ -55,7 +57,9 @@ Options:
   -h, --help      Show this help
 
 Examples:
-  rubrics/run-rubric.sh minecraft-clone                          # enumerate models
+  rubrics/run-rubric.sh                                              # interactive menu (TTY): pick test → model → run
+  rubrics/run-rubric.sh minecraft-clone                              # ditto, straight to the model menu
+  rubrics/run-rubric.sh minecraft-clone --list                       # non-interactive listing (also default when piped)
   rubrics/run-rubric.sh --list                                   # list all tests
   rubrics/run-rubric.sh minecraft-clone my-model --harness pi    # interactive pi in isolated stage
   rubrics/run-rubric.sh minecraft-clone my-model --harness opencode  # interactive opencode
@@ -100,6 +104,145 @@ list_models() {
     echo "  Create one with: rubrics/run-rubric.sh $test <model-name> --harness pi"
     echo "               or: rubrics/run-rubric.sh $test <model-name> --harness opencode"
   fi
+}
+
+# harness model-id -> submission dir slug, e.g. opencode + opencode/muse-spark-1.2-x -> opencode-opencode-muse-spark-1-2-x
+model_slug() {
+  printf '%s-%s' "$1" "$(printf '%s' "$2" | tr '/.' '--')"
+}
+
+# ---- model catalog from installed harnesses ---------------------------------
+AV_IDS=(); AV_H=(); AV_DONE=(); AV_SLUG=(); SUBS=()
+
+collect_models() { # $1=test_dir — fills AV_* + SUBS arrays (deduped across harnesses)
+  local test_dir="$1" pairs="" ids="" id h csv slug hs i m d done_flag done_slug
+  if command -v opencode >/dev/null 2>&1; then
+    while IFS= read -r id; do [[ -n "$id" ]] && pairs+="opencode|$id"$'\n'; done < <(opencode models 2>/dev/null)
+  fi
+  if command -v pi >/dev/null 2>&1; then
+    if command -v jq >/dev/null 2>&1; then
+      ids="$( { [[ -f "$HOME/.pi/agent/models.json" ]] && jq -r '.providers // {} | to_entries[] | .key as $p | .value.models[]? | $p + "/" + .id' "$HOME/.pi/agent/models.json" 2>/dev/null
+                [[ -f "$HOME/.pi/agent/models-store.json" ]] && jq -r 'to_entries[] | .key as $p | .value.models[]? | $p + "/" + .id' "$HOME/.pi/agent/models-store.json" 2>/dev/null; } | sort -u )"
+    fi
+    while IFS= read -r id; do [[ -n "$id" ]] && pairs+="pi|$id"$'\n'; done <<<"$ids"
+  fi
+
+  SUBS=()
+  for d in "$test_dir"/*/; do
+    [[ -d "$d" ]] || continue
+    m="$(basename "$d")"
+    [[ "$m" == "_template" ]] && continue
+    SUBS+=("$m")
+  done
+
+  AV_IDS=(); AV_H=(); AV_DONE=(); AV_SLUG=()
+  while IFS= read -r id; do [[ -n "$id" ]] && AV_IDS+=("$id"); done < <(printf '%s' "$pairs" | cut -d'|' -f2- | sort -u)
+  for i in "${!AV_IDS[@]}"; do
+    id="${AV_IDS[$i]}"
+    csv="$(printf '%s\n' "$pairs" | awk -F'|' -v want="$id" '$2==want{print $1}' | sort -u | paste -sd, -)"
+    AV_H+=("$csv")
+    IFS=',' read -ra hs <<<"$csv"
+    done_flag=0; done_slug=""
+    for h in "${hs[@]}"; do
+      slug="$(model_slug "$h" "$id")"
+      if [[ -d "$test_dir/$slug" ]]; then done_flag=1; done_slug="$slug"; break; fi
+    done
+    AV_DONE+=("$done_flag"); AV_SLUG+=("$done_slug")
+  done
+}
+
+show_av_models() { # numbered list of runnable models (no submissions header)
+  local i mark
+  if [[ ${#AV_IDS[@]} -eq 0 ]]; then
+    echo "  (no harness CLI found — install opencode or pi, or pass -- <agent command>)"
+    return
+  fi
+  echo "Available to execute:"
+  for i in "${!AV_IDS[@]}"; do
+    if [[ "${AV_DONE[$i]}" == "1" ]]; then mark="✔ done (${AV_SLUG[$i]})"; else mark="○ not run"; fi
+    printf '  %2d) %-45s [%s]  %s\n' "$((i+1))" "${AV_IDS[$i]}" "${AV_H[$i]}" "$mark"
+  done
+}
+
+show_subs() { # numbered rerun list of existing submissions
+  local i
+  if [[ ${#SUBS[@]} -eq 0 ]]; then echo "Existing submissions: (none)"; return; fi
+  echo "Existing submissions (rerun with r<N>):"
+  for i in "${!SUBS[@]}"; do printf '  R%d) %s\n' "$((i+1))" "${SUBS[$i]}"; done
+}
+
+pick_test_interactive() { # sets TEST from menu
+  local tests=() d i ans
+  for d in "$ROOT"/rubrics/*/; do [[ -d "$d" ]] || continue; tests+=("$(basename "$d")"); done
+  if [[ ${#tests[@]} -eq 0 ]]; then echo "no tests found under $ROOT/rubrics" >&2; exit 1; fi
+  echo "Rubric runner — pick a test:"
+  for i in "${!tests[@]}"; do printf '  %d) %s\n' "$((i+1))" "${tests[$i]}"; done
+  while :; do
+    read -rp "test [1-${#tests[@]}, q=quit]: " ans || exit 0
+    [[ -z "$ans" ]] && continue
+    [[ "$ans" == "q" ]] && exit 0
+    if [[ "$ans" =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= ${#tests[@]} )); then TEST="${tests[$((ans-1))]}"; return; fi
+    echo "invalid choice: $ans" >&2
+  done
+}
+
+ask_mode_and_run() { # $1=model-slug $2=harness[:id] — confirm and exec self
+  local slug="$1" harness="$2" mm yn
+  read -rp "mode: [1] interactive (default) or [2] headless: " mm || exit 0
+  local cmd=("$SCRIPT_DIR/$RUNNER_NAME" "$TEST" "$slug" --harness "$harness")
+  [[ "$mm" == "2" ]] && cmd+=(--headless)
+  echo ""
+  echo "→ ${cmd[*]}"
+  read -rp "run it? [Y/n]: " yn || exit 0
+  case "$yn" in n|N) return ;; esac
+  exec "${cmd[@]}"
+}
+
+pick_model_interactive() { # $1=test_dir — menu loop; execs self or exits
+  local test_dir="$1" ans i h csv hs first pick id slug j hits mark
+  collect_models "$test_dir"
+  echo ""
+  show_subs
+  show_av_models
+  while :; do
+    echo ""
+    read -rp "run # | r# rerun | text=filter | l=list | q=quit: " ans || exit 0
+    case "$ans" in
+      "") continue ;;
+      q|Q) exit 0 ;;
+      l|L) show_subs; show_av_models; continue ;;
+    esac
+    if [[ "$ans" =~ ^[0-9]+$ ]] && (( ans >= 1 && ans <= ${#AV_IDS[@]} )); then
+      i=$((ans-1)); id="${AV_IDS[$i]}"
+      csv="${AV_H[$i]}"; IFS=',' read -ra hs <<<"$csv"
+      if [[ ${#hs[@]} -gt 1 ]]; then
+        first="${hs[0]}"
+        read -rp "harness [${hs[*]}] (default $first): " h || exit 0
+        [[ -z "$h" ]] && h="$first"
+        case ",$csv," in *",$h,"*) ;; *) echo "unknown harness: $h" >&2; continue ;; esac
+      else
+        h="${hs[0]}"
+      fi
+      ask_mode_and_run "$(model_slug "$h" "$id")" "$h:$id"
+      continue
+    fi
+    if [[ "$ans" =~ ^r([0-9]+)$ ]] && (( BASH_REMATCH[1] >= 1 && BASH_REMATCH[1] <= ${#SUBS[@]} )); then
+      pick="${SUBS[$((BASH_REMATCH[1]-1))]}"
+      h="opencode"; [[ "$pick" == pi-* ]] && h="pi"
+      read -rp "model id for rerun (Enter = harness default, provider/id): " id || exit 0
+      if [[ -n "$id" ]]; then ask_mode_and_run "$pick" "$h:$id"; else ask_mode_and_run "$pick" "$h"; fi
+      continue
+    fi
+    hits=0
+    for j in "${!AV_IDS[@]}"; do
+      if printf '%s' "${AV_IDS[$j]}" | grep -qi -- "$ans"; then
+        [[ $hits == 0 ]] && { echo "matches:"; hits=1; }
+        if [[ "${AV_DONE[$j]}" == "1" ]]; then mark="✔ done (${AV_SLUG[$j]})"; else mark="○ not run"; fi
+        printf '  %2d) %-45s [%s]  %s\n' "$((j+1))" "${AV_IDS[$j]}" "${AV_H[$j]}" "$mark"
+      fi
+    done
+    [[ $hits == 0 ]] && echo "no match: $ans (l = full list)" >&2
+  done
 }
 
 TEST=""
@@ -156,6 +299,14 @@ else
   fi
 fi
 
+RUNNER_NAME="$(basename "$SCRIPT_SRC")"
+
+# Interactive wizard when run bare in a terminal (no flags/command given).
+WIZARD="0"
+if [[ -t 0 && -t 1 && "$LIST" == "0" && "$ALL" == "0" && -z "$HARNESS" && ${#AGENT_CMD[@]} -eq 0 ]]; then
+  WIZARD="1"
+fi
+
 # --list with no test: list all tests + models
 if [[ "$LIST" == "1" && -z "$TEST" ]]; then
   list_tests "$ROOT"
@@ -168,12 +319,16 @@ if [[ "$LIST" == "1" && -z "$TEST" ]]; then
   exit 0
 fi
 
-# No test at all: enumerate everything (friendly default)
+# No test at all: interactive menu in a terminal, otherwise enumerate + usage
 if [[ -z "$TEST" ]]; then
-  usage >&2
-  echo "" >&2
-  list_tests "$ROOT"
-  exit 1
+  if [[ "$WIZARD" == "1" ]]; then
+    pick_test_interactive
+  else
+    usage >&2
+    echo "" >&2
+    list_tests "$ROOT"
+    exit 1
+  fi
 fi
 
 TEST_DIR="$ROOT/rubrics/$TEST"
@@ -234,8 +389,14 @@ if [[ -z "$MODEL" ]]; then
     echo "All $TEST models done."
     exit 0
   fi
-  # Default no-model behavior: list and exit
+  # Default no-model behavior: interactive menu in a terminal, else list + exit
+  if [[ "$WIZARD" == "1" ]]; then
+    pick_model_interactive "$TEST_DIR"
+  fi
   list_models "$TEST_DIR"
+  echo ""
+  collect_models "$TEST_DIR"
+  show_av_models
   if [[ "$LIST" == "1" ]]; then exit 0; fi
   echo ""
   echo "Tip: run a model isolated: rubrics/run-rubric.sh $TEST <model> -- <agent command>"
