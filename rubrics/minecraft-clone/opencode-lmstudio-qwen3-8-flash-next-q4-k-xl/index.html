@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Minecraft — Java Edition (Web Clone)</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="gl"></canvas>
+
+<!-- ============ In-game HUD ============ -->
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+
+  <div id="debug" class="hidden"></div>
+
+  <div id="vitals">
+    <div id="hearts"></div>
+  </div>
+
+  <div id="hotbar"></div>
+  <div id="item-name"></div>
+  <div id="toast"></div>
+</div>
+
+<!-- ============ Title screen ============ -->
+<div id="title" class="screen">
+  <h1 class="mc-title">MINECRAFT</h1>
+  <p class="splash" id="splash">100% JavaScript!</p>
+  <div class="panel">
+    <button id="btn-play" class="btn btn-big">Click to Play</button>
+    <div class="row">
+      <input id="seed-input" type="text" placeholder="World seed (blank = random)" spellcheck="false">
+      <button id="btn-new" class="btn">Generate new world</button>
+    </div>
+    <p class="hint" id="load-hint"></p>
+    <div class="legend">
+      <b>Controls</b>
+      <span><i>Click</i> lock mouse / look around</span>
+      <span><i>ESC</i> release mouse + pause menu</span>
+      <span><i>W A S D</i> move &nbsp; <i>Ctrl</i> sprint (or double-tap W)</span>
+      <span><i>Space</i> jump / swim up &nbsp; <i>Shift</i> sneak</span>
+      <span><i>Left click</i> break block (hold to mine) &nbsp; <i>Right click</i> place</span>
+      <span><i>Middle click</i> pick block</span>
+      <span><i>1 – 9</i> or <i>wheel</i> select hotbar slot</span>
+      <span><i>E</i> / <i>B</i> block picker &nbsp; <i>F3</i> debug overlay</span>
+    </div>
+    <p class="tiny">Runs from <code>file://</code> — no server, no build step. Progress autosaves to this browser.</p>
+  </div>
+</div>
+
+<!-- ============ Pause menu (ESC) ============ -->
+<div id="pause" class="screen hidden">
+  <div class="panel panel-narrow">
+    <h2>Game Menu</h2>
+    <button id="btn-resume" class="btn btn-big">Back to Game</button>
+    <label class="slider">FOV <input id="opt-fov" type="range" min="55" max="110" step="1"><span id="val-fov"></span></label>
+    <label class="slider">Render distance <input id="opt-rd" type="range" min="2" max="8" step="1"><span id="val-rd"></span></label>
+    <label class="slider">Mouse sensitivity <input id="opt-sens" type="range" min="20" max="300" step="5"><span id="val-sens"></span></label>
+    <label class="check"><input id="opt-sound" type="checkbox" checked> Sound effects</label>
+    <div class="row">
+      <button id="btn-save" class="btn">Save now</button>
+      <button id="btn-regen" class="btn">New world (seed)</button>
+    </div>
+    <p class="tiny">World edits autosave every few seconds under a key derived from the seed.</p>
+  </div>
+</div>
+
+<!-- ============ Block picker (E / B) ============ -->
+<div id="picker" class="screen hidden">
+  <div class="panel panel-wide">
+    <h2>Select block for slot <span id="picker-slot">1</span></h2>
+    <div id="picker-grid"></div>
+    <p class="tiny">Click a block to put it in the highlighted hotbar slot &nbsp;·&nbsp; <i>E</i> / <i>B</i> / <i>ESC</i> close</p>
+  </div>
+</div>
+
+<!-- ============ Death screen ============ -->
+<div id="death" class="screen hidden">
+  <div class="panel panel-narrow">
+    <h2>You Died!</h2>
+    <p class="tiny" id="death-reason">Ouch. Looks like the ground disagreed with you.</p>
+    <button id="btn-respawn" class="btn btn-big">Respawn</button>
+  </div>
+</div>
+
+<!-- ============ Touch controls (mobile fallback) ============ -->
+<div id="touch" class="hidden">
+  <div id="stick"><div id="knob"></div></div>
+  <button id="t-jump">Jump</button>
+  <button id="t-break">Mine</button>
+  <button id="t-place">Place</button>
+</div>
+
+<!-- Three.js r128 UMD global build — plain https CDN script, loaded before our code. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/00-core.js"></script>
+<script src="js/01-textures.js"></script>
+<script src="js/02-blocks.js"></script>
+<script src="js/03-world.js"></script>
+<script src="js/04-mesh.js"></script>
+<script src="js/05-scene.js"></script>
+<script src="js/06-player.js"></script>
+<script src="js/07-audio.js"></script>
+<script src="js/08-ui.js"></script>
+<script src="js/09-game.js"></script>
+<script src="js/10-input.js"></script>
+</body>
+</html>
