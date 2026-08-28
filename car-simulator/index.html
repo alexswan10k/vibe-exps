@@ -2,240 +2,543 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
     <title>3D Car Driving Simulator</title>
     <style>
-        body {
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
             margin: 0;
             padding: 0;
-            overflow: hidden;
-            font-family: Arial, sans-serif;
-            background: #87CEEB;
-        }
-        #container {
             width: 100vw;
             height: 100vh;
+            overflow: hidden;
+            background: #060814;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            color: #ffffff;
+        }
+        #container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* --- Top Control Bar --- */
+        #top-bar {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 20;
+            background: rgba(10, 14, 24, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 6px 14px;
+            border-radius: 30px;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 15px rgba(0, 243, 255, 0.2);
+            max-width: 95vw;
+            overflow-x: auto;
+        }
+        .car-selector {
+            display: flex;
+            gap: 6px;
+            border-right: 1px solid rgba(255, 255, 255, 0.15);
+            padding-right: 10px;
+        }
+        .hud-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e0e0e0;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .hud-btn:hover {
+            background: rgba(0, 243, 255, 0.2);
+            border-color: #00f3ff;
+            color: #ffffff;
+            box-shadow: 0 0 10px rgba(0, 243, 255, 0.4);
+        }
+        .btn-car-select.active {
+            background: linear-gradient(135deg, #00f3ff, #0077ff);
+            color: #000000;
+            border-color: #00f3ff;
+            font-weight: bold;
+            box-shadow: 0 0 14px rgba(0, 243, 255, 0.6);
+        }
+        .hud-select {
+            background: rgba(20, 26, 40, 0.9);
+            border: 1px solid rgba(0, 243, 255, 0.4);
+            color: #00f3ff;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+        }
+
+        /* --- Stunt / Notification Banner --- */
+        #stunt-banner {
+            position: absolute;
+            top: 75px;
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            background: linear-gradient(90deg, rgba(255, 0, 85, 0.9), rgba(0, 243, 255, 0.9));
+            color: #ffffff;
+            padding: 8px 24px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.7);
+            pointer-events: none;
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 30;
+        }
+        #stunt-banner.visible {
+            opacity: 1;
+            transform: translateX(-50%) scale(1);
+        }
+
+        /* --- Drift Score Combo HUD --- */
+        #drift-hud {
+            position: absolute;
+            top: 80px;
+            left: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 20;
+            opacity: 0.6;
+            transition: opacity 0.3s;
+        }
+        #drift-hud.active {
+            opacity: 1;
+        }
+        #drift-score {
+            font-size: 20px;
+            font-weight: 900;
+            color: #ffaa00;
+            text-shadow: 0 0 10px rgba(255, 170, 0, 0.8);
+            letter-spacing: 1px;
+        }
+        #drift-multiplier {
+            font-size: 15px;
+            font-weight: 800;
+            color: #00f3ff;
+            text-shadow: 0 0 8px rgba(0, 243, 255, 0.8);
+        }
+        #challenge-timer {
+            display: none;
+            margin-top: 6px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #00ff66;
+            text-shadow: 0 0 10px rgba(0, 255, 102, 0.8);
+        }
+
+        /* --- Minimap Radar --- */
+        #minimap-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 150px;
+            height: 150px;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 2px solid rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+            background: #0a0d14;
+            z-index: 20;
+        }
+        #minimap-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* --- Bottom Right Dashboard Cluster --- */
+        #dashboard-cluster {
+            position: absolute;
+            bottom: 20px;
+            right: 25px;
+            width: 220px;
+            height: 220px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            pointer-events: none;
+        }
+        #gauge-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #digital-readout {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            top: 45%;
+            transform: translateY(-50%);
+        }
+        #speed-digital {
+            font-size: 38px;
+            font-weight: 900;
+            color: #ffffff;
+            text-shadow: 0 0 12px rgba(0, 243, 255, 0.8);
+            line-height: 1;
+            font-family: 'Courier New', monospace;
+        }
+        #speed-unit {
+            font-size: 11px;
+            font-weight: 700;
+            color: #00f3ff;
+            letter-spacing: 1px;
+            margin-top: 2px;
+        }
+        #gear-val {
+            margin-top: 4px;
+            font-size: 16px;
+            font-weight: 800;
+            color: #ffcc00;
+            text-shadow: 0 0 8px rgba(255, 204, 0, 0.8);
+        }
+
+        /* Status Bars (Nitro & Health) */
+        #bars-container {
+            position: absolute;
+            bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            width: 140px;
+        }
+        .stat-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            overflow: hidden;
             position: relative;
         }
-    #ui {
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        background: rgba(0, 0, 0, 0.8);
-        color: white;
-        padding: 15px;
-        border-radius: 10px;
-        font-size: 14px;
-        font-family: 'Courier New', monospace;
-        border: 2px solid #333;
-        box-shadow: 0 0 10px rgba(0,0,0,0.5);
-        min-width: 200px;
-    }
-    #controls {
-        margin-bottom: 15px;
-        border-bottom: 1px solid #555;
-        padding-bottom: 10px;
-    }
-    #speed {
-        font-weight: bold;
-        color: #00ff00;
-        font-size: 16px;
-        text-shadow: 0 0 5px #00ff00;
-    }
-    #rpm {
-        margin-top: 5px;
-        color: #ff6600;
-        font-size: 14px;
-    }
-    #gear {
-        margin-top: 5px;
-        color: #ffff00;
-    }
-    #fuel {
-        margin-top: 5px;
-        color: #00ccff;
-    }
-    #health {
-        margin-top: 5px;
-        color: #ff3333;
-    }
-    #score {
-        margin-top: 10px;
-        color: #ffffff;
-        font-weight: bold;
-        border-top: 1px solid #555;
-        padding-top: 10px;
-    }
-    #minimap {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        width: 200px;
-        height: 200px;
-        background: rgba(0, 0, 0, 0.8);
-        border-radius: 10px;
-        border: 2px solid #333;
-        overflow: hidden;
-    }
-    #minimap-canvas {
-        width: 100%;
-        height: 100%;
-        display: block;
-    }
+        #nitro-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #00f3ff, #0077ff);
+            box-shadow: 0 0 8px #00f3ff;
+            transition: width 0.1s;
+        }
+        #health-fill {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #00ff66, #ffcc00);
+            box-shadow: 0 0 8px #00ff66;
+            transition: width 0.1s;
+        }
 
-    /* Touch Controls */
-    #touch-controls {
-        display: none;
-        position: absolute;
-        bottom: 20px;
-        left: 0;
-        width: 100%;
-        height: 150px;
-        pointer-events: none;
-        z-index: 100;
-    }
-    #joystick-zone {
-        position: absolute;
-        bottom: 30px;
-        left: 30px;
-        width: 120px;
-        height: 120px;
-        background: rgba(255, 255, 255, 0.1);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        border-radius: 50%;
-        pointer-events: auto;
-        touch-action: none;
-        z-index: 200;
-    }
-    @media (max-width: 900px) {
+        /* --- Touch Controls (Mobile Friendly) --- */
+        #touch-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 25;
+        }
         #joystick-zone {
-            left: 50px;
-            bottom: 50px;
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 110px;
+            height: 110px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 2px solid rgba(0, 243, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
         }
-        .action-buttons {
-            right: 50px;
-            bottom: 50px;
+        #joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 44px;
+            height: 44px;
+            background: rgba(0, 243, 255, 0.6);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px #00f3ff;
+            pointer-events: none;
         }
-    }
-    #joystick-knob {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 50px;
-        height: 50px;
-        background: rgba(255, 255, 255, 0.5);
-        border-radius: 50%;
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-    }
+        .pedal-group {
+            position: absolute;
+            bottom: 30px;
+            right: 250px;
+            display: flex;
+            gap: 12px;
+            pointer-events: auto;
+        }
+        .touch-pedal {
+            width: 60px;
+            height: 70px;
+            background: rgba(20, 28, 45, 0.7);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            color: #ffffff;
+            touch-action: none;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .touch-pedal.pressed {
+            transform: scale(0.92);
+            background: rgba(0, 243, 255, 0.4);
+            border-color: #00f3ff;
+        }
+        .btn-nitro-touch {
+            border-color: #00f3ff;
+            color: #00f3ff;
+        }
+        .btn-brake-touch {
+            border-color: #ff3366;
+            color: #ff3366;
+        }
 
-    .action-buttons {
-        position: absolute;
-        bottom: 20px;
-        right: 20px;
-        display: flex;
-        gap: 15px;
-        pointer-events: auto;
-        align-items: flex-end;
-        z-index: 200;
-    }
-    .touch-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: 2px solid rgba(255, 255, 255, 0.5);
-        border-radius: 10px;
-        color: white;
-        font-size: 24px;
-        font-weight: bold;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        user-select: none;
-        touch-action: manipulation;
-        cursor: pointer;
-    }
-    .touch-btn:active {
-        background: rgba(255, 255, 255, 0.5);
-        transform: scale(0.95);
-    }
-    .dpad-up { grid-column: 2; grid-row: 1; }
-    .dpad-down { grid-column: 2; grid-row: 3; }
-    .dpad-left { grid-column: 1; grid-row: 2; }
-    .dpad-right { grid-column: 3; grid-row: 2; }
+        /* --- Help Modal --- */
+        #help-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: rgba(10, 14, 26, 0.95);
+            border: 1px solid rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 35px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 243, 255, 0.3);
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90vw;
+            z-index: 100;
+            display: none;
+            opacity: 0;
+            transition: all 0.25s ease;
+        }
+        #help-modal.open {
+            display: block;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .help-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #00f3ff;
+            margin-top: 0;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .help-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+        .help-key {
+            color: #ffcc00;
+            font-weight: bold;
+            font-family: monospace;
+        }
+        .btn-close {
+            background: none;
+            border: none;
+            color: #ffffff;
+            font-size: 22px;
+            cursor: pointer;
+        }
 
-    .action-btn {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        font-size: 16px;
-    }
-    #btn-toggle-touch {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        width: 40px;
-        height: 40px;
-        background: rgba(0, 0, 0, 0.5);
-        border: 1px solid white;
-        border-radius: 5px;
-        color: white;
-        font-size: 20px;
-        z-index: 200;
-        cursor: pointer;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-    }
-    @media (max-width: 900px) {
-        #minimap {
-            display: none;
+        /* Responsive */
+        @media (max-width: 768px) {
+            #top-bar {
+                top: 8px;
+                padding: 4px 8px;
+                gap: 5px;
+            }
+            .hud-btn {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+            #minimap-container {
+                display: none;
+            }
+            #dashboard-cluster {
+                right: 10px;
+                bottom: 10px;
+                width: 170px;
+                height: 170px;
+            }
+            #speed-digital {
+                font-size: 28px;
+            }
+            .pedal-group {
+                right: 175px;
+                bottom: 15px;
+                gap: 6px;
+            }
+            .touch-pedal {
+                width: 50px;
+                height: 55px;
+                font-size: 11px;
+            }
+            #joystick-zone {
+                bottom: 15px;
+                left: 15px;
+                width: 90px;
+                height: 90px;
+            }
         }
-        #ui {
-            max-width: 250px;
-        }
-        #controls {
-            display: none;
-        }
-    }
     </style>
 </head>
 <body>
     <div id="container"></div>
-    <div id="ui">
-        <div id="controls">
-            <strong>Controls:</strong><br>
-            W - Accelerate<br>
-            S - Brake<br>
-            A/D - Steer Left/Right<br>
-            Space - Handbrake<br>
-            R - Reset Car<br>
-            P - Pause<br>
-            F - Debug Info
+
+    <!-- Top Bar Controls -->
+    <div id="top-bar">
+        <div class="car-selector">
+            <button class="hud-btn btn-car-select active" data-car="0">🏎️ Supercar</button>
+            <button class="hud-btn btn-car-select" data-car="1">🔥 Muscle</button>
+            <button class="hud-btn btn-car-select" data-car="2">⚡ Hypercar</button>
+            <button class="hud-btn btn-car-select" data-car="3">🚙 4x4 Offroad</button>
         </div>
-        <div id="speed">Speed: 0 km/h</div>
-        <div id="rpm">RPM: 800</div>
-        <div id="gear">Gear: N</div>
-        <div id="fuel">Fuel: 100%</div>
-        <div id="health">Health: 100%</div>
-        <div id="score">Score: 0</div>
-    </div>
-    <div id="minimap">
-        <canvas id="minimap-canvas"></canvas>
+
+        <button class="hud-btn" id="btn-cam">📷 CHASE</button>
+        <button class="hud-btn" id="btn-weather">☀️ DAY</button>
+        <button class="hud-btn" id="btn-radio">
+            <span id="station-ticker">📻 Neon Nights</span>
+        </button>
+
+        <select class="hud-select" id="select-challenge">
+            <option value="freeroam">Mode: Free Roam</option>
+            <option value="timetrial">Mode: Checkpoint Race</option>
+            <option value="drift">Mode: Drift King</option>
+        </select>
+
+        <button class="hud-btn" id="btn-reset-top">🔄 Reset</button>
+        <button class="hud-btn" id="btn-help">❓ Help</button>
     </div>
 
+    <!-- Stunt / Feedback Banner -->
+    <div id="stunt-banner">DRIVE & DRIFT</div>
 
-    <div id="touch-controls">
+    <!-- Drift HUD -->
+    <div id="drift-hud">
+        <div id="drift-score">DRIFT: 0</div>
+        <div id="drift-multiplier">x1.0</div>
+        <div id="challenge-timer">TIME: 0.0s</div>
+    </div>
+
+    <!-- Minimap -->
+    <div id="minimap-container">
+        <canvas id="minimap-canvas" width="150" height="150"></canvas>
+    </div>
+
+    <!-- Dashboard Gauge Cluster -->
+    <div id="dashboard-cluster">
+        <canvas id="gauge-canvas" width="220" height="220"></canvas>
+        <div id="digital-readout">
+            <div id="speed-digital">0</div>
+            <div id="speed-unit">KM/H</div>
+            <div id="gear-val">1</div>
+            <div id="bars-container">
+                <div class="stat-bar" title="Nitro Boost">
+                    <div id="nitro-fill"></div>
+                </div>
+                <div class="stat-bar" title="Car Health">
+                    <div id="health-fill"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Touch Pedals & Joystick (Mobile/Touch UX) -->
+    <div id="touch-ui">
         <div id="joystick-zone">
             <div id="joystick-knob"></div>
         </div>
-        <div class="action-buttons">
-            <div class="touch-btn action-btn" id="btn-reset">R</div>
-            <div class="touch-btn action-btn" id="btn-brake" style="width: 80px; border-radius: 30px;">SPACE</div>
+
+        <div class="pedal-group">
+            <div class="touch-pedal btn-nitro-touch" id="btn-touch-nitro">⚡ BOOST</div>
+            <div class="touch-pedal btn-brake-touch" id="btn-touch-handbrake">DRIFT</div>
+            <div class="touch-pedal" id="btn-touch-brake">BRAKE</div>
+            <div class="touch-pedal" id="btn-touch-gas" style="background: rgba(0, 243, 255, 0.2); border-color: #00f3ff;">GAS</div>
         </div>
     </div>
-    <button id="btn-toggle-touch">📱</button>
 
+    <!-- Controls & Help Modal -->
+    <div id="help-modal">
+        <div class="help-title">
+            <span>Driving Controls</span>
+            <button class="btn-close" id="btn-close-help">&times;</button>
+        </div>
+        <div class="help-grid">
+            <div><span class="help-key">W / Up</span> : Accelerate</div>
+            <div><span class="help-key">S / Down</span> : Brake / Reverse</div>
+            <div><span class="help-key">A / D / Left / Right</span> : Steer</div>
+            <div><span class="help-key">Space</span> : Handbrake Drift</div>
+            <div><span class="help-key">Shift / N</span> : Nitro Boost</div>
+            <div><span class="help-key">C</span> : Switch Camera (Cockpit, Chase, Hood, Orbit)</div>
+            <div><span class="help-key">T</span> : Toggle Weather (Day, Sunset, Night, Rain)</div>
+            <div><span class="help-key">M</span> : Synthwave Radio Station</div>
+            <div><span class="help-key">1, 2, 3, 4</span> : Switch Car Classes</div>
+            <div><span class="help-key">H</span> : Horn</div>
+            <div><span class="help-key">R</span> : Reset Car Position</div>
+            <div><span class="help-key">P</span> : Pause Game</div>
+        </div>
+        <div style="font-size: 12px; color: #8899aa; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px;">
+            <strong>Pro Tip:</strong> Initiate drifts by tapping <span class="help-key">Space</span> into turns, maintain throttle for combo score, and launch off stunt ramps in the West Stunt Park!
+        </div>
+    </div>
+
+    <!-- Scripts loaded sequentially without ES Modules -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <script src="js/AudioSystem.js"></script>
+    <script src="js/EffectsManager.js"></script>
+    <script src="js/CarModels.js"></script>
+    <script src="js/PhysicsVehicle.js"></script>
+    <script src="js/WorldGen.js"></script>
+    <script src="js/TrafficManager.js"></script>
+    <script src="js/Challenges.js"></script>
+    <script src="js/UIManager.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
