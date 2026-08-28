@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test Rubrics — Vibe Experiments</title>
+<style>
+  *{box-sizing:border-box}
+  body{
+    font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+    background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#334155 100%);
+    color:#fff;min-height:100vh;margin:0;padding:40px 20px;
+  }
+  .container{max-width:1000px;margin:0 auto}
+  .back-link{
+    display:inline-block;margin-bottom:24px;color:#fff;text-decoration:none;
+    font-weight:600;border:1px solid rgba(255,255,255,.35);padding:10px 20px;border-radius:25px;transition:background .2s;
+  }
+  .back-link:hover{background:rgba(255,255,255,.15)}
+  h1{font-size:2.6em;margin:0 0 8px;text-shadow:2px 2px 4px rgba(0,0,0,.5);text-align:center}
+  p.subtitle{text-align:center;opacity:.85;font-size:1.15em;margin:0 0 14px}
+  p.meta{text-align:center;opacity:.65;font-size:.9em;margin:0 0 36px}
+  p.meta a{color:#7dd3fc}
+  p.meta code{background:rgba(255,255,255,.12);padding:2px 6px;border-radius:4px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:28px}
+  .card{
+    background:rgba(255,255,255,.97);border-radius:14px;padding:26px;text-decoration:none;color:#1e293b;
+    box-shadow:0 10px 24px rgba(0,0,0,.25);transition:transform .25s,box-shadow .25s;display:flex;flex-direction:column;position:relative;overflow:hidden;
+  }
+  .card:hover{transform:translateY(-6px);box-shadow:0 16px 36px rgba(0,0,0,.35)}
+  .card::before{content:"";position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(125,211,252,.18),transparent);transition:left .5s}
+  .card:hover::before{left:100%}
+  .badge{display:inline-block;font-size:.72em;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:#0ea5e9;padding:4px 10px;border-radius:999px;margin-bottom:12px;width:fit-content}
+  .badge.wip{background:#f59e0b}
+  .card h2{margin:0 0 8px;font-size:1.45em;color:#0f172a;display:flex;align-items:center;gap:10px}
+  .card p{margin:0 0 14px;color:#475569;font-size:.95em;line-height:1.55;flex-grow:1}
+  .card .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .chip{font-size:.82em;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;padding:6px 10px;border-radius:999px;text-decoration:none}
+  .chip.primary{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
+  .foot{margin-top:36px;text-align:center;opacity:.6;font-size:.85em}
+  .foot a{color:#7dd3fc}
+  .count{font-weight:700;color:#0ea5e9}
+  .explain{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:18px 20px;margin:0 auto 36px;max-width:800px;backdrop-filter:blur(8px)}
+  .explain h3{margin:0 0 8px;font-size:1em;opacity:.95}
+  .explain ol{margin:0;padding-left:18px;opacity:.85;font-size:.9em;line-height:1.6}
+  .explain code{background:rgba(255,255,255,.14);padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="../index.html" class="back-link">&larr; Back to Project Navigator</a>
+  <h1>🧪 Test Rubrics</h1>
+  <p class="subtitle">One prompt → N models → fair side-by-side comparison</p>
+  <p class="meta">Format: <code>rubrics/&lt;test&gt;/prompt.md</code> + <code>rubrics/&lt;test&gt;/&lt;model&gt;/index.html</code> &middot; See <a href="README.md">README.md</a> for the spec &middot; Every demo must work via <code>file://</code></p>
+
+  <div class="explain">
+    <h3>How this works</h3>
+    <ol>
+      <li>Each <strong>test</strong> is a single <code>prompt.md</code> + optional <code>rubric.md</code>.</li>
+      <li>Each <strong>model</strong> gets its own sandbox folder <code>rubrics/&lt;test&gt;/&lt;model-name&gt;/</code> — nothing is shared.</li>
+      <li>Reviewers open the test dashboard, then open each <code>index.html</code> (double-click, no server) and score with the rubric.</li>
+      <li>To add a submission: <code>cp -r rubrics/&lt;test&gt;/_template rubrics/&lt;test&gt;/my-model</code> then let the model write into it.</li>
+    </ol>
+  </div>
+
+  <div class="grid">
+    <a href="minecraft-clone/index.html" class="card">
+      <span class="badge">Active · P0</span>
+      <h2>⛏️ Minecraft Clone</h2>
+      <p>Faithful Java Edition clone in HTML/CSS/JS. First-person voxel world, break &amp; place, procedural terrain, hotbar, pointer-lock physics. CDN-only, <code>file://</code>-safe, no bundlers.</p>
+      <div class="row">
+        <span class="chip primary">Open test &rarr;</span>
+        <span class="chip">prompt.md</span>
+        <span class="chip">rubric.md (36 pts)</span>
+        <span class="chip"><span class="count">1</span> template</span>
+      </div>
+    </a>
+
+    <!-- Future tests: duplicate this card, bump badge to wip/active -->
+    <!--
+    <a href="your-new-test/index.html" class="card" style="opacity:.65">
+      <span class="badge wip">Coming soon</span>
+      <h2>🎯 Your Test</h2>
+      <p>Short description of what the prompt asks for.</p>
+      <div class="row"><span class="chip">prompt.md</span></div>
+    </a>
+    -->
+  </div>
+
+  <p class="foot">Add a new test by copying <code>rubrics/minecraft-clone</code> as a skeleton and updating <code>rubrics/index.html</code>. See <a href="README.md">rubrics/README.md</a>.</p>
+</div>
+</body>
+</html>

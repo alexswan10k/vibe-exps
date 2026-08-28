@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft Clone — Template</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:monospace;background:#6b8cff;color:#fff;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center}
+  .card{background:#fff;color:#222;max-width:640px;width:100%;border-radius:12px;padding:32px;box-shadow:0 12px 32px rgba(0,0,0,.2)}
+  .card h1{font-size:22px;margin-bottom:8px}
+  .card p{font-size:14px;line-height:1.6;color:#555;margin-bottom:12px}
+  code{background:#f3f3f3;padding:2px 6px;border-radius:4px;font-size:13px}
+  .steps{text-align:left;background:#fafafa;border:1px solid #eee;border-radius:8px;padding:16px;margin-top:16px}
+  .steps ol{padding-left:20px}
+  .steps li{font-size:13px;line-height:1.6;color:#333}
+  a{color:#3b5bff}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🧱 Minecraft Clone — Template</h1>
+    <p>This folder is a <strong>sandbox for one model</strong>. Copy this entire <code>_template</code> folder to <code>../&lt;model-name&gt;/</code> and let the model overwrite <code>index.html</code>.</p>
+    <p>See <a href="../prompt.md">prompt.md</a> (also rendered on the test dashboard) for the full spec.</p>
+    <div class="steps">
+      <strong>To create a submission:</strong>
+      <ol>
+        <li><code>cp -r _template my-model-name</code></li>
+        <li>Paste <code>prompt.md</code> to the model and instruct it to write <code>index.html</code> (and optionally <code>style.css</code> / <code>script.js</code>) inside <code>my-model-name/</code>.</li>
+        <li>Double-click <code>my-model-name/index.html</code> — it must work via <code>file://</code> with no server.</li>
+        <li>Score it with <a href="../rubric.md">rubric.md</a>.</li>
+      </ol>
+    </div>
+    <p style="margin-top:16px;font-size:12px;color:#888">Delete this placeholder when a real submission exists. This template is not scored.</p>
+  </div>
+</body>
+</html>

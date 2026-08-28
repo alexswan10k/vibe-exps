@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⛏️ Minecraft Clone — Test Dashboard</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#14532d 0%,#1a7a3a 35%,#2d6a4f 100%);color:#fff;min-height:100vh;margin:0;padding:36px 20px}
+  .container{max-width:1100px;margin:0 auto}
+  .breadcrumbs{margin-bottom:18px;opacity:.9;font-size:.9em}
+  .breadcrumbs a{color:#bbf7d0;text-decoration:none;border-bottom:1px dotted rgba(187,247,208,.6)}
+  .back-link{display:inline-block;margin-bottom:12px;color:#fff;text-decoration:none;font-weight:600;border:1px solid rgba(255,255,255,.35);padding:9px 18px;border-radius:999px;transition:background .2s}
+  .back-link:hover{background:rgba(255,255,255,.15)}
+  h1{font-size:2.4em;margin:8px 0 6px;text-shadow:2px 2px 6px rgba(0,0,0,.4)}
+  .subtitle{opacity:.9;margin:0 0 8px;font-size:1.05em;line-height:1.5}
+  .meta{opacity:.72;font-size:.85em;margin:0 0 22px}
+  .meta a{color:#bbf7d0}
+  .meta code{background:rgba(255,255,255,.14);padding:2px 6px;border-radius:4px}
+  .actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 28px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;text-decoration:none;font-weight:700;font-size:.92em;transition:transform .15s,box-shadow .15s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn-primary{background:#fff;color:#14532d;box-shadow:0 6px 16px rgba(0,0,0,.2)}
+  .btn-ghost{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3)}
+  .btn-ghost:hover{background:rgba(255,255,255,.22)}
+  .panel{background:rgba(255,255,255,.97);color:#1e293b;border-radius:14px;padding:22px 24px;box-shadow:0 10px 28px rgba(0,0,0,.22);margin-bottom:22px}
+  .panel h2{margin:0 0 10px;color:#14532d;font-size:1.2em;display:flex;align-items:center;gap:8px}
+  .panel p,.panel li{color:#334155;font-size:.92em;line-height:1.6}
+  .panel ul{margin:6px 0 0 18px}
+  .panel code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:.88em}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px}
+  .card{background:rgba(255,255,255,.97);border-radius:14px;padding:22px;text-decoration:none;color:#1e293b;box-shadow:0 8px 20px rgba(0,0,0,.18);transition:transform .2s,box-shadow .2s;display:flex;flex-direction:column;position:relative;overflow:hidden}
+  .card:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(0,0,0,.28)}
+  .card.template{border:1.5px dashed #a7f3d0;background:rgba(255,255,255,.88)}
+  .badge{display:inline-block;font-size:.68em;font-weight:800;letter-spacing:.07em;text-transform:uppercase;padding:4px 9px;border-radius:999px;margin-bottom:10px;width:fit-content}
+  .badge-demo{background:#16a34a;color:#fff}
+  .badge-template{background:#e2e8f0;color:#475569}
+  .badge-empty{background:#fef3c7;color:#92400e}
+  .card h3{margin:0 0 6px;font-size:1.15em;color:#0f172a}
+  .card p{margin:0 0 12px;font-size:.88em;color:#475569;line-height:1.5;flex-grow:1}
+  .card .row{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{font-size:.78em;background:#f1f5f9;border:1px solid #e2e8f0;color:#334155;padding:5px 9px;border-radius:999px}
+  .chip.live{background:#dcfce7;border-color:#86efac;color:#14532d}
+  .notice{background:rgba(254,243,199,.14);border:1px solid rgba(254,243,199,.35);border-radius:10px;padding:12px 14px;margin-top:18px;font-size:.85em;color:#fef3c7}
+  .notice code{background:rgba(0,0,0,.22);padding:1px 5px;border-radius:4px}
+  .tree{font-family:ui-monospace,Menlo,monospace;font-size:.82em;background:#0f172a;color:#e2e8f0;padding:14px 16px;border-radius:10px;overflow:auto;line-height:1.6}
+  .tree .dim{opacity:.55}
+  table{width:100%;border-collapse:collapse;font-size:.85em;margin-top:8px}
+  th{ text-align:left;background:#f8fafc;padding:8px;border-bottom:1px solid #e2e8f0;color:#334155}
+  td{padding:8px;border-bottom:1px solid #f1f5f9;color:#475569}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="breadcrumbs"><a href="../../index.html">Project Navigator</a> <span class="dim">/</span> <a href="../index.html">Rubrics</a> <span class="dim">/</span> minecraft-clone</div>
+  <a href="../index.html" class="back-link">&larr; Back to Rubrics</a>
+
+  <h1>⛏️ Minecraft Clone</h1>
+  <p class="subtitle">As faithful to <strong>Minecraft: Java Edition</strong> as possible — in HTML/CSS/JS, no server, <code>file://</code>-safe, CDN via plain <code>&lt;script src&gt;</code> only.</p>
+  <p class="meta">Prompt: <code>rubrics/minecraft-clone/prompt.md</code> &middot; Rubric: <code>rubric.md</code> (36 pts, 12 criteria) &middot; Template: <code>_template/</code></p>
+
+  <div class="actions">
+    <a href="prompt.md" class="btn btn-primary">📄 View prompt.md</a>
+    <a href="rubric.md" class="btn btn-ghost">📋 Rubric (36 pts)</a>
+    <a href="_template/index.html" class="btn btn-ghost">📦 Template</a>
+  </div>
+
+  <div class="panel">
+    <h2>📁 Expected folder layout</h2>
+    <div class="tree">rubrics/minecraft-clone/<br>├── prompt.md <span class="dim">— canonical prompt (copy-paste to models)</span><br>├── rubric.md <span class="dim">— 12 × 0–3 grading checklist</span><br>├── index.html <span class="dim">— this dashboard</span><br>├── _template/ <span class="dim">— copy this to create a submission</span><br>│&nbsp;&nbsp; └── index.html<br>└── &lt;model-name&gt;/ <span class="dim">— one sandbox per model</span><br>&nbsp;&nbsp;&nbsp; └── index.html <span class="dim">— must work on double-click (file://)</span></div>
+    <ul>
+      <li>Naming: <code>&lt;provider&gt;-&lt;model&gt;-&lt;date&gt;</code> e.g. <code>claude-opus-4-20250514</code>, <code>gpt-5-high</code>.</li>
+      <li>Submission is self-contained — no shared code, no absolute paths.</li>
+      <li>Add a card below for each model after generation (duplicate the template card).</li>
+    </ul>
+    <div class="notice">⚠️ <strong>Gate:</strong> any submission that fails on <code>file://</code> or uses <code>type="module"</code> / <code>importmap</code> / <code>fetch('./…')</code> without fallback scores <strong>0 on File-safety and is marked FAIL</strong>, regardless of visuals.</div>
+  </div>
+
+  <div class="panel">
+    <h2>🧭 Quick start — adding a model</h2>
+    <table>
+      <tr><th>Step</th><th>Command / action</th></tr>
+      <tr><td>1</td><td><code>cp -r rubrics/minecraft-clone/_template rubrics/minecraft-clone/my-model-name</code></td></tr>
+      <tr><td>2</td><td>Paste <code>prompt.md</code> to the model. Instruct it to write <code>index.html</code> inside <code>my-model-name/</code> (and optionally <code>style.css</code>/<code>script.js</code>).</td></tr>
+      <tr><td>3</td><td>Double-click <code>my-model-name/index.html</code> — must render, pointer-lock works, break/place works, no console CORS errors.</td></tr>
+      <tr><td>4</td><td>Duplicate a card below, update href + description, commit.</td></tr>
+    </table>
+  </div>
+
+  <h2 style="margin:0 0 14px;font-size:1.15em;opacity:.95">🎮 Model sandboxes</h2>
+  <div class="grid">
+    <a href="_template/index.html" class="card template">
+      <span class="badge badge-template">Template · not scored</span>
+      <h3>📦 _template</h3>
+      <p>Starter placeholder. Copy this folder to <code>../&lt;model-name&gt;/</code> before generation. Shows expected file conventions.</p>
+      <div class="row"><span class="chip">Open template</span><span class="chip">Copy to new model →</span></div>
+    </a>
+
+    <!--
+      HOW TO ADD A SUBMISSION:
+      Duplicate the block below, fill in model name + one-line summary, link href.
+
+    <a href="claude-opus-4-20250514/index.html" class="card">
+      <span class="badge badge-demo">Demo · scored</span>
+      <h3>🤖 claude-opus-4 — 2025-05-14</h3>
+      <p>Glass + trees, sharp pointer-lock, hold-to-mine with crack animation. 32×32 procedural hills. ~60fps.</p>
+      <div class="row"><span class="chip live">▶ Play demo</span><span class="chip">P0 ✓</span><span class="chip">Score: —/36</span></div>
+    </a>
+    -->
+
+    <div class="card" style="border:1.5px dashed rgba(255,255,255,.35);background:rgba(255,255,255,.08);color:#fff;box-shadow:none">
+      <span class="badge badge-empty">Empty</span>
+      <h3 style="color:#fff">No model submissions yet</h3>
+      <p style="color:rgba(255,255,255,.8)">Generate your first by copying <code style="background:rgba(0,0,0,.25);color:#bbf7d0">_template</code> to a model folder and pasting <code style="background:rgba(0,0,0,.25);color:#bbf7d0">prompt.md</code> to the model.</p>
+      <div class="row"><span class="chip" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.2);color:#fff">prompt.md → model → sandbox</span></div>
+    </div>
+  </div>
+
+  <p style="text-align:center;margin:28px 0 0;opacity:.65;font-size:.82em">Scoring: open each demo via <code>file://</code> + <code>http://</code>, play 2 min, score 0–3 per 12 criteria in <a href="rubric.md" style="color:#bbf7d0">rubric.md</a>. · <a href="../README.md" style="color:#bbf7d0">Rubric format →</a></p>
+</div>
+</body>
+</html>
