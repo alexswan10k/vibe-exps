@@ -10,18 +10,20 @@ set -euo pipefail
 #                    requires `msb` CLI: curl -fsSL https://install.microsandbox.dev | sh
 #
 # Usage:
-#   rubrics/run-rubric.sh <test-slug> <model-name> [--msb|--tmp] [--force] -- <agent command>
+#   rubrics/run-rubric.sh <test-slug> <model-name> [--msb|--tmp] [--force] [--interactive|--headless] -- <agent command>
 #   rubrics/run-rubric.sh minecraft-clone my-model -- opencode run "Build from ../prompt.md"
-#   rubrics/run-rubric.sh minecraft-clone claude-opus-4-20250514 -- pi -p "Build the minecraft clone per ../prompt.md"
-#   rubrics/run-rubric.sh minecraft-clone gpt-5 --msb -- opencode run
+#   rubrics/run-rubric.sh minecraft-clone my-model -- pi --approve "Build per ../prompt.md"
+#   rubrics/run-rubric.sh minecraft-clone my-model --harness pi          # interactive (default)
+#   rubrics/run-rubric.sh minecraft-clone my-model --harness pi --headless  # non-interactive -p
+#   rubrics/run-rubric.sh minecraft-clone my-model --harness opencode     # interactive
 #   (shim also at scripts/run-rubric.sh)
 #
 #   rubrics/run-rubric.sh <test-slug>               # enumerate models for that test
 #   rubrics/run-rubric.sh --list                    # list all tests + models
 #   rubrics/run-rubric.sh <test> --all -- <cmd>     # run <cmd> isolated for every model in test
-#   rubrics/run-rubric.sh <test> <model> --harness pi|opencode  # auto-build harness cmd from prompt.md
+#   rubrics/run-rubric.sh <test> <model> --harness pi|opencode  # interactive session in isolated stage
 #
-# If no <agent command> is given, the script only stages and prints next steps.
+# If no <agent command> and no --harness, the script stages and prints next steps.
 #
 # See rubrics/README.md#isolation for the full protocol.
 
@@ -32,16 +34,20 @@ Usage: rubrics/run-rubric.sh <test-slug> [model-name] [options] [-- <agent comma
 
 Args:
   <test-slug>   e.g. minecraft-clone
-  [model-name]  e.g. claude-opus-4-20250514 (lowercase, no spaces)
+  [model-name]  e.g. my-model (lowercase, no spaces)
                 If omitted, enumerates models for the test.
 
 Options:
   -l, --list      List tests / models and exit (also default when no model given)
   --all           Run <agent command> for every model in <test> (requires <test> and -- <cmd>)
-  --harness NAME  Auto-build harness command from prompt.md: pi | opencode
-                  (shorthand: --pi, --opencode)
+  --harness NAME  Start an interactive agent session in isolated stage: pi | opencode
+                  Optionally with model: pi:provider/model or opencode:provider/model
+                  Default is interactive; add --headless for non-interactive -p / run mode.
+                  (shorthands: --pi, --opencode)
   --pi            Alias for --harness pi
   --opencode      Alias for --harness opencode
+  --interactive   Force interactive session (default when --harness is used)
+  --headless      Force headless / non-interactive mode (pi -p / opencode run with prompt injected)
   --msb           Use microsandbox (msb) microVM if available (falls back to tmp with warning if missing)
   --tmp           Force tmpdir isolation even if msb is installed (default when msb missing)
   --force         Overwrite existing model dir if it already has content (otherwise reuses it)
@@ -51,10 +57,11 @@ Options:
 Examples:
   rubrics/run-rubric.sh minecraft-clone                          # enumerate models
   rubrics/run-rubric.sh --list                                   # list all tests
-  rubrics/run-rubric.sh minecraft-clone my-model -- opencode
-  rubrics/run-rubric.sh minecraft-clone my-model -- pi -p "Build per ../prompt.md"
-  rubrics/run-rubric.sh minecraft-clone my-model --harness pi    # auto: pi reads ../prompt.md
-  rubrics/run-rubric.sh minecraft-clone my-model --harness opencode --msb
+  rubrics/run-rubric.sh minecraft-clone my-model --harness pi    # interactive pi in isolated stage
+  rubrics/run-rubric.sh minecraft-clone my-model --harness opencode  # interactive opencode
+  rubrics/run-rubric.sh minecraft-clone my-model --harness pi --headless  # headless pi -p
+  rubrics/run-rubric.sh minecraft-clone my-model -- pi --approve "Build per ../prompt.md"
+  rubrics/run-rubric.sh minecraft-clone --all --harness pi       # interactive for each model (sequential)
   rubrics/run-rubric.sh minecraft-clone --all -- echo "hello"   # run for every model
 
 Isolation guarantee:
@@ -85,15 +92,13 @@ list_models() {
     local m
     m="$(basename "$d")"
     [[ "$m" == "_template" ]] && continue
-    # only dirs that look like a model (has index.html or AGENTS.md or is a dir)
-    if [[ -f "$d/index.html" || -f "$d/AGENTS.md" || -d "$d" ]]; then
-      echo "  - $m  ($d)"
-      found=1
-    fi
+    echo "  - $m  ($d)"
+    found=1
   done
   if [[ "$found" == "0" ]]; then
     echo "  (none — only _template exists)"
-    echo "  Create one with: rubrics/run-rubric.sh $test my-model"
+    echo "  Create one with: rubrics/run-rubric.sh $test <model-name> --harness pi"
+    echo "               or: rubrics/run-rubric.sh $test <model-name> --harness opencode"
   fi
 }
 
@@ -103,6 +108,8 @@ MODE="auto"
 FORCE="0"
 MSB_IMAGE="debian:bookworm-slim"
 HARNESS=""
+HEADLESS="0"
+INTERACTIVE_FLAG="0"
 LIST="0"
 ALL="0"
 
@@ -114,6 +121,8 @@ while [[ $# -gt 0 ]]; do
     --harness) HARNESS="$2"; shift 2 ;;
     --pi) HARNESS="pi"; shift ;;
     --opencode) HARNESS="opencode"; shift ;;
+    --interactive) INTERACTIVE_FLAG="1"; HEADLESS="0"; shift ;;
+    --headless) HEADLESS="1"; INTERACTIVE_FLAG="0"; shift ;;
     --msb) MODE="msb"; shift ;;
     --tmp) MODE="tmp"; shift ;;
     --force) FORCE="1"; shift ;;
@@ -132,7 +141,20 @@ done
 
 AGENT_CMD=("$@") # may be empty
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Robust ROOT detection: works whether invoked as rubrics/run-rubric.sh (from repo root),
+# ./run-rubric.sh (from rubrics/), or via absolute path / symlink.
+SCRIPT_SRC="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_SRC")" && pwd)"
+# script lives in rubrics/ or scripts/ — ROOT is its parent; if script is at repo root, ROOT is SCRIPT_DIR
+if [[ "$(basename "$SCRIPT_DIR")" == "rubrics" || "$(basename "$SCRIPT_DIR")" == "scripts" ]]; then
+  ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+else
+  ROOT="$SCRIPT_DIR"
+  # fall back to git top-level if we guessed wrong and rubrics/ not found
+  if [[ ! -d "$ROOT/rubrics" ]] && git rev-parse --show-toplevel >/dev/null 2>&1; then
+    ROOT="$(git rev-parse --show-toplevel)"
+  fi
+fi
 
 # --list with no test: list all tests + models
 if [[ "$LIST" == "1" && -z "$TEST" ]]; then
@@ -196,8 +218,9 @@ if [[ -z "$MODEL" ]]; then
       [[ "$MODE" != "auto" ]] && extra+=("--$MODE")
       [[ "$FORCE" == "1" ]] && extra+=("--force")
       [[ -n "$HARNESS" ]] && extra+=("--harness" "$HARNESS")
+      [[ "$HEADLESS" == "1" ]] && extra+=("--headless")
+      [[ "$INTERACTIVE_FLAG" == "1" ]] && extra+=("--interactive")
       [[ "$MSB_IMAGE" != "debian:bookworm-slim" ]] && extra+=("--image" "$MSB_IMAGE")
-      # Use safe expansion for set -u with empty arrays
       if ! "$0" "$TEST" "$m" ${extra[@]:+"${extra[@]}"} -- ${AGENT_CMD[@]:+"${AGENT_CMD[@]}"}; then
         echo "✗ failed: $m" >&2
         failures=$((failures+1))
@@ -216,6 +239,8 @@ if [[ -z "$MODEL" ]]; then
   if [[ "$LIST" == "1" ]]; then exit 0; fi
   echo ""
   echo "Tip: run a model isolated: rubrics/run-rubric.sh $TEST <model> -- <agent command>"
+  echo "     interactive: rubrics/run-rubric.sh $TEST <model> --harness pi"
+  echo "     headless:    rubrics/run-rubric.sh $TEST <model> --harness pi --headless"
   echo "     or stage without running: rubrics/run-rubric.sh $TEST <model>"
   echo "     or run for all: rubrics/run-rubric.sh $TEST --all -- <agent command>"
   exit 0
@@ -247,31 +272,66 @@ if [[ ! -d "$TEMPLATE_DIR" ]]; then
 fi
 
 # If harness requested and no explicit command, build one
+# Supports harness:model — e.g. pi:provider/model  or  opencode:provider/model
+# Default is interactive (headless only with --headless).
 if [[ -n "$HARNESS" && ${#AGENT_CMD[@]} -eq 0 ]]; then
-  case "$HARNESS" in
+  harness_name="${HARNESS%%:*}"
+  harness_model="${HARNESS#*:}"
+  if [[ "$harness_model" == "$HARNESS" ]]; then harness_model=""; fi
+  case "$harness_name" in
     pi)
-      # pi: non-interactive, prompt injected via file. Works both in tmp and msb (prompt is at ../prompt.md in staged view)
-      # Use: pi -p --append-system-prompt "$(cat ../prompt.md)"  or pi @prompt
-      # We prefer reading prompt.md inside the model dir's parent
-      AGENT_CMD=(pi -p "$(cat "$PROMPT_FILE")")
-      echo "→ harness=pi: ${AGENT_CMD[*]:0:80}..." >&2
+      if [[ "$HEADLESS" == "1" ]]; then
+        if [[ -n "$harness_model" ]]; then
+          AGENT_CMD=(pi --approve --model "$harness_model" -p "$(cat "$PROMPT_FILE")")
+        else
+          AGENT_CMD=(pi --approve -p "$(cat "$PROMPT_FILE")")
+        fi
+        echo "→ harness=pi${harness_model:+:$harness_model} (headless): ${AGENT_CMD[*]:0:120}..." >&2
+      else
+        # Interactive: launch pi with prompt as initial message (no -p), stays in TUI
+        if [[ -n "$harness_model" ]]; then
+          AGENT_CMD=(pi --approve --model "$harness_model" "$(cat "$PROMPT_FILE")")
+        else
+          AGENT_CMD=(pi --approve "$(cat "$PROMPT_FILE")")
+        fi
+        echo "→ harness=pi${harness_model:+:$harness_model} (interactive): ${AGENT_CMD[*]:0:120}..." >&2
+      fi
       ;;
     opencode)
-      # opencode: opencode run with prompt as message. Use --prompt for larger prompts if needed
-      AGENT_CMD=(opencode run "$(cat "$PROMPT_FILE")")
-      echo "→ harness=opencode: ${AGENT_CMD[*]:0:80}..." >&2
+      if [[ "$HEADLESS" == "1" ]]; then
+        if [[ -n "$harness_model" ]]; then
+          AGENT_CMD=(opencode --auto -m "$harness_model" run "$(cat "$PROMPT_FILE")")
+        else
+          AGENT_CMD=(opencode --auto run "$(cat "$PROMPT_FILE")")
+        fi
+        echo "→ harness=opencode${harness_model:+:$harness_model} (headless): ${AGENT_CMD[*]:0:120}..." >&2
+      else
+        # Interactive opencode: TUI in the staged model dir. Prompt is on disk at ./prompt.md; also passed as initial message via --prompt if supported.
+        # We use `opencode --prompt` when model is specified, otherwise plain `opencode` — both keep TUI interactive.
+        # Fallback: if --prompt not supported, the agent will read ./prompt.md per AGENTS.md.
+        if [[ -n "$harness_model" ]]; then
+          AGENT_CMD=(opencode -m "$harness_model" --prompt "$(cat "$PROMPT_FILE")")
+        else
+          AGENT_CMD=(opencode --prompt "$(cat "$PROMPT_FILE")")
+        fi
+        # If --prompt fails (older opencode), it will error; user can retry with `opencode` + manual paste.
+        echo "→ harness=opencode${harness_model:+:$harness_model} (interactive): ${AGENT_CMD[*]:0:120}..." >&2
+        echo "  (if --prompt unsupported, run 'opencode' and paste prompt.md manually)" >&2
+      fi
       ;;
     *)
-      echo "error: unknown harness: $HARNESS (expected pi|opencode)" >&2
+      echo "error: unknown harness: $HARNESS (expected pi|opencode[:model])" >&2
       exit 1
       ;;
   esac
 fi
 
-# Also support --harness with explicit command: harness wraps the command
-# (if both harness and cmd given, we ignore harness — user gave explicit cmd)
+# Decide mode — interactive sessions should not use msb (no TTY in VM); force tmp
+if [[ -n "$HARNESS" && "$HEADLESS" == "0" && "$MODE" == "msb" ]]; then
+  echo "warn: interactive harness with --msb is not TTY-capable; falling back to --tmp" >&2
+  MODE="tmp"
+fi
 
-# Decide mode
 HAS_MSB="0"
 if command -v msb >/dev/null 2>&1; then HAS_MSB="1"; fi
 
@@ -310,7 +370,6 @@ fi
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/rubric-${TEST}-XXXX")"
 # shellcheck disable=SC2064
 trap "echo '→ stage at $STAGE (will be synced back on success)'; " EXIT
-# We trap INT/TERM to cleanup? Keep stage on failure for inspection
 cleanup_stage() { :; }
 mkdir -p "$STAGE/rubrics/$TEST/$MODEL"
 
@@ -323,6 +382,13 @@ if [[ -d "$TEMPLATE_DIR" ]]; then
 fi
 # Copy current model content into stage (this is the only sibling visible)
 cp -R "$MODEL_DIR/." "$STAGE/rubrics/$TEST/$MODEL/"
+# Also make prompt/rubric available *inside* the model dir so the agent
+# doesn't need external_directory permission to read ../prompt.md.
+cp "$PROMPT_FILE" "$STAGE/rubrics/$TEST/$MODEL/prompt.md"
+cp "$PROMPT_FILE" "$STAGE/rubrics/$TEST/$MODEL/PROMPT.md"
+if [[ -f "$RUBRIC_FILE" ]]; then
+  cp "$RUBRIC_FILE" "$STAGE/rubrics/$TEST/$MODEL/rubric.md"
+fi
 
 # Common: show what the agent will see
 echo "→ isolated view contains:"
@@ -335,20 +401,26 @@ if [[ ${#AGENT_CMD[@]} -eq 0 ]]; then
 
 Staged. No agent command given — nothing executed yet.
 
-Next steps (pick one):
+Next steps (pick one — interactive is recommended; headless often hangs):
 
-  # Run opencode scoped to the isolated model:
-  (cd "$STAGE/rubrics/$TEST/$MODEL" && opencode run "Build per ../prompt.md — see AGENTS.md. Work only in this folder. Output index.html here.")
+  # Interactive pi (staged, isolated):
+  (cd "$STAGE/rubrics/$TEST/$MODEL" && pi --approve "\$(cat prompt.md)")
 
-  # Or pi (harness):
-  (cd "$STAGE/rubrics/$TEST/$MODEL" && pi -p "\$(cat ../prompt.md)")
+  # Interactive opencode:
+  (cd "$STAGE/rubrics/$TEST/$MODEL" && opencode)
 
   # Or re-run via harness flag (auto-reads prompt.md):
-  rubrics/run-rubric.sh $TEST $MODEL --harness pi
-  rubrics/run-rubric.sh $TEST $MODEL --harness opencode
+  rubrics/run-rubric.sh $TEST $MODEL --harness pi              # interactive
+  rubrics/run-rubric.sh $TEST $MODEL --harness pi --headless   # headless (pi -p)
+  rubrics/run-rubric.sh $TEST $MODEL --harness opencode        # interactive
+  rubrics/run-rubric.sh $TEST $MODEL --harness opencode --headless
+
+  # Explicit headless:
+  (cd "$STAGE/rubrics/$TEST/$MODEL" && pi --approve -p "\$(cat prompt.md)")
+  (cd "$STAGE/rubrics/$TEST/$MODEL" && opencode --auto run "\$(cat prompt.md)")
 
 Then sync back:
-  rsync -a --delete "$STAGE/rubrics/$TEST/$MODEL/" "$MODEL_DIR/"
+  rsync -a --delete --exclude='prompt.md' --exclude='PROMPT.md' --exclude='rubric.md' "$STAGE/rubrics/$TEST/$MODEL/" "$MODEL_DIR/"
 
 Or re-run this script with -- <agent command> to do it in one step.
 
@@ -360,7 +432,7 @@ MSG
 fi
 
 echo "→ agent command: ${AGENT_CMD[*]}"
-echo "→ mode: $MODE (harness=${HARNESS:-none})"
+echo "→ mode: $MODE (harness=${HARNESS:-none} headless=$HEADLESS)"
 
 run_in_tmp() {
   echo "→ running in tmp isolation (no siblings mounted)"
@@ -370,10 +442,7 @@ run_in_tmp() {
 run_in_msb() {
   local workdir="/workspace/rubrics/$TEST/$MODEL"
   echo "→ running in microsandbox (image: $MSB_IMAGE, workdir: $workdir)"
-  # Mount stage as /workspace. Mount host agent binaries if available so the VM can run them.
   local vol_args=(--volume "$STAGE:/workspace:rw" --workdir "$workdir")
-  # Try to make opencode/pi available inside the VM by volume-mounting the host binaries
-  # (works if the image has compatible libs; otherwise use an image that already has your agent)
   local oc_bin pi_bin
   oc_bin="$(command -v opencode 2>/dev/null || true)"
   pi_bin="$(command -v pi 2>/dev/null || true)"
@@ -385,15 +454,11 @@ run_in_msb() {
     vol_args+=(--volume "$pi_bin:/usr/local/bin/pi:ro")
     echo "→ mounting host pi: $pi_bin"
   fi
-  # Also mount HOME configs for auth if they exist (so agent can find credentials)
-  # Microsandbox supports secrets via --secret; we mount configs as fallback with warning.
-  # Only mount if the user explicitly allows — here we do a read-only mount of opencode config dir.
   if [[ -d "$HOME/.config/opencode" ]]; then
     vol_args+=(--volume "$HOME/.config/opencode:/root/.config/opencode:ro")
   fi
   # shellcheck disable=SC2145
   echo "→ msb run ${vol_args[*]} $MSB_IMAGE -- bash -lc \"${AGENT_CMD[*]}\""
-  # Use --rm semantics via msb run (one-shot). If msb not available this branch is not taken.
   msb run "${vol_args[@]}" "$MSB_IMAGE" -- bash -lc "${AGENT_CMD[*]}"
 }
 
@@ -402,7 +467,6 @@ set +e
 if [[ "$MODE" == "msb" ]]; then
   run_in_msb
   RC=$?
-  # Fallback: if msb failed because image missing or binary not executable, try tmp
   if [[ $RC -ne 0 ]]; then
     echo "warn: msb run failed (rc=$RC). Try: msb pull $MSB_IMAGE, or use --tmp" >&2
     echo "warn: retrying in tmp isolation" >&2
@@ -422,13 +486,13 @@ if [[ $RC -ne 0 ]]; then
 fi
 
 echo "→ agent finished. Syncing back to $MODEL_DIR"
-# Use rsync if available, else cp
 if command -v rsync >/dev/null 2>&1; then
-  rsync -a --delete "$STAGE/rubrics/$TEST/$MODEL/" "$MODEL_DIR/"
+  rsync -a --delete --exclude='prompt.md' --exclude='PROMPT.md' --exclude='rubric.md' "$STAGE/rubrics/$TEST/$MODEL/" "$MODEL_DIR/"
 else
   rm -rf "$MODEL_DIR"
   mkdir -p "$MODEL_DIR"
   cp -R "$STAGE/rubrics/$TEST/$MODEL/." "$MODEL_DIR/"
+  rm -f "$MODEL_DIR/prompt.md" "$MODEL_DIR/PROMPT.md" "$MODEL_DIR/rubric.md"
 fi
 
 echo "→ verifying file:// safety (no type=module / importmap in html/js)"
@@ -443,5 +507,4 @@ echo "→ done. Preview: open $MODEL_DIR/index.html (double-click, no server)"
 echo "→ to grade: open rubrics/$TEST/rubric.md and play the demo 2 min"
 echo "→ stage can be removed: rm -rf $STAGE"
 trap - EXIT
-# Remove stage on success (keep if you want audit trail — comment out next line to preserve)
 rm -rf "$STAGE"
