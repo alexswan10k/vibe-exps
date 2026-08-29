@@ -50,16 +50,8 @@ let a = bike(0, 0, 200, 0),
     b = bike(14, 0, -200, 0, true);
 Game.prototype.resolveContacts.call(game([a, b]));
 ck(a.vx < 0 && b.vx > 0, "head-on must separate", a.vx, b.vx);
-ck(
-    Math.hypot(b.x - a.x, b.y - a.y) > 21.9,
-    "overlap must clear",
-    b.x - a.x,
-);
-ck(
-    near(b.forwardSpeed, b.vx),
-    "forwardSpeed resynced",
-    b.forwardSpeed,
-);
+ck(Math.hypot(b.x - a.x, b.y - a.y) > 21.9, "overlap must clear", b.x - a.x);
+ck(near(b.forwardSpeed, b.vx), "forwardSpeed resynced", b.forwardSpeed);
 
 // 2. rear-end: faster follower slows, target speeds up, no bounce-through
 a = bike(0, 0, 250, 0);
@@ -77,12 +69,7 @@ ck(b.y <= 18, "no shove into wall", b.y);
 a = bike(0, 0, 200, 0, false, 30);
 b = bike(5, 0, 0, 0, true);
 Game.prototype.resolveContacts.call(game([a, b]));
-ck(
-    a.vx === 200 && b.vx === 0 && b.x === 5,
-    "airborne passes over",
-    a.vx,
-    b.x,
-);
+ck(a.vx === 200 && b.vx === 0 && b.x === 5, "airborne passes over", a.vx, b.x);
 
 // 5. side-by-side at equal speed: no jitter
 a = bike(0, 0, 200, 0);

@@ -382,7 +382,7 @@ class Game {
             }
             case "trick":
                 this.addFloatText(
-                    bike.isPlayer ? "360 AIR! +BOOST" : "TRICK!",
+                    bike.isPlayer ? "BIG SPIN! +BOOST" : "SPIN!",
                     bike.x,
                     bike.y - 24,
                     "#ffeb3b",

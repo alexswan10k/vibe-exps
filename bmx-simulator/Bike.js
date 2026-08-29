@@ -16,6 +16,12 @@ class Bike {
         this.gripAir = 1.7;
         this.gravity = 1500;
         this.hopVz = 330;
+        // Whip authority in the air. A rider spins a real 360 at roughly 12 rad/s,
+        // so unloaded the bike rotates far faster than ground steering allows.
+        // Measured reachable whip: flat hop 2.7 rad, lip launch 3.7, fast-lip
+        // hop 4.5 — trickSpin sits between a casual hop and a committed lip.
+        this.airSpin = 1.9; // multiplier on ground turn rate while airborne
+        this.trickSpin = 3.4; // rad of whip that pays out the landing boost
         this.speedScale = 1;
 
         this.vx = 0;
@@ -191,14 +197,14 @@ class Bike {
 
         const dirScale = vF < -5 ? -1 : 1;
         const steerFactor = MathUtils.clamp(Math.abs(vF) / 130, 0, 1);
-        const airFactor = grounded ? 1 : 0.38;
+        const airFactor = grounded ? 1 : this.airSpin;
         const effTurn = this.turnRate * steerFactor * airFactor * dirScale;
         const dHeading = ctrl.turn * effTurn * dt;
         this.angle += dHeading;
 
         if (!grounded) {
             this.spinAccum += Math.abs(dHeading);
-            if (this.spinAccum > 5.3 && !this.trickCounted) {
+            if (this.spinAccum > this.trickSpin && !this.trickCounted) {
                 this.pendingTrick = true;
                 this.trickCounted = true;
             }
