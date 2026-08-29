@@ -7,6 +7,17 @@ vm.runInThisContext(
 );
 const Game = globalThis.__Game;
 
+const fails = [];
+const ck = (ok, msg, got) => {
+    if (!ok) fails.push(msg + " -> " + got);
+};
+process.on("exit", () => {
+    if (fails.length) {
+        process.stderr.write("FAIL\n" + fails.join("\n") + "\n");
+        process.exitCode = 1;
+    } else process.stdout.write("ok\n");
+});
+
 function bike(x, y, vx, vy, isPlayer = false, air = 0) {
     return {
         x,
@@ -38,13 +49,13 @@ const near = (a, b) => Math.abs(a - b) < 1e-6;
 let a = bike(0, 0, 200, 0),
     b = bike(14, 0, -200, 0, true);
 Game.prototype.resolveContacts.call(game([a, b]));
-console.assert(a.vx < 0 && b.vx > 0, "head-on must separate", a.vx, b.vx);
-console.assert(
+ck(a.vx < 0 && b.vx > 0, "head-on must separate", a.vx, b.vx);
+ck(
     Math.hypot(b.x - a.x, b.y - a.y) > 21.9,
     "overlap must clear",
     b.x - a.x,
 );
-console.assert(
+ck(
     near(b.forwardSpeed, b.vx),
     "forwardSpeed resynced",
     b.forwardSpeed,
@@ -54,19 +65,19 @@ console.assert(
 a = bike(0, 0, 250, 0);
 b = bike(18, 0, 60, 0, true);
 Game.prototype.resolveContacts.call(game([a, b]));
-console.assert(a.vx < 250 && b.vx > 60, "momentum transfers", a.vx, b.vx);
+ck(a.vx < 250 && b.vx > 60, "momentum transfers", a.vx, b.vx);
 
 // 3. wall side: the bike next to the wall is not shoved into it
 a = bike(0, 0, 0, 100);
 b = bike(0, 12, 0, -100, true);
 Game.prototype.resolveContacts.call(game([a, b], (_x, y) => y > 18));
-console.assert(b.y <= 18, "no shove into wall", b.y);
+ck(b.y <= 18, "no shove into wall", b.y);
 
 // 4. hopping over a rival: no contact while airborne
 a = bike(0, 0, 200, 0, false, 30);
 b = bike(5, 0, 0, 0, true);
 Game.prototype.resolveContacts.call(game([a, b]));
-console.assert(
+ck(
     a.vx === 200 && b.vx === 0 && b.x === 5,
     "airborne passes over",
     a.vx,
@@ -77,4 +88,4 @@ console.assert(
 a = bike(0, 0, 200, 0);
 b = bike(21, 0, 200, 0, true);
 Game.prototype.resolveContacts.call(game([a, b]));
-console.assert(a.vx === 200 && b.vx === 200, "no phantom drag", a.vx, b.vx);
+ck(a.vx === 200 && b.vx === 200, "no phantom drag", a.vx, b.vx);
