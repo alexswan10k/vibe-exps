@@ -519,12 +519,43 @@
       </button>
     </div>
 
-    <a href="rubrics/index.html" class="rubrics-banner" aria-label="Test Rubrics — model evaluation harness">
+    <a
+      href="rubrics/index.html"
+      class="rubrics-banner"
+      aria-label="Test Rubrics — model evaluation harness"
+    >
       <div class="rubrics-banner-inner">
         <div class="rubrics-banner-icon">🧪</div>
         <div class="rubrics-banner-text">
-          <h2>Test Rubrics <span style="font-size:0.72em;font-weight:600;background:rgba(125,211,252,.18);color:#7dd3fc;padding:2px 8px;border-radius:999px;border:1px solid rgba(125,211,252,.3)">NEW</span></h2>
-          <p>Model-vs-model evaluation harness — one prompt → N sandboxes. Browse tests, compare demos, score with the rubric. Everything runs via <code style="background:rgba(255,255,255,.12);padding:1px 5px;border-radius:4px;font-size:.9em">file://</code> with no build step.</p>
+          <h2>
+            Test Rubrics
+            <span
+              style="
+                font-size: 0.72em;
+                font-weight: 600;
+                background: rgba(125, 211, 252, 0.18);
+                color: #7dd3fc;
+                padding: 2px 8px;
+                border-radius: 999px;
+                border: 1px solid rgba(125, 211, 252, 0.3);
+              "
+              >NEW</span
+            >
+          </h2>
+          <p>
+            Model-vs-model evaluation harness — one prompt → N sandboxes. Browse
+            tests, compare demos, score with the rubric. Everything runs via
+            <code
+              style="
+                background: rgba(255, 255, 255, 0.12);
+                padding: 1px 5px;
+                border-radius: 4px;
+                font-size: 0.9em;
+              "
+              >file://</code
+            >
+            with no build step.
+          </p>
         </div>
         <div class="rubrics-banner-arrow">→</div>
       </div>
@@ -644,11 +675,7 @@
         </p>
       </a>
 
-      <a
-        href="drone-sim/index.html"
-        class="project-card"
-        data-category="games"
-      >
+      <a href="drone-sim/index.html" class="project-card" data-category="games">
         <h3>🚁 Drone Sim 3D</h3>
         <p>A realistic 3D drone flight simulator prototype with physics.</p>
       </a>
@@ -669,7 +696,9 @@
       >
         <h3>🏎️ 3D Car Driving Simulator</h3>
         <p>
-          High-performance 3D driving simulator with 4 vehicle classes, realistic drifting & nitro, stunt loops/ramps, smart AI traffic, procedural synthwave radio, dynamic weather & cockpit camera.
+          High-performance 3D driving simulator with 4 vehicle classes,
+          realistic drifting & nitro, stunt loops/ramps, smart AI traffic,
+          procedural synthwave radio, dynamic weather & cockpit camera.
         </p>
       </a>
 
@@ -756,7 +785,11 @@
         </p>
       </a>
 
-      <a href="alex-cv-v2/index.html" class="project-card" data-category="other">
+      <a
+        href="alex-cv-v2/index.html"
+        class="project-card"
+        data-category="other"
+      >
         <h3>✨ Alexander Swan CV v2</h3>
         <p>
           Premium glassmorphism CV — aurora starfield, interactive timeline,
@@ -915,8 +948,8 @@
       >
         <h3>🧜 Mermaid Studio</h3>
         <p>
-          Visual editors for flowcharts, sequence diagrams, gantt timelines
-          and pie charts — drag everything, always in sync with Mermaid code.
+          Visual editors for flowcharts, sequence diagrams, gantt timelines and
+          pie charts — drag everything, always in sync with Mermaid code.
         </p>
       </a>
 
@@ -1152,8 +1185,11 @@
         class="project-card"
         data-category="games"
       >
-        <h3>🚗 2D Car Sandbox</h3>
-        <p>Physics sandbox and car simulator with crate spawning.</p>
+        <h3>🏜️ Dust Runner — 2D Hill Racer</h3>
+        <p>
+          Suspension-physics hill racer: nitro, flips, smashable crates,
+          day/night. Zero dependencies.
+        </p>
       </a>
 
       <a
@@ -1262,7 +1298,9 @@
       >
         <h3>🎤 SpeechCards</h3>
         <p>
-          Offline speech memorization flashcards tool. Supports rich text and image pasting, touch/mouse swiping, word hiding, first-letters aid, and WPM timing.
+          Offline speech memorization flashcards tool. Supports rich text and
+          image pasting, touch/mouse swiping, word hiding, first-letters aid,
+          and WPM timing.
         </p>
       </a>
     </div>
@@ -1378,7 +1416,7 @@
         "puzzle-platformer": 1137,
         "htm-prototype": 1990,
         "algorithm-visualizer": 586,
-        "car-simulator-2d": 493,
+        "car-simulator-2d": 1082,
         "tower-defense": 1140,
         "dicom-tag-explorer.html": 382,
         "dicom-viewer.html": 317,
@@ -1397,7 +1435,7 @@
         "stock-research/rio-tinto.html": 139,
         "stock-research/bp.html": 130,
         "stock-research": 102,
-        "speechcards": 2270,
+        speechcards: 2270,
       };
 
       function getComplexityLevel(loc) {
@@ -1428,7 +1466,7 @@
             const complexity = getComplexityLevel(loc);
             const badge = document.createElement("div");
             badge.className = "complexity-badge";
-            badge.innerHTML = `${complexity.icon} ${loc} LOC`;
+            badge.textContent = `${complexity.icon} ${loc} LOC`;
             badge.style.cssText = `
                         position: absolute;
                         bottom: 10px;
