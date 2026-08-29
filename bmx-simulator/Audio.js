@@ -102,6 +102,11 @@ class Sfx {
         this.playTone(130, 0.28, 'sine', 0.35, 45);
     }
 
+    bump() {
+        this.playNoise(0.08, 600, 0.2);
+        this.playTone(180, 0.07, 'square', 0.1, 90);
+    }
+
     land() {
         this.playNoise(0.12, 420, 0.22);
         this.playTone(90, 0.12, 'sine', 0.2, 55);

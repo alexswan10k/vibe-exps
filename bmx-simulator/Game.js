@@ -15,6 +15,8 @@ class Game {
         this.bestLapDisplay = document.getElementById('bestlap-display');
         this.trackNameDisplay = document.getElementById('track-name');
         this.crashOverlay = document.getElementById('crash-overlay');
+        this.wrongWayOverlay = document.getElementById('wrongway-overlay');
+        this.wrongWayT = 0;
         this.messageOverlay = document.getElementById('message-overlay');
         this.resultsPanel = document.getElementById('results');
         this.resultsRows = document.getElementById('results-rows');
@@ -111,13 +113,13 @@ class Game {
         try {
             const v = localStorage.getItem(`urbnbmx_best_${name}`);
             return v ? parseFloat(v) : null;
-        } catch (e) { return null; }
+        } catch { return null; }
     }
 
     saveBest(name, t) {
         try {
             localStorage.setItem(`urbnbmx_best_${name}`, String(t));
-        } catch (e) { }
+        } catch { }
     }
 
     startGame(index) {
@@ -197,6 +199,8 @@ class Game {
         this.shake = 0;
         this.messageOverlay.style.display = 'none';
         this.crashOverlay.style.display = 'none';
+        this.wrongWayT = 0;
+        if (this.wrongWayOverlay) this.wrongWayOverlay.style.display = 'none';
         this.hideResults();
         this.trackNameDisplay.innerText = this.track.name;
         this.buildMinimapBg();
@@ -280,13 +284,23 @@ class Game {
                 this.particles.burst(bike.x, bike.y, 6, 60, { size: 3.5, life: 0.4, color: '#8a8578', drag: 4 });
                 break;
             case 'launch':
-                this.launchCount = (this.launchCount || 0) + 1;
                 if (bike.isPlayer) {
                     this.audio.whoosh();
                     if (d.power > 240) {
                         this.addFloatText('BIG AIR!', bike.x, bike.y - 26, '#7CFC00', 22);
                     }
                     this.shake = Math.max(this.shake, 4);
+                }
+                break;
+            case 'bump':
+                this.particles.burst(d.x, d.y, 5, 120, { size: 3, life: 0.35, color: '#d8d3c6', drag: 5 });
+                if (bike.isPlayer) {
+                    this.shake = Math.max(this.shake, Math.min(6, d.power * 0.02));
+                    const now = performance.now();
+                    if (now - (this.lastBumpSfx || 0) > 140) {
+                        this.lastBumpSfx = now;
+                        this.audio.bump();
+                    }
                 }
                 break;
             case 'land': {
@@ -384,7 +398,8 @@ class Game {
             let thrust = 0;
             let turn = 0;
             if (racing) {
-                thrust = Input.isUp() ? 1 : (Input.isDown() ? -1 : 0);
+                if (Input.isUp()) thrust = 1;
+                else if (Input.isDown()) thrust = -1;
                 if (Input.isLeft()) turn = -1;
                 if (Input.isRight()) turn = 1;
             }
@@ -402,7 +417,9 @@ class Game {
             }
         }
 
+        this.resolveContacts();
         this.checkWaypointsAndLaps();
+        this.updateWrongWay(dt);
         this.updateHUD();
 
         if (this.state === 'finished') {
@@ -410,11 +427,80 @@ class Game {
             if (this.resultsPanel.style.display === 'block' && Math.floor(this.postRaceTimer * 2) !== Math.floor((this.postRaceTimer - dt) * 2)) {
                 this.buildResults();
             }
+            if (Input.consume('respawn')) {
+                this.loadTrack(this.currentTrackIndex);
+                return;
+            }
             if ((this.postRaceTimer > 8 || Input.consume('confirm')) ) {
                 this.hideResults();
                 this.loadTrack(this.currentTrackIndex + 1);
             }
         }
+    }
+
+    // Bikes are solid to each other: push out of overlap and trade momentum along
+    // the contact normal. You can hop over a rival, but not ride through one.
+    resolveContacts() {
+        const bikes = this.bikes;
+        const R = 22;
+        for (let i = 0; i < bikes.length; i++) {
+            for (let j = i + 1; j < bikes.length; j++) {
+                const a = bikes[i];
+                const b = bikes[j];
+                if (a.air > 10 || b.air > 10) continue;
+                const dx = b.x - a.x;
+                const dy = b.y - a.y;
+                const d = Math.hypot(dx, dy);
+                if (d >= R || d < 0.001) continue;
+                const nx = dx / d;
+                const ny = dy / d;
+                const closing = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+                if (closing > 0) {
+                    const imp = closing * 0.65;
+                    a.vx -= nx * imp;
+                    a.vy -= ny * imp;
+                    b.vx += nx * imp;
+                    b.vy += ny * imp;
+                    a.syncVelocities();
+                    b.syncVelocities();
+                }
+                const push = (R - d) * 0.5;
+                this.nudge(a, -nx * push, -ny * push);
+                this.nudge(b, nx * push, ny * push);
+                if (closing > 70) {
+                    const hit = a.isPlayer ? a : b;
+                    this.onBikeEvent(hit, 'bump', { x: hit.x, y: hit.y, power: closing });
+                }
+            }
+        }
+    }
+
+    nudge(bike, ox, oy) {
+        const x = bike.x + ox;
+        const y = bike.y + oy;
+        if (!this.world.isBlocked(x, y)) {
+            bike.x = x;
+            bike.y = y;
+        }
+    }
+
+    updateWrongWay(dt) {
+        const el = this.wrongWayOverlay;
+        if (!el) return;
+        const p = this.playerBike;
+        if (this.state !== 'racing' || !p || p.state === 'crashed') {
+            this.wrongWayT = 0;
+            el.style.display = 'none';
+            return;
+        }
+        const wp = this.track.waypoints[p.currentWaypoint];
+        const gx = wp.x - p.x;
+        const gy = wp.y - p.y;
+        const spd = Math.hypot(p.vx, p.vy);
+        const dist = Math.hypot(gx, gy);
+        const drivingAway = spd > 45 && (p.vx * gx + p.vy * gy) < -0.5 * spd * dist;
+        this.wrongWayT = drivingAway ? this.wrongWayT + dt : 0;
+        el.style.display = this.wrongWayT > 1 ? 'block' : 'none';
     }
 
     checkWaypointsAndLaps() {
@@ -503,7 +589,7 @@ class Game {
 
         standings.forEach((bike, i) => {
             const row = document.createElement('div');
-            row.className = 'result-row' + (bike.isPlayer ? ' you' : '');
+            row.className = `result-row${bike.isPlayer ? ' you' : ''}`;
             const pos = document.createElement('span');
             pos.className = 'res-pos';
             pos.innerText = `${i + 1}`;
@@ -528,10 +614,19 @@ class Game {
 
         const stats = document.createElement('div');
         stats.className = 'results-stats';
-        stats.innerHTML = `
-            <div><span class="stat-label">Total</span> ${MathUtils.formatTime(this.playerBike.finishTime || this.raceTimer)}</div>
-            <div><span class="stat-label">Last lap</span> ${MathUtils.formatTime(this.lastLap)}</div>
-            <div><span class="stat-label">Best lap</span> ${MathUtils.formatTime(this.bestLap)}</div>`;
+        const stat = (label, value) => {
+            const row = document.createElement('div');
+            const cap = document.createElement('span');
+            cap.className = 'stat-label';
+            cap.innerText = label;
+            row.append(cap, ` ${value}`);
+            return row;
+        };
+        stats.append(
+            stat('Total', MathUtils.formatTime(this.playerBike.finishTime || this.raceTimer)),
+            stat('Last lap', MathUtils.formatTime(this.lastLap)),
+            stat('Best lap', MathUtils.formatTime(this.bestLap))
+        );
         this.resultsRows.appendChild(stats);
         this.resultsPanel.style.display = 'flex';
     }

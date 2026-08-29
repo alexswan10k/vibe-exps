@@ -112,7 +112,8 @@ body {
     background: rgba(0, 0, 0, 0.5);
 }
 
-#crash-overlay {
+#crash-overlay,
+#wrongway-overlay {
     position: absolute;
     top: 42%;
     left: 50%;
@@ -124,6 +125,12 @@ body {
     pointer-events: none;
     z-index: 20;
     animation: blink 0.2s linear infinite;
+}
+
+#wrongway-overlay {
+    top: 30%;
+    color: #ffb300;
+    font-size: 34px;
 }
 
 #message-overlay {

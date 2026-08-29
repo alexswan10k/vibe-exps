@@ -64,6 +64,13 @@ class Bike {
         if (this.onEvent) this.onEvent(type, data || {});
     }
 
+    syncVelocities() {
+        const fx = Math.cos(this.angle);
+        const fy = Math.sin(this.angle);
+        this.forwardSpeed = this.vx * fx + this.vy * fy;
+        this.lateralSpeed = -this.vx * fy + this.vy * fx;
+    }
+
     respawn(track) {
         const wps = track.waypoints;
         const wp = wps[this.lastCheckpointIdx % wps.length];
