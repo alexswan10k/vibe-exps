@@ -69,6 +69,7 @@ class Game {
             z: 0,
             angle: 0,
             lateralSpeed: 0,
+            crossSlope: 0,
             color: "#b0bec5",
             state: "normal",
             isPlayer: false,
@@ -363,6 +364,25 @@ class Game {
                     if (now - (this.lastBumpSfx || 0) > 140) {
                         this.lastBumpSfx = now;
                         this.audio.bump();
+                    }
+                }
+                break;
+            case "scrape":
+                this.particles.burst(d.x, d.y, 4, 150, {
+                    size: 2.6,
+                    life: 0.3,
+                    color: "#ffd54a",
+                    drag: 6,
+                });
+                if (bike.isPlayer) {
+                    this.shake = Math.max(
+                        this.shake,
+                        Math.min(4, d.power * 0.012),
+                    );
+                    const t = performance.now();
+                    if (t - (this.lastScrapeSfx || 0) > 110) {
+                        this.lastScrapeSfx = t;
+                        this.audio.scrape();
                     }
                 }
                 break;

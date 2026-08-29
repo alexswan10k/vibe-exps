@@ -63,7 +63,10 @@ ck(
 );
 ck(lazy.spin < 0.01, "no bars, no spin", lazy.spin.toFixed(3));
 ck(!lazy.tricked, "big air alone is not a trick");
-ck(lip.rollSpeed < 250, `need speed headroom to see the boost (${lip.rollSpeed.toFixed(0)})`);
+ck(
+    lip.rollSpeed < 250,
+    `need speed headroom to see the boost (${lip.rollSpeed.toFixed(0)})`,
+);
 ck(lip.gain > 60, `landing boost applied (${lip.gain.toFixed(0)})`);
 ck(
     Math.abs(lazy.gain) < 1,

@@ -116,6 +116,11 @@ class Sfx {
         this.playTone(130, 0.28, "sine", 0.35, 45);
     }
 
+    scrape() {
+        this.playNoise(0.16, 1600, 0.14, "bandpass");
+        this.playTone(95, 0.1, "sawtooth", 0.05, 60);
+    }
+
     bump() {
         this.playNoise(0.08, 600, 0.2);
         this.playTone(180, 0.07, "square", 0.1, 90);

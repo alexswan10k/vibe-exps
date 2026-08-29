@@ -22,6 +22,15 @@ class Bike {
         // hop 4.5 — trickSpin sits between a casual hop and a committed lip.
         this.airSpin = 1.9; // multiplier on ground turn rate while airborne
         this.trickSpin = 3.4; // rad of whip that pays out the landing boost
+        // Banked surface: the bike carves toward the low side of the slope and the
+        // corner grips up. These are feel knobs, the world never matches paper.
+        this.camber = 1.5; // rad/s of steering per unit of cross-slope
+        this.bankGrip = 1.3; // extra lateral grip at full bank (x gripGround)
+        this.bankMin = 0.12; // cross-slope below this reads as flat road
+        // Walls: a glancing graze deflects, a solid hit ends the lap.
+        this.wallCrashSin = 0.6; // ~37 deg to the wall face; past that you eat it
+        this.wallBounce = 0.4; // restitution off the wall face
+        this.wallScrape = 0.9; // speed kept along the wall after a graze
         this.speedScale = 1;
 
         this.vx = 0;
@@ -35,6 +44,7 @@ class Bike {
         this.launchCd = 0;
         this.lastSlope = 0;
         this.recentSlope = 0;
+        this.crossSlope = 0;
 
         this.currentLap = 0;
         this.lapsCompleted = -1;
@@ -162,6 +172,18 @@ class Bike {
             this.recentSlope * Math.exp(-5 * dt),
         );
 
+        // Slope across the bike: >0 means the (-fy, fx) side is the high side.
+        // A bank is only felt through this, never through absolute height.
+        let crossSlope = 0;
+        if (world) {
+            const half = 10;
+            crossSlope =
+                (world.groundAt(this.x - fy * half, this.y + fx * half) -
+                    world.groundAt(this.x + fy * half, this.y - fx * half)) /
+                (half * 2);
+        }
+        this.crossSlope = crossSlope;
+
         if (grounded) {
             if (ctrl.thrust > 0.05) {
                 const headroom = 1 - MathUtils.clamp(vF / maxEff, 0, 1) * 0.55;
@@ -210,8 +232,20 @@ class Bike {
             }
         }
 
-        const bermBoost = grounded && gHere > 6 ? 1.9 : 1;
-        const gripRate = grounded ? this.gripGround * bermBoost : this.gripAir;
+        const bank = MathUtils.clamp(
+            (Math.abs(crossSlope) - this.bankMin) / 0.5,
+            0,
+            1,
+        );
+        if (grounded && bank > 0) {
+            // The bank pulls the front wheel toward the low side of the corner.
+            this.angle -=
+                Math.sign(crossSlope) * this.camber * bank * steerFactor * dt;
+        }
+
+        const gripRate = grounded
+            ? this.gripGround * (1 + bank * this.bankGrip)
+            : this.gripAir;
         vL *= Math.exp(-gripRate * dt);
 
         const nfx = Math.cos(this.angle);
@@ -292,12 +326,7 @@ class Bike {
             this.air <= 0 &&
             world.isBlocked(this.x, this.y)
         ) {
-            this.crash();
-            const sp2 = Math.max(Math.hypot(this.vx, this.vy), 1);
-            this.x -= (this.vx / sp2) * 8;
-            this.y -= (this.vy / sp2) * 8;
-            this.vx *= 0.2;
-            this.vy *= 0.2;
+            this.hitWall(world);
         }
 
         if (grounded && Math.abs(vL) > 70 && Math.abs(vF) > 60) {
@@ -316,6 +345,76 @@ class Bike {
         }
 
         this.updateSkidMarks(dt);
+    }
+
+    // Grazing a wall at a shallow angle scrubs speed and throws you along it;
+    // only a hit steeper than wallCrashSin (about 35 deg to the face) crashes.
+    hitWall(world) {
+        const n = this.wallNormal(world);
+        const spd = Math.hypot(this.vx, this.vy);
+        const into = spd > 1 ? -(this.vx * n.x + this.vy * n.y) / spd : 1;
+        if (into > this.wallCrashSin) {
+            this.crash();
+            const sp2 = Math.max(spd, 1);
+            this.x -= (this.vx / sp2) * 8;
+            this.y -= (this.vy / sp2) * 8;
+            this.vx *= 0.2;
+            this.vy *= 0.2;
+            return;
+        }
+        const vn = this.vx * n.x + this.vy * n.y;
+        if (vn < 0) {
+            this.vx -= (1 + this.wallBounce) * vn * n.x;
+            this.vy -= (1 + this.wallBounce) * vn * n.y;
+        }
+        this.vx *= this.wallScrape;
+        this.vy *= this.wallScrape;
+        // The face redirects the bike as well as the velocity. Tested on the
+        // heading, not the velocity: if the bars still point into the wall, grip
+        // pulls the bike back onto it next frame and one corner becomes a scrape
+        // every frame until the run is dead.
+        if (Math.cos(this.angle) * n.x + Math.sin(this.angle) * n.y < 0) {
+            const face = Math.atan2(n.y, n.x);
+            const along =
+                Math.abs(MathUtils.angleDiff(face + Math.PI / 2, this.angle)) <
+                Math.abs(MathUtils.angleDiff(face - Math.PI / 2, this.angle))
+                    ? face + Math.PI / 2
+                    : face - Math.PI / 2;
+            // Snap to the face. Blending leaves a few degrees of heading still
+            // pointing into the wall, grip keeps steering into it, and the run dies
+            // one small scrape per frame.
+            this.angle = along;
+        }
+        this.syncVelocities();
+        for (let i = 0; i < 12 && world.isBlocked(this.x, this.y); i++) {
+            this.x += n.x * 3;
+            this.y += n.y * 3;
+        }
+        this.emit("scrape", { power: Math.abs(vn), x: this.x, y: this.y });
+    }
+
+    // Unit vector out of the wall, from the blocked cells around the contact
+    // point. Two rings: on a shallow graze a single ring can read free space on
+    // every side and give no direction at all.
+    wallNormal(world) {
+        let gx = 0;
+        let gy = 0;
+        for (const r of [5, 11]) {
+            for (let k = 0; k < 8; k++) {
+                const a = (k / 8) * Math.PI * 2;
+                const ox = Math.cos(a) * r;
+                const oy = Math.sin(a) * r;
+                if (!world.isBlocked(this.x + ox, this.y + oy)) continue;
+                gx -= ox / r / r; // nearer blocked cells decide the face
+                gy -= oy / r / r;
+            }
+        }
+        const len = Math.hypot(gx, gy);
+        if (len < 1e-6) {
+            const sp = Math.max(Math.hypot(this.vx, this.vy), 1);
+            return { x: -this.vx / sp, y: -this.vy / sp }; // buried: back the way you came
+        }
+        return { x: gx / len, y: gy / len };
     }
 
     crash() {
@@ -402,7 +501,12 @@ class Bike {
             if (Math.floor(Date.now() / 110) % 2 === 0) ctx.globalAlpha = 0.45;
         }
 
-        const lean = MathUtils.clamp(this.lateralSpeed / 260, -1, 1);
+        // Lean with the surface: toward its low side, same way a rider does.
+        const lean = MathUtils.clamp(
+            this.lateralSpeed / 260 - this.crossSlope * 0.9,
+            -1,
+            1,
+        );
 
         ctx.fillStyle = "#0a0a0a";
         ctx.beginPath();
