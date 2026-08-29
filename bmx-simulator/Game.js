@@ -59,6 +59,21 @@ class Game {
         this.lapStartT = 0;
         this.lastLap = null;
         this.bestLap = null;
+        this.ghosts = {};
+        this.ghostData = null;
+        this.ghostRec = [];
+        this.ghostIdx = 0;
+        this.ghostBike = {
+            x: 0,
+            y: 0,
+            z: 0,
+            angle: 0,
+            lateralSpeed: 0,
+            crossSlope: 0,
+            color: "#b0bec5",
+            state: "normal",
+            isPlayer: false,
+        };
 
         this.resize();
         window.addEventListener("resize", () => this.resize());
@@ -212,6 +227,9 @@ class Game {
         this.lapStartT = 0;
         this.lastLap = null;
         this.bestLap = this.loadBest(this.track.name);
+        this.ghostData = this.ghosts[this.track.name] || null;
+        this.ghostRec = [];
+        this.ghostIdx = 0;
         this.shake = 0;
         this.messageOverlay.style.display = "none";
         this.crashOverlay.style.display = "none";
@@ -349,6 +367,25 @@ class Game {
                     }
                 }
                 break;
+            case "scrape":
+                this.particles.burst(d.x, d.y, 4, 150, {
+                    size: 2.6,
+                    life: 0.3,
+                    color: "#ffd54a",
+                    drag: 6,
+                });
+                if (bike.isPlayer) {
+                    this.shake = Math.max(
+                        this.shake,
+                        Math.min(4, d.power * 0.012),
+                    );
+                    const t = performance.now();
+                    if (t - (this.lastScrapeSfx || 0) > 110) {
+                        this.lastScrapeSfx = t;
+                        this.audio.scrape();
+                    }
+                }
+                break;
             case "land": {
                 this.particles.burst(bike.x, bike.y, 10, 90, {
                     size: 4,
@@ -365,7 +402,7 @@ class Game {
             }
             case "trick":
                 this.addFloatText(
-                    bike.isPlayer ? "360 AIR! +BOOST" : "TRICK!",
+                    bike.isPlayer ? "BIG SPIN! +BOOST" : "SPIN!",
                     bike.x,
                     bike.y - 24,
                     "#ffeb3b",
@@ -490,6 +527,8 @@ class Game {
             this.crashOverlay.style.display =
                 this.playerBike.state === "crashed" ? "block" : "none";
         }
+
+        if (racing) this.recordGhost();
 
         const playerProgress = this.playerBike ? this.playerBike.progress : 0;
         for (const ai of this.aiControllers) {
@@ -656,25 +695,86 @@ class Game {
         const p = this.playerBike;
         if (p.lapsCompleted === 0) {
             this.lapStartT = t;
+            this.ghostRec = [];
         } else {
             const lapTime = t - this.lapStartT;
+            const lapStart = this.lapStartT;
+            const beaten = this.ghostData;
             this.lastLap = lapTime;
             this.lapStartT = t;
             let isBest = false;
             if (this.bestLap == null || lapTime < this.bestLap) {
                 this.bestLap = lapTime;
                 this.saveBest(this.track.name, lapTime);
+                this.saveGhost(lapStart, lapTime);
                 isBest = true;
+            }
+            this.ghostRec = [];
+            let text = `${isBest ? "BEST LAP " : "LAP "}${MathUtils.formatTime(lapTime)}`;
+            if (beaten) {
+                const d = lapTime - beaten.lapTime;
+                text += `  ${d <= 0 ? "-" : "+"}${Math.abs(d).toFixed(2)}`;
             }
             this.audio.lap();
             this.addFloatText(
-                `${isBest ? "BEST LAP " : "LAP "}${MathUtils.formatTime(lapTime)}`,
+                text,
                 p.x,
                 p.y - 30,
                 isBest ? "#ffeb3b" : "#fff",
                 20,
             );
         }
+    }
+
+    // Ghost = your fastest lap so far in this session, per track, raced from the
+    // start line like a real rival.
+    // ponytail: in-memory only; pack samples to Int16 and persist if ghosts must
+    // survive a page reload.
+    recordGhost() {
+        const p = this.playerBike;
+        if (!p || p.state === "crashed") return;
+        this.ghostRec.push({
+            t: this.raceTimer,
+            x: p.x,
+            y: p.y,
+            z: p.z,
+            angle: p.angle,
+            lat: p.lateralSpeed,
+        });
+    }
+
+    saveGhost(lapStart, lapTime) {
+        const samples = this.ghostRec.map((s) => ({
+            t: s.t - lapStart,
+            x: s.x,
+            y: s.y,
+            z: s.z,
+            angle: s.angle,
+            lat: s.lat,
+        }));
+        if (samples.length < 2) return;
+        this.ghostData = { samples, lapTime };
+        this.ghosts[this.track.name] = this.ghostData;
+    }
+
+    ghostAt(t) {
+        const s = this.ghostData ? this.ghostData.samples : null;
+        if (!s || s.length === 0) return null;
+        if (t < 0 || t > s[s.length - 1].t) return null;
+        let i = this.ghostIdx;
+        if (i >= s.length - 1 || s[i].t > t) i = 0;
+        while (i < s.length - 2 && s[i + 1].t < t) i++;
+        this.ghostIdx = i;
+        const a = s[i];
+        const b = s[Math.min(i + 1, s.length - 1)];
+        const u = b === a ? 0 : MathUtils.clamp((t - a.t) / (b.t - a.t), 0, 1);
+        const g = this.ghostBike;
+        g.x = MathUtils.lerp(a.x, b.x, u);
+        g.y = MathUtils.lerp(a.y, b.y, u);
+        g.z = MathUtils.lerp(a.z, b.z, u);
+        g.angle = MathUtils.lerpAngle(a.angle, b.angle, u);
+        g.lateralSpeed = MathUtils.lerp(a.lat, b.lat, u);
+        return g;
     }
 
     finishRace() {
@@ -838,6 +938,12 @@ class Game {
 
         for (const bike of this.bikes) {
             if (!bike.isPlayer) bike.draw(ctx);
+        }
+        const ghost = this.ghostAt(this.raceTimer - this.lapStartT);
+        if (ghost) {
+            ctx.globalAlpha = 0.38;
+            Bike.prototype.draw.call(ghost, ctx);
+            ctx.globalAlpha = 1;
         }
         if (this.playerBike) this.playerBike.draw(ctx);
 
