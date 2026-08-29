@@ -24,7 +24,7 @@ class Bike {
         this.vz = 0;
         this.z = 0;
 
-        this.state = 'normal';
+        this.state = "normal";
         this.crashTimer = 0;
         this.launchCd = 0;
         this.lastSlope = 0;
@@ -53,15 +53,30 @@ class Bike {
     }
 
     get speedNorm() {
-        return MathUtils.clamp(Math.abs(this.forwardSpeed) / this.maxSpeed, 0, 1);
+        return MathUtils.clamp(
+            Math.abs(this.forwardSpeed) / this.maxSpeed,
+            0,
+            1,
+        );
     }
 
     get progress() {
-        return this.lapsCompleted * 100000 + this.currentWaypoint * 1000 - Math.sqrt(this.distanceToNextWaypoint);
+        return (
+            this.lapsCompleted * 100000 +
+            this.currentWaypoint * 1000 -
+            Math.sqrt(this.distanceToNextWaypoint)
+        );
     }
 
     emit(type, data) {
         if (this.onEvent) this.onEvent(type, data || {});
+    }
+
+    syncVelocities() {
+        const fx = Math.cos(this.angle);
+        const fy = Math.sin(this.angle);
+        this.forwardSpeed = this.vx * fx + this.vy * fy;
+        this.lateralSpeed = -this.vx * fy + this.vy * fx;
     }
 
     respawn(track) {
@@ -76,7 +91,7 @@ class Bike {
         this.air = 0;
         this.vz = 0;
         this.z = 0;
-        this.state = 'normal';
+        this.state = "normal";
         this.crashTimer = 0;
         this.spinAccum = 0;
         this.pendingTrick = false;
@@ -96,7 +111,7 @@ class Bike {
     }
 
     update(dt, ctrl, world, track) {
-        if (this.state === 'crashed') {
+        if (this.state === "crashed") {
             this.crashTimer -= dt;
             const damp = Math.exp(-6 * dt);
             this.vx *= damp;
@@ -105,7 +120,7 @@ class Bike {
             this.y += this.vy * dt;
             if (world) this.z = world.groundAt(this.x, this.y);
             if (this.crashTimer <= 0) {
-                this.state = 'normal';
+                this.state = "normal";
                 if (world && world.isBlocked(this.x, this.y)) {
                     this.respawn(track);
                 }
@@ -136,26 +151,39 @@ class Bike {
             dropAhead = gHere - gAhead;
         }
         this.lastSlope = slopeAhead;
-        this.recentSlope = Math.max(slopeAhead, this.recentSlope * Math.exp(-5 * dt));
+        this.recentSlope = Math.max(
+            slopeAhead,
+            this.recentSlope * Math.exp(-5 * dt),
+        );
 
         if (grounded) {
             if (ctrl.thrust > 0.05) {
                 const headroom = 1 - MathUtils.clamp(vF / maxEff, 0, 1) * 0.55;
-                vF += this.acceleration * ctrl.thrust * dt * Math.max(headroom, 0.35);
+                vF +=
+                    this.acceleration *
+                    ctrl.thrust *
+                    dt *
+                    Math.max(headroom, 0.35);
             } else if (ctrl.thrust < -0.05) {
                 if (vF > 10) vF += this.brakePower * ctrl.thrust * dt;
-                else vF = Math.max(this.reverseMax, vF + this.acceleration * 0.65 * ctrl.thrust * dt);
-            } else {
-                if (vF > 0) vF = Math.max(0, vF - this.friction * dt);
-                else if (vF < 0) vF = Math.min(0, vF + this.friction * dt);
-            }
+                else
+                    vF = Math.max(
+                        this.reverseMax,
+                        vF + this.acceleration * 0.65 * ctrl.thrust * dt,
+                    );
+            } else if (vF > 0) vF = Math.max(0, vF - this.friction * dt);
+            else if (vF < 0) vF = Math.min(0, vF + this.friction * dt);
 
             vF -= slopeAhead * 480 * dt;
 
             if (ctrl.hop && Math.abs(vF) > 60) {
-                const rampBonus = MathUtils.clamp(Math.max(0, slopeAhead) * Math.abs(vF) * 1.2, 0, 200);
+                const rampBonus = MathUtils.clamp(
+                    Math.max(0, slopeAhead) * Math.abs(vF) * 1.2,
+                    0,
+                    200,
+                );
                 this.beginAir(this.hopVz + rampBonus);
-                this.emit('hop');
+                this.emit("hop");
             }
         }
 
@@ -203,37 +231,39 @@ class Bike {
                     this.vz = 0;
                     this.recentSlope = 0;
                     this.launchCd = 0.35;
-                    this.emit('land', { impact });
+                    this.emit("land", { impact });
                     if (this.pendingTrick) {
                         this.pendingTrick = false;
                         vF = Math.min(maxEff * 1.15, vF + 90);
                         this.forwardSpeed = vF;
                         this.vx = nfx * vF - nfy * vL;
                         this.vy = nfy * vF + nfx * vL;
-                        this.emit('trick', { boost: true });
+                        this.emit("trick", { boost: true });
                     }
                 }
-            } else {
-                if (
-                    dropAhead > 7 &&
-                    this.recentSlope > 0.1 &&
-                    this.launchCd <= 0 &&
-                    Math.abs(vF) > 70
-                ) {
-                    const carry = MathUtils.clamp(this.recentSlope * Math.abs(vF) * 3.2, 80, 430);
-                    this.beginAir(carry);
-                    this.recentSlope = 0;
-                    this.launchCd = 0.5;
-                    if (dropAhead > 30) {
-                        this.vx *= -0.5;
-                        this.vy *= -0.5;
-                        vF = nfx * this.vx + nfy * this.vy;
-                        vL = -nfx * this.vy + nfy * this.vx;
-                        this.forwardSpeed = vF;
-                        this.lateralSpeed = vL;
-                    }
-                    this.emit('launch', { power: carry });
+            } else if (
+                dropAhead > 7 &&
+                this.recentSlope > 0.1 &&
+                this.launchCd <= 0 &&
+                Math.abs(vF) > 70
+            ) {
+                const carry = MathUtils.clamp(
+                    this.recentSlope * Math.abs(vF) * 3.2,
+                    80,
+                    430,
+                );
+                this.beginAir(carry);
+                this.recentSlope = 0;
+                this.launchCd = 0.5;
+                if (dropAhead > 30) {
+                    this.vx *= -0.5;
+                    this.vy *= -0.5;
+                    vF = nfx * this.vx + nfy * this.vy;
+                    vL = -nfx * this.vy + nfy * this.vx;
+                    this.forwardSpeed = vF;
+                    this.lateralSpeed = vL;
                 }
+                this.emit("launch", { power: carry });
             }
 
             this.z = gNew + this.air;
@@ -244,13 +274,18 @@ class Bike {
                 if (this.air <= 0) {
                     this.air = 0;
                     this.vz = 0;
-                    this.emit('land', { impact: 300 });
+                    this.emit("land", { impact: 300 });
                 }
             }
             this.z = this.air;
         }
 
-        if (grounded && world && this.air <= 0 && world.isBlocked(this.x, this.y)) {
+        if (
+            grounded &&
+            world &&
+            this.air <= 0 &&
+            world.isBlocked(this.x, this.y)
+        ) {
             this.crash();
             const sp2 = Math.max(Math.hypot(this.vx, this.vy), 1);
             this.x -= (this.vx / sp2) * 8;
@@ -269,7 +304,7 @@ class Bike {
                 this.skidSmokeAcc += 1;
                 if (this.skidSmokeAcc >= 3) {
                     this.skidSmokeAcc = 0;
-                    this.emit('skid', { x: rx, y: ry });
+                    this.emit("skid", { x: rx, y: ry });
                 }
             }
         }
@@ -278,13 +313,13 @@ class Bike {
     }
 
     crash() {
-        if (this.state !== 'crashed') {
-            this.state = 'crashed';
+        if (this.state !== "crashed") {
+            this.state = "crashed";
             this.crashTimer = 1.15;
             this.air = 0;
             this.vz = 0;
             this.pushSkidMark(this.x, this.y, true);
-            this.emit('crash');
+            this.emit("crash");
         }
     }
 
@@ -299,10 +334,13 @@ class Bike {
                 break;
             }
         }
-        if (permanent) { px = x; py = y; }
+        if (permanent) {
+            px = x;
+            py = y;
+        }
         marks.push({ x, y, px, py, age: permanent ? -1 : 0 });
         if (marks.length > 500) {
-            const idx = marks.findIndex(m => m.age >= 0);
+            const idx = marks.findIndex((m) => m.age >= 0);
             if (idx >= 0) marks.splice(idx, 1);
             else marks.shift();
         }
@@ -319,14 +357,14 @@ class Bike {
     }
 
     drawSkidMarks(ctx) {
-        ctx.lineCap = 'round';
+        ctx.lineCap = "round";
         for (const m of this.skidMarks) {
             if (m.age < 0) {
-                ctx.strokeStyle = 'rgba(10,10,10,0.75)';
+                ctx.strokeStyle = "rgba(10,10,10,0.75)";
                 ctx.lineWidth = 7;
                 ctx.globalAlpha = 1;
             } else {
-                ctx.strokeStyle = 'rgba(15,15,15,0.45)';
+                ctx.strokeStyle = "rgba(15,15,15,0.45)";
                 ctx.lineWidth = 5;
                 ctx.globalAlpha = 1 - m.age / 3;
             }
@@ -343,7 +381,7 @@ class Bike {
         ctx.save();
         ctx.translate(this.x, this.y + 3);
         ctx.scale(shadowScale, shadowScale * 0.8);
-        ctx.fillStyle = 'rgba(0,0,0,0.32)';
+        ctx.fillStyle = "rgba(0,0,0,0.32)";
         ctx.beginPath();
         ctx.ellipse(0, 0, 18, 12, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -353,28 +391,28 @@ class Bike {
         ctx.translate(this.x, this.y - this.z * 0.55);
         ctx.rotate(this.angle);
 
-        if (this.state === 'crashed') {
+        if (this.state === "crashed") {
             ctx.rotate(Math.sin(Date.now() / 90) * 0.25);
             if (Math.floor(Date.now() / 110) % 2 === 0) ctx.globalAlpha = 0.45;
         }
 
         const lean = MathUtils.clamp(this.lateralSpeed / 260, -1, 1);
 
-        ctx.fillStyle = '#0a0a0a';
+        ctx.fillStyle = "#0a0a0a";
         ctx.beginPath();
         ctx.arc(11, 0, 5.2, 0, Math.PI * 2);
         ctx.arc(-12, 0, 5.6, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.fillStyle = '#333';
+        ctx.fillStyle = "#333";
         ctx.beginPath();
         ctx.arc(11, 0, 2.2, 0, Math.PI * 2);
         ctx.arc(-12, 0, 2.2, 0, Math.PI * 2);
         ctx.fill();
 
-        ctx.strokeStyle = '#cfcfcf';
+        ctx.strokeStyle = "#cfcfcf";
         ctx.lineWidth = 2.4;
-        ctx.lineCap = 'round';
+        ctx.lineCap = "round";
         ctx.beginPath();
         ctx.moveTo(-12, 0);
         ctx.lineTo(-4, -2);
@@ -385,7 +423,7 @@ class Bike {
         ctx.save();
         ctx.translate(9, 0);
         ctx.rotate(lean * 0.5);
-        ctx.strokeStyle = '#111';
+        ctx.strokeStyle = "#111";
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(0, -8);
@@ -402,12 +440,12 @@ class Bike {
         ctx.lineTo(-1, 0);
         ctx.stroke();
 
-        ctx.fillStyle = '#fff';
-        if (this.isPlayer) ctx.fillStyle = '#ffeb3b';
+        ctx.fillStyle = "#fff";
+        if (this.isPlayer) ctx.fillStyle = "#ffeb3b";
         ctx.beginPath();
         ctx.arc(-2, 0, 5.6, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#000';
+        ctx.strokeStyle = "#000";
         ctx.lineWidth = 1;
         ctx.stroke();
         ctx.restore();

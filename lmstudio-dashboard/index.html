@@ -1,0 +1,1201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LM Studio — Local Dashboard</title>
+<meta name="color-scheme" content="dark">
+<style>
+  :root{
+    --bg:#0a0a0f; --panel:#12121a; --panel-2:#181825; --border:#25253a;
+    --text:#e8e8f0; --muted:#9a9ab0; --dim:#6b6b85;
+    --accent:#8b5cf6; --accent-2:#06b6d4; --green:#22c55e; --amber:#f59e0b; --red:#ef4444;
+    --radius:14px; --radius-sm:9px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-system,-apple-system,Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.5}
+  a{color:var(--accent)}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#2a2a44;border-radius:999px}
+  ::-webkit-scrollbar-track{background:transparent}
+  /* header */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(10,10,15,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+  .topbar-inner{max-width:1320px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#06b6d4);display:grid;place-items:center;font-size:18px;box-shadow:0 6px 20px rgba(139,92,246,.35)}
+  .brand h1{margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em}
+  .brand p{margin:0;color:var(--muted);font-size:12px}
+  .spacer{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;border:1px solid var(--border);background:var(--panel);font-size:12px;white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim);box-shadow:0 0 0 4px rgba(255,255,255,.06)}
+  .dot.ok{background:var(--green);box-shadow:0 0 0 4px rgba(34,197,94,.18)}
+  .dot.bad{background:var(--red);box-shadow:0 0 0 4px rgba(239,68,68,.18)}
+  .dot.warn{background:var(--amber)}
+  .endpoint-row{max-width:1320px;margin:0 auto;padding:10px 20px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid transparent}
+  .input{flex:1;min-width:260px;background:var(--panel);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px;font-size:13px;outline:none}
+  .input:focus{border-color:#3b3b5e;box-shadow:0 0 0 3px rgba(139,92,246,.18)}
+  .btn{appearance:none;border:1px solid var(--border);background:var(--panel-2);color:var(--text);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover{transform:translateY(-1px);border-color:#3a3a5e}
+  .btn:active{transform:translateY(0)}
+  .btn.primary{background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-color:transparent;color:white;box-shadow:0 6px 18px rgba(139,92,246,.35)}
+  .btn.ghost{background:transparent}
+  .btn.small{padding:6px 10px;font-size:12px}
+  /* layout */
+  .wrap{max-width:1320px;margin:0 auto;padding:18px 20px 40px}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .card-h{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .card-h h2{margin:0;font-size:13px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#d6d6ea}
+  .card-b{padding:16px}
+  .kpi{grid-column:span 3}
+  .kpi .num{font-size:28px;font-weight:800;letter-spacing:-.03em}
+  .kpi .sub{font-size:12px;color:var(--muted)}
+  @media(max-width:980px){.kpi{grid-column:span 6}}
+  @media(max-width:560px){.kpi{grid-column:span 12}}
+  /* model cards */
+  .models-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px}
+  .model{background:var(--panel-2);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative}
+  .model.loaded{border-color:rgba(34,197,94,.35);box-shadow:0 0 0 1px rgba(34,197,94,.12) inset}
+  .model-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .model-id{font-weight:800;font-size:13px;line-height:1.2;word-break:break-all}
+  .badge{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:4px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap}
+  .badge.loaded{background:rgba(34,197,94,.14);border-color:rgba(34,197,94,.35);color:#86efac}
+  .badge.idle{background:rgba(148,163,184,.12);color:#cbd5e1}
+  .badge.vlm{background:rgba(139,92,246,.14);border-color:rgba(139,92,246,.3);color:#c4b5fd}
+  .badge.llm{background:rgba(6,182,214,.12);border-color:rgba(6,182,214,.28);color:#67e8f9}
+  .badge.emb{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.28);color:#fcd34d}
+  .meta{display:flex;flex-wrap:wrap;gap:6px}
+  .meta span{font-size:11px;color:var(--muted);background:#0f0f18;border:1px solid var(--border);padding:4px 7px;border-radius:999px}
+  .bar{height:6px;background:#0f0f18;border:1px solid var(--border);border-radius:999px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:0%}
+  .model-actions{display:flex;gap:8px;margin-top:auto}
+  /* bench */
+  .bench-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  select.input{padding:9px 10px}
+  .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+  .stat{ background:#0f0f18;border:1px solid var(--border);border-radius:10px;padding:12px}
+  .stat .k{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .stat .v{font-size:20px;font-weight:800;margin-top:2px}
+  .stat .u{font-size:11px;color:var(--muted)}
+  @media(max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr)}}
+  canvas.chart{width:100%;height:180px;display:block;background:#0b0b14;border:1px solid var(--border);border-radius:10px}
+  .table{width:100%;border-collapse:collapse;font-size:13px}
+  .table th{ text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border)}
+  .table td{padding:9px 10px;border-bottom:1px solid rgba(37,37,58,.6)}
+  .table tr:last-child td{border-bottom:none}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .muted{color:var(--muted)}
+  .split{display:grid;grid-template-columns:1.35fr .85fr;gap:14px}
+  @media(max-width:980px){.split{grid-template-columns:1fr}}
+  /* playground */
+  .chat-log{height:320px;overflow:auto;background:#0b0b14;border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .bubble{max-width:88%;padding:10px 12px;border-radius:14px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .bubble.user{align-self:flex-end;background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:white;border-bottom-right-radius:6px}
+  .bubble.assist{align-self:flex-start;background:#181825;border:1px solid var(--border);border-bottom-left-radius:6px}
+  .bubble.sys{align-self:center;background:#0f172a;border:1px dashed #334155;color:#94a3b8;font-size:12px}
+  .prompt-row{display:flex;gap:8px;margin-top:10px}
+  .prompt-row textarea{flex:1;min-height:44px;max-height:120px;resize:vertical}
+  /* cors help */
+  details.help{background:#0f0f18;border:1px solid var(--border);border-radius:10px;padding:12px}
+  details.help summary{cursor:pointer;font-weight:700;font-size:13px}
+  code.inline{background:#1a1a2e;border:1px solid var(--border);padding:1px 6px;border-radius:6px;font-size:12px}
+  .notice{padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:12px}
+  .notice.ok{background:rgba(34,197,94,.08);border-color:rgba(34,197,94,.25)}
+  .notice.bad{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.28)}
+  .notice.warn{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.28)}
+  .tag{font-size:11px;padding:3px 7px;border-radius:999px;background:#1e1e32;border:1px solid var(--border);color:#cbd5e1}
+
+  /* realtime */
+  .pulse{animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.35)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+  .pulse.busy{animation:pulseBusy 1.1s infinite}
+  @keyframes pulseBusy{0%{box-shadow:0 0 0 0 rgba(239,68,68,.35)}70%{box-shadow:0 0 0 8px rgba(239,68,68,0)}100%{box-shadow:0 0 0 0 rgba(239,68,68,0)}}
+  .rt-grid{display:grid;grid-template-columns:1.15fr 1.35fr .9fr;gap:12px}
+  @media(max-width:980px){.rt-grid{grid-template-columns:1fr}}
+  .rt-metric{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .rt-box{background:#0b0b14;border:1px solid var(--border);border-radius:10px;padding:10px}
+  .rt-box .k{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .rt-box .v{font-size:18px;font-weight:800;margin-top:2px}
+  .rt-box .s{font-size:11px;color:var(--muted)}
+  .phase-idle{color:#94a3b8}
+  .phase-reasoning{color:#f59e0b}
+  .phase-generating{color:#22c55e}
+  .phase-eval{color:#06b6d4}
+  canvas.rt{width:100%;height:150px;display:block;background:#0b0b14;border:1px solid var(--border);border-radius:10px}
+  #rtLog{max-height:160px;overflow:auto;background:#0b0b14;border:1px solid var(--border);border-radius:10px;padding:8px;font-size:11px;display:flex;flex-direction:column;gap:4px}
+  .rt-logrow{display:flex;gap:8px;align-items:baseline}
+  .rt-logrow .t{color:var(--dim);font-family:ui-monospace,monospace;white-space:nowrap}
+  .rt-logrow .m{color:#cbd5e1}
+  .rt-logrow.err .m{color:#fca5a5}
+  .ctx-gauge{height:10px;background:#0f0f18;border:1px solid var(--border);border-radius:999px;overflow:hidden;display:flex}
+  .ctx-gauge i{height:100%;display:block}
+  .ctx-gauge i.prompt{background:#334155}
+  .ctx-gauge i.gen{background:linear-gradient(90deg,#8b5cf6,#06b6d4)}
+  .inspector{max-height:180px;overflow:auto;background:#0b0b14;border:1px solid var(--border);border-radius:10px}
+  .inspector table{width:100%;border-collapse:collapse;font-size:11px}
+  .inspector th{position:sticky;top:0;background:#0b0b14;text-align:left;padding:6px 8px;color:var(--muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid var(--border)}
+  .inspector td{padding:5px 8px;border-bottom:1px solid rgba(37,37,58,.35);font-family:ui-monospace,monospace}
+
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo">◈</div>
+        <div>
+          <h1>LM Studio — Local Dashboard</h1>
+          <p>Standalone • no helpers • loaded models • live inference • <span class="mono">file://</span> safe</p>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <span id="connPill" class="pill"><span id="connDot" class="dot"></span><span id="connText">Checking…</span></span>
+      <span id="loadedPill" class="pill">● <span id="loadedCount">–</span> loaded</span>
+      <span id="corsPill" class="pill" title="LM Studio sends Access-Control-Allow-Origin: * so file:// should work in Chrome/Edge/Firefox">CORS: <span id="corsText">–</span></span>
+    </div>
+    <div class="endpoint-row">
+      <input id="endpoint" class="input mono" spellcheck="false" value="http://localhost:1234" placeholder="http://localhost:1234">
+      <button id="btnTest" class="btn">Test connection</button>
+      <button id="btnRefresh" class="btn">Refresh models</button>
+      <label class="pill" style="gap:8px"><input id="autoPoll" type="checkbox" checked> auto-poll</label>
+      <select id="pollMs" class="input" style="max-width:140px;flex:0 0 auto">
+        <option value="2000">every 2s</option>
+        <option value="5000">every 5s</option>
+        <option value="10000">every 10s</option>
+        <option value="0">manual only</option>
+      </select>
+      <button id="btnCorsHelp" class="btn ghost small">CORS help</button>
+      <span class="muted" style="font-size:12px">Tip: this file is meant to be opened via <code class="inline">file:///</code> — no server needed. LM Studio already sends <code class="inline">ACA-Origin: *</code>.</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- KPIs -->
+    <div class="grid" style="margin-bottom:14px">
+      <div class="card kpi"><div class="card-b"><div class="sub">Total models (catalog)</div><div class="num" id="kpiTotal">–</div><div class="sub" id="kpiTotalSub">–</div></div></div>
+      <div class="card kpi"><div class="card-b"><div class="sub">Loaded now</div><div class="num" id="kpiLoaded">–</div><div class="sub" id="kpiLoadedSub">–</div></div></div>
+      <div class="card kpi"><div class="card-b"><div class="sub">Context (loaded model)</div><div class="num mono" id="kpiCtx">–</div><div class="sub" id="kpiCtxSub">max / loaded</div></div></div>
+      <div class="card kpi"><div class="card-b"><div class="sub">Last throughput</div><div class="num mono" id="kpiTps">–</div><div class="sub" id="kpiTpsSub">tokens / s (gen)</div></div></div>
+    </div>
+
+
+    <!-- REALTIME -->
+    <div class="card" id="realtimeCard" style="margin-bottom:14px;border-color:#2a2a44">
+      <div class="card-h" style="gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span id="rtDot" class="dot" style="width:10px;height:10px"></span>
+          <h2 style="margin:0">Live</h2>
+          <span id="rtModel" class="mono" style="font-size:13px;font-weight:800">—</span>
+          <span id="rtPhase" class="badge idle" style="font-size:11px">IDLE</span>
+          <span id="rtSub" class="muted" style="font-size:12px">no active request</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span class="pill mono" id="rtPing" title="ping to LM Studio">ping —</span>
+          <span class="pill mono" id="rtQueue" title="queue / parallel slots">queue 0/4</span>
+          <span class="pill mono" id="rtBridgeInfo" style="display:none"></span>
+          <button id="btnRtClear" class="btn small ghost">Clear log</button>
+        </div>
+      </div>
+      <div class="card-b" style="display:flex;flex-direction:column;gap:12px">
+        <div class="rt-grid">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="rt-metric">
+              <div class="rt-box"><div class="k">TTFT</div><div class="v mono" id="rtTtft">—</div><div class="s">time to first token</div></div>
+              <div class="rt-box"><div class="k">Instant tok/s</div><div class="v mono" id="rtInst">—</div><div class="s" id="rtInstSub">last 1s window</div></div>
+              <div class="rt-box"><div class="k">Avg tok/s</div><div class="v mono" id="rtAvg">—</div><div class="s" id="rtAvgSub">since start</div></div>
+              <div class="rt-box"><div class="k">Inter-token p50</div><div class="v mono" id="rtItl">—</div><div class="s">median latency</div></div>
+            </div>
+            <div class="rt-box">
+              <div class="k">Tokens — reasoning vs content</div>
+              <div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-top:6px">
+                <span class="mono" style="font-size:13px"><b id="rtTokTotal">0</b> total</span>
+                <span class="tag" style="background:rgba(245,158,11,.12)">🧠 <span id="rtReason">0</span> reasoning</span>
+                <span class="tag" style="background:rgba(34,197,94,.12)">✎ <span id="rtContent">0</span> content</span>
+                <span class="muted mono" style="font-size:11px" id="rtTokRate">—</span>
+              </div>
+              <div style="margin-top:8px;display:flex;justify-content:space-between;font-size:11px;color:var(--muted)"><span>Context window</span><span class="mono" id="rtCtxLabel">— / —</span></div>
+              <div class="ctx-gauge" style="margin-top:4px"><i class="prompt" id="rtCtxPrompt" style="width:0%"></i><i class="gen" id="rtCtxGen" style="width:0%"></i></div>
+              <div class="muted" style="font-size:11px;margin-top:6px" id="rtCtxDetail">—</div>
+              <div class="muted mono" style="font-size:11px;margin-top:6px" id="rtDraft">speculative: —</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <canvas id="rtChart" class="rt" width="560" height="150"></canvas>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <span class="tag">live tok/s (purple) + latency ms (amber)</span>
+              <span class="muted" style="font-size:11px" id="rtChartHint">—</span>
+            </div>
+            <details id="rtInspectorDetails" style="margin-top:2px">
+              <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted)">Stream inspector — last 30 SSE chunks</summary>
+              <div class="inspector" style="margin-top:8px">
+                <table><thead><tr><th>#</th><th>Δt</th><th>type</th><th>text</th></tr></thead><tbody id="rtInspectorBody"><tr><td colspan="4" class="muted" style="text-align:center;padding:12px">no chunks yet</td></tr></tbody></table>
+              </div>
+            </details>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="rt-box">
+              <div class="k">What the model is doing</div>
+              <div id="rtDoing" style="font-size:13px;margin-top:6px;line-height:1.6" class="muted">Idle — start a chat or benchmark to see step-by-step phases.<br><br><b>Phases:</b> <span class="phase-eval">● prompt eval</span> → <span class="phase-reasoning">● reasoning</span> → <span class="phase-generating">● generating</span> → done. Bridge adds <code class="inline">queued/parallel</code> + <code class="inline">status</code> from <code class="inline">lms ps</code>.</div>
+              <div id="rtDoingMeta" class="mono" style="font-size:11px;color:var(--dim);margin-top:8px"></div>
+            </div>
+            <div class="rt-box">
+              <div class="k">Server</div>
+              <div style="font-size:12px;display:grid;gap:4px;margin-top:6px">
+                <div>Ping: <b class="mono" id="rtPingVal">—</b> <span class="muted" id="rtPingHist">—</span></div>
+                <div>Last poll: <span class="mono" id="rtLastPoll">—</span></div>
+                <div id="rtBridgeDetail" class="muted mono" style="font-size:11px;word-break:break-all"></div>
+              </div>
+            </div>
+            <details id="bridgeDetails" style="background:#0f0f18;border:1px solid var(--border);border-radius:10px;padding:10px">
+              <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted)">Advanced — optional Deno bridge for <code class="inline">lms ps</code> data</summary>
+              <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+                <div class="muted" style="font-size:11px;line-height:1.5">The dashboard is <b>fully standalone</b> — live tokens, TTFT, reasoning split, context gauge, and throughput all work from <code class="inline">file://</code> with no helper. The only thing the HTTP API <i>doesn't</i> expose is file size / params / true <code class="inline">queued</code>/<code class="inline">parallel</code>/<code class="inline">status</code> from <code class="inline">lms ps --json</code>. If you want those extra fields, run the optional Deno bridge:</div>
+                <code class="inline" style="padding:6px 8px;display:block;white-space:nowrap;overflow:auto">deno run --allow-run --allow-net --allow-env lmstudio-dashboard/bridge.ts</code>
+                <div class="muted" style="font-size:10px">or <code class="inline">cd lmstudio-dashboard && deno run --allow-run --allow-net --allow-env bridge.ts</code></div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <input id="bridgeUrl" class="input mono" style="flex:1;min-width:180px" spellcheck="false" value="http://localhost:1235" title="bridge URL">
+                  <span id="bridgePill" class="pill" title="bridge status">bridge: <span id="bridgeText">off</span></span>
+                  <button id="btnBridgeTest" class="btn small">Test</button>
+                </div>
+                <div class="muted" style="font-size:11px">Leave off unless you need those fields — everything realtime already works without it.</div>
+              </div>
+            </details>
+          </div>
+        </div>
+        <div id="rtLog"></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <!-- LEFT: models + bench -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-h">
+            <h2>Models — <span id="modelsTitleCount" class="muted" style="text-transform:none;letter-spacing:0">–</span></h2>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="modelFilter" class="input" style="padding:7px 10px;min-width:180px" placeholder="Filter models…">
+              <select id="modelSort" class="input" style="max-width:150px"><option value="loaded-first">Loaded first</option><option value="name">Name A→Z</option><option value="type">Type</option></select>
+            </div>
+          </div>
+          <div class="card-b">
+            <div id="modelsGrid" class="models-grid"></div>
+            <div id="modelsEmpty" class="notice warn" style="display:none;margin-top:10px">No models match filter — or not connected yet.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h">
+            <h2>Throughput bench</h2>
+            <span class="tag">measures real LM Studio tokens/s</span>
+          </div>
+          <div class="card-b">
+            <div class="bench-controls">
+              <div class="field"><label>Model</label><select id="benchModel" class="input" style="min-width:220px"></select></div>
+              <div class="field"><label>Preset</label>
+                <select id="benchPreset" class="input">
+                  <option value="short">Short — 32 tok</option>
+                  <option value="medium" selected>Medium — 128 tok</option>
+                  <option value="long">Long — 256 tok</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+              <div class="field"><label>Max tokens</label><input id="benchTokens" class="input" type="number" min="1" max="2048" value="128" style="width:110px"></div>
+              <div class="field"><label>Runs</label><input id="benchRuns" class="input" type="number" min="1" max="5" value="1" style="width:90px"></div>
+              <div class="field"><label>Stream</label><label class="pill" style="cursor:pointer"><input id="benchStream" type="checkbox" checked> measure TTFT</label></div>
+              <button id="btnBench" class="btn primary">▶ Run benchmark</button>
+              <button id="btnBenchStop" class="btn" style="display:none">Stop</button>
+            </div>
+
+            <div id="benchNotice" class="notice" style="display:none;margin-top:10px"></div>
+
+            <div class="stats-row">
+              <div class="stat"><div class="k">Gen throughput</div><div class="v mono" id="statGen">–</div><div class="u" id="statGenSub">tok/s</div></div>
+              <div class="stat"><div class="k">Prompt eval</div><div class="v mono" id="statPrompt">–</div><div class="u">tok/s (approx)</div></div>
+              <div class="stat"><div class="k">TTFT</div><div class="v mono" id="statTtft">–</div><div class="u">time to first token</div></div>
+              <div class="stat"><div class="k">Total time</div><div class="v mono" id="statTotal">–</div><div class="u" id="statTotalSub">wall time</div></div>
+            </div>
+
+            <div style="margin-top:12px;display:grid;gap:10px">
+              <canvas id="tpsChart" class="chart" width="900" height="180"></canvas>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button id="btnExportCsv" class="btn small">Export CSV</button>
+                <button id="btnClearHist" class="btn small ghost">Clear history</button>
+                <span class="muted" style="font-size:12px">History is stored in <code class="inline">localStorage</code> per-browser.</span>
+              </div>
+              <div style="overflow:auto;border:1px solid var(--border);border-radius:10px">
+                <table class="table" id="histTable">
+                  <thead><tr><th>Time</th><th>Model</th><th>Tok</th><th>Gen tok/s</th><th>Prompt tok/s</th><th>TTFT</th><th>Accept</th></tr></thead>
+                  <tbody id="histBody"><tr><td colspan="7" class="muted" style="text-align:center;padding:18px">No runs yet — hit “Run benchmark”.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: playground + info -->
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="card">
+          <div class="card-h"><h2>Playground</h2><span class="tag">streaming • usage • speculative stats</span></div>
+          <div class="card-b">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+              <select id="chatModel" class="input" style="flex:1;min-width:180px"></select>
+              <input id="chatTemp" class="input" type="number" step="0.1" min="0" max="2" value="0.7" style="width:90px" title="temperature">
+              <input id="chatMax" class="input" type="number" min="1" max="2048" value="256" style="width:110px" title="max_tokens">
+              <label class="pill"><input id="chatStream" type="checkbox" checked> stream</label>
+            </div>
+            <div id="chatLog" class="chat-log"><div class="bubble sys">Pick a loaded model and say hi. Streaming shows TTFT and tokens/s live. Works from <code class="inline">file://</code>.</div></div>
+            <div class="prompt-row">
+              <textarea id="chatInput" class="input" placeholder="Ask something… (⌘/Ctrl+Enter to send)"></textarea>
+              <button id="btnSend" class="btn primary" style="align-self:flex-end">Send</button>
+            </div>
+            <div id="chatStats" class="notice" style="display:none;margin-top:10px"></div>
+            <div style="margin-top:10px;display:flex;gap:8px"><button id="btnClearChat" class="btn small ghost">Clear chat</button><button id="btnCopyLast" class="btn small">Copy last answer</button></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>Connection &amp; CORS</h2></div>
+          <div class="card-b" style="display:flex;flex-direction:column;gap:10px">
+            <div id="corsBox" class="notice">Checking CORS headers…</div>
+            <details class="help" id="corsDetails">
+              <summary>Why this works from <code class="inline">file://</code> (and when it doesn’t)</summary>
+              <div style="margin-top:10px;color:var(--muted);font-size:13px;line-height:1.6">
+                <p><b>Good news:</b> LM Studio’s local server already sends <code class="inline">Access-Control-Allow-Origin: *</code> and <code class="inline">Access-Control-Allow-Headers: *</code> on every <code class="inline">/v1/*</code> and <code class="inline">/api/v0/*</code> endpoint. That means <code class="inline">fetch()</code> from a <code class="inline">file:///</code> page (Origin: <code class="inline">null</code>) succeeds in Chrome, Edge, and Firefox without any proxy.</p>
+                <p><b>If you see “Failed to fetch”:</b></p>
+                <ul style="margin:6px 0 0 18px">
+                  <li>Make sure LM Studio → <b>Local Server</b> is <b>Running</b> (port <code class="inline">1234</code> by default).</li>
+                  <li>Check the endpoint above matches the port shown in LM Studio. Try <code class="inline">http://localhost:1234</code> or <code class="inline">http://127.0.0.1:1234</code>.</li>
+                  <li>Safari is stricter with <code class="inline">file://</code> + <code class="inline">null</code> origin — open via a tiny local server instead:<br><code class="inline">python3 -m http.server 8000</code> or <code class="inline">npx http-server .</code> then visit <code class="inline">http://localhost:8000/lmstudio-dashboard.html</code></li>
+                  <li>No extra CORS proxy is needed. If you self-host elsewhere, ensure the server still sends <code class="inline">ACA-Origin: *</code>.</li>
+                </ul>
+                <p style="margin-top:8px"><b>Bypass attempt built-in:</b> this dashboard automatically retries <code class="inline">/api/v0/models</code> → <code class="inline">/v1/models</code>, handles <code class="inline">Origin: null</code>, and surfaces the exact CORS error so you can see what’s blocked.</p>
+              </div>
+            </details>
+            <div class="notice" style="font-size:12px">
+              <div class="mono" style="font-size:11px;color:var(--muted)">Endpoints probed</div>
+              <div class="mono" style="font-size:12px;word-break:break-all">GET <span id="ep1"></span><br>GET <span id="ep2"></span><br>POST <span id="ep3"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>Live raw</h2><button id="btnCopyRaw" class="btn small">Copy JSON</button></div>
+          <div class="card-b">
+            <pre id="rawOut" class="mono" style="margin:0;white-space:pre-wrap;word-break:break-all;background:#0b0b14;border:1px solid var(--border);border-radius:10px;padding:12px;max-height:300px;overflow:auto;font-size:11px;color:#cbd5e1">—</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="muted" style="font-size:12px;margin-top:18px;text-align:center">Single-file dashboard • no build • no deps • drop it anywhere and open as <code class="inline">file:///</code>. Benchmark uses <code class="inline">POST /v1/chat/completions</code> with <code class="inline">usage</code> + <code class="inline">stats</code> for speculative decoding.</p>
+  </div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const endpointInput = $('#endpoint');
+  const connDot = $('#connDot');
+  const connText = $('#connText');
+  const corsText = $('#corsText');
+  const corsBox = $('#corsBox');
+  const ep1 = $('#ep1'), ep2 = $('#ep2'), ep3 = $('#ep3');
+  const rawOut = $('#rawOut');
+  const modelsGrid = $('#modelsGrid');
+  const modelsEmpty = $('#modelsEmpty');
+  const modelsTitleCount = $('#modelsTitleCount');
+  const kpiTotal = $('#kpiTotal'), kpiTotalSub = $('#kpiTotalSub');
+  const kpiLoaded = $('#kpiLoaded'), kpiLoadedSub = $('#kpiLoadedSub');
+  const kpiCtx = $('#kpiCtx'), kpiCtxSub = $('#kpiCtxSub');
+  const kpiTps = $('#kpiTps'), kpiTpsSub = $('#kpiTpsSub');
+  const loadedCount = $('#loadedCount');
+  const modelFilter = $('#modelFilter');
+  const modelSort = $('#modelSort');
+  const benchModel = $('#benchModel');
+  const chatModel = $('#chatModel');
+  const benchPreset = $('#benchPreset');
+  const benchTokens = $('#benchTokens');
+  const benchRuns = $('#benchRuns');
+  const benchStream = $('#benchStream');
+  const btnBench = $('#btnBench');
+  const btnBenchStop = $('#btnBenchStop');
+  const benchNotice = $('#benchNotice');
+  const statGen = $('#statGen'), statPrompt = $('#statPrompt'), statTtft = $('#statTtft'), statTotal = $('#statTotal'), statTotalSub = $('#statTotalSub'), statGenSub = $('#statGenSub');
+  const histBody = $('#histBody');
+  const tpsChart = $('#tpsChart');
+  const chatLog = $('#chatLog');
+  const chatInput = $('#chatInput');
+  const chatStats = $('#chatStats');
+  const btnSend = $('#btnSend');
+  const chatTemp = $('#chatTemp'), chatMax = $('#chatMax'), chatStream = $('#chatStream');
+  const rtDot = $('#rtDot'), rtModel = $('#rtModel'), rtPhase = $('#rtPhase'), rtSub = $('#rtSub');
+  const rtTtft = $('#rtTtft'), rtInst = $('#rtInst'), rtInstSub = $('#rtInstSub'), rtAvg = $('#rtAvg'), rtAvgSub = $('#rtAvgSub'), rtItl = $('#rtItl');
+  const rtTokTotal = $('#rtTokTotal'), rtReason = $('#rtReason'), rtContent = $('#rtContent'), rtTokRate = $('#rtTokRate');
+  const rtCtxLabel = $('#rtCtxLabel'), rtCtxPrompt = $('#rtCtxPrompt'), rtCtxGen = $('#rtCtxGen'), rtCtxDetail = $('#rtCtxDetail'), rtDraft = $('#rtDraft');
+  const rtPingEl = $('#rtPing'), rtQueueEl = $('#rtQueue'), rtBridgeInfo = $('#rtBridgeInfo'), rtPingVal = $('#rtPingVal'), rtPingHist = $('#rtPingHist'), rtLastPoll = $('#rtLastPoll'), rtBridgeDetail = $('#rtBridgeDetail');
+  const rtDoing = $('#rtDoing'), rtDoingMeta = $('#rtDoingMeta'), rtLogEl = $('#rtLog'), rtChartEl = $('#rtChart'), rtInspectorBody = $('#rtInspectorBody');
+  const bridgeUrlInput = $('#bridgeUrl'), bridgeText = $('#bridgeText'), bridgePill = $('#bridgePill');
+  const rtChartHint = $('#rtChartHint');
+
+
+  let models = []; // from /api/v0/models
+  let bridgeData = null;
+  // realtime state
+  const rtState = { phase:'IDLE', model:null, start:0, ttft:null, tokens:0, reasoningTokens:0, contentTokens:0, latencies:[], tpsSamples:[], lastTokTime:0, promptTokens:0, maxCtx:0, draft:null, statusDetail:'idle', queue:0, parallel:4, events:[], inspector:[], pingSamples:[], lastPing:0 };
+  let rtFrame = null;
+
+  let pollTimer = null;
+  let benchAbort = null;
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem('lmstudio-bench-history') || '[]'); } catch {}
+
+
+  function rtLog(msg, cls=''){
+    const t = new Date().toLocaleTimeString() + '.' + String(Date.now()%1000).padStart(3,'0');
+    rtState.events.push({t,msg,cls}); if(rtState.events.length>80) rtState.events.shift();
+    renderRtLog();
+  }
+  function renderRtLog(){
+    if(!rtState.events.length){ rtLogEl.innerHTML = '<div class="muted" style="font-size:11px;padding:6px">No events yet — start a chat or benchmark.</div>'; return; }
+    rtLogEl.innerHTML = rtState.events.slice(-30).reverse().map(e=> `<div class="rt-logrow ${e.cls}"><span class="t">${e.t}</span><span class="m">${esc(e.msg)}</span></div>`).join('');
+  }
+  function rtSetPhase(phase, detail){
+    rtState.phase = phase;
+    const map = {IDLE:['idle','IDLE'], EVAL:['eval','PROMPT EVAL'], REASONING:['reasoning','REASONING'], GENERATING:['generating','GENERATING'], DONE:['idle','DONE']};
+    const c = map[phase]||['idle',phase];
+    rtPhase.textContent = c[1];
+    rtPhase.className = 'badge ' + c[0];
+    rtDoingMeta.textContent = detail||'';
+    // dot color
+    rtDot.className = 'dot ' + (phase==='GENERATING'?'ok pulse busy':phase==='REASONING'?'warn pulse':phase==='EVAL'?'ok':'' );
+    rtDot.style.background = phase==='IDLE' ? 'var(--dim)' : phase==='GENERATING' ? 'var(--green)' : phase==='REASONING' ? 'var(--amber)' : 'var(--accent-2)';
+  }
+  function rtBegin(model, promptTokens, maxCtx){
+    rtState.model = model; rtState.start = performance.now(); rtState.ttft=null; rtState.tokens=0; rtState.reasoningTokens=0; rtState.contentTokens=0; rtState.latencies=[]; rtState.tpsSamples=[]; rtState.lastTokTime=0; rtState.promptTokens=promptTokens||0; rtState.maxCtx=maxCtx||0; rtState.draft=null; rtState.inspector=[];
+    rtModel.textContent = model; rtSub.textContent = 'evaluating prompt…';
+    rtSetPhase('EVAL','prompt → first token');
+    rtLog(`▶ ${model} — start (prompt ~${promptTokens||'?'} tok, ctx ${maxCtx||'?'} )`);
+    rtTtft.textContent='…'; rtInst.textContent='…'; rtAvg.textContent='…'; rtItl.textContent='…';
+    rtTokTotal.textContent='0'; rtReason.textContent='0'; rtContent.textContent='0';
+    if(rtFrame) cancelAnimationFrame(rtFrame);
+    rtFrame = requestAnimationFrame(rtTick);
+    updateRtDoing();
+  }
+  function rtOnToken(isReasoning, text, latency){
+    const now = performance.now();
+    if(rtState.ttft==null){ rtState.ttft = now - rtState.start; rtTtft.textContent = rtState.ttft.toFixed(0)+' ms'; rtLog(`first token after ${rtState.ttft.toFixed(0)} ms (${isReasoning?'reasoning':'content'})`); rtSetPhase(isReasoning?'REASONING':'GENERATING', isReasoning?'thinking…':'generating tokens'); rtSub.textContent = isReasoning ? 'reasoning…' : 'decoding…';
+    }
+    rtState.tokens++; if(isReasoning) rtState.reasoningTokens++; else rtState.contentTokens++;
+    if(latency!=null) rtState.latencies.push(latency);
+    if(rtState.latencies.length>120) rtState.latencies.shift();
+    // tps sample (instant over last 1s)
+    rtState.tpsSamples.push({t:now, c:rtState.tokens}); // we compute window
+    // keep last 8s
+    rtState.tpsSamples = rtState.tpsSamples.filter(s=> now - s.t < 8000);
+    rtState.lastTokTime = now;
+    rtTokTotal.textContent = String(rtState.tokens);
+    rtReason.textContent = String(rtState.reasoningTokens);
+    rtContent.textContent = String(rtState.contentTokens);
+    // inspector
+    rtState.inspector.push({n:rtState.tokens, dt: latency!=null? latency.toFixed(0)+'ms':'—', type: isReasoning?'reason':'content', text:(text||'').slice(0,60).replace(/\n/g,'↵')});
+    if(rtState.inspector.length>30) rtState.inspector.shift();
+    renderRtInspector();
+    updateRtContext();
+  }
+  function renderRtInspector(){
+    if(!rtState.inspector.length){ rtInspectorBody.innerHTML='<tr><td colspan="4" class="muted" style="text-align:center;padding:12px">no chunks yet</td></tr>'; return; }
+    rtInspectorBody.innerHTML = rtState.inspector.slice().reverse().map(r=> `<tr><td>${r.n}</td><td>${r.dt}</td><td style="color:${r.type==='reason'?'#f59e0b':'#22c55e'}">${r.type}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.text)}</td></tr>`).join('');
+  }
+  function updateRtContext(){
+    const total = (rtState.promptTokens||0) + rtState.tokens;
+    const max = rtState.maxCtx||0;
+    if(max){ const pctPrompt = Math.min(100, (rtState.promptTokens/max*100)); const pctGen = Math.min(100 - pctPrompt, rtState.tokens/max*100); rtCtxPrompt.style.width=pctPrompt+'%'; rtCtxGen.style.width=pctGen+'%'; rtCtxLabel.textContent = total.toLocaleString() + ' / ' + max.toLocaleString() + ' (' + (total/max*100).toFixed(2)+'% )'; rtCtxDetail.textContent = `${rtState.promptTokens} prompt + ${rtState.tokens} gen = ${total} tokens — ${max-total} remaining`; } else { rtCtxLabel.textContent = total + ' tokens (max unknown)'; rtCtxPrompt.style.width='0%'; rtCtxGen.style.width='0%'; rtCtxDetail.textContent='Max context unknown — load a model to see gauge.'; }
+  }
+  function updateRtDoing(){
+    if(rtState.phase==='IDLE'){ rtDoing.innerHTML='Idle — start a chat or benchmark to see step-by-step phases.<br><br><b>Phases:</b> <span class="phase-eval">● prompt eval</span> → <span class="phase-reasoning">● reasoning</span> → <span class="phase-generating">● generating</span> → done. Bridge adds <code class="inline">queued/parallel</code> + <code class="inline">status</code> from <code class="inline">lms ps</code>.'; return; }
+    const p = rtState.phase;
+    const tt = rtState.ttft!=null? rtState.ttft.toFixed(0)+' ms TTFT' : 'waiting for first token…';
+    const itl = rtState.latencies.length? (rtState.latencies.slice().sort((a,b)=>a-b)[Math.floor(rtState.latencies.length/2)]).toFixed(1)+' ms median' : '—';
+    rtDoing.innerHTML = `<b style="color:${p==='REASONING'?'#f59e0b':p==='GENERATING'?'#22c55e':'#06b6d4'}">${p}</b> — ${esc(rtState.model||'')} — ${tt}<br>Tokens: ${rtState.tokens} (🧠 ${rtState.reasoningTokens} reasoning / ✎ ${rtState.contentTokens} content) • p50 ${itl}`;
+  }
+  function rtTick(){
+    const now = performance.now();
+    const elapsed = (now - rtState.start)/1000;
+    if(rtState.phase!=='IDLE' && elapsed>0){
+      const avg = rtState.tokens / elapsed;
+      rtAvg.textContent = avg.toFixed(1);
+      rtAvgSub.textContent = rtState.tokens + ' tok / ' + elapsed.toFixed(1)+'s';
+      // instant over last 1s
+      const win = rtState.tpsSamples.filter(s=> now - s.t <= 1000);
+      let inst = 0;
+      if(win.length>=2){ const dt = (win[win.length-1].t - win[0].t)/1000; const dc = win[win.length-1].c - win[0].c; inst = dt>0? dc/dt : 0; }
+      else if(rtState.tokens && elapsed<1.2){ inst = avg; }
+      rtInst.textContent = inst.toFixed(1);
+      rtInstSub.textContent = win.length? win.length+' samples / s' : 'warming…';
+      rtTokRate.textContent = elapsed.toFixed(1)+'s elapsed';
+      if(rtState.latencies.length){ const sorted=[...rtState.latencies].sort((a,b)=>a-b); const p50=sorted[Math.floor(sorted.length/2)]; rtItl.textContent = p50.toFixed(1)+' ms'; }
+      drawRtChart();
+      updateRtDoing();
+    }
+    if(rtState.phase!=='IDLE' && rtState.phase!=='DONE'){ rtFrame=requestAnimationFrame(rtTick); }
+  }
+  function rtEnd(reason){
+    const totalMs = performance.now() - rtState.start;
+    const avg = totalMs>0 ? rtState.tokens/(totalMs/1000) : 0;
+    rtAvg.textContent = avg.toFixed(1);
+    rtSub.textContent = reason || 'done';
+    rtSetPhase('DONE', reason||'finished');
+    rtLog(`■ done — ${rtState.tokens} tok in ${(totalMs/1000).toFixed(2)}s, avg ${avg.toFixed(1)} tok/s` + (rtState.draft? `, draft ${rtState.draft}`:''));
+    setTimeout(()=>{ if(rtState.phase==='DONE'){ rtSetPhase('IDLE','idle'); rtSub.textContent='idle'; rtDoingMeta.textContent='last: '+rtState.model+' • '+rtState.tokens+' tok'; } }, 2500);
+    if(rtFrame) cancelAnimationFrame(rtFrame);
+    drawRtChart();
+    updateRtDoing();
+  }
+  function drawRtChart(){
+    const c = rtChartEl, ctx = c.getContext('2d'); const W=c.width, H=c.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1; for(let i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(0,H*i/4); ctx.lineTo(W,H*i/4); ctx.stroke(); }
+    const pts = rtState.tpsSamples;
+    if(pts.length<2){ ctx.fillStyle='#6b6b85'; ctx.font='11px ui-monospace,monospace'; ctx.textAlign='center'; ctx.fillText(rtState.phase==='IDLE' ? 'Start a request to see live tok/s + latency' : 'collecting…', W/2, H/2); return; }
+    // compute instant series per second
+    const now = performance.now();
+    const buckets = [];
+    for(let i=0;i<pts.length-1;i++){ const dt=(pts[i+1].t-pts[i].t)/1000; const dc=pts[i+1].c-pts[i].c; if(dt>0) buckets.push({t:pts[i+1].t, v: dc/dt}); }
+    // also latency buckets
+    const lats = rtState.latencies;
+    // find max for scaling
+    const maxTps = Math.max(5, ...buckets.map(b=>b.v))*1.2;
+    const maxLat = Math.max(10, ...lats)*1.2;
+    const padL=36, padR=10, padT=12, padB=16; const plotW=W-padL-padR, plotH=H-padT-padB;
+    // y labels tps left
+    ctx.fillStyle='#c4b5fd'; ctx.font='9px ui-monospace,monospace'; ctx.textAlign='right';
+    for(let i=0;i<=3;i++){ const v=maxTps - maxTps*i/3; ctx.fillText(v.toFixed(0), padL-4, padT + plotH*i/3 + 3); }
+    ctx.fillStyle='#fcd34d'; ctx.textAlign='left'; for(let i=0;i<=3;i++){ const v=maxLat - maxLat*i/3; ctx.fillText(v.toFixed(0)+'ms', padL+plotW+2, padT + plotH*i/3 + 3); }
+    // tps line
+    ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=2; ctx.beginPath();
+    buckets.forEach((b,i)=>{ const x=padL + ( (b.t - pts[0].t) / Math.max(1, now - pts[0].t) ) * plotW; const y=padT + plotH - (b.v/maxTps*plotH); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+    ctx.stroke();
+    // latency line amber
+    if(lats.length){
+      ctx.strokeStyle='rgba(245,158,11,.85)'; ctx.lineWidth=1.5; ctx.beginPath();
+      // map latencies to time proportionally (approx)
+      lats.forEach((lat,i)=>{ const t = pts[Math.min(i, pts.length-1)]?.t || now - (lats.length-i)*40; const x=padL + ((t - pts[0].t)/Math.max(1, now - pts[0].t))*plotW; const y=padT + plotH - (Math.min(lat,maxLat)/maxLat*plotH); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.stroke();
+    }
+    // dots
+    buckets.slice(-1).forEach(b=>{ const x=padL + ((b.t - pts[0].t)/Math.max(1, now - pts[0].t))*plotW; const y=padT + plotH - (b.v/maxTps*plotH); ctx.fillStyle='#c4b5fd'; ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill(); rtChartHint.textContent = b.v.toFixed(1)+' tok/s now'; });
+  }
+
+
+  function endpoint() {
+    let v = endpointInput.value.trim().replace(/\/+$/,'');
+    if (!/^https?:\/\//.test(v)) v = 'http://' + v;
+    return v;
+  }
+  function saveEndpoint(){ localStorage.setItem('lmstudio-endpoint', endpointInput.value.trim()); }
+  const savedEp = localStorage.getItem('lmstudio-endpoint');
+  if (savedEp) endpointInput.value = savedEp;
+  // also allow ?endpoint= override
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('endpoint')) endpointInput.value = qp.get('endpoint');
+
+  function setConn(state, msg){
+    connText.textContent = msg;
+    connDot.className = 'dot ' + (state==='ok'?'ok':state==='bad'?'bad':'warn');
+  }
+  function setCors(ok, msg){
+    corsText.textContent = ok ? 'OK (*)' : msg || 'blocked?';
+    corsBox.className = 'notice ' + (ok?'ok':'bad');
+    corsBox.textContent = ok
+      ? 'CORS is fine — LM Studio sends Access-Control-Allow-Origin: * . file:// fetches succeed.'
+      : 'CORS / connection issue: ' + (msg || 'Failed to fetch — see help below.');
+  }
+
+  async function fetchWithCors(url, opts={}){
+    const headers = Object.assign({}, opts.headers||{});
+    // Ensure we don't send credentials
+    return fetch(url, { ...opts, headers, mode:'cors', cache:'no-store' });
+  }
+
+  async function probe(){
+    const base = endpoint();
+    ep1.textContent = base + '/api/v0/models';
+    ep2.textContent = base + '/v1/models';
+    ep3.textContent = base + '/v1/chat/completions (POST)';
+    // Try detailed endpoint first
+    try {
+      const r = await fetchWithCors(base + '/api/v0/models');
+      const corsOk = r.headers.get('access-control-allow-origin') === '*';
+      const j = await r.json();
+      const corsMsg = corsOk ? 'OK' : 'no ACAO header';
+      setCors(true, corsMsg);
+      setConn('ok', 'Connected — ' + (j.data?.length||0) + ' models');
+      return { ok:true, data:j, corsOk, raw:j };
+    } catch (e) {
+      // fallback to /v1/models
+      try {
+        const r2 = await fetchWithCors(base + '/v1/models');
+        const corsOk2 = r2.headers.get('access-control-allow-origin') === '*';
+        const j2 = await r2.json();
+        // normalize to same shape
+        const data = { data: (j2.data||[]).map(m=>({ id:m.id, state:'unknown', type:'llm', publisher:'', arch:'', quantization:'', max_context_length:0 }))};
+        setCors(corsOk2, corsOk2?'OK (fallback)':'no header');
+        setConn('warn', 'Connected (fallback /v1/models) — ' + (j2.data?.length||0) + ' models');
+        rawOut.textContent = JSON.stringify(j2,null,2);
+        models = data.data;
+        renderModels();
+        updateKpis();
+        return { ok:true, data, corsOk:corsOk2, raw:j2 };
+      } catch (e2){
+        setConn('bad', 'Not reachable — ' + (e2.message||'Failed to fetch'));
+        setCors(false, e2.message||'Failed to fetch');
+        corsBox.textContent = 'Failed to fetch ' + base + ' — is LM Studio Local Server running? ' + (e2.message||'') + ' . Try http://localhost:1234 and see CORS help.';
+        throw e2;
+      }
+    }
+  }
+
+  async function refresh(){
+    try {
+      const base = endpoint();
+      const r = await fetchWithCors(base + '/api/v0/models');
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      const corsOk = r.headers.get('access-control-allow-origin') === '*';
+      setCors(corsOk, corsOk?'OK':'missing');
+      setConn('ok', 'Connected');
+      rawOut.textContent = JSON.stringify(j,null,2);
+      models = j.data || [];
+      renderModels();
+      updateKpis();
+      populateModelSelects();
+      saveEndpoint();
+    } catch (e){
+      // try fallback
+      try { await probe(); } catch {}
+      rawOut.textContent = 'Error: ' + (e.message||e) + '\n\nIf you opened this as file:// and see "Failed to fetch", check that LM Studio Local Server is running and try the CORS help panel. Chrome/Edge/Firefox allow file:// → http://localhost when the server sends ACAO: * (LM Studio does). Safari needs http:// via python -m http.server.';
+    }
+  }
+
+  function filteredSorted(){
+    const q = modelFilter.value.trim().toLowerCase();
+    let list = models.slice();
+    if (q) list = list.filter(m => (m.id + ' ' + (m.publisher||'') + ' ' + (m.arch||'') + ' ' + (m.type||'')).toLowerCase().includes(q));
+    const sort = modelSort.value;
+    if (sort==='name') list.sort((a,b)=>a.id.localeCompare(b.id));
+    else if (sort==='type') list.sort((a,b)=>(a.type||'').localeCompare(b.type||'')||a.id.localeCompare(b.id));
+    else { // loaded-first
+      const rank = s => s==='loaded'?0:s==='unknown'?1:2;
+      list.sort((a,b)=> rank(a.state)-rank(b.state) || a.id.localeCompare(b.id));
+    }
+    return list;
+  }
+
+  function enrichWithBridge(){
+    if(!bridgeData || !bridgeData.data) return;
+    const map = new Map(bridgeData.data.map(b=>[b.identifier||b.modelKey, b]));
+    models.forEach(m=>{
+      const e = map.get(m.id);
+      if(e){ m._bridge=e; m.status=e.status; m.queued=e.queued; m.parallel=e.parallel; m.sizeBytes=e.sizeBytes; m.paramsString=e.paramsString; m.ttlMs=e.ttlMs; }
+    });
+  }
+  function renderModels(){
+    enrichWithBridge();
+
+    const list = filteredSorted();
+    modelsTitleCount.textContent = models.length ? `${list.length} / ${models.length}` : '–';
+    if (!list.length){ modelsGrid.innerHTML=''; modelsEmpty.style.display='block'; return; }
+    modelsEmpty.style.display='none';
+    modelsGrid.innerHTML = list.map(m=>{
+      const isLoaded = m.state==='loaded';
+      const type = (m.type||'llm').toLowerCase();
+      const typeBadge = type==='vlm' ? 'vlm' : type==='embeddings' ? 'emb' : 'llm';
+      const typeLabel = type==='vlm' ? 'VLM' : type==='embeddings' ? 'EMB' : 'LLM';
+      const ctx = m.max_context_length || 0;
+      const loadedCtx = m.loaded_context_length || 0;
+      const pct = ctx ? Math.round((loadedCtx||ctx)/ctx*100) : 0;
+      const caps = (m.capabilities||[]).join(' • ') || '—';
+      return `<div class="model ${isLoaded?'loaded':''}">
+        <div class="model-top">
+          <div class="model-id">${esc(m.id)}</div>
+          <span class="badge ${isLoaded?'loaded':'idle'}">${isLoaded?'● loaded':'○ not loaded'}</span>
+        </div>
+        <div class="meta">
+          <span class="badge ${typeBadge}" style="font-size:10px">${typeLabel}</span>
+          ${m.publisher?`<span>${esc(m.publisher)}</span>`:''}
+          ${m.arch?`<span>${esc(m.arch)}</span>`:''}
+          ${m.quantization?`<span>${esc(m.quantization)}</span>`:''}
+          ${m.compatibility_type?`<span>${esc(m.compatibility_type)}</span>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted)"><span>Context</span><span class="mono">${fmtNum(loadedCtx||ctx)} / ${fmtNum(ctx)}</span></div>
+          <div class="bar"><i style="width:${pct}%"></i></div>
+          <div style="font-size:11px;color:var(--muted)">capabilities: ${esc(caps)}</div>
+          ${m._bridge? `<div class="mono" style="font-size:11px;color:#cbd5e1;display:grid;gap:2px;margin-top:2px"><span>size ${m._bridge.sizeBytes? (m._bridge.sizeBytes/1024/1024/1024).toFixed(1)+' GB':''} • params ${esc(m._bridge.paramsString||'')} • ${m._bridge.vision?'vision ':''}${m._bridge.trainedForToolUse?'tool-use ':''}</span><span>status <b style="color:${m._bridge.status==='generating'?'#22c55e':'#94a3b8'}">${esc(m._bridge.status||'')}</b> • queued ${m._bridge.queued} • parallel ${m._bridge.parallel||'—'} • ttl ${m._bridge.ttlMs? Math.round(m._bridge.ttlMs/60000)+'m':'∞'}</span></div>` : ''}
+        </div>
+        <div class="model-actions">
+          <button class="btn small" data-copy="${escAttr(m.id)}">Copy ID</button>
+          <button class="btn small ghost" data-chat="${escAttr(m.id)}" ${type==='embeddings'?'disabled title="embedding model"':''}>Chat</button>
+        </div>
+      </div>`;
+    }).join('');
+    // wire
+    modelsGrid.querySelectorAll('[data-copy]').forEach(b=> b.addEventListener('click', ()=>{ navigator.clipboard.writeText(b.getAttribute('data-copy')); b.textContent='Copied!'; setTimeout(()=>b.textContent='Copy ID',1200); }));
+    modelsGrid.querySelectorAll('[data-chat]').forEach(b=> b.addEventListener('click', ()=>{
+      const id=b.getAttribute('data-chat');
+      chatModel.value=id; benchModel.value=id;
+      document.getElementById('chatLog').scrollIntoView({behavior:'smooth', block:'center'});
+      chatInput.focus();
+    }));
+  }
+
+  function updateKpis(){
+    const total = models.length;
+    const loaded = models.filter(m=>m.state==='loaded');
+    const loadedN = loaded.length;
+    kpiTotal.textContent = total || '–';
+    kpiTotalSub.textContent = total ? `${models.filter(m=>m.type==='llm').length} LLM • ${models.filter(m=>m.type==='vlm').length} VLM • ${models.filter(m=>m.type==='embeddings').length} emb` : '–';
+    kpiLoaded.textContent = String(loadedN);
+    kpiLoadedSub.textContent = loadedN ? loaded.map(m=>m.id).join(', ') : 'none loaded';
+    loadedCount.textContent = String(loadedN);
+    if (loadedN){
+      const m = loaded[0];
+      kpiCtx.textContent = fmtNum(m.loaded_context_length || m.max_context_length);
+      kpiCtxSub.textContent = `max ${fmtNum(m.max_context_length)} • ${esc(m.id).slice(0,28)}`;
+    } else {
+      kpiCtx.textContent='–'; kpiCtxSub.textContent='max / loaded';
+    }
+    if (!history.length){ kpiTps.textContent='–'; kpiTpsSub.textContent='tokens / s (gen)';}
+    else {
+      const last = history[history.length-1];
+      kpiTps.textContent = last.genTps ? last.genTps.toFixed(1) : '–';
+      kpiTpsSub.textContent = last.model + ' • ' + last.tokens + ' tok';
+    }
+  }
+
+  function populateModelSelects(){
+    const loaded = models.filter(m=>m.state==='loaded');
+    const all = models.slice();
+    const opts = (list) => list.map(m=> `<option value="${escAttr(m.id)}">${esc(m.id)} ${m.state==='loaded'?'●':''} ${m.type?`[${m.type}]`:''}</option>`).join('');
+    // prefer loaded, but allow all
+    const pref = loaded.length ? loaded : all;
+    const curB = benchModel.value;
+    const curC = chatModel.value;
+    benchModel.innerHTML = pref.length ? opts(pref) : '<option value="">(no models)</option>';
+    chatModel.innerHTML = pref.length ? opts(pref) : '<option value="">(no models)</option>';
+    if (curB) benchModel.value = curB;
+    if (curC) chatModel.value = curC;
+    // if nothing selected, pick first loaded
+    if (!benchModel.value && pref[0]) benchModel.value = pref[0].id;
+    if (!chatModel.value && pref[0]) chatModel.value = pref[0].id;
+  }
+
+  // bench preset handling
+  benchPreset.addEventListener('change', ()=>{
+    if (benchPreset.value==='short') benchTokens.value=32;
+    else if (benchPreset.value==='medium') benchTokens.value=128;
+    else if (benchPreset.value==='long') benchTokens.value=256;
+  });
+
+  // chart (tiny no-deps canvas)
+  function drawChart(){
+    const ctx = tpsChart.getContext('2d');
+    const W = tpsChart.width, H = tpsChart.height;
+    ctx.clearRect(0,0,W,H);
+    // grid
+    ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1;
+    for(let i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(0,H*i/4); ctx.lineTo(W,H*i/4); ctx.stroke(); }
+    if (!history.length){
+      ctx.fillStyle='#6b6b85'; ctx.font='12px ui-monospace,monospace'; ctx.textAlign='center';
+      ctx.fillText('Run a benchmark to see throughput over time', W/2, H/2);
+      return;
+    }
+    const vals = history.map(h=>h.genTps||0);
+    const max = Math.max(10, ...vals)*1.15;
+    const min = 0;
+    const padL=44, padR=12, padT=14, padB=18;
+    const plotW=W-padL-padR, plotH=H-padT-padB;
+    // y labels
+    ctx.fillStyle='#9a9ab0'; ctx.font='10px ui-monospace,monospace'; ctx.textAlign='right';
+    for(let i=0;i<=4;i++){
+      const v = max - (max-min)*i/4;
+      ctx.fillText(v.toFixed(0), padL-8, padT + plotH*i/4 + 3);
+    }
+    // line
+    ctx.strokeStyle='#8b5cf6'; ctx.lineWidth=2; ctx.beginPath();
+    history.forEach((h,i)=>{
+      const x = padL + (history.length===1? plotW/2 : plotW*i/(history.length-1));
+      const y = padT + plotH - ( (h.genTps-min)/(max-min) * plotH );
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    // dots + area
+    ctx.fillStyle='rgba(139,92,246,.18)';
+    ctx.beginPath();
+    history.forEach((h,i)=>{
+      const x = padL + (history.length===1? plotW/2 : plotW*i/(history.length-1));
+      const y = padT + plotH - ( (h.genTps-min)/(max-min) * plotH );
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.lineTo(padL + plotW, padT+plotH); ctx.lineTo(padL, padT+plotH); ctx.closePath(); ctx.fill();
+    history.forEach((h,i)=>{
+      const x = padL + (history.length===1? plotW/2 : plotW*i/(history.length-1));
+      const y = padT + plotH - ( (h.genTps-min)/(max-min) * plotH );
+      ctx.fillStyle='#c4b5fd'; ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='white'; ctx.font='10px ui-monospace,monospace'; ctx.textAlign='center';
+      if(history.length<=12) ctx.fillText(h.genTps.toFixed(0), x, y-8);
+    });
+    // x labels (time)
+    ctx.fillStyle='#6b6b85'; ctx.font='10px ui-monospace,monospace'; ctx.textAlign='center';
+    const step = Math.ceil(history.length/6);
+    history.forEach((h,i)=>{ if(i%step===0 || i===history.length-1){ const x = padL + (history.length===1? plotW/2 : plotW*i/(history.length-1)); ctx.fillText(h.timeLabel, x, H-4); }});
+    ctx.fillStyle='#9a9ab0'; ctx.textAlign='left'; ctx.fillText('tokens/s', padL, 11);
+  }
+
+  function renderHistory(){
+    if (!history.length){
+      histBody.innerHTML='<tr><td colspan="7" class="muted" style="text-align:center;padding:18px">No runs yet — hit “Run benchmark”.</td></tr>';
+      drawChart(); updateKpis(); return;
+    }
+    histBody.innerHTML = history.slice().reverse().map(h=>{
+      const accept = h.acceptRate!=null ? (h.acceptRate*100).toFixed(1)+'%' : '—';
+      return `<tr>
+        <td class="mono" style="font-size:11px">${esc(h.timeLabel)}</td>
+        <td class="mono" style="font-size:12px">${esc(h.model)}</td>
+        <td class="mono">${h.tokens}</td>
+        <td class="mono" style="font-weight:800;color:#c4b5fd">${h.genTps?h.genTps.toFixed(1):'–'}</td>
+        <td class="mono">${h.promptTps?h.promptTps.toFixed(1):'–'}</td>
+        <td class="mono">${h.ttft!=null? h.ttft.toFixed(0)+' ms':'–'}</td>
+        <td class="mono">${accept}</td>
+      </tr>`;
+    }).join('');
+    drawChart(); updateKpis();
+    localStorage.setItem('lmstudio-bench-history', JSON.stringify(history.slice(-50)));
+  }
+
+  async function runBenchmark(){
+    const base = endpoint();
+    const model = benchModel.value;
+    if (!model){ benchNotice.style.display='block'; benchNotice.className='notice bad'; benchNotice.textContent='Pick a model first (need at least one loaded).'; return; }
+    const maxTokens = parseInt(benchTokens.value,10)||128;
+    const runs = Math.max(1, Math.min(5, parseInt(benchRuns.value,10)||1));
+    const doStream = benchStream.checked;
+    benchAbort = new AbortController();
+    btnBench.style.display='none'; btnBenchStop.style.display='inline-block';
+    // rtBegin per run inside loop
+    benchNotice.style.display='block'; benchNotice.className='notice warn'; benchNotice.textContent='Running…';
+    statGen.textContent='…'; statPrompt.textContent='…'; statTtft.textContent='…'; statTotal.textContent='…';
+    try {
+      for(let run=0; run<runs; run++){
+        if (benchAbort.signal.aborted) break;
+        const prompt = run===0
+          ? 'Write a short paragraph about the history of computing. Be concise.'
+          : 'Continue writing. Explain the difference between CPUs and GPUs in one paragraph.';
+        if(run===0){ const bmm=models.find(x=>x.id===model); const bMax=bmm? (bmm.max_context_length||bmm._bridge?.maxContextLength||0):0; rtBegin(model, Math.ceil(prompt.length/4), bMax); } else { rtState.start=performance.now(); rtState.ttft=null; rtState.tokens=0; rtState.reasoningTokens=0; rtState.contentTokens=0; rtState.latencies=[]; rtState.tpsSamples=[]; rtLog(`↻ run ${run+1}/${runs}`); }
+        // non-stream for accurate usage
+        const t0 = performance.now();
+        let ttft = null;
+        let firstTokenTime = null;
+        // Optionally measure TTFT via streaming first-token, then do a timed non-stream generation for tps
+        if (doStream){
+          const s0 = performance.now();
+          try{
+            const rStream = await fetchWithCors(base + '/v1/chat/completions', {
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({ model, messages:[{role:'user', content: prompt}], max_tokens: Math.min(maxTokens, 64), stream:true }),
+              signal: benchAbort.signal
+            });
+            if (!rStream.ok) throw new Error('stream HTTP '+rStream.status);
+            const reader = rStream.body.getReader();
+            const decoder = new TextDecoder();
+            let buf='';
+            outer: while(true){
+              const {value, done} = await reader.read();
+              if(done) break;
+              buf += decoder.decode(value, {stream:true});
+              const lines = buf.split('\n');
+              buf = lines.pop();
+              for(const line of lines){
+                const t=line.trim();
+                if(!t || t==='data: [DONE]') continue;
+                if(!t.startsWith('data:')) continue;
+                try{
+                  const j=JSON.parse(t.slice(5));
+                  const delta = j.choices?.[0]?.delta;
+                  const hasToken = !!(delta?.content || delta?.reasoning_content);
+                  if(hasToken && ttft==null){
+                    ttft = performance.now() - s0;
+                    rtOnToken(!!(delta?.reasoning_content), (delta?.content||delta?.reasoning_content||'').slice(0,40), ttft);
+                    firstTokenTime = ttft;
+                    break outer;
+                  }
+                }catch{}
+              }
+            }
+            try{ await reader.cancel(); }catch{}
+          }catch(e){ if(e.name==='AbortError') throw e; ttft=null; }
+        }
+
+        const t1 = performance.now();
+        const resp = await fetchWithCors(base + '/v1/chat/completions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ model, messages:[{role:'user', content: prompt}], max_tokens: maxTokens, stream:false, temperature:0.7 }),
+          signal: benchAbort.signal
+        });
+        const t2 = performance.now();
+        if (!resp.ok){
+          const txt = await resp.text();
+          throw new Error('HTTP '+resp.status+': '+txt.slice(0,400));
+        }
+        const j = await resp.json();
+        const usage = j.usage || {};
+        const promptTokens = usage.prompt_tokens || 0;
+        const compTokens = usage.completion_tokens || maxTokens;
+        const totalMs = t2 - t1;
+        for(let i=0;i<compTokens;i++) rtOnToken(false,'',null);
+        if(run===runs-1) rtEnd(`bench run ${run+1}/${runs} done`); else { rtLog(`run ${run+1} done — ${compTokens} tok`); }
+        const genTps = compTokens / (totalMs/1000);
+        // prompt eval: if we have ttft, use ttft as proxy for prompt processing; else estimate total
+        const promptTps = ttft ? (promptTokens / (ttft/1000)) : (promptTokens / (totalMs/1000) * 0.6);
+        const acceptRate = j.stats ? (j.stats.accepted_draft_tokens_count / Math.max(1,j.stats.total_draft_tokens_count)) : null;
+
+        const entry = {
+          timeLabel: new Date().toLocaleTimeString(),
+          model, tokens: compTokens,
+          genTps, promptTps, ttft: ttft, totalMs,
+          acceptRate, draftModel: j.stats?.draft_model || null,
+          usage, stats: j.stats || null
+        };
+        history.push(entry);
+        // update live stats to last entry
+        statGen.textContent = genTps.toFixed(1);
+        statGenSub.textContent = compTokens + ' tok / ' + (totalMs/1000).toFixed(2)+'s';
+        statPrompt.textContent = promptTokens ? promptTps.toFixed(1) : '–';
+        statTtft.textContent = ttft!=null ? ttft.toFixed(0)+' ms' : '–';
+        statTotal.textContent = (totalMs/1000).toFixed(2)+' s';
+        statTotalSub.textContent = promptTokens + ' prompt • ' + compTokens + ' gen';
+        benchNotice.className='notice ok';
+        benchNotice.textContent = `Run ${run+1}/${runs} done — ${compTokens} tok at ${genTps.toFixed(1)} tok/s` + (j.stats? ` • draft ${j.stats.draft_model} accept ${(acceptRate*100).toFixed(1)}%`:'');
+        renderHistory();
+        // small pause between runs
+        if (run < runs-1) await new Promise(r=> setTimeout(r, 250));
+      }
+    } catch(e){
+      if (e.name==='AbortError'){ benchNotice.className='notice warn'; benchNotice.textContent='Stopped.'; rtEnd('bench aborted'); }
+      else { benchNotice.className='notice bad'; benchNotice.textContent='Benchmark failed: '+(e.message||e); rtEnd('bench error'); }
+    } finally {
+      btnBench.style.display='inline-block'; btnBenchStop.style.display='none'; benchAbort=null;
+    }
+  }
+
+  // chat
+  let chatAbort = null;
+  async function sendChat(){
+    const base = endpoint();
+    const model = chatModel.value;
+    const text = chatInput.value.trim();
+    if (!text) return;
+    if (!model){ chatStats.style.display='block'; chatStats.className='notice bad'; chatStats.textContent='Pick a model first.'; return; }
+    const userBubble = document.createElement('div'); userBubble.className='bubble user'; userBubble.textContent=text;
+    chatLog.appendChild(userBubble);
+    chatInput.value='';
+    const assist = document.createElement('div'); assist.className='bubble assist mono'; assist.textContent='…';
+    chatLog.appendChild(assist);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    const temp = parseFloat(chatTemp.value)||0.7;
+    const maxTok = parseInt(chatMax.value,10)||256;
+    const doStream = chatStream.checked;
+    const t0 = performance.now();
+    let ttft=null, tokCount=0, full='';
+    // realtime: find maxCtx for this model
+    const cm = models.find(x=>x.id===model); const maxCtx = cm ? (cm.max_context_length || cm._bridge?.maxContextLength || 0) : 0;
+    const estPrompt = Math.ceil(text.length/4);
+    rtBegin(model, estPrompt, maxCtx);
+    chatAbort?.abort(); chatAbort=new AbortController();
+    btnSend.textContent='Stop'; btnSend.onclick = ()=> chatAbort.abort();
+    chatStats.style.display='none';
+    try{
+      if (doStream){
+        const r = await fetchWithCors(base + '/v1/chat/completions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ model, messages:[{role:'user', content:text}], max_tokens:maxTok, temperature:temp, stream:true }),
+          signal: chatAbort.signal
+        });
+        if (!r.ok) throw new Error('HTTP '+r.status+' '+await r.text());
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buf=''; let started=false;
+        assist.textContent='';
+        while(true){
+          const {value,done}=await reader.read();
+          if(done) break;
+          buf+=decoder.decode(value,{stream:true});
+          const lines=buf.split('\n'); buf=lines.pop();
+          for(const line of lines){
+            const t=line.trim(); if(!t) continue; if(t==='data: [DONE]'){ break; }
+            if(!t.startsWith('data:')) continue;
+            try{
+              const j=JSON.parse(t.slice(5));
+              if(j.choices?.[0]?.delta){
+                const d=j.choices[0].delta;
+                const chunk = d.content || '';
+                const rc = d.reasoning_content || '';
+                // show reasoning faintly? just append
+                const add = chunk || (rc ? '' : '');
+                // if we want to show reasoning, prefix
+                if (!started && (chunk || rc)){ ttft = performance.now() - t0; started=true; }
+                if (chunk){ full+=chunk; tokCount++; assist.textContent = full; const lat = ttft!=null ? (performance.now() - (rtState.lastTokTime||t0)) : null; rtOnToken(false, chunk, lat); }
+                else if (rc && !chunk){ const lat2 = ttft!=null ? (performance.now() - (rtState.lastTokTime||t0)) : null; rtOnToken(true, rc, lat2); // reasoning token
+                  // keep but dim — append to bubble as muted prefix on first
+                }
+                // stats on last chunk
+                if (j.stats) assist.dataset.stats = JSON.stringify(j.stats);
+                if (j.usage) assist.dataset.usage = JSON.stringify(j.usage);
+              }
+              if (j.stats) assist.dataset.stats = JSON.stringify(j.stats);
+            }catch{}
+          }
+          chatLog.scrollTop=chatLog.scrollHeight;
+        }
+        const totalMs = performance.now()-t0;
+        rtEnd('chat done');
+        const tps = tokCount ? (tokCount/(totalMs/1000)) : 0;
+        chatStats.style.display='block'; chatStats.className='notice ok';
+        chatStats.innerHTML = `<b>${tokCount} chunks</b> • ${totalMs.toFixed(0)} ms total • ${ttft? ttft.toFixed(0)+' ms TTFT • ':''}${tps? tps.toFixed(1)+' tok/s (chunk est.)':''} ${assist.dataset.stats? ' • draft '+JSON.parse(assist.dataset.stats).draft_model:''}`;
+      } else {
+        const r = await fetchWithCors(base + '/v1/chat/completions', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ model, messages:[{role:'user', content:text}], max_tokens:maxTok, temperature:temp, stream:false }),
+          signal: chatAbort.signal
+        });
+        if (!r.ok) throw new Error('HTTP '+r.status+' '+await r.text());
+        const j = await r.json();
+        const ans = j.choices?.[0]?.message?.content || j.choices?.[0]?.text || '(empty)';
+        tokCount = j.usage?.completion_tokens || 0;
+        // feed realtime as bulk
+        for(let i=0;i<tokCount;i++) rtOnToken(false, '', null);
+        const totalMs = performance.now()-t0;
+        rtEnd('chat done (non-stream)');
+        const tps = tokCount ? tokCount/(totalMs/1000) : 0;
+        assist.textContent = ans;
+        chatStats.style.display='block'; chatStats.className='notice ok';
+        const stats = j.stats ? ` • draft ${j.stats.draft_model} accept ${(j.stats.accepted_draft_tokens_count/Math.max(1,j.stats.total_draft_tokens_count)*100).toFixed(1)}%` : '';
+        const reasoning = j.choices?.[0]?.message?.reasoning_content ? `\n\n[reasoning: ${j.choices[0].message.reasoning_content.slice(0,300)}]` : '';
+        chatStats.innerHTML = `<b>${j.usage?.prompt_tokens||'?'} prompt</b> + <b>${tokCount} gen</b> • ${totalMs.toFixed(0)} ms • ${tps.toFixed(1)} tok/s${stats}${reasoning? '<br><span class="muted mono" style="font-size:11px">'+esc(reasoning)+'</span>':''}`;
+      }
+    } catch(e){
+      if (e.name==='AbortError'){ assist.textContent+='\n— stopped —'; chatStats.style.display='block'; chatStats.className='notice warn'; chatStats.textContent='Stopped.'; rtEnd('aborted'); }
+      else { assist.textContent='Error: '+(e.message||e); chatStats.style.display='block'; chatStats.className='notice bad'; chatStats.textContent='Request failed: '+(e.message||e); rtEnd('error: '+(e.message||e).slice(0,60)); }
+    } finally {
+      btnSend.textContent='Send'; btnSend.onclick = sendChat;
+      chatLog.scrollTop=chatLog.scrollHeight;
+      chatAbort=null;
+    }
+  }
+
+  // helpers
+  function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+  function escAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+  function fmtNum(n){ if(!n) return '0'; if(n>=1000) return (n/1000).toFixed(n%1000===0?0:1)+'k'; return String(n); }
+
+  // events
+  $('#btnTest').addEventListener('click', refresh);
+  $('#btnRefresh').addEventListener('click', refresh);
+  endpointInput.addEventListener('change', ()=>{ saveEndpoint(); refresh(); });
+  endpointInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ saveEndpoint(); refresh(); }});
+  modelFilter.addEventListener('input', renderModels);
+  modelSort.addEventListener('change', renderModels);
+  $('#btnCorsHelp').addEventListener('click', ()=>{ const d=$('#corsDetails'); d.open=!d.open; d.scrollIntoView({behavior:'smooth'}); });
+  btnBench.addEventListener('click', runBenchmark);
+  btnBenchStop.addEventListener('click', ()=> benchAbort?.abort());
+  $('#btnExportCsv').addEventListener('click', ()=>{
+    if(!history.length) return;
+    const rows=[['time','model','tokens','gen_tps','prompt_tps','ttft_ms','accept_rate','draft_model']];
+    history.forEach(h=> rows.push([h.timeLabel,h.model,h.tokens,(h.genTps||0).toFixed(2),(h.promptTps||0).toFixed(2),h.ttft!=null?h.ttft.toFixed(0):'',h.acceptRate!=null?h.acceptRate.toFixed(3):'',h.draftModel||'']));
+    const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob=new Blob([csv],{type:'text/csv'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='lmstudio-bench.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  });
+  $('#btnClearHist').addEventListener('click', ()=>{ if(confirm('Clear benchmark history?')){ history=[]; localStorage.removeItem('lmstudio-bench-history'); renderHistory(); }});
+  $('#btnCopyRaw').addEventListener('click', ()=>{ navigator.clipboard.writeText(rawOut.textContent); const b=$('#btnCopyRaw'); const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1200); });
+  btnSend.addEventListener('click', sendChat);
+  $('#btnClearChat').addEventListener('click', ()=>{ chatLog.innerHTML='<div class="bubble sys">Cleared.</div>'; chatStats.style.display='none'; });
+  $('#btnCopyLast').addEventListener('click', ()=>{
+    const last=[...chatLog.querySelectorAll('.bubble.assist')].pop();
+    if(!last) return; navigator.clipboard.writeText(last.textContent); const b=$('#btnCopyLast'); const t=b.textContent; b.textContent='Copied!'; setTimeout(()=>b.textContent=t,1200);
+  });
+  chatInput.addEventListener('keydown', e=>{
+    if ((e.metaKey||e.ctrlKey) && e.key==='Enter'){ sendChat(); }
+    else if (e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendChat(); }
+  });
+
+
+  // ping + bridge polling
+  async function pingOnce(){
+    const base = endpoint();
+    const t0 = performance.now();
+    try{ const r = await fetchWithCors(base + '/api/v0/models', {method:'GET'}); await r.text(); const dt = performance.now()-t0; rtState.lastPing=dt; rtState.pingSamples.push(dt); if(rtState.pingSamples.length>30) rtState.pingSamples.shift(); rtPingEl.textContent='ping '+dt.toFixed(0)+'ms'; rtPingVal.textContent=dt.toFixed(0)+' ms'; rtPingHist.textContent='p50 '+(rtState.pingSamples.slice().sort((a,b)=>a-b)[Math.floor(rtState.pingSamples.length/2)]||0).toFixed(0)+'ms • last '+rtState.pingSamples.length; rtLastPoll.textContent=new Date().toLocaleTimeString(); }catch(e){ rtPingEl.textContent='ping err'; }
+  }
+  async function pollBridge(){
+    const url = (bridgeUrlInput.value.trim()||'http://localhost:1235').replace(/\/+$/,'') + '/lms-ps';
+    try{
+      const r = await fetch(url, {mode:'cors', cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j = await r.json();
+      bridgeData = j;
+      const n = (j.data||[]).length;
+      bridgeText.textContent = n ? n+' models' : 'ok';
+      bridgePill.style.borderColor='rgba(34,197,94,.35)';
+      bridgePill.style.background='rgba(34,197,94,.1)';
+      // update queue/parallel from bridge for the active model or first loaded
+      const active = (j.data||[]).find(x=> (x.identifier||x.modelKey)===rtState.model) || (j.data||[]).find(x=>x.status==='generating') || j.data[0];
+      if(active){ rtQueueEl.textContent = `queue ${active.queued??0}/${active.parallel??'—'}`; rtBridgeInfo.style.display='inline-flex'; rtBridgeInfo.textContent = active.status + ' • ' + (active.paramsString||''); rtBridgeDetail.textContent = (active.displayName||active.identifier) + ' • ' + (active.sizeBytes? (active.sizeBytes/1024/1024/1024).toFixed(1)+'GB ':'') + (active.architecture||'') + ' ' + (active.quantization?.name||''); enrichWithBridge(); renderModels(); updateKpis(); }
+    }catch(e){
+      bridgeText.textContent='off'; bridgePill.style.borderColor=''; bridgePill.style.background='';
+      rtBridgeInfo.style.display='none';
+    }
+  }
+
+
+  function startPoll(){
+    clearInterval(pollTimer);
+    const ms = parseInt($('#pollMs').value,10);
+    const auto = $('#autoPoll').checked;
+    if (!auto || !ms) return;
+    pollTimer=setInterval(()=>{ if(!document.hidden) refresh().catch(()=>{}); }, ms);
+  }
+  let pingTimer=null, bridgeTimer=null;
+  function startPingBridge(){
+    clearInterval(pingTimer); clearInterval(bridgeTimer);
+    pingTimer=setInterval(()=>{ if(!document.hidden) pingOnce(); }, 900);
+    bridgeTimer=setInterval(()=>{ if(!document.hidden) pollBridge(); }, 800);
+    pingOnce(); pollBridge();
+  }
+  $('#pollMs').addEventListener('change', startPoll);
+  $('#autoPoll').addEventListener('change', startPoll);
+  // keep ping/bridge in sync with poll toggle
+  $('#autoPoll').addEventListener('change', startPingBridge);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) refresh().catch(()=>{}); });
+
+  $('#btnRtClear').addEventListener('click', ()=>{ rtState.events=[]; rtState.inspector=[]; renderRtLog(); renderRtInspector(); });
+  bridgeUrlInput.addEventListener('change', ()=>{ localStorage.setItem('lmstudio-bridge-url', bridgeUrlInput.value.trim()); pollBridge(); });
+  const btnBridgeTest = document.getElementById('btnBridgeTest'); if(btnBridgeTest) btnBridgeTest.addEventListener('click', pollBridge);
+  const savedBridge = localStorage.getItem('lmstudio-bridge-url'); if(savedBridge) bridgeUrlInput.value=savedBridge;
+  // init
+  refresh().catch(()=>{}); startPingBridge();
+  renderHistory();
+  drawChart();
+  startPoll();
+  // handle dpi for chart
+  const ro=new ResizeObserver(()=> drawChart());
+  ro.observe(tpsChart);
+})();
+</script>
+</body>
+</html>
