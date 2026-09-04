@@ -4,84 +4,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Virtual Aquarium Prototype</title>
+    <title>Virtual Aquarium — AI Ecosystem</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-    <div class="aquarium-container">
-        <h1>Virtual Aquarium</h1>
-        <canvas id="aquarium-canvas" width="1280" height="800"></canvas>
-        <div class="controls">
-            <button id="add-fish">Add Fish</button>
-            <button id="add-bubble">Add Bubble</button>
-        </div>
+    <div class="page">
+        <header class="hero">
+            <div>
+                <h1>🪸 Virtual Aquarium</h1>
+                <p class="subtitle">Adversarial AI ecosystem · prey evolve to survive, predators evolve to hunt — click any fish to inspect its genome</p>
+            </div>
+            <div class="live-badges" id="live-badges">
+                <div class="badge"><span class="dot prey-dot"></span>Prey <strong id="hud-prey">0</strong></div>
+                <div class="badge"><span class="dot pred-dot"></span>Predators <strong id="hud-pred">0</strong></div>
+                <div class="badge">🏆 Round <strong id="hud-round">1</strong></div>
+                <div class="badge">🧬 Gen <strong id="hud-gen">1</strong></div>
+                <div class="badge">🎚️ Difficulty <strong id="hud-diff">1/10</strong></div>
+                <div class="badge">🌿 <strong id="hud-season">spring</strong></div>
+                <div class="badge">🏆 <strong id="hud-best">—</strong> best</div>
+                <div class="badge">⚡ <strong id="hud-fps">60</strong> fps</div>
+            </div>
+        </header>
 
-        <div class="controls-container">
-            <div class="learning-controls">
-                <h3>Learning Rate Controls</h3>
-
-                <div class="slider-group">
-                    <label for="eating-reward-rate">Eating Reward: <span id="eating-rate-value">0.10</span></label>
-                    <input type="range" id="eating-reward-rate" min="0" max="1" step="0.01" value="0.10">
+        <div class="aquarium-container">
+            <div class="tank-wrap">
+                <canvas id="aquarium-canvas" width="1280" height="720"></canvas>
+                <div class="tank-hud">
+                    <div class="timer-track"><div class="timer-fill" id="round-timer-fill"></div></div>
+                    <div class="tank-hint">Click fish to inspect · click water to feed · <kbd>E</kbd> evolve · <kbd>1/2/3</kbd> speed · <kbd>Space</kbd> pause</div>
                 </div>
-
-                <div class="slider-group">
-                    <label for="positive-reward-rate">Positive Reinforcement: <span
-                            id="positive-rate-value">0.10</span></label>
-                    <input type="range" id="positive-reward-rate" min="0" max="1" step="0.01" value="0.10">
-                </div>
-
-                <div class="slider-group">
-                    <label for="negative-reward-rate">Negative Reinforcement: <span
-                            id="negative-rate-value">0.10</span></label>
-                    <input type="range" id="negative-reward-rate" min="0" max="1" step="0.01" value="0.10">
-                </div>
-
-                <div class="slider-group">
-                    <label for="prey-survival-rate">Prey Survival: <span id="prey-rate-value">0.02</span></label>
-                    <input type="range" id="prey-survival-rate" min="0" max="1" step="0.01" value="0.02">
-                </div>
-
-                <div class="slider-group">
-                    <label for="predator-hunting-rate">Predator Hunting: <span
-                            id="predator-rate-value">0.02</span></label>
-                    <input type="range" id="predator-hunting-rate" min="0" max="1" step="0.01" value="0.02">
+                <div class="round-banner hidden" id="round-banner"></div>
+                <div class="fish-inspector hidden" id="fish-inspector">
+                    <div class="insp-head"><strong data-f="team">🐟 Prey</strong><span data-f="elite"></span></div>
+                    <div class="insp-fit">fitness <strong data-f="fit">0</strong></div>
+                    <div class="insp-line" data-f="gen">G1</div>
+                    <div class="insp-line" data-f="stats"></div>
+                    <div class="insp-line genome" data-f="genome"></div>
                 </div>
             </div>
 
-            <div class="analytics-panel hidden" id="analytics-dashboard">
-                <h3>Analytics Dashboard</h3>
-                <div class="graph-container">
-                    <canvas id="fitness-graph" width="360" height="150"></canvas>
-                    <div class="graph-label">Fitness over Generations</div>
-                </div>
-                <div class="graph-container">
-                    <canvas id="population-graph" width="360" height="150"></canvas>
-                    <div class="graph-label">Population Balance</div>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-gen">1</div>
-                        <div class="stat-label">Generation</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-ecosystem">100%</div>
-                        <div class="stat-label">Eco-Health</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value" id="stat-scarcity">0%</div>
-                        <div class="stat-label">Scarcity</div>
-                    </div>
-                </div>
+            <div class="controls">
+                <button id="add-fish" title="Add a random AI fish">➕ Add Fish</button>
+                <button id="add-prey" title="Add a prey fish">🐟 Add Prey</button>
+                <button id="add-predator" title="Add a predator">🦈 Add Predator</button>
+                <button id="add-food" title="Drop food pellets">🍽️ Drop Food</button>
+                <button id="add-bubble" title="Add bubbles">🫧 Bubbles</button>
+                <button id="evolve-now" title="End this round and breed the next generation (E)">🧬 Evolve Now</button>
+                <button id="speed-btn" title="Cycle simulation speed 1×→2×→4×">⏩ 1×</button>
+                <button id="pause-btn" title="Pause / resume (Space)">⏸️ Pause</button>
             </div>
 
-            <div class="training-log">
-                <h3>Training Log</h3>
-                <div id="log-container">
-                    <div class="log-entry">🎯 Training session started...</div>
+            <div class="controls-container">
+                <div class="learning-controls panel">
+                    <h3>🧠 Learning Rates</h3>
+                    <p class="panel-desc">Live-tunable. Applied to the next training step.</p>
+
+                    <div class="slider-group">
+                        <label for="eating-reward-rate">Eating Reward: <span id="eating-rate-value">0.10</span></label>
+                        <input type="range" id="eating-reward-rate" min="0" max="1" step="0.01" value="0.10">
+                    </div>
+
+                    <div class="slider-group">
+                        <label for="positive-reward-rate">Positive Reinforcement: <span
+                                id="positive-rate-value">0.10</span></label>
+                        <input type="range" id="positive-reward-rate" min="0" max="1" step="0.01" value="0.10">
+                    </div>
+
+                    <div class="slider-group">
+                        <label for="negative-reward-rate">Negative Reinforcement: <span
+                                id="negative-rate-value">0.10</span></label>
+                        <input type="range" id="negative-reward-rate" min="0" max="1" step="0.01" value="0.10">
+                    </div>
+
+                    <div class="slider-group">
+                        <label for="prey-survival-rate">Prey Survival: <span id="prey-rate-value">0.02</span></label>
+                        <input type="range" id="prey-survival-rate" min="0" max="1" step="0.01" value="0.02">
+                    </div>
+
+                    <div class="slider-group">
+                        <label for="predator-hunting-rate">Predator Hunting: <span
+                                id="predator-rate-value">0.02</span></label>
+                        <input type="range" id="predator-hunting-rate" min="0" max="1" step="0.01" value="0.02">
+                    </div>
                 </div>
-                <button id="clear-log">Clear Log</button>
+
+                <div class="evolution-panel panel">
+                    <h3>🧬 Evolution Lab</h3>
+                    <p class="panel-desc" id="evo-status">Gen 1 · waiting for first selection…</p>
+                    <div class="slider-group">
+                        <label for="evo-mutation-rate">Mutation Rate: <span id="evo-mutation-value">0.080</span></label>
+                        <input type="range" id="evo-mutation-rate" min="0.01" max="0.30" step="0.005" value="0.08">
+                    </div>
+                    <p class="panel-desc">Bodies evolve: speed · size · vision · metabolism · color (prey hue is inherited — watch the school change color). 👑 = live champion, cyan ring = elite bloodline. Dead fish still pass on genes via the gene pool.</p>
+                    <div class="graph-container">
+                        <canvas id="trait-graph" width="360" height="140"></canvas>
+                        <div class="graph-label">Evolving traits · <span class="legend blue">prey spd</span> · <span class="legend green">prey vis</span> · <span class="legend red">pred spd</span> · <span class="legend orange">pred vis</span></div>
+                    </div>
+                    <div class="stats-grid stats-grid-4">
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-best-prey">0</div>
+                            <div class="stat-label">Best Prey</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-best-pred">0</div>
+                            <div class="stat-label">Best Pred</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-diversity">—</div>
+                            <div class="stat-label">Diversity</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-mut">0.080</div>
+                            <div class="stat-label">Mutation</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-panel hidden panel" id="analytics-dashboard">
+                    <h3>📈 Analytics Dashboard</h3>
+                    <div class="graph-container">
+                        <canvas id="fitness-graph" width="360" height="150"></canvas>
+                        <div class="graph-label">Fitness over Generations · <span class="legend blue">prey</span> · <span class="legend red">predator</span></div>
+                    </div>
+                    <div class="graph-container">
+                        <canvas id="population-graph" width="360" height="150"></canvas>
+                        <div class="graph-label">Population Balance · <span class="legend blue">prey</span> · <span class="legend red">predators</span> · <span class="legend green">plants</span></div>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-gen">1</div>
+                            <div class="stat-label">Generation</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-ecosystem">100%</div>
+                            <div class="stat-label">Eco-Health</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="stat-scarcity">0%</div>
+                            <div class="stat-label">Scarcity</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="training-log panel">
+                    <h3>📜 Training Log</h3>
+                    <div id="log-container">
+                        <div class="log-entry">🎯 Training session started...</div>
+                    </div>
+                    <button id="clear-log">Clear Log</button>
+                </div>
             </div>
         </div>
     </div>
