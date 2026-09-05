@@ -9,7 +9,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 
 - **Black-Scholes Calculator**: Options pricing calculator using the Black-Scholes model
 - **Chatbot Agent**: An interactive chatbot application with tool system
-- **Circuit Lab**: Relational circuit-diagram DSL with dagre-style layered auto-layout
+- **Circuit Lab**: Relational circuit-diagram DSL with dagre-style layered auto-layout and built-in DC + transient simulation
 - **Colony Simulator**: A modular colony management simulation game
 - **Dungeon Crawler**: A dungeon crawler game
 - **Expense Tracker**: A tool for tracking expenses

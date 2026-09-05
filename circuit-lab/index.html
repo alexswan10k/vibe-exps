@@ -4,62 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>⚡ Circuit Lab — relational circuit DSL + auto-layout</title>
-<style>
-  :root{
-    --bg:#0b1020; --panel:#131a30; --panel2:#0f1528; --line:#263056;
-    --ink:#e8ecff; --dim:#9aa3c7; --accent:#ffd166; --teal:#4ecdc4;
-    --rose:#ff5d7a; --blue:#5aa9ff; --green:#5df08d; --grid:#1a2340;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#1b2650 0%,var(--bg) 55%) fixed,var(--bg);
-    color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  header{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);
-    background:rgba(11,16,32,.85);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20;flex-wrap:wrap}
-  header h1{font-size:16px;margin:0;letter-spacing:.3px}
-  header h1 small{color:var(--dim);font-weight:400}
-  .pill{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;
-    padding:6px 12px;font:inherit;cursor:pointer}
-  .pill:hover{border-color:var(--accent)}
-  .pill.primary{background:var(--accent);border-color:var(--accent);color:#1a1405;font-weight:700}
-  select.pill{cursor:auto}
-  main{display:grid;grid-template-columns:minmax(300px,400px) 1fr minmax(240px,300px);gap:12px;padding:12px;max-width:1700px;margin:0 auto}
-  @media(max-width:1100px){main{grid-template-columns:1fr}}
-  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
-    border-radius:14px;overflow:hidden;min-width:0}
-  .card h2{margin:0;padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);
-    border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .card h2 .tag{font-size:11px;color:var(--accent);border:1px solid var(--line);border-radius:999px;padding:1px 8px;text-transform:none;letter-spacing:0}
-  #editor{width:100%;height:420px;background:#080c1a;color:#d7f9ff;border:0;outline:none;resize:vertical;
-    padding:12px;font:13px/1.6 ui-monospace,Menlo,Consolas,monospace;tab-size:2}
-  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px}
-  .row label{color:var(--dim);font-size:12px}
-  #errors{max-height:120px;overflow:auto;padding:8px 12px;font-size:12px}
-  #errors .err{color:#ff8fa3}#errors .warn{color:var(--accent)}#errors .ok{color:var(--green)}
-  #stage{position:relative;background:#070b18}
-  #canvas{width:100%;height:560px;display:block;touch-action:none;cursor:grab}
-  #canvas:active{cursor:grabbing}
-  #hud{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:70%}
-  #hud span{background:rgba(8,12,26,.85);border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:11px;color:var(--dim)}
-  #hud b{color:var(--ink)}
-  .legend{padding:10px 12px;color:var(--dim);font-size:12px}
-  .legend code,.help code{background:#080c1a;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--accent)}
-  .examples{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
-  .examples button{background:#080c1a;border:1px solid var(--line);color:var(--ink);border-radius:10px;
-    padding:8px;font:inherit;font-size:12px;cursor:pointer;text-align:left}
-  .examples button:hover{border-color:var(--teal)}
-  .examples button b{display:block;font-size:12px}.examples button span{color:var(--dim);font-size:11px}
-  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 12px;font-size:12px}
-  .kv dt{color:var(--dim)}.kv dd{margin:0;text-align:right}
-  #netlist{max-height:220px;overflow:auto;padding:8px 12px;font-size:12px;color:var(--dim)}
-  #netlist table{width:100%;border-collapse:collapse}
-  #netlist td,#netlist th{border-bottom:1px dashed var(--line);padding:3px 4px;text-align:left}
-  dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:640px;width:92vw}
-  dialog::backdrop{background:rgba(0,0,0,.6)}
-  dialog pre{background:#080c1a;padding:12px;border-radius:10px;overflow:auto;font-size:12px}
-  .kbd{background:#080c1a;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px}
-  footer{color:var(--dim);text-align:center;padding:18px;font-size:12px}
-  a{color:var(--teal)}
-</style>
+<link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 <header>
@@ -94,6 +39,8 @@
     </div>
     <div class="row">
       <label><input type="checkbox" id="gridSnap" checked /> snap to grid</label>
+      <label><input type="checkbox" id="showV" checked /> voltages</label>
+      <label><input type="checkbox" id="showI" /> currents</label>
       <span style="color:var(--dim);font-size:12px">layout is automatic — like mermaid, there is nothing to tune</span>
     </div>
   </section>
@@ -112,6 +59,42 @@
     <div class="legend">Power nets (<code>VCC 5V 9V V+ GND</code>) anchor the layout: supply pulls up, ground pulls down.</div>
   </section>
 </main>
+
+<div class="wrap">
+<section class="card" id="simCard">
+  <h2>4 · simulation <span class="tag" id="simTag">—</span></h2>
+  <div class="row">
+    <label>stimulus
+      <select id="stimSel">
+        <option value="auto">auto</option>
+        <option value="step">step</option>
+        <option value="drawn">as drawn</option>
+      </select>
+    </label>
+    <label>tStop <input type="number" id="tStop" placeholder="auto" min="0" step="any" /> ms</label>
+    <button id="runSimBtn" class="pill">run sim</button>
+    <span style="color:var(--dim);font-size:12px">DC always solves · transient needs C, L, or an AC/SIN source</span>
+  </div>
+  <div id="simMsg"></div>
+  <div class="simgrid">
+    <div>
+      <h3>node voltages · DC</h3>
+      <table id="simV"></table>
+      <h3>part currents · DC</h3>
+      <table id="simI"></table>
+    </div>
+    <div>
+      <canvas id="plot" width="640" height="300"></canvas>
+      <div id="probes"></div>
+    </div>
+  </div>
+  <div class="legend">MNA + piecewise-linear regions · <code>D</code> 0.7V / <code>LED</code> 2.0V ·
+  <code>QN/QP</code> off / active (0.7V + β) / saturated (0.2V) — regions shown in the table ·
+  <code>OPAMP</code> ideal (gain 1e5) · DC: <code>C</code> open, <code>L</code> short ·
+  sources: <code>9V</code> DC, <code>12VAC</code> = 50 Hz sine (RMS), <code>SIN(peak freq)</code> ·
+  current source: <code>I1 I 1mA A B</code> (flows A→B) · power comes from <code>V/BAT</code> parts, not rail names</div>
+</section>
+</div>
 
 <dialog id="help">
   <h3 style="margin-top:0">Circuit DSL — v2</h3>
@@ -134,9 +117,14 @@ G1 GND N1            # ground symbol on N1
 wire N1 N2</pre>
   <p>Nets named <code>VCC 5V 9V V+</code> pin to the <b>top rail</b>, <code>GND 0V</code> to the <b>bottom rail</b> —
   use them to simplify: anything returning to ground just says <code>GND</code>.</p>
-  <p><b>Types:</b> <code>R C L D LED V BAT SW FUSE W SPK M</code> (2-pin) ·
+  <p><b>Types:</b> <code>R C L D LED V I BAT SW FUSE W SPK M</code> (2-pin) ·
   <code>QN QP</code> · <code>OPAMP</code> · <code>GND VCC PORT</code>.
-  In links the type is inferred from the refdes (<code>R C L D V Q U …</code>); <code>D1 LED</code> forces an LED.</p>
+  In links the type is inferred from the refdes (<code>R C L D V I Q U …</code>); <code>D1 LED</code> forces an LED.</p>
+  <p><b>Simulation:</b> every render runs a DC operating point (MNA + Newton–Raphson) and, when the
+  circuit has <code>C</code>, <code>L</code>, or an AC source, a transient — shown as voltage badges on the
+  schematic, tables below, and a scope plot. <code>V1 V 12VAC AC1 AC2</code> is a 50&nbsp;Hz mains sine (RMS);
+  <code>V1 V SIN(5 1000) IN GND</code> is a 5&nbsp;V-peak 1&nbsp;kHz sine. Stimulus <code>step</code> switches all
+  DC sources on at t=0 so you can watch RC charge and LC ring.</p>
   <p><b>Values</b> are free text — <code>10k 100n 2N2222 LM358 9V</code>. Unknown nets are created on demand.</p>
   <div class="row"><button class="pill primary" onclick="document.getElementById('help').close()">got it</button></div>
 </dialog>
@@ -146,679 +134,11 @@ wire N1 N2</pre>
   automatic orthogonal layout · drag junctions to tweak, 🎲 to re-roll
 </footer>
 
-<script>
-"use strict";
-/* ============================================================
-   Circuit Lab — relational DSL -> netlist -> optimized SVG
-   ============================================================ */
-
-/* ---------- seeded RNG (re-seed each run for variety) ---------- */
-function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
-
-/* ---------- component type table ---------- */
-const TYPES = {
-  R:{pins:2,label:'resistor'}, C:{pins:2,label:'capacitor'}, L:{pins:2,label:'inductor'},
-  D:{pins:2,label:'diode'}, LED:{pins:2,label:'LED'}, V:{pins:2,label:'DC source'},
-  BAT:{pins:2,label:'battery'}, SW:{pins:2,label:'switch'}, FUSE:{pins:2,label:'fuse'},
-  W:{pins:2,label:'jumper'}, SPK:{pins:2,label:'speaker'}, M:{pins:2,label:'motor'},
-  QN:{pins:3,label:'NPN'}, QP:{pins:3,label:'PNP'}, OPAMP:{pins:3,label:'op-amp'},
-  GND:{pins:1,label:'ground'}, VCC:{pins:1,label:'supply'}, PORT:{pins:1,label:'port'},
-};
-const POWER = new Set(['VCC','V+','VDD','5V','9V','12V','3V3','VIN','VCC1']);
-const GROUND = new Set(['GND','0V','GND1','VSS','VEE']);
-
-function inferType(id){
-  const s = id.toUpperCase();
-  if(s.startsWith('LED')) return 'LED';
-  if(s.startsWith('QN')||s==='Q'||s.startsWith('Q')) return 'QN';
-  if(s.startsWith('QP')) return 'QP';
-  if(s.startsWith('U')||s.startsWith('OP')) return 'OPAMP';
-  const c = s[0];
-  if(c==='R')return 'R'; if(c==='C')return 'C'; if(c==='L')return 'L';
-  if(c==='D')return 'D'; if(c==='V'||c==='B')return c==='B'?'BAT':'V';
-  if(c==='S'&&s.startsWith('SP'))return 'SPK'; if(c==='S')return 'SW';
-  if(c==='F')return 'FUSE'; if(c==='J'||c==='W')return 'W';
-  if(c==='M')return 'M'; if(c==='G')return 'GND'; if(c==='P')return 'VCC';
-  return 'R';
-}
-
-/* ---------- DSL parser ---------- */
-function parseDSL(src){
-  const comps=[]; const wires=[]; const errors=[]; let title='untitled circuit';
-  const lines = src.split('\n');
-  lines.forEach((raw,idx)=>{
-    const ln = idx+1;
-    let line = raw.trim();
-    if(!line || line.startsWith('#')) return;
-    if(line.startsWith('//')) return;
-    const mTitle = line.match(/^title\s*:\s*(.+)$/i);
-    if(mTitle){ title = mTitle[1].trim(); return; }
-    // chain form: segments joined by - or -- (spaces required): A - B, A -- R1 10k -- B
-    if(/\s-{1,2}\s/.test(line)){
-      try{ parseChain(line, comps, wires, errors, ln); }
-      catch(e){ errors.push({ln, msg:String(e.message||e)}); }
-      return;
-    }
-    const toks = line.split(/\s+/);
-    const head = toks[0].toUpperCase();
-    if(head==='WIRE'){
-      if(toks.length!==3){ errors.push({ln,msg:`wire needs 2 nets: wire N1 N2`}); return; }
-      wires.push({a:toks[1], b:toks[2], ln}); return;
-    }
-    if(toks.length<3){ errors.push({ln,msg:`can't parse: "${raw.trim()}". Want: ID TYPE VALUE NET… or A -- R1 10k -- B`}); return; }
-    const id = toks[0];
-    let type = toks[1].toUpperCase();
-    if(!TYPES[type]){ errors.push({ln,msg:`${id}: unknown type "${toks[1]}" — try R C L D LED V QN QP OPAMP GND VCC`}); return; }
-    const need = TYPES[type].pins;
-    // 1-pin: ID TYPE NET
-    if(need===1){
-      const nets = toks.slice(2);
-      if(nets.length!==1){ errors.push({ln,msg:`${id} (${type}) takes exactly 1 net`}); return; }
-      comps.push({id, type, value:'', nets, ln}); return;
-    }
-    // value = optional single token before the nets (e.g. "10k", "2N2222", "9V").
-    // Disambiguated by token COUNT, not content: nets routinely contain
-    // digits (N1, OUT2), so content sniffing misfires.
-    let rest = toks.slice(2), value='', nets=[];
-    if(rest.length===need){ nets=rest; }
-    else if(rest.length===need+1){ value=rest[0]; nets=rest.slice(1); }
-    else { errors.push({ln,msg:`${id} (${type}) wants ${need} nets${need===2?' + optional value':''}, got "${rest.join(' ')}"`}); return; }
-    if(nets.length!==need){ errors.push({ln,msg:`${id}: expected ${need} nets, got ${nets.length}`}); return; }
-    comps.push({id, type, value, nets, ln});
-  });
-  // duplicate id check
-  const seen=new Set();
-  comps.forEach(c=>{ if(seen.has(c.id.toUpperCase())) errors.push({ln:c.ln,msg:`duplicate id "${c.id}"`}); seen.add(c.id.toUpperCase()); });
-  return {comps, wires, errors, title};
-}
-
-function parseChain(line, comps, wires, errors, ln){
-  // split on - or -- (spaces required, so negative values are safe); strip brackets
-  const parts = line.split(/\s-{1,2}\s/).map(s=>s.trim().replace(/^\[/,'').replace(/\]$/,'').trim()).filter(Boolean);
-  if(parts.length<2){ errors.push({ln,msg:`chain needs NET - NET or NET -- PART -- NET …`}); return; }
-  const netName = s => s.split(/\s+/)[0];
-  // classify an odd-position segment: component spec (2+ tokens) or plain net (1 token)
-  const asComp = (spec) => {
-    const st = spec.split(/\s+/).filter(Boolean);
-    if(st.length<2) return null; // single token -> it's a net, i.e. a plain wire hop
-    let id=st[0], type=null, value='';
-    if(st.length>=3 && TYPES[st[1].toUpperCase()]){ type=st[1].toUpperCase(); value=st.slice(2).join(' '); }
-    else if(st.length===2 && TYPES[st[1].toUpperCase()]){ type=st[1].toUpperCase(); value=''; } // "D1 LED"
-    else if(st.length>=2 && TYPES[st[0].toUpperCase()] && st[0].length<=5){ type=st[0].toUpperCase(); id=st[0]+'_'+ln; value=st.slice(1).join(' '); }
-    else { type=inferType(id); value=st.slice(1).join(' '); }
-    return {id, type, value};
-  };
-  let pending = netName(parts[0]);   // current net
-  const flushWire = (a,b) => { if(a!==b) wires.push({a, b, ln}); };
-  // classify every segment up front: single token = net, 2+ tokens = component.
-  // Then consume: NET (COMP NET | NET)*  — parity-independent, so mixes like
-  // "A - B -- R1 10k -- C" just work.
-  let i=1;
-  while(i<parts.length){
-    const c = asComp(parts[i]);
-    if(c){
-      if(TYPES[c.type].pins!==2){ errors.push({ln,msg:`${c.id} (${c.type}) has ${TYPES[c.type].pins} pins — use explicit form, not chains`}); return; }
-      if(i+1>=parts.length){ errors.push({ln,msg:`${c.id} is missing its second net — want NET -- ID VALUE -- NET`}); return; }
-      const nxt = asComp(parts[i+1]);
-      if(nxt){ errors.push({ln,msg:`expected a net after "${parts[i]}", got another part`}); return; }
-      const net = netName(parts[i+1]);
-      comps.push({id:c.id,type:c.type,value:c.value,nets:[pending,net],ln});
-      pending=net; i+=2;
-    } else {
-      const net = netName(parts[i]);
-      flushWire(pending, net); pending=net; i+=1;
-    }
-  }
-}
-
-/* ---------- examples ---------- */
-const EXAMPLES = {
-loop:{name:'Resistor loop',sub:'A–B–C–D–A',
-dsl:`title: Resistor loop
-A -- R1 1k -- B
-B -- R2 1k -- C
-C -- R3 1k -- D
-D -- R4 1k -- A`},
-divider:{name:'Voltage divider',sub:'VCC … GND rails',
-dsl:`title: Voltage divider
-V1 V 9V VCC GND
-VCC -- R1 10k -- OUT
-OUT -- R2 10k -- GND`},
-rc:{name:'RC low-pass',sub:'fc ≈ 160 Hz',
-dsl:`title: RC low-pass filter
-V1 V 5V IN GND
-IN -- R1 1k -- OUT
-OUT -- C1 1u -- GND`},
-led:{name:'LED limiter',sub:'9V + 330Ω',
-dsl:`title: LED with current-limiting resistor
-V1 V 9V VCC GND
-VCC -- R1 330 -- A
-A -- D1 LED -- GND`},
-bridge:{name:'Wheatstone bridge',sub:'null detector',
-dsl:`title: Wheatstone bridge
-V1 V 5V TOP GND
-TOP -- R1 1k -- A
-TOP -- R3 1k -- B
-A -- R2 1k -- GND
-B -- R4 1k -- GND
-A -- R5 10k -- B`},
-npn:{name:'NPN switch',sub:'drives an LED',
-dsl:`title: NPN low-side switch
-V1 V 9V VCC GND
-VCC -- R1 330 -- N1
-Q1 QN N1 N2 GND
-VCC -- R2 10k -- N2
-IN -- R3 1k -- N2`},
-opamp:{name:'Inverting amp',sub:'gain ≈ −10',
-dsl:`title: Inverting op-amp, gain -10
-V1 V 1V IN GND
-IN -- R1 1k -- N1
-N1 -- R2 10k -- OUT
-U1 OPAMP GND N1 OUT`},
-rectifier:{name:'Bridge rectifier',sub:'AC → DC + cap',
-dsl:`title: Full-wave bridge rectifier
-V1 V 12VAC AC1 AC2
-AC1 -- D1 1N4007 -- DC
-AC2 -- D2 1N4007 -- DC
-GNDX -- D3 1N4007 -- AC1
-GNDX -- D4 1N4007 -- AC2
-DC -- C1 1000u -- GNDX`},
-rlc:{name:'Series RLC',sub:'resonant tank',
-dsl:`title: Series RLC tank
-V1 V 5V IN GND
-IN -- R1 100 -- N1
-N1 -- L1 10m -- N2
-N2 -- C1 100n -- GND`},
-};
-
-/* ---------- layout: dagre-style layered ranking (mermaid's approach) ----------
-   Nodes = nets, edges = components/wires. Parts ride their edge, so both
-   ends are connected by construction.
-   1. direct edges by BFS visit order (supply outward); backward ones
-      become feedback edges  2. longest-path ranking: supply rank 0,
-      ground pinned bottom, stray subcircuits stacked below
-   3. barycenter ordering sweeps kill crossings  4. centered x + snap
-   5. orthogonal routing; multi-rank spans jog into side lanes */
-const layout = { nets:new Map(), edges:[], hidden:[], cost:0, cross:0, len:0 };
-const LW=760, LH=480;
-
-function isTopRail(n){const u=n.toUpperCase();return POWER.has(u)||u.startsWith('VCC')||u.startsWith('VDD')||u.startsWith('TOP')||u.startsWith('VBUS')||u.startsWith('PWR')||/^\d+V/.test(u)||u==='VIN'||u==='V+';}
-function isBotRail(n){const u=n.toUpperCase();return GROUND.has(u)||u.startsWith('GND');}
-function clamp(v,a,b){ return Math.min(b,Math.max(a,v)); }
-
-function buildLayered(netlist){
-  layout.nets.clear(); layout.edges=[]; layout.hidden=[]; layout.pinPair=new Set(); layout.pullTo=new Map();
-  const addNet=n=>{ if(!layout.nets.has(n))layout.nets.set(n,{id:n,x:0,y:0,rank:0,ord:0,rail:isTopRail(n)?'top':isBotRail(n)?'bot':null}); };
-  netlist.comps.forEach(c=>{
-    c.nets.forEach(addNet);
-    if(c.nets.length===2)layout.edges.push({comp:c,a:c.nets[0],b:c.nets[1]});
-    else if(c.nets.length===3){
-      layout.hidden.push({a:c.nets[0],b:c.nets[1]},{a:c.nets[1],b:c.nets[2]});
-      for(let i=0;i<3;i++)for(let j=i+1;j<3;j++){layout.pinPair.add(c.nets[i]+'\n'+c.nets[j]);layout.pinPair.add(c.nets[j]+'\n'+c.nets[i]);}
-    }
-  });
-  netlist.wires.forEach(w=>{addNet(w.a);addNet(w.b);layout.edges.push({comp:null,a:w.a,b:w.b});});
-  const N=layout.nets;
-  const nb=new Map();
-  const link=(a,b)=>{ if(a===b)return; if(!nb.has(a))nb.set(a,new Set()); if(!nb.has(b))nb.set(b,new Set()); nb.get(a).add(b); nb.get(b).add(a); };
-  [...layout.edges,...layout.hidden].forEach(e=>link(e.a,e.b));
-  // visit order: BFS from supply rails first, then any stray component
-  const order=new Map(); let cnt=0;
-  const comps=[];
-  const seeds=[...N.keys()].filter(isTopRail);
-  [...seeds,...N.keys()].forEach(s=>{
-    if(order.has(s))return;
-    const members=[]; const q=[s]; order.set(s,cnt++);
-    while(q.length){ const cur=q.shift(); members.push(cur);
-      for(const m of (nb.get(cur)||[])) if(!order.has(m)){order.set(m,cnt++);q.push(m);} }
-    comps.push(members);
-  });
-  // classify unique edges by visit order: forward (ranking) vs feedback
-  const rankE=[]; const seenE=new Set();
-  [...layout.edges,...layout.hidden].forEach(e=>{
-    if(e.a===e.b)return;
-    const k=e.a+'\n'+e.b, kr=e.b+'\n'+e.a;
-    if(seenE.has(k)||seenE.has(kr))return; seenE.add(k);
-    if(order.get(e.a)<order.get(e.b))rankE.push([e.a,e.b]); // forward only; rest is feedback
-  });
-  // longest-path ranks per connected component, stacked vertically
-  const rank=new Map(); let maxRank=0;
-  comps.forEach((members,ci)=>{
-    const inC=new Set(members);
-    const preds=new Map(members.map(v=>[v,[]]));
-    const succs=new Map(members.map(v=>[v,[]]));
-    rankE.forEach(([a,b])=>{ if(inC.has(a)&&inC.has(b)){preds.get(b).push(a);succs.get(a).push(b);} });
-    const sorted=[...members].sort((x,y)=>order.get(x)-order.get(y));
-    sorted.forEach(v=>{
-      if(isTopRail(v)){ rank.set(v,0); return; }
-      let r=0; preds.get(v).forEach(p=>{r=Math.max(r,rank.get(p)+1);}); rank.set(v,r);
-    });
-    let cMax=Math.max(...members.map(v=>rank.get(v)));
-    members.forEach(v=>{ if(isBotRail(v))rank.set(v,cMax); });
-    // lone signal inputs (single neighbor, e.g. IN -- R3 -- N2) drop to
-    // their neighbor's row instead of floating on the top row.
-    // (Multi-neighbor sources like TOP stay put — they're supply entries.)
-    for(let pass=0;pass<2;pass++)
-      sorted.forEach(v=>{
-        if(isTopRail(v)||isBotRail(v))return;
-        const all=[...(nb.get(v)||[])];
-        if(all.length!==1)return;
-        rank.set(v,rank.get(all[0]));
-        layout.pullTo.set(v,all[0]);
-      });
-    cMax=Math.max(...members.map(v=>rank.get(v)));
-    const lo=Math.min(...members.map(v=>rank.get(v)));
-    const shift=(ci===0?-lo:maxRank+2-lo);
-    members.forEach(v=>rank.set(v,rank.get(v)+shift));
-    maxRank=Math.max(...members.map(v=>rank.get(v)));
-  });
-  N.forEach((v,id)=>{ v.rank=rank.get(id)??0; });
-  layout.nb=nb; layout.maxRank=maxRank;
-}
-function segCross(p1,p2,p3,p4){
-  const d=(a,b,c)=>(b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
-  const d1=d(p3,p4,p1),d2=d(p3,p4,p2),d3=d(p1,p2,p3),d4=d(p1,p2,p4);
-  return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));
-}
-// schematic cost: dominant-axis edge length (matches orthogonal drawing)
-// plus a heavy crossing penalty. Shared endpoints never count.
-function layoutCost(){
-  const N=layout.nets, E=layout.edges;
-  let len=0;
-  const pts=E.map(e=>{const A=N.get(e.a),B=N.get(e.b);len+=Math.max(Math.abs(A.x-B.x),Math.abs(A.y-B.y));return [A,B];});
-  let cross=0;
-  for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
-    const e1=E[i],e2=E[j];
-    if(e1.a===e2.a||e1.a===e2.b||e1.b===e2.a||e1.b===e2.b)continue;
-    if(segCross(pts[i][0],pts[i][1],pts[j][0],pts[j][1]))cross++;
-  }
-  // separation: two nets must never coincide (that would read as a short).
-  // Without this the greedy sweeps "optimize" by stacking everything.
-  const NN=[...N.values()];
-  let ov=0;
-  for(let i=0;i<NN.length;i++)for(let j=i+1;j<NN.length;j++){
-    const d=Math.hypot(NN[i].x-NN[j].x,NN[i].y-NN[j].y);
-    if(d<96)ov+=(96-d);
-  }
-  return {cost:len+cross*500+ov*8, len, cross};
-}
-// crossing minimization: barycenter sweeps, top-down then bottom-up
-function orderRanks(){
-  const N=layout.nets, nb=layout.nb, maxR=layout.maxRank;
-  const rows=new Map();
-  N.forEach(v=>{ if(!rows.has(v.rank))rows.set(v.rank,[]); rows.get(v.rank).push(v.id); });
-  // pulled-down inputs start life next to their neighbor, so same-rank
-  // wires never have to cross a third junction to get home
-  rows.forEach((row,r)=>{
-    const pulled=row.filter(id=>layout.pullTo&&layout.pullTo.has(id));
-    if(!pulled.length)return;
-    const base=row.filter(id=>!layout.pullTo.has(id));
-    pulled.forEach(id=>{
-      const t=layout.pullTo.get(id), i=base.indexOf(t);
-      if(i<0)base.push(id); else base.splice(i+1,0,id);
-    });
-    rows.set(r,base);
-  });
-  const pos=new Map();
-  const reindex=r=>rows.get(r).forEach((id,i)=>pos.set(id,i));
-  for(let r=0;r<=maxR;r++) if(rows.has(r))reindex(r);
-  const bary=(v,otherRank)=>{
-    const row=rows.get(otherRank); if(!row)return null;
-    const idxs=[];
-    for(const m of (nb.get(v)||[])){ const u=N.get(m); if(u&&u.rank===otherRank&&pos.has(m))idxs.push(pos.get(m)); }
-    if(!idxs.length)return null;
-    return idxs.reduce((a,b)=>a+b,0)/idxs.length;
-  };
-  const sweep=(r,adj)=>{
-    const row=rows.get(r); if(!row)return;
-    const key=new Map(row.map(id=>{
-      // pulled-down inputs stay glued just after their neighbor
-      if(layout.pullTo&&layout.pullTo.has(id))return [id,(pos.get(layout.pullTo.get(id))??0)+0.01];
-      return [id,bary(id,adj)];
-    }));
-    row.sort((a,b)=>{const ka=key.get(a),kb=key.get(b);
-      if(ka===null&&kb===null)return pos.get(a)-pos.get(b);
-      if(ka===null)return 1; if(kb===null)return -1;
-      return ka-kb||pos.get(a)-pos.get(b);});
-    reindex(r);
-  };
-  for(let s=0;s<12;s++){
-    for(let r=1;r<=maxR;r++)sweep(r,r-1);
-    for(let r=maxR-1;r>=0;r--)sweep(r,r+1);
-  }
-  N.forEach((v,id)=>{ v.ord=pos.get(id)??0; });
-  layout.rows=rows;
-}
-// x: centered rows + median relaxation; y: even rank spacing
-function assignCoords(){
-  const N=layout.nets, rows=layout.rows, maxR=layout.maxRank;
-  const snapOn=document.getElementById('gridSnap').checked;
-  const sn=v=>snapOn?Math.round(v/24)*24:v;
-  let vs=maxR>0?Math.min(150,(LH-170)/maxR):0;
-  vs=Math.max(vs,72);
-  N.forEach(v=>{ v.y=80+v.rank*vs; });
-  rows.forEach(row=>{
-    const n=row.length;
-    row.forEach((id,i)=>{ N.get(id).x=LW/2+(i-(n-1)/2)*150; });
-  });
-  for(let p=0;p<3;p++){
-    N.forEach(v=>{
-      const xs=[];
-      for(const m of (layout.nb.get(v.id)||[])){const u=N.get(m); if(u)xs.push(u.x);}
-      if(xs.length)v.x=(v.x+xs.reduce((a,b)=>a+b,0)/xs.length)/2;
-    });
-    rows.forEach(row=>{
-      const sv=row.map(id=>N.get(id)).sort((a,b)=>a.x-b.x);
-      for(let i=1;i<sv.length;i++){
-        // nets sharing a 3-pin body need extra elbow room for it
-        const need=layout.pinPair.has(sv[i].id+'\n'+sv[i-1].id)?170:110;
-        if(sv[i].x-sv[i-1].x<need)sv[i].x=sv[i-1].x+need;
-      }
-      const mid=(sv[0].x+sv[sv.length-1].x)/2, sh=LW/2-mid;
-      sv.forEach(v=>{v.x+=sh;});
-    });
-  }
-  N.forEach(v=>{ v.x=sn(v.x); v.y=sn(v.y); });
-}
-// orthogonal routing: adjacent ranks go straight/L, long spans jog into
-// side lanes (deconflicted so parallel spans don't share a lane)
-function routeAll(){
-  const N=layout.nets;
-  const dedupe=pts=>pts.filter((p,i)=>i===0||p.x!==pts[i-1].x||p.y!==pts[i-1].y);
-  const lanes=[];
-  layout.edges.forEach((e,idx)=>{
-    const A=N.get(e.a),B=N.get(e.b);
-    let pts;
-    if(e.a===e.b){const x=A.x,y=A.y;pts=[{x,y},{x:x+56,y},{x:x+56,y:y+56},{x,y:y+56}];}
-    else if(A.rank===B.rank)pts=[{x:A.x,y:A.y},{x:B.x,y:B.y}];
-    // adjacent ranks: horizontal stub at the source row first, so edges
-    // fanning out of one net get separate vertical trunks (at their
-    // target's x) instead of all piling onto the source's x
-    else if(Math.abs(A.rank-B.rank)===1)pts=dedupe([{x:A.x,y:A.y},{x:B.x,y:A.y},{x:B.x,y:B.y}]);
-    else{
-      // side lane: nearest offset whose vertical span overlaps the least
-      // of what's already routed (parallel spans need parallel lanes)
-      const y1=Math.min(A.y,B.y), y2=Math.max(A.y,B.y);
-      const cands=[84,-84,168,-168].map(d=>A.x+d);
-      const score=lx=>lanes.reduce((s,l)=>{
-        if(Math.abs(l.x-lx)>=24)return s;
-        const ov=Math.min(l.b,y2)-Math.max(l.a,y1);
-        return s+(ov>0?10+ov:1);
-      },0)+Math.abs(lx-A.x)/840;
-      let lx=cands[0],bs=score(lx);
-      if(idx%2===1){lx=cands[1];bs=score(lx);} // alternate the default side
-      for(const c of cands){const s=score(c);if(s<bs-0.01){bs=s;lx=c;}}
-      lanes.push({x:lx,a:y1,b:y2});
-      pts=dedupe([{x:A.x,y:A.y},{x:lx,y:A.y},{x:lx,y:B.y},{x:B.x,y:B.y}]);
-    }
-    let bi=0,bl=-1;
-    for(let i=0;i<pts.length-1;i++){
-      const l=Math.max(Math.abs(pts[i+1].x-pts[i].x),Math.abs(pts[i+1].y-pts[i].y));
-      if(l>bl){bl=l;bi=i;}
-    }
-    e.pts=pts;
-    e.px=(pts[bi].x+pts[bi+1].x)/2; e.py=(pts[bi].y+pts[bi+1].y)/2;
-    e.horiz=Math.abs(pts[bi+1].x-pts[bi].x)>=Math.abs(pts[bi+1].y-pts[bi].y);
-    // diodes/LEDs point at their second net (nets are [anode, cathode])
-    if(e.comp&&(e.comp.type==='D'||e.comp.type==='LED'))
-      e.rot=e.horiz?(B.x>=A.x?0:180):(B.y>=A.y?90:270);
-    else e.rot=e.horiz?0:90;
-  });
-}
-// deterministic and instant — no animation, like mermaid
-function optimize(netlist){
-  buildLayered(netlist);
-  orderRanks();
-  assignCoords();
-  routeAll();
-  const c=layoutCost();
-  layout.cost=c.cost; layout.len=c.len; layout.cross=c.cross;
-  return c;
-}
-
-/* ---------- SVG rendering: parts live at edge midpoints ---------- */
-const NS='http://www.w3.org/2000/svg';
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
-function symbolSVG(c, node){
-  // NB: symbol artwork is drawn around local (0,0), so rotation is about
-  // the local origin — passing global coords here flings parts off-canvas.
-  const v = node.rot?`rotate(${node.rot})`:'';
-  const g0=`<g transform="translate(${node.x} ${node.y}) ${v}">`;
-  const ink='stroke="#d7e0ff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"';
-  const thin='stroke="#d7e0ff" stroke-width="2" fill="none" stroke-linecap="round"';
-  const accent=`stroke="#ffd166" stroke-width="2.4" fill="none" stroke-linecap="round"`;
-  let s='';
-  switch(c.type){
-    case 'R': s=`<path d="M-42 0 L-26 0 L-21 -12 L-11 12 L-1 -12 L9 12 L19 -12 L26 0 L42 0" ${accent}/>`;break;
-    case 'C': s=`<line x1="-42" y1="0" x2="-6" y2="0" ${ink}/><line x1="-6" y1="-16" x2="-6" y2="16" ${ink}/><line x1="6" y1="-16" x2="6" y2="16" ${ink}/><line x1="6" y1="0" x2="42" y2="0" ${ink}/>`;break;
-    case 'L': s=`<line x1="-42" y1="0" x2="-28" y2="0" ${ink}/><path d="M-28 0 a7 9 0 1 1 14 0 a7 9 0 1 1 14 0 a7 9 0 1 1 14 0 a7 9 0 1 1 14 0" ${accent}/><line x1="28" y1="0" x2="42" y2="0" ${ink}/>`;break;
-    case 'D': s=`<line x1="-42" y1="0" x2="-10" y2="0" ${ink}/><path d="M-10 -13 L-10 13 L14 0 Z" ${accent}/><line x1="14" y1="-13" x2="14" y2="13" ${ink}/><line x1="14" y1="0" x2="42" y2="0" ${ink}/>`;break;
-    case 'LED': s=`<line x1="-42" y1="0" x2="-10" y2="0" ${ink}/><path d="M-10 -13 L-10 13 L14 0 Z" ${accent}/><line x1="14" y1="-13" x2="14" y2="13" ${ink}/><line x1="14" y1="0" x2="42" y2="0" ${ink}/><path d="M-2 -16 L6 -26 M8 -16 L16 -26" stroke="#5df08d" stroke-width="1.8" fill="none" stroke-linecap="round"/><path d="M6 -26 l4 0 -4 3 M16 -26 l4 0 -4 3" stroke="#5df08d" stroke-width="1.8" fill="none"/>`;break;
-    case 'V': case 'BAT': {
-      if(c.type==='V') s=`<circle cx="0" cy="0" r="20" ${accent}/><text x="0" y="-24" text-anchor="middle" font-size="13" fill="#ffd166">+</text><text x="0" y="8" text-anchor="middle" font-size="15" fill="#d7e0ff">⎓</text><line x1="-42" y1="0" x2="-20" y2="0" ${ink}/><line x1="20" y1="0" x2="42" y2="0" ${ink}/>`;
-      else s=`<line x1="-42" y1="0" x2="-4" y2="0" ${ink}/><line x1="-4" y1="-16" x2="-4" y2="16" ${ink}/><line x1="8" y1="-6" x2="8" y2="6" ${ink}/><line x1="8" y1="0" x2="42" y2="0" ${ink}/>`;
-      break; }
-    case 'SW': s=`<circle cx="-30" cy="0" r="3" fill="#d7e0ff"/><circle cx="30" cy="0" r="3" fill="#d7e0ff"/><line x1="-42" y1="0" x2="-30" y2="0" ${ink}/><line x1="30" y1="0" x2="42" y2="0" ${ink}/><line x1="-30" y1="0" x2="26" y2="-16" ${accent}/>`;break;
-    case 'FUSE': s=`<rect x="-26" y="-9" width="52" height="18" rx="3" ${thin}/><line x1="-26" y1="0" x2="-14" y2="0" ${thin}/><line x1="-42" y1="0" x2="-26" y2="0" ${ink}/><line x1="26" y1="0" x2="42" y2="0" ${ink}/>`;break;
-    case 'W': s=`<line x1="-42" y1="0" x2="42" y2="0" stroke="#5aa9ff" stroke-width="2.4" stroke-dasharray="7 5"/>`;break;
-    case 'SPK': s=`<path d="M-20 -12 L-6 -12 L10 0 L-6 12 L-20 12 Z" ${thin}/><path d="M14 -10 a14 14 0 0 1 0 20 M20 -16 a22 22 0 0 1 0 32" ${thin}/><line x1="-42" y1="0" x2="-20" y2="0" ${ink}/>`;break;
-    case 'M': s=`<circle cx="0" cy="0" r="19" ${thin}/><text x="0" y="6" text-anchor="middle" font-size="15" fill="#d7e0ff">M</text><line x1="-42" y1="0" x2="-19" y2="0" ${ink}/><line x1="19" y1="0" x2="42" y2="0" ${ink}/>`;break;
-    case 'QN': case 'QP': {
-      const up = c.type==='QN';
-      s=`<line x1="-34" y1="-22" x2="-10" y2="-22" ${ink}/><line x1="-34" y1="22" x2="-10" y2="22" ${ink}/><line x1="-10" y1="-26" x2="-10" y2="26" ${accent}/><line x1="-34" y1="0" x2="-10" y2="0" ${ink}/><line x1="-10" y1="0" x2="12" y2="${up?14:14}" ${ink}/><line x1="12" y1="${up?14:-14}" x2="12" y2="${up?34:-34}" ${ink}/><circle cx="2" cy="0" r="30" ${thin}/><path d="M12 ${up?22: -22} l-7 ${up?-9:9} M12 ${up?22:-22} l7 1" ${accent}/>`;
-      break; }
-    case 'OPAMP': s=`<path d="M-28 -26 L30 0 L-28 26 Z" ${thin}/><text x="-16" y="-8" font-size="14" fill="#d7e0ff">−</text><text x="-16" y="16" font-size="14" fill="#d7e0ff">+</text><line x1="-42" y1="-13" x2="-24" y2="-13" ${ink}/><line x1="-42" y1="13" x2="-24" y2="13" ${ink}/><line x1="30" y1="0" x2="44" y2="0" ${ink}/>`;break;
-    case 'GND': s=`<line x1="0" y1="-30" x2="0" y2="-8" ${ink}/><line x1="-14" y1="-8" x2="14" y2="-8" ${ink}/><line x1="-9" y1="0" x2="9" y2="0" ${ink}/><line x1="-4" y1="8" x2="4" y2="8" ${ink}/>`;break;
-    case 'VCC': case 'PORT': s=`<circle cx="0" cy="0" r="4" fill="#ffd166"/><line x1="0" y1="4" x2="0" y2="30" ${ink}/>`;break;
-    default: s=`<rect x="-30" y="-14" width="60" height="28" rx="6" ${thin}/>`;
-  }
-  const lbl = esc(c.value?`${c.id} · ${c.value}`:c.id);
-  return `${g0}${s}<text x="0" y="40" text-anchor="middle" font-size="11.5" fill="#9aa3c7" font-family="inherit" style="paint-order:stroke" stroke="#070b18" stroke-width="5" stroke-linejoin="round">${lbl}</text></g>`;
-}
-function routePath(t, n){
-  // manhattan: go along the longer axis first from terminal
-  const dx=n.x-t.x, dy=n.y-t.y;
-  if(Math.abs(dx)<4||Math.abs(dy)<4) return `M${t.x} ${t.y} L${n.x} ${n.y}`;
-  if(Math.abs(dx)>=Math.abs(dy)) return `M${t.x} ${t.y} L${n.x} ${t.y} L${n.x} ${n.y}`;
-  return `M${t.x} ${t.y} L${t.x} ${n.y} L${n.x} ${n.y}`;
-}
-
-let view={x:0,y:0,k:1};
-function render(netlist){
-  const svg=document.getElementById('canvas');
-  const W=820,H=560;
-  svg.setAttribute('viewBox',`${view.x} ${view.y} ${W/view.k} ${H/view.k}`);
-  let defs=`<defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0 H0 V24" fill="none" stroke="#1a2340" stroke-width="1"/></pattern></defs>`;
-  let bg=`<rect x="${view.x-200}" y="${view.y-200}" width="${W/view.k+400}" height="${H/view.k+400}" fill="#070b18"/><rect x="${view.x-200}" y="${view.y-200}" width="${W/view.k+400}" height="${H/view.k+400}" fill="url(#grid)"/>`;
-  // title block
-  bg+=`<text x="${view.x+14}" y="${view.y+28}" font-size="15" fill="#e8ecff" font-weight="bold">${esc(netlist.title||'')}</text>`;
-  bg+=`<text x="${view.x+14}" y="${view.y+46}" font-size="11" fill="#9aa3c7">${netlist.comps.length} parts · ${new Set(netlist.comps.flatMap(c=>c.nets)).size} nets · drag junctions to tweak · scroll to zoom</text>`;
-  const N=layout.nets;
-  const wireStyle=`stroke="#5aa9ff" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.9"`;
-  let wires='', parts='';
-  // degree of nets for junction dots
-  const deg={};
-  netlist.comps.forEach(c=>c.nets.forEach(n=>deg[n]=(deg[n]||0)+1));
-  netlist.wires.forEach(w=>{deg[w.a]=(deg[w.a]||0)+1;deg[w.b]=(deg[w.b]||0)+1;});
-  // drawn edges: orthogonal polyline, part riding its longest segment
-  const line=p=>p.map((q,i)=>(i?'L':'M')+q.x+' '+q.y).join(' ');
-  layout.edges.forEach(e=>{
-    const A=N.get(e.a),B=N.get(e.b); if(!A||!B||!e.pts)return;
-    if(!e.comp){
-      wires+=`<path d="${line(e.pts)}" ${wireStyle} stroke-dasharray="7 5"/>`;
-      return;
-    }
-    wires+=`<path d="${line(e.pts)}" ${wireStyle}/>`;
-    parts+=symbolSVG(e.comp,{x:e.px,y:e.py,rot:e.rot??(e.horiz?0:90)});
-  });
-  // 1-pin terminators hang off their net
-  netlist.comps.forEach(c=>{
-    if(c.nets.length!==1)return;
-    const np=N.get(c.nets[0]); if(!np)return;
-    if(c.type==='GND'){
-      const node={x:np.x,y:np.y+38,rot:0};
-      wires+=`<path d="M${np.x} ${np.y} L${np.x} ${np.y+8}" ${wireStyle}/>`;
-      parts+=symbolSVG(c,node);
-    } else { // VCC / PORT
-      const node={x:np.x,y:np.y-38,rot:0};
-      wires+=`<path d="M${np.x} ${np.y} L${np.x} ${np.y-8}" ${wireStyle}/>`;
-      parts+=symbolSVG(c,node);
-    }
-  });
-  // 3-pin parts sit at their nets' centroid with a stub per pin
-  netlist.comps.forEach(c=>{
-    if(c.nets.length!==3)return;
-    const pts=c.nets.map(n=>N.get(n)); if(pts.some(p=>!p))return;
-    const cx=(pts[0].x+pts[1].x+pts[2].x)/3, cy=(pts[0].y+pts[1].y+pts[2].y)/3;
-    const offs = c.type==='OPAMP'
-      ? [{x:cx-42,y:cy+13},{x:cx-42,y:cy-13},{x:cx+44,y:cy}]
-      : [{x:cx-34,y:cy-22},{x:cx-34,y:cy},{x:cx-34,y:cy+22}];
-    c.nets.forEach((n,idx)=>{
-      wires+=`<path d="${routePath(offs[idx],N.get(n))}" ${wireStyle}/>`;
-    });
-    parts+=symbolSVG(c,{x:cx,y:cy,rot:0});
-  });
-  // nets
-  let nets='';
-  N.forEach(v=>{
-    const up=v.id.toUpperCase();
-    const isP=POWER.has(up), isG=GROUND.has(up);
-    const d=deg[v.id]||0;
-    const fill=isP?'#ffd166':isG?'#5df08d':'#5aa9ff';
-    if(d>2) nets+=`<circle cx="${v.x}" cy="${v.y}" r="5" fill="${fill}" stroke="#070b18" stroke-width="2" data-net="${esc(v.id)}"/>`;
-    else nets+=`<circle cx="${v.x}" cy="${v.y}" r="3.4" fill="none" stroke="${fill}" stroke-width="2" data-net="${esc(v.id)}"/>`;
-    nets+=`<text x="${v.x+9}" y="${v.y-8}" font-size="11" fill="${isP||isG?'#ffd166':'#9aa3c7'}" font-weight="${isP||isG?'bold':'normal'}" style="paint-order:stroke" stroke="#070b18" stroke-width="4">${esc(v.id)}</text>`;
-  });
-  svg.innerHTML=defs+bg+wires+nets+parts;
-  attachDrag(svg, netlist);
-}
-
-/* ---------- drag / pan / zoom ---------- */
-function svgPoint(svg, evt){
-  const m=svg.getScreenCTM(); if(!m)return {x:evt.clientX,y:evt.clientY};
-  return new DOMPoint(evt.clientX,evt.clientY).matrixTransform(m.inverse());
-}
-function attachDrag(svg, netlist){
-  let drag=null;
-  svg.onmousedown=e=>{
-    const t=e.target.closest('[data-net]');
-    const p=svgPoint(svg,e);
-    if(t&&t.dataset.net){
-      const v=layout.nets.get(t.dataset.net);
-      drag={kind:'net',id:t.dataset.net,dx:v.x-p.x,dy:v.y-p.y};
-    } else drag={kind:'pan',sx:e.clientX,sy:e.clientY,vx:view.x,vy:view.y};
-    // grabbing a junction captures the pointer; plain mousedown has no
-    // pointer id, so guard it (used to throw and kill the gesture)
-    if(e.pointerId!==undefined&&svg.setPointerCapture){try{svg.setPointerCapture(e.pointerId);}catch(_){}}
-  };
-  svg.onmousemove=e=>{
-    if(!drag)return;
-    if(drag.kind==='pan'){
-      const r=svg.getBoundingClientRect();
-      view.x=drag.vx-(e.clientX-drag.sx)*( (svg.viewBox.baseVal.width)/r.width );
-      view.y=drag.vy-(e.clientY-drag.sy)*( (svg.viewBox.baseVal.height)/r.height );
-      render(netlist); return;
-    }
-    const p=svgPoint(svg,e);
-    const v=layout.nets.get(drag.id); if(!v)return;
-    v.x=p.x+drag.dx;
-    if(!v.rail)v.y=p.y+drag.dy;
-    render(netlist);
-  };
-  svg.onmouseup=()=>{drag=null; refreshStats(netlist);};
-  svg.onmouseleave=()=>{drag=null;};
-  svg.onwheel=e=>{e.preventDefault();view.k=Math.min(3,Math.max(.5,view.k*(e.deltaY<0?1.1:0.9)));render(netlist);},{passive:false};
-}
-
-/* ---------- stats / errors / netlist ---------- */
-function refreshStats(netlist){
-  const c=layoutCost();
-  document.getElementById('stParts').textContent=netlist.comps.length;
-  document.getElementById('stNets').textContent=new Set(netlist.comps.flatMap(x=>x.nets)).size;
-  document.getElementById('stLen').textContent=Math.round(c.len)+' px';
-  document.getElementById('stCross').textContent=c.cross;
-  document.getElementById('costTag').textContent=`${netlist.comps.length} parts · ✕${c.cross} crossings`;
-  document.getElementById('hud').innerHTML=
-    `<span><b>${esc(netlist.title||'')}</b></span><span>crossings <b>${c.cross}</b></span><span>drag junctions · scroll to zoom</span>`;
-  document.getElementById('netlist').innerHTML=`<table><tr><th>part</th><th>type</th><th>value</th><th>nets</th></tr>`+
-    netlist.comps.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.type)}</td><td>${esc(x.value||'—')}</td><td>${x.nets.map(esc).join(' · ')}</td></tr>`).join('')+`</table>`;
-}
-function showErrors(errors){
-  const el=document.getElementById('errors');
-  if(!errors.length){el.innerHTML=`<div class="ok">✓ ${'parsed clean — layout is automatic, just like mermaid.'}</div>`;return;}
-  el.innerHTML=errors.map(e=>`<div class="err">line ${e.ln}: ${esc(e.msg)}</div>`).join('');
-}
-
-/* ---------- app wiring ---------- */
-let current=null, renderTimer=null;
-function currentDSL(){return document.getElementById('editor').value;}
-function doRender(){
-  const netlist=parseDSL(currentDSL());
-  current=netlist;
-  showErrors(netlist.errors);
-  if(!netlist.comps.length&&!netlist.wires.length){document.getElementById('canvas').innerHTML='';refreshStats(netlist);return;}
-  optimize(netlist);          // layered, synchronous — just lands somewhere sensible
-  fitView();
-  render(netlist);
-  refreshStats(netlist);
-  persistHash();
-}
-// fit the fresh layout into view (user pan/zoom afterwards is untouched
-// until the next render, since net-dragging re-renders in place)
-function fitView(){
-  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
-  layout.nets.forEach(v=>{x0=Math.min(x0,v.x);y0=Math.min(y0,v.y);x1=Math.max(x1,v.x);y1=Math.max(y1,v.y);});
-  if(x0>x1){view={x:0,y:0,k:1};return;}
-  const bw=x1-x0+280, bh=y1-y0+240;
-  const k=clamp(Math.min(820/bw,560/bh),0.4,2);
-  view={x:(x0+x1)/2-(820/k)/2, y:(y0+y1)/2-(560/k)/2, k};
-}
-function persistHash(){
-  try{ location.hash='#dsl='+btoa(unescape(encodeURIComponent(currentDSL()))).slice(0,6000); }catch(e){}
-}
-function restoreHash(){
-  if(location.hash.startsWith('#dsl=')){
-    try{return decodeURIComponent(escape(atob(location.hash.slice(5))));}catch(e){return null;}
-  }return null;
-}
-function loadExample(key){
-  document.getElementById('editor').value=EXAMPLES[key].dsl;
-  document.getElementById('exampleSel').value=key;
-  doRender();
-}
-
-(function init(){
-  const sel=document.getElementById('exampleSel');
-  sel.innerHTML=Object.entries(EXAMPLES).map(([k,v])=>`<option value="${k}">${v.name} — ${v.sub}</option>`).join('');
-  const grid=document.getElementById('exampleGrid');
-  grid.innerHTML=Object.entries(EXAMPLES).map(([k,v])=>`<button data-ex="${k}"><b>${v.name}</b><span>${v.sub}</span></button>`).join('');
-  grid.querySelectorAll('button').forEach(b=>b.onclick=()=>loadExample(b.dataset.ex));
-  sel.onchange=()=>loadExample(sel.value);
-  const fromHash=restoreHash();
-  document.getElementById('editor').value=fromHash||EXAMPLES.loop.dsl;
-  sel.value=fromHash?'loop':'loop';
-  document.getElementById('editor').addEventListener('input',()=>{
-    clearTimeout(renderTimer); renderTimer=setTimeout(()=>doRender(),350);
-  });
-  document.getElementById('renderBtn').onclick=()=>doRender();
-  document.getElementById('layoutBtn').onclick=()=>doRender();
-  document.getElementById('helpBtn').onclick=()=>document.getElementById('help').showModal();
-  document.getElementById('shareBtn').onclick=async()=>{
-    persistHash();
-    try{await navigator.clipboard.writeText(location.href);document.getElementById('shareBtn').textContent='copied!';setTimeout(()=>document.getElementById('shareBtn').textContent='copy link',1200);}catch(e){}
-  };
-  document.getElementById('svgBtn').onclick=()=>{
-    const blob=new Blob([document.getElementById('canvas').outerHTML],{type:'image/svg+xml'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='circuit.svg';a.click();
-  };
-  document.getElementById('pngBtn').onclick=()=>{
-    const svg=document.getElementById('canvas');const xml=new XMLSerializer().serializeToString(svg);
-    const img=new Image();
-    img.onload=()=>{const c=document.createElement('canvas');c.width=1640;c.height=1120;const x=c.getContext('2d');x.fillStyle='#070b18';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='circuit.png';a.click();};
-    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml);
-  };
-  doRender();
-})();
-</script>
+<script src="dsl.js"></script>
+<script src="layout.js"></script>
+<script src="sim.js"></script>
+<script src="render.js"></script>
+<script src="sim-ui.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
