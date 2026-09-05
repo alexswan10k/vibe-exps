@@ -1,0 +1,70 @@
+:root{
+    --bg:#0b1020; --panel:#131a30; --panel2:#0f1528; --line:#263056;
+    --ink:#e8ecff; --dim:#9aa3c7; --accent:#ffd166; --teal:#4ecdc4;
+    --rose:#ff5d7a; --blue:#5aa9ff; --green:#5df08d; --grid:#1a2340;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#1b2650 0%,var(--bg) 55%) fixed,var(--bg);
+    color:var(--ink);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  header{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);
+    background:rgba(11,16,32,.85);backdrop-filter:blur(8px);position:sticky;top:0;z-index:20;flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;letter-spacing:.3px}
+  header h1 small{color:var(--dim);font-weight:400}
+  .pill{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;
+    padding:6px 12px;font:inherit;cursor:pointer}
+  .pill:hover{border-color:var(--accent)}
+  .pill.primary{background:var(--accent);border-color:var(--accent);color:#1a1405;font-weight:700}
+  select.pill{cursor:auto}
+  main{display:grid;grid-template-columns:minmax(300px,400px) 1fr minmax(240px,300px);gap:12px;padding:12px;max-width:1700px;margin:0 auto}
+  @media(max-width:1100px){main{grid-template-columns:1fr}}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+    border-radius:14px;overflow:hidden;min-width:0}
+  .card h2{margin:0;padding:10px 12px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);
+    border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .card h2 .tag{font-size:11px;color:var(--accent);border:1px solid var(--line);border-radius:999px;padding:1px 8px;text-transform:none;letter-spacing:0}
+  #editor{width:100%;height:420px;background:#080c1a;color:#d7f9ff;border:0;outline:none;resize:vertical;
+    padding:12px;font:13px/1.6 ui-monospace,Menlo,Consolas,monospace;tab-size:2}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px}
+  .row label{color:var(--dim);font-size:12px}
+  #errors{max-height:120px;overflow:auto;padding:8px 12px;font-size:12px}
+  #errors .err{color:#ff8fa3}#errors .warn{color:var(--accent)}#errors .ok{color:var(--green)}
+  #stage{position:relative;background:#070b18}
+  #canvas{width:100%;height:560px;display:block;touch-action:none;cursor:grab}
+  #canvas:active{cursor:grabbing}
+  #hud{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:70%}
+  #hud span{background:rgba(8,12,26,.85);border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:11px;color:var(--dim)}
+  #hud b{color:var(--ink)}
+  .legend{padding:10px 12px;color:var(--dim);font-size:12px}
+  .legend code,.help code{background:#080c1a;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--accent)}
+  .examples{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 12px}
+  .examples button{background:#080c1a;border:1px solid var(--line);color:var(--ink);border-radius:10px;
+    padding:8px;font:inherit;font-size:12px;cursor:pointer;text-align:left}
+  .examples button:hover{border-color:var(--teal)}
+  .examples button b{display:block;font-size:12px}.examples button span{color:var(--dim);font-size:11px}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;padding:10px 12px;font-size:12px}
+  .kv dt{color:var(--dim)}.kv dd{margin:0;text-align:right}
+  #netlist{max-height:220px;overflow:auto;padding:8px 12px;font-size:12px;color:var(--dim)}
+  #netlist table{width:100%;border-collapse:collapse}
+  #netlist td,#netlist th{border-bottom:1px dashed var(--line);padding:3px 4px;text-align:left}
+  dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;max-width:640px;width:92vw}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog pre{background:#080c1a;padding:12px;border-radius:10px;overflow:auto;font-size:12px}
+  .kbd{background:#080c1a;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:0 6px}
+  footer{color:var(--dim);text-align:center;padding:18px;font-size:12px}
+  a{color:var(--teal)}
+  .wrap{max-width:1700px;margin:0 auto;padding:0 12px 12px}
+  .simgrid{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:12px;padding:10px 12px}
+  @media(max-width:1100px){.simgrid{grid-template-columns:1fr}}
+  #simCard h3{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin:12px 0 4px}
+  #simCard h3:first-child{margin-top:0}
+  .simgrid table{width:100%;border-collapse:collapse;font-size:12px}
+  .simgrid td,.simgrid th{border-bottom:1px dashed var(--line);padding:3px 4px;text-align:left}
+  .simgrid th{color:var(--dim);font-weight:400}
+  #plot{width:100%;height:300px;background:#070b18;border:1px solid var(--line);border-radius:10px}
+  #probes{display:flex;gap:10px;flex-wrap:wrap;padding:8px 0;color:var(--dim);font-size:12px}
+  #probes label{cursor:pointer}
+  #simMsg{padding:8px 12px 0;font-size:12px}
+  #simMsg .err{color:#ff8fa3}#simMsg .warn{color:var(--accent)}#simMsg .ok{color:var(--green)}
+  #simCard input[type=number],#simCard select{background:#080c1a;border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:5px 8px;font:inherit;font-size:12px}
+  #simCard input[type=number]{width:90px}
