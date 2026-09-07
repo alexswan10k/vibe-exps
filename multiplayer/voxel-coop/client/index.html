@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>voxel-coop 🧱 — LAN multiplayer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="game"></div>
+<div id="crosshair">+</div>
+<div id="status">not connected</div>
+<div id="hint"></div>
+<div id="vitals"></div>
+<div id="hotbar"></div>
+<div id="breakbar"><div></div></div>
+
+<div id="chat">
+  <div id="chat-log"></div>
+  <input id="chat-input" placeholder="chat… (T)" maxlength="200" autocomplete="off">
+</div>
+
+<div id="inventory" style="display:none">
+  <div class="inv-panel">
+    <h3>Inventory <small>(E to close · click two slots to swap · G eats pork)</small></h3>
+    <div id="inv-grid"></div>
+    <h3>Crafting <small>(click to craft)</small></h3>
+    <div id="recipe-list"></div>
+  </div>
+</div>
+
+<div id="dead" style="display:none">
+  <div class="dead-panel">
+    <h1>☠ you died</h1>
+    <button id="respawn-btn">respawn</button>
+  </div>
+</div>
+
+<div id="menu">
+  <div class="menu-panel">
+    <h1>🧱 voxel-coop</h1>
+    <p>2-player LAN survival · no certs, plain http</p>
+    <label>name <input id="menu-name" maxlength="16"></label>
+    <label>server <input id="menu-server" spellcheck="false"></label>
+    <button id="menu-join">join world</button>
+    <div class="help">
+      <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
+      <b>hold LMB</b> mine · <b>RMB</b> place · <b>click mob</b> attack<br>
+      <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>G</b> eat pork<br>
+      <b>F</b> use furnace (look at it) · <b>T</b> chat · <b>shift</b> sprint
+    </div>
+  </div>
+</div>
+
+<script src="libs/three.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
