@@ -1,0 +1,209 @@
+// Authoritative voxel world: seeded terrain gen, block overrides, persistence.
+// Coordinates: x,z unbounded, y in [0, WORLD_H).
+
+import { B, CHUNK, WORLD_H, SEA_LEVEL, encodeRLE } from "./protocol.ts";
+
+function hash2(x: number, z: number, seed: number): number {
+  let h = seed ^ (x * 374761393) ^ (z * 668265263);
+  h = (h ^ (h >> 13)) * 1274126177;
+  h = h ^ (h >> 16);
+  return (h >>> 0) / 4294967295;
+}
+
+function smooth(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+// Deterministic value-noise height, no deps.
+export function terrainHeight(x: number, z: number, seed: number): number {
+  const s = 0.035;
+  const xi = Math.floor(x * s), zi = Math.floor(z * s);
+  const xf = x * s - xi, zf = z * s - zi;
+  const a = hash2(xi, zi, seed);
+  const b = hash2(xi + 1, zi, seed);
+  const c = hash2(xi, zi + 1, seed);
+  const d = hash2(xi + 1, zi + 1, seed);
+  const n = a + (b - a) * smooth(xf) + ((c + (d - c) * smooth(xf)) - (a + (b - a) * smooth(xf))) * smooth(zf);
+  // second octave for detail
+  const m = hash2(Math.floor(x * 0.15), Math.floor(z * 0.15), seed ^ 0x9e3779b9);
+  const h = 14 + n * 16 + (m - 0.5) * 5;
+  return Math.max(2, Math.min(WORLD_H - 12, Math.floor(h)));
+}
+
+export function treeAt(x: number, z: number, seed: number): boolean {
+  const r = hash2(x, z, seed ^ 0x51ab);
+  return r > 0.985;
+}
+
+const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
+export class World {
+  seed: number;
+  overrides = new Map<string, number>(); // player edits (incl. placed & removed)
+  time = 0.25; // 0..1, 0.25 = morning
+  savePath: string;
+  private saveTimer = 0;
+
+  constructor(seed: number, savePath: string) {
+    this.seed = seed;
+    this.savePath = savePath;
+  }
+
+  static async loadOrCreate(savePath: string): Promise<World> {
+    try {
+      const raw = await Deno.readTextFile(savePath);
+      const d = JSON.parse(raw);
+      const w = new World(d.seed ?? 1337, savePath);
+      w.time = d.time ?? 0.25;
+      for (const [k, v] of Object.entries(d.overrides ?? {})) w.overrides.set(k, v as number);
+      console.log(`[world] loaded ${w.overrides.size} overrides from ${savePath}`);
+      return w;
+    } catch {
+      const w = new World(Math.floor(Math.random() * 1e9), savePath);
+      console.log(`[world] new world, seed=${w.seed}`);
+      return w;
+    }
+  }
+
+  async save(): Promise<void> {
+    try {
+      await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
+      const d = { seed: this.seed, time: this.time, overrides: Object.fromEntries(this.overrides) };
+      await Deno.writeTextFile(this.savePath, JSON.stringify(d));
+    } catch (e) {
+      console.error("[world] save failed:", e);
+    }
+  }
+
+  // Base terrain block (before overrides). Returns B.* id.
+  baseBlock(x: number, y: number, z: number): number {
+    if (y < 0 || y >= WORLD_H) return B.AIR;
+    if (y === 0) return B.BEDROCK;
+    const h = terrainHeight(x, z, this.seed);
+    if (y <= h - 4) {
+      // ores sprinkled in stone
+      const r = hash2(x * 3 + y * 7, z * 5 - y, this.seed ^ 0x0e3);
+      if (y < h - 1 && r > 0.986 && y <= 22) return B.COAL_ORE;
+      if (y < h - 2 && r > 0.993 && y <= 14) return B.IRON_ORE;
+      return B.STONE;
+    }
+    if (y < h) return B.DIRT;
+    if (y === h) {
+      if (h <= SEA_LEVEL + 1) return B.SAND;
+      if (h >= 27) return B.SNOW;
+      return B.GRASS;
+    }
+    // above surface
+    if (y <= SEA_LEVEL) return B.WATER;
+    // per-column tree check: is (x,z) part of a tree rooted nearby?
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const tx = x - dx, tz = z - dz;
+        if (!treeAt(tx, tz, this.seed)) continue;
+        const th = terrainHeight(tx, tz, this.seed);
+        if (th <= SEA_LEVEL + 1 || th >= 27) continue;
+        const trunkH = 4 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2);
+        if (dx === 0 && dz === 0 && y > th && y <= th + trunkH) return B.LOG;
+        if (y >= th + trunkH - 1 && y <= th + trunkH + 1) {
+          const adx = Math.abs(dx), adz = Math.abs(dz);
+          if (adx + adz <= 3 && !(adx === 0 && adz === 0 && y <= th + trunkH)) {
+            if (y === th + trunkH + 1) {
+              if (adx + adz <= 1) return B.LEAVES;
+            } else {
+              if (adx + adz <= 2 || (adx <= 2 && adz <= 2 && (adx < 2 || adz < 2))) return B.LEAVES;
+            }
+          }
+        }
+      }
+    }
+    return B.AIR;
+  }
+
+  get(x: number, y: number, z: number): number {
+    x = Math.round(x); y = Math.round(y); z = Math.round(z);
+    if (y < 0 || y >= WORLD_H) return B.AIR;
+    const k = key(x, y, z);
+    const o = this.overrides.get(k);
+    if (o !== undefined) return o;
+    return this.baseBlock(x, y, z);
+  }
+
+  set(x: number, y: number, z: number, v: number): void {
+    x = Math.round(x); y = Math.round(y); z = Math.round(z);
+    if (y < 1 || y >= WORLD_H) return; // never edit bedrock layer / out of range
+    const k = key(x, y, z);
+    if (v === B.AIR) {
+      // removing: record AIR only if base wasn't air
+      if (this.baseBlock(x, y, z) === B.AIR) this.overrides.delete(k);
+      else this.overrides.set(k, B.AIR);
+    } else {
+      if (this.baseBlock(x, y, z) === v) this.overrides.delete(k);
+      else this.overrides.set(k, v);
+    }
+  }
+
+  isSolid(x: number, y: number, z: number): boolean {
+    const b = this.get(x, y, z);
+    return b !== B.AIR && b !== B.WATER;
+  }
+
+  /** True if `block` exists within `r` blocks (cube) of pos. */
+  hasBlockNear(x: number, y: number, z: number, block: number, r: number): boolean {
+    const xi = Math.round(x), yi = Math.round(y), zi = Math.round(z);
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (this.get(xi + dx, yi + dy, zi + dz) === block) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  groundHeight(x: number, z: number): number {
+    for (let y = WORLD_H - 1; y >= 0; y--) {
+      if (this.isSolid(x, y, z)) return y;
+    }
+    return 0;
+  }
+
+  findSpawn(): [number, number, number] {
+    for (let r = 0; r < 200; r += 8) {
+      const x = r === 0 ? 0.5 : Math.floor(hash2(r, 7, this.seed) * r * 2 - r) + 0.5;
+      const z = r === 0 ? 0.5 : Math.floor(hash2(r, 13, this.seed) * r * 2 - r) + 0.5;
+      const h = terrainHeight(Math.floor(x), Math.floor(z), this.seed);
+      if (h > SEA_LEVEL + 1 && h < 26) return [x, h + 2.5, z];
+    }
+    return [0.5, 30, 0.5];
+  }
+
+  chunkData(cx: number, cz: number): Uint8Array {
+    const out = new Uint8Array(CHUNK * WORLD_H * CHUNK);
+    let i = 0;
+    for (let y = 0; y < WORLD_H; y++) {
+      for (let z = 0; z < CHUNK; z++) {
+        for (let x = 0; x < CHUNK; x++) {
+          out[i++] = this.get(cx * CHUNK + x, y, cz * CHUNK + z);
+        }
+      }
+    }
+    return out;
+  }
+
+  chunkRLE(cx: number, cz: number): number[] {
+    return encodeRLE(this.chunkData(cx, cz));
+  }
+
+  tick(dt: number): void {
+    this.time = (this.time + dt / 600) % 1; // 10-min full day
+    this.saveTimer += dt;
+    if (this.saveTimer > 30) {
+      this.saveTimer = 0;
+      void this.save();
+    }
+  }
+
+  isNight(): boolean {
+    return this.time < 0.02 || this.time > 0.52;
+  }
+}
