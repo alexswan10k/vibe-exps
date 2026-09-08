@@ -1,6 +1,6 @@
 // Connected players: vitals (hp/hunger), survival tick, inventories.
 
-import { InvSlot, PublicPlayer, Vec3 } from "./protocol.ts";
+import { InvSlot, PublicPlayer, ServerMsg, Vec3 } from "./protocol.ts";
 import { giveItems } from "./crafting.ts";
 
 export interface Player {
@@ -18,6 +18,9 @@ export interface Player {
   hungerT: number;
   hurtCd: number;
   socket: WebSocket | null;
+  isPoll: boolean; // legacy HTTP-poll transport (no websocket)
+  outbox: ServerMsg[]; // queued messages for poll players
+  lastPoll: number;
   lastMove: number;
 }
 
@@ -34,7 +37,7 @@ let nextId = 1;
 export class Players {
   all = new Map<number, Player>();
 
-  add(name: string, spawn: Vec3, sock: WebSocket): Player {
+  add(name: string, spawn: Vec3, sock: WebSocket | null): Player {
     const p: Player = {
       id: nextId++,
       name: (name || "player").slice(0, 16),
@@ -42,7 +45,8 @@ export class Players {
       hp: 20, maxHp: 20, hunger: 20, dead: false,
       slots: emptyInv(), hungerT: 0, hurtCd: 0,
       grid: emptyGrid(),
-      socket: sock, lastMove: Date.now(),
+      socket: sock, isPoll: sock === null, outbox: [], lastPoll: Date.now(),
+      lastMove: Date.now(),
     };
     // starter kit: torches so night one isn't miserable
     giveItems(p.slots, 15, 8);

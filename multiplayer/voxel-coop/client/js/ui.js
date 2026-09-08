@@ -23,6 +23,10 @@ export class UI {
     this.onGridTake = null;
     this.onCraftTake = null;
     this.onAutoFill = null;
+    this.onChatClosed = null;
+    // injected by main.js (needs the player): show/hide the mouse pointer
+    this.requestLock = null;
+    this.releaseLock = null;
     this.onChat = null;
     this.onRespawn = null;
     this.onEat = null;
@@ -137,23 +141,29 @@ export class UI {
 
   bindKeys() {
     document.addEventListener("keydown", (e) => {
+      if (this.chatFocused()) return;
       if (e.code.startsWith("Digit")) {
         const n = Number(e.code.slice(5));
         if (n >= 1 && n <= 9) { this.hotbarSel = n - 1; this.renderHotbar(); }
       }
-      if (e.code === "KeyE" && !this.chatFocused()) this.toggleInv();
-      if (e.code === "KeyH" && !this.chatFocused()) this.toggleHelp();
+      if (e.code === "KeyE") this.toggleInv();
+      if (e.code === "KeyH") this.toggleHelp();
       if (e.code === "KeyG") {
         const s = this.slots[this.hotbarSel];
         if (s?.id === 104) this.onEat?.(this.hotbarSel);
       }
     });
+    this.el("chat-input").addEventListener("focus", () => this.releaseLock?.());
     this.el("chat-input").addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter" && e.target.value.trim()) {
         this.onChat?.(e.target.value.trim().slice(0, 200));
         e.target.value = "";
         e.target.blur();
+        this.onChatClosed?.();
+      } else if (e.key === "Escape") {
+        e.target.blur();
+        this.onChatClosed?.();
       }
     });
   }
@@ -165,8 +175,9 @@ export class UI {
   toggleInv(force) {
     this.invOpen = force ?? !this.invOpen;
     this.el("inventory").style.display = this.invOpen ? "flex" : "none";
-    if (this.invOpen) { this.renderInv(); this.renderGrid(); this.renderBook(); }
-    if (!this.invOpen && document.pointerLockElement) document.exitPointerLock?.();
+    // minecraft rules: opening a GUI frees the mouse, closing re-engages look
+    if (this.invOpen) { this.releaseLock?.(); this.renderInv(); this.renderGrid(); this.renderBook(); }
+    else this.requestLock?.();
   }
 
   toggleHelp(force) {
@@ -175,8 +186,14 @@ export class UI {
     h.style.display = show ? "flex" : "none";
     if (show) {
       try { localStorage.setItem("voxelcoop.helpSeen", "1"); } catch { /* noop */ }
-      if (document.pointerLockElement) document.exitPointerLock?.();
+      this.releaseLock?.();
+    } else {
+      this.requestLock?.();
     }
+  }
+
+  helpOpen() {
+    return this.el("help").style.display !== "none";
   }
 
   maybeShowHelp() {

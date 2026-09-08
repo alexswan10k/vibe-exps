@@ -61,7 +61,7 @@ export class Entities {
       e.bar.scale.x = Math.max(0.001, frac);
       e.bar.position.x = -(1 - frac) / 2;
       e.bar.material.color.setHex(frac > 0.5 ? 0x44dd44 : frac > 0.25 ? 0xffaa22 : 0xff3333);
-      e.barBg.visible = frac < 1;
+      e.barBg.visible = true;
     }
     for (const [id, e] of this.mobs) {
       if (!seen.has(id)) {

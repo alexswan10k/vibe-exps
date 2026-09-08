@@ -40,21 +40,25 @@ async function persistPlayers(): Promise<void> {
 function send(sock: WebSocket, msg: ServerMsg): void {
   if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(msg));
 }
+/** Route to a player via websocket or, for legacy poll clients, the outbox. */
+function sendTo(pl: Player, msg: ServerMsg): void {
+  if (pl.socket) {
+    send(pl.socket, msg);
+  } else if (pl.isPoll) {
+    pl.outbox.push(msg);
+    if (pl.outbox.length > 150) pl.outbox.splice(0, pl.outbox.length - 150);
+  }
+}
 function broadcast(msg: ServerMsg, exceptId?: number): void {
-  const raw = JSON.stringify(msg);
   for (const pl of players.all.values()) {
-    if (pl.id !== exceptId && pl.socket && pl.socket.readyState === WebSocket.OPEN) {
-      pl.socket.send(raw);
-    }
+    if (pl.id !== exceptId) sendTo(pl, msg);
   }
 }
 function sendVitals(pl: Player): void {
-  if (pl.socket) {
-    send(pl.socket, { t: "vitals", hp: Math.ceil(pl.hp), maxHp: pl.maxHp, hunger: Math.floor(pl.hunger), dead: pl.dead });
-  }
+  sendTo(pl, { t: "vitals", hp: Math.ceil(pl.hp), maxHp: pl.maxHp, hunger: Math.floor(pl.hunger), dead: pl.dead });
 }
 function sendInv(pl: Player): void {
-  if (pl.socket) send(pl.socket, { t: "inv", slots: pl.slots });
+  sendTo(pl, { t: "inv", slots: pl.slots });
 }
 function sendGrid(pl: Player): void {
   const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
@@ -62,7 +66,31 @@ function sendGrid(pl: Player): void {
   const result = recipe && (!recipe.needsTable || nearTable)
     ? { id: recipe.out.id, n: recipe.out.n }
     : { id: 0, n: 0 };
-  if (pl.socket) send(pl.socket, { t: "grid", cells: pl.grid, result });
+  sendTo(pl, { t: "grid", cells: pl.grid, result });
+}
+
+/** Shared join for websocket + legacy poll transports. */
+function joinGame(rawName: string, sock: WebSocket | null): Player {
+  const name = rawName.slice(0, 16) || "player";
+  const pl = players.add(name, spawn, sock);
+  const saved = savedPlayers[name];
+  if (saved) {
+    pl.p = saved.p;
+    pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
+  }
+  console.log(`[join] ${name} (id=${pl.id}${sock ? "" : " poll"})`);
+  sendInv(pl);
+  sendGrid(pl);
+  sendVitals(pl);
+  broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
+  return pl;
+}
+
+function leaveGame(pl: Player): void {
+  console.log(`[leave] ${pl.name}`);
+  players.remove(pl.id);
+  broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
+  void persistPlayers();
 }
 
 const fkey = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -89,14 +117,14 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
   if (pl.dead) return;
   if (!checkRate(pl.id)) return;
   if (dist(pl.p, x, y, z) > 7.5) {
-    if (pl.socket) send(pl.socket, { t: "denied", reason: "too far" });
+    sendTo(pl, { t: "denied", reason: "too far" });
     return;
   }
   if (op === "break") {
     const cur = world.get(x, y, z);
     if (cur === B.AIR || cur === B.WATER) return;
     if (cur === B.BEDROCK) {
-      if (pl.socket) send(pl.socket, { t: "denied", reason: "bedrock is unbreakable" });
+      sendTo(pl, { t: "denied", reason: "bedrock is unbreakable" });
       return;
     }
     if (HARDNESS[cur] === Infinity) return;
@@ -133,7 +161,7 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
       if (dx < 0.8 && dz < 0.8 && y + 0.5 < mob.p[1] + 0.6 && y + 0.5 > mob.p[1] - 1.2) return;
     }
     if (countOf(pl.slots, block) <= 0) {
-      if (pl.socket) send(pl.socket, { t: "denied", reason: "none of those in inventory" });
+      sendTo(pl, { t: "denied", reason: "none of those in inventory" });
       return;
     }
     removeItems(pl.slots, { [block]: 1 });
@@ -151,7 +179,7 @@ function onMessage(pl: Player, raw: string): void {
     case "reqChunk": {
       const { cx, cz } = m;
       if (!Number.isInteger(cx) || !Number.isInteger(cz) || Math.abs(cx) > 64 || Math.abs(cz) > 64) return;
-      if (pl.socket) send(pl.socket, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
+      sendTo(pl, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
       break;
     }
     case "edit":
@@ -206,15 +234,15 @@ function onMessage(pl: Player, raw: string): void {
       const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
       const recipe = matchGrid(pl.grid.map((c) => c.id), !nearTable);
       if (!recipe) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "no recipe matches" });
+        sendTo(pl, { t: "denied", reason: "no recipe matches" });
         break;
       }
       if (recipe.needsTable && !nearTable) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "need a crafting table nearby" });
+        sendTo(pl, { t: "denied", reason: "need a crafting table nearby" });
         break;
       }
       if (!canFit(pl.slots, recipe.out.id, recipe.out.n)) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "inventory full" });
+        sendTo(pl, { t: "denied", reason: "inventory full" });
         break;
       }
       for (const c of pl.grid) { c.id = 0; c.n = 0; }
@@ -232,13 +260,13 @@ function onMessage(pl: Player, raw: string): void {
         if (ex?.active) break;
         // needs 1 iron ore block + 1 coal
         if (countOf(pl.slots, B.IRON_ORE) < 1 || countOf(pl.slots, 102) < 1) {
-          if (pl.socket) send(pl.socket, { t: "denied", reason: "need 1 iron ore + 1 coal" });
+          sendTo(pl, { t: "denied", reason: "need 1 iron ore + 1 coal" });
           break;
         }
         removeItems(pl.slots, { [B.IRON_ORE]: 1, 102: 1 });
         furnaces.set(k, { x, y, z, progress: 0, active: true, owner: pl.id });
         sendInv(pl);
-        if (pl.socket) send(pl.socket, { t: "chat", from: "server", msg: `smelting started (${SMELT_TIME}s)` });
+        sendTo(pl, { t: "chat", from: "server", msg: `smelting started (${SMELT_TIME}s)` });
       } else {
         const ex = furnaces.get(k);
         if (ex && !ex.active && ex.progress >= 0 && (ex as { done?: boolean }).done) {
@@ -260,11 +288,13 @@ function onMessage(pl: Player, raw: string): void {
       if (!mob) break;
       if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 4.5) break;
       const swordMult = m.weapon !== undefined ? (SWORD_MULT[m.weapon] ?? 1) : 1;
-      const dmg = (m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110 ? 2 : 1) * swordMult;
-      // knockback away from the player
+      const isPick = m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110;
+      const dmg = (m.weapon === undefined ? 2 : isPick ? 2 : 1) * swordMult;
+      // small knockback away from the player (big shoves knock mobs out of
+      // reach and make melee miserable)
       const kx = mob.p[0] - pl.p[0], kz = mob.p[2] - pl.p[2];
       const kl = Math.hypot(kx, kz) || 1;
-      mob.p[0] += (kx / kl) * 1.1;
+      mob.p[0] += (kx / kl) * 0.45;
       mob.p[2] += (kz / kl) * 1.1;
       broadcast({ t: "mobHit", id: mob.id });
       const alive = mobs.hurt(mob.id, dmg);
@@ -312,9 +342,7 @@ function onMessage(pl: Player, raw: string): void {
       if (pl.dead) {
         players.respawn(pl, spawn);
         sendVitals(pl);
-        if (pl.socket) {
-          send(pl.socket, { t: "chat", from: "server", msg: "respawned" });
-        }
+        sendTo(pl, { t: "chat", from: "server", msg: "respawned" });
       }
       break;
     }
@@ -340,32 +368,15 @@ async function handler(req: Request): Promise<Response> {
         try {
           const m = JSON.parse(data);
           if (m.t !== "hello") { socket.close(1008, "hello first"); return; }
-          const name = String(m.name || "player").slice(0, 16);
-          pl = players.add(name, spawn, socket);
-          // restore saved inventory/pos
-          const saved = savedPlayers[name];
-          if (saved) {
-            pl.p = saved.p;
-            pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
-          }
-          console.log(`[join] ${name} (id=${pl.id})`);
+          pl = joinGame(String(m.name || "player"), socket);
           send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, motd: "voxel-coop 🧱" });
-          sendInv(pl);
-          sendGrid(pl);
-          sendVitals(pl);
-          broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
         } catch { socket.close(1008, "bad hello"); }
         return;
       }
       onMessage(pl, data);
     };
     socket.onclose = () => {
-      if (pl) {
-        console.log(`[leave] ${pl.name}`);
-        players.remove(pl.id);
-        broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
-        void persistPlayers();
-      }
+      if (pl) leaveGame(pl);
     };
     socket.onerror = () => { try { socket.close(); } catch { /* noop */ } };
     return response;
@@ -374,11 +385,38 @@ async function handler(req: Request): Promise<Response> {
   if (url.pathname === "/api/status") {
     return withCors(Response.json({
       game: "voxel-coop",
+      mode: mobs.peaceful ? "peaceful" : "survival",
       seed: world.seed,
       time: world.time,
       players: players.all.size,
       names: [...players.all.values()].map((p) => p.name),
     }));
+  }
+
+  // legacy transport for devices without working websockets (old iPads):
+  // POST /api/join {name} -> welcome; POST /api/poll {id, msgs} -> {msgs}
+  if (url.pathname === "/api/join" && req.method === "POST") {
+    let body: { name?: unknown };
+    try { body = await req.json(); } catch { return withCors(new Response("bad json", { status: 400 })); }
+    const pl = joinGame(String(body.name || "player"), null);
+    return withCors(Response.json({
+      t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p,
+      time: world.time, motd: "voxel-coop 🧱 (poll mode)",
+    }));
+  }
+  if (url.pathname === "/api/poll" && req.method === "POST") {
+    let body: { id?: unknown; msgs?: unknown };
+    try { body = await req.json(); } catch { return withCors(new Response("bad json", { status: 400 })); }
+    const pl = players.all.get(Number(body.id));
+    if (!pl || !pl.isPoll) return withCors(new Response("no session", { status: 404 }));
+    pl.lastPoll = Date.now();
+    if (Array.isArray(body.msgs)) {
+      for (const m of body.msgs.slice(0, 50)) {
+        try { onMessage(pl, JSON.stringify(m)); } catch { /* skip bad msg */ }
+      }
+    }
+    const out = pl.outbox.splice(0, 100);
+    return withCors(Response.json({ msgs: out }));
   }
 
   // static client
@@ -416,9 +454,7 @@ setInterval(() => {
   }
   // players broadcast at 10Hz
   for (const pl of players.all.values()) {
-    if (pl.socket && pl.socket.readyState === WebSocket.OPEN) {
-      send(pl.socket, { t: "players", list: players.wire(pl.id) });
-    }
+    sendTo(pl, { t: "players", list: players.wire(pl.id) });
   }
   // furnaces
   let furnaceChanged = false;
@@ -447,6 +483,11 @@ setInterval(() => {
       slowT = 0;
       broadcast({ t: "time", time: world.time });
       void persistPlayers();
+      // evict legacy poll clients that stopped polling
+      const now = Date.now();
+      for (const pl of [...players.all.values()]) {
+        if (pl.isPoll && now - pl.lastPoll > 15000) leaveGame(pl);
+      }
     }
     const states: FurnaceWire[] = [...furnaces.values()].map((f) => ({
       x: f.x, y: f.y, z: f.z, progress: f.progress / SMELT_TIME, ready: false,

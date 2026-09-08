@@ -1,10 +1,11 @@
 // voxel-coop client entry: scene, networking, chunk streaming, mining, day/night.
 import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, isPlaceable, resolveServerUrl, httpBase } from "./config.js";
-import { Net } from "./net.js";
+import { Net, PollNet } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
 import { Entities } from "./entities.js";
 import { Touch } from "./touch.js";
+import { CrackOverlay, Particles } from "./fx.js";
 import { UI } from "./ui.js";
 
 const RENDER_DIST = 4;
@@ -55,9 +56,46 @@ function updateTorchLights() {
 const world = new WorldClient(scene, makeMaterials());
 const player = new Player(camera, renderer.domElement);
 player.onFallDamage = (dmg) => net.fall(dmg);
+const crack = new CrackOverlay(scene);
+const particles = new Particles(scene);
+
+// approx block colors for debris particles
+const BREAK_COLORS = {
+  1: 0x5cb84a, 2: 0x7a5230, 3: 0x808080, 4: 0xd9c78c, 5: 0x5a3a1a,
+  6: 0x228b22, 7: 0x9c6f34, 8: 0x1e1e1e, 9: 0xeeeeee, 11: 0x555555,
+  12: 0xc08a5a, 13: 0x8a5a20, 14: 0x6b6b6e, 15: 0xffcf4d, 16: 0x737373,
+};
+function breakColor(block) {
+  return BREAK_COLORS[block] ?? 0xffffff;
+}
 const entities = new Entities(scene);
 const ui = new UI();
-const net = new Net();
+let net = null;
+let welcomed = false;
+let connectEpoch = 0;
+
+// ---- pointer focus rules (minecraft-style) ----
+ui.requestLock = () => player.lock();
+ui.releaseLock = () => { if (document.pointerLockElement) document.exitPointerLock(); };
+function menuVisible() { return $("menu").style.display !== "none"; }
+function relockIfClear() {
+  if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
+      !menuVisible() && net?.connected) {
+    player.lock();
+  }
+}
+ui.onChatClosed = () => relockIfClear();
+player.onLockChange = (locked) => {
+  if (!locked) {
+    // stop mining the moment look disengages
+    mouseSafeRelease();
+    // Esc with nothing open = pause menu (closing it re-locks via toggleHelp)
+    if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
+        !menuVisible() && net?.connected) {
+      ui.toggleHelp(true);
+    }
+  }
+};
 
 let myId = -1;
 let serverTime = 0.25;
@@ -66,6 +104,11 @@ let pendingChunks = new Set();
 let lastStream = 0;
 let lastMoveSend = 0;
 let breaking = null; // {x,y,z,block,prog,need}
+function clearBreak() {
+  breaking = null;
+  ui.breakProgress(null);
+  crack.hide();
+}
 let spawnPos = [0.5, 30, 0.5];
 
 function decodeRLE(rle) {
@@ -140,17 +183,23 @@ function tryAttack() {
   lastSwing = nowSwing;
   const held = ui.heldItem();
   net.attackMob(hitMob, held?.id);
+  ui.pulse(); // instant feedback; mobHit echo pulses again on confirm
   return true;
+}
+
+function mouseSafeRelease() {
+  mouse.left = false;
+  clearBreak();
 }
 
 const touch = new Touch(player, {
   mine: (down) => {
-    if (!net.connected || ui.invOpen || dead) return;
+    if (!net?.connected || ui.invOpen || dead) return;
     mouse.left = down;
-    if (!down) { breaking = null; ui.breakProgress(null); }
+    if (!down) clearBreak();
   },
-  place: () => { if (net.connected && !ui.invOpen && !dead) doPlace(); },
-  attack: () => { if (net.connected && !ui.invOpen && !dead) tryAttack(); },
+  place: () => { if (net?.connected && !ui.invOpen && !dead) doPlace(); },
+  attack: () => { if (net?.connected && !ui.invOpen && !dead) tryAttack(); },
   inv: () => ui.toggleInv(),
 });
 if (!("ontouchstart" in window) && !(navigator.maxTouchPoints > 0)) {
@@ -158,10 +207,11 @@ if (!("ontouchstart" in window) && !(navigator.maxTouchPoints > 0)) {
 }
 
 renderer.domElement.addEventListener("mousedown", (e) => {
-  if (!net.connected || ui.invOpen || dead) return;
+  if (!net?.connected || ui.invOpen || dead) return;
   if (!player.locked) { player.lock(); return; }
   if (e.button === 0) {
-    if (tryAttack()) return;
+    // holding LMB on a mob auto-swings (see tickBreaking); single click hits now
+    tryAttack();
     mouse.left = true;
     breaking = null;
   } else if (e.button === 2) {
@@ -169,7 +219,7 @@ renderer.domElement.addEventListener("mousedown", (e) => {
   }
 });
 addEventListener("mouseup", (e) => {
-  if (e.button === 0) { mouse.left = false; breaking = null; ui.breakProgress(null); }
+  if (e.button === 0) { mouse.left = false; clearBreak(); }
 });
 addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -191,19 +241,23 @@ function doPlace() {
 function tickBreaking(dt) {
   // touch mode has no pointer lock; the MINE button is the gate instead
   if (!mouse.left || (!player.locked && !touch.enabled) || ui.invOpen || dead) {
-    if (breaking) { breaking = null; ui.breakProgress(null); }
+    if (breaking) clearBreak();
+    return;
+  }
+  // holding LMB on a mob keeps swinging; otherwise mine the aimed block
+  if (tryAttack()) {
+    clearBreak();
     return;
   }
   const hit = world.raycast(player.eye(), player.lookDir(), 6);
-  if (!hit) { breaking = null; ui.breakProgress(null); return; }
+  if (!hit) { clearBreak(); return; }
   const key = `${hit.x},${hit.y},${hit.z}`;
   if (!breaking || breaking.key !== key) {
     const held = ui.heldItem();
     const need = breakTime(hit.block, held?.id);
     if (!Number.isFinite(need)) {
       ui.hint(hit.block === 8 ? "bedrock is unbreakable" : "can't break that");
-      breaking = null;
-      ui.breakProgress(null);
+      clearBreak();
       mouse.left = false;
       return;
     }
@@ -211,11 +265,18 @@ function tickBreaking(dt) {
   }
   breaking.prog += dt;
   ui.breakProgress(breaking.prog / breaking.need);
+  crack.show(breaking.x, breaking.y, breaking.z, breaking.prog / breaking.need);
+  // occasional chip puff while grinding away
+  const nowPuff = performance.now();
+  if (nowPuff - (breaking.lastPuff ?? 0) > 300) {
+    breaking.lastPuff = nowPuff;
+    particles.burst(breaking.x + 0.5, breaking.y + 0.5, breaking.z + 0.5, breakColor(breaking.block), 2);
+  }
   if (breaking.prog >= breaking.need) {
     const held = ui.heldItem();
     net.edit("break", breaking.x, breaking.y, breaking.z, undefined, held?.id);
-    breaking = null;
-    ui.breakProgress(null);
+    particles.burst(breaking.x + 0.5, breaking.y + 0.5, breaking.z + 0.5, breakColor(breaking.block), 14);
+    clearBreak();
   }
 }
 
@@ -231,11 +292,13 @@ addEventListener("keydown", (e) => {
   }
 });
 
-// ---------- net handlers ----------
+// ---------- net handlers (attach to whichever transport is active) ----------
+function attachHandlers() {
 net.on("open", () => ui.status("connected — loading world…"));
 net.on("close", () => ui.status("disconnected — retrying…"));
 
 net.on("welcome", (m) => {
+  welcomed = true;
   myId = m.id;
   serverTime = m.time;
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
@@ -295,6 +358,7 @@ ui.onAutoFill = (recipe) => {
   }
 };
 net.on("vitals", (m) => {
+  if (m.dead && !dead) ui.releaseLock?.();
   dead = m.dead;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
@@ -305,17 +369,42 @@ net.on("smeltState", (m) => {
   ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
 });
 net.on("denied", (m) => ui.hint(m.reason));
+} // attachHandlers
 
 // ---------- menu ----------
 $("menu-server").value = resolveServerUrl();
 try { $("menu-name").value = localStorage.getItem("voxelcoop.name") ?? `player${Math.floor(Math.random() * 99)}`; } catch { /* noop */ }
+function connectGame(serverUrl, name) {
+  if (net) { try { net.disconnect(); } catch { /* noop */ } }
+  pendingChunks.clear();
+  myId = -1;
+  welcomed = false;
+  const epoch = ++connectEpoch;
+  const forcePoll = new URLSearchParams(location.search).get("transport") === "poll";
+  if (forcePoll) {
+    net = new PollNet();
+    ui.status("connecting (legacy poll mode)…");
+  } else {
+    net = new Net();
+    ui.status("connecting…");
+    // auto-fallback for devices where websockets fail (old iPads)
+    setTimeout(() => {
+      if (!welcomed && epoch === connectEpoch && net instanceof Net) {
+        try { net.disconnect(); } catch { /* noop */ }
+        net = new PollNet();
+        attachHandlers();
+        net.connect(serverUrl, name);
+        ui.status("websocket failed — legacy poll mode…");
+      }
+    }, 6000);
+  }
+  attachHandlers();
+  net.connect(serverUrl, name);
+}
 $("menu-join").addEventListener("click", () => {
   const name = $("menu-name").value.trim().slice(0, 16) || "player";
   try { localStorage.setItem("voxelcoop.name", name); } catch { /* noop */ }
-  net.disconnect();
-  pendingChunks.clear();
-  net.connect($("menu-server").value.trim(), name);
-  ui.status("connecting…");
+  connectGame($("menu-server").value.trim(), name);
 });
 // fetch public status for hint (works when menu served from server)
 (async () => {
@@ -335,13 +424,13 @@ ui.onChat = (msg) => net.chat(msg);
 ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => net.eat(slot);
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
-$("respawn-btn").addEventListener("click", () => net.respawn());
+$("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
-  if (e.target.id === "menu" && net.connected) { $("menu").style.display = "none"; player.lock(); }
+  if (e.target.id === "menu" && net?.connected) { $("menu").style.display = "none"; player.lock(); }
 });
 renderer.domElement.addEventListener("click", () => {
-  if (net.connected && !ui.invOpen && !player.locked && myId >= 0) player.lock();
+  if (net?.connected && !ui.invOpen && !player.locked && myId >= 0) player.lock();
 });
 
 // ---------- main loop ----------
@@ -353,7 +442,7 @@ function frame() {
   const dt = Math.min(0.05, (now - prev) / 1000);
   prev = now;
 
-  if (myId >= 0 && net.connected) {
+  if (myId >= 0 && net?.connected) {
     if (!ui.invOpen && !dead) player.update(dt, world);
     // gravity-only update while dead/inv so camera stays sane
     player.euler.set(player.pitch, player.yaw, 0);
@@ -389,6 +478,7 @@ function frame() {
     }
   }
   entities.update(dt, camera);
+  particles.update(dt);
   applyTime(serverTime); // cheap enough; keeps sun glued to player
   renderer.render(scene, camera);
 }

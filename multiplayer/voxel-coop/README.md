@@ -16,6 +16,11 @@ Both players just open the URL — the client is served by the server
 (same-origin, so no CORS headaches). The server prints its LAN URLs on
 startup (`--allow-sys` lets it list your network interfaces).
 
+Old iPad with broken websockets? Open the page with `?transport=poll`
+(auto-fallback kicks in after 6s if websockets fail). Poll mode is plain
+HTTP POST (`/api/join` + `/api/poll`), ~4Hz — playable on LAN, laggier
+than sockets. Check `/api/status` for `mode` + who's online.
+
 ## Layout
 
 ```

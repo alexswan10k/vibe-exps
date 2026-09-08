@@ -20,9 +20,11 @@ export class Player {
     this.onGround = false;
     this.fallStart = null;
     this.onFallDamage = null; // (amount) => void — server owns hp, client predicts
+    this.onLockChange = null; // (locked) => void
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
 
     document.addEventListener("keydown", (e) => {
+      if (document.activeElement && document.activeElement.tagName === "INPUT") return;
       this.keys[e.code] = true;
       if (["Space", "ArrowUp"].includes(e.code)) e.preventDefault();
     });
@@ -35,6 +37,7 @@ export class Player {
     });
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === this.dom;
+      this.onLockChange?.(this.locked);
     });
   }
 
