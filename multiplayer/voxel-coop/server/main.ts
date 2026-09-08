@@ -16,6 +16,7 @@ const SAVE_PLAYERS = new URL("../data/players.json", import.meta.url).pathname;
 const world = await World.loadOrCreate(SAVE_WORLD);
 const players = new Players();
 const mobs = new MobSim();
+mobs.peaceful = Deno.args.includes("--peaceful") || Deno.args.includes("--peace");
 const furnaces = new Map<string, FurnaceState & { owner: number }>();
 const spawn = world.findSpawn();
 
@@ -115,25 +116,26 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
   } else {
     // place
     if (block === undefined || block === B.AIR || block === B.WATER || block === B.BEDROCK) return;
-    if (!Object.values(B).includes(block as 0)) return;
+    if (!(Object.values(B) as number[]).includes(block)) return;
     const cur = world.get(x, y, z);
     if (cur !== B.AIR && cur !== B.WATER) return;
-    // don't place inside yourself or the other player
-    const feet: Vec3 = [x + 0.5, y + 1.0, z + 0.5];
-    void feet;
+    // don't place inside any live player (feet..head box)
     for (const other of players.all.values()) {
       if (other.dead) continue;
       const dx = Math.abs(other.p[0] - (x + 0.5));
       const dz = Math.abs(other.p[2] - (z + 0.5));
-      const dyTop = other.p[1];
-      const dyBot = other.p[1] - 1.8;
-      if (dx < 0.75 && dz < 0.75 && y + 0.5 < dyTop && y + 0.5 > dyBot) return;
+      if (dx < 0.75 && dz < 0.75 && y + 0.5 < other.p[1] && y + 0.5 > other.p[1] - 1.8) return;
     }
-    if (countOf(pl.slots, block) <= 0 && !removeItems(pl.slots, {})) {
-      if (pl.socket) send(pl.socket, { t: "denied", reason: "no blocks" });
+    // don't place inside mobs either
+    for (const mob of mobs.mobs.values()) {
+      const dx = Math.abs(mob.p[0] - (x + 0.5));
+      const dz = Math.abs(mob.p[2] - (z + 0.5));
+      if (dx < 0.8 && dz < 0.8 && y + 0.5 < mob.p[1] + 0.6 && y + 0.5 > mob.p[1] - 1.2) return;
+    }
+    if (countOf(pl.slots, block) <= 0) {
+      if (pl.socket) send(pl.socket, { t: "denied", reason: "none of those in inventory" });
       return;
     }
-    if (countOf(pl.slots, block) <= 0) return;
     removeItems(pl.slots, { [block]: 1 });
     world.set(x, y, z, block);
     sendInv(pl);
@@ -259,7 +261,13 @@ function onMessage(pl: Player, raw: string): void {
       if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 4.5) break;
       const swordMult = m.weapon !== undefined ? (SWORD_MULT[m.weapon] ?? 1) : 1;
       const dmg = (m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110 ? 2 : 1) * swordMult;
-      const alive = mobs.hurt(m.id, dmg);
+      // knockback away from the player
+      const kx = mob.p[0] - pl.p[0], kz = mob.p[2] - pl.p[2];
+      const kl = Math.hypot(kx, kz) || 1;
+      mob.p[0] += (kx / kl) * 1.1;
+      mob.p[2] += (kz / kl) * 1.1;
+      broadcast({ t: "mobHit", id: mob.id });
+      const alive = mobs.hurt(mob.id, dmg);
       if (!alive) {
         for (const d of mobDrops(mob.kind)) giveItems(pl.slots, d.id, d.n);
         sendInv(pl);
@@ -396,8 +404,8 @@ setInterval(() => {
       }
     },
   }));
-  mobs.tick(dt, world, wrappers);
-  if (players.tick(dt)) {
+  mobs.tick(dt, world, wrappers, world.isNight());
+  if (players.tick(dt, mobs.peaceful)) {
     for (const pl of players.all.values()) sendVitals(pl);
   }
   mobT += dt;
@@ -452,7 +460,7 @@ Deno.addSignalListener("SIGINT", () => {
   void Promise.all([world.save(), persistPlayers()]).then(() => Deno.exit(0));
 });
 
-console.log(`\n  🧱 voxel-coop server on :${PORT}`);
+console.log(`\n  🧱 voxel-coop server on :${PORT}${mobs.peaceful ? "  [PEACEFUL — no hostiles, no hunger]" : ""}`);
 console.log(`  local:  http://localhost:${PORT}/`);
 for (const ip of lanIps()) console.log(`  lan:    http://${ip}:${PORT}/`);
 console.log(`  share the lan URL with player 2 — same Wi-Fi, no certs, plain http.\n`);

@@ -4,6 +4,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #game canvas { display: block; }
 #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   font-size: 22px; color: #fff; opacity: 0.8; pointer-events: none; mix-blend-mode: difference; }
+#crosshair.hit { animation: hitpulse 0.18s ease-out; }
+@keyframes hitpulse { 0% { transform: translate(-50%,-50%) scale(2.2); color: #ff5555; } 100% { transform: translate(-50%,-50%) scale(1); } }
 #status { position: fixed; top: 8px; left: 8px; font-size: 12px; opacity: 0.8;
   background: rgba(0,0,0,.5); padding: 4px 8px; border-radius: 6px; }
 #hint { position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
@@ -17,7 +19,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
   border-radius: 6px; position: relative; cursor: pointer; }
 .slot.sel { border-color: #ffd23d; }
 .slot.swap { border-color: #4dd2ff; }
-.slot .icon { position: absolute; inset: 6px; border-radius: 3px; }
+.slot .icon { position: absolute; inset: 6px; border-radius: 3px;
+  background-size: cover; image-rendering: pixelated; }
 .slot .cnt { position: absolute; right: 3px; bottom: 1px; font-size: 13px; font-weight: 700;
   text-shadow: 1px 1px 0 #000; }
 .slot .nm { position: absolute; left: 2px; top: 1px; font-size: 8px; opacity: .85;
@@ -47,6 +50,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #craft-grid.small .slot[data-g="8"] { display: none; }
 #craft-arrow { font-size: 24px; opacity: .7; }
 #craft-result { width: 64px; height: 64px; border-color: #55aa35; }
+#recipe-book { display: flex; flex-direction: column; gap: 4px; margin-top: 4px;
+  max-height: 220px; overflow-y: auto; }
+.book-row { display: flex; align-items: center; gap: 8px; background: #2a2a33;
+  border: 1px solid #555; border-radius: 6px; padding: 4px 6px; opacity: .45; }
+.book-row.ok { opacity: 1; border-color: #55aa35; cursor: pointer; }
+.book-row .mini { display: grid; grid-template-columns: repeat(3, 16px); gap: 1px; }
+.book-row .mini span { width: 16px; height: 16px; background: #101014; border-radius: 2px;
+  background-size: cover; image-rendering: pixelated; }
+.book-row .out { width: 34px; height: 34px; background-size: cover;
+  image-rendering: pixelated; border-radius: 4px; flex-shrink: 0; }
+.book-row .lbl { font-size: 12px; }
+.book-row .lbl small { display: block; opacity: .65; }
 #dead { position: fixed; inset: 0; background: rgba(60,0,0,.6); z-index: 6;
   display: flex; align-items: center; justify-content: center; }
 .dead-panel { text-align: center; }

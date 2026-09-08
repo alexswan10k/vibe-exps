@@ -134,6 +134,35 @@ function paintLeaves(g, r) {
 function paintSand(g, r) { noiseFill(g, r, [0.85, 0.78, 0.55], 0.07); }
 function paintSnow(g, r) { noiseFill(g, r, [0.92, 0.93, 0.95], 0.04); }
 function paintBedrock(g, r) { noiseFill(g, r, [0.12, 0.12, 0.13], 0.14); }
+function paintWater(g) { g.fillStyle = "#4472dd"; g.fillRect(0, 0, 16, 16); }
+function paintTorchIcon(g, r) {
+  g.fillStyle = "#8a5f30"; g.fillRect(7, 6, 2, 10);
+  noiseFill(g, r, [1.0, 0.8, 0.3], 0.1);
+  g.fillStyle = "#ffcf4d"; g.fillRect(5, 1, 6, 6);
+  g.fillStyle = "#fff08a"; g.fillRect(6, 2, 3, 3);
+}
+
+// Representative face per block for inventory icons (data URLs, cached).
+const ICON_PAINT = {
+  1: [paintGrassTop, 110], 2: [paintDirt, 12], 3: [paintStone, 13],
+  4: [paintSand, 14], 5: [paintRings, 150], 6: [paintLeaves, 16],
+  7: [paintPlanks, 17], 8: [paintBedrock, 18], 9: [paintSnow, 19],
+  10: [paintWater, 0], 11: [paintCoalOre, 21], 12: [paintIronOre, 22],
+  13: [paintTableTop, 230], 14: [paintFurnaceFront, 240],
+  15: [paintTorchIcon, 7], 16: [paintCobble, 26],
+};
+const iconCache = new Map();
+export function blockIconURL(block) {
+  const hit = iconCache.get(block);
+  if (hit) return hit;
+  const [paint, seed] = ICON_PAINT[block] ?? [paintStone, 1];
+  const c = document.createElement("canvas");
+  c.width = c.height = 16;
+  paint(c.getContext("2d"), rng(seed));
+  const url = c.toDataURL();
+  iconCache.set(block, url);
+  return url;
+}
 
 export function makeMaterials() {
   const M = (tex, opts = {}) => new THREE.MeshLambertMaterial({ map: tex, ...opts });
@@ -204,8 +233,14 @@ export class WorldClient {
     const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
     const c = this.chunks.get(`${cx},${cz}`);
     if (!c) return;
-    c[WorldClient.idx(x - cx * CHUNK, y, z - cz * CHUNK)] = v;
+    const lx = x - cx * CHUNK, lz = z - cz * CHUNK;
+    c[WorldClient.idx(lx, y, lz)] = v;
     this.remesh(cx, cz);
+    // edits on a chunk border change face-culling in the neighbour's mesh too
+    if (lx === 0) this.remesh(cx - 1, cz);
+    if (lx === CHUNK - 1) this.remesh(cx + 1, cz);
+    if (lz === 0) this.remesh(cx, cz - 1);
+    if (lz === CHUNK - 1) this.remesh(cx, cz + 1);
   }
 
   remesh(cx, cz) {
