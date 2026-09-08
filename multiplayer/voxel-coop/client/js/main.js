@@ -216,6 +216,7 @@ net.on("welcome", (m) => {
   spawnPos = m.spawn;
   ui.status(`playing as ${$("menu-name").value || "player"}`);
   $("menu").style.display = "none";
+  ui.maybeShowHelp();
   player.lock();
   streamChunks();
 });
@@ -229,6 +230,7 @@ net.on("block", (m) => world.setLocal(m.x, m.y, m.z, m.block));
 net.on("players", (m) => entities.setPlayers(m.list));
 net.on("mobs", (m) => entities.setMobs(m.list));
 net.on("inv", (m) => ui.setSlots(m.slots));
+net.on("grid", (m) => ui.setGrid(m.cells, m.result));
 net.on("vitals", (m) => {
   dead = m.dead;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
@@ -263,12 +265,15 @@ $("menu-join").addEventListener("click", () => {
   } catch { /* offline / file:// without server yet */ }
 })();
 
-ui.onCraft = (id) => net.craft(id, false);
+ui.onGridPut = (slot, g, all) => net.gridPut(slot, g, all);
+ui.onGridTake = (g) => net.gridTake(g);
+ui.onCraftTake = () => net.craftTake();
 ui.onChat = (msg) => net.chat(msg);
 ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => net.eat(slot);
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
 $("respawn-btn").addEventListener("click", () => net.respawn());
+$("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
   if (e.target.id === "menu" && net.connected) { $("menu").style.display = "none"; player.lock(); }
 });

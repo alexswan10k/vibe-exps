@@ -14,6 +14,7 @@ export interface Player {
   hunger: number; // 0..20
   dead: boolean;
   slots: InvSlot[];
+  grid: InvSlot[]; // 3x3 crafting grid (2x2 inventory view uses cells 0,1,3,4)
   hungerT: number;
   hurtCd: number;
   socket: WebSocket | null;
@@ -22,6 +23,10 @@ export interface Player {
 
 export function emptyInv(): InvSlot[] {
   return Array.from({ length: 36 }, () => ({ id: 0, n: 0 }));
+}
+
+export function emptyGrid(): InvSlot[] {
+  return Array.from({ length: 9 }, () => ({ id: 0, n: 0 }));
 }
 
 let nextId = 1;
@@ -36,6 +41,7 @@ export class Players {
       p: [...spawn] as Vec3, yaw: 0, pitch: 0,
       hp: 20, maxHp: 20, hunger: 20, dead: false,
       slots: emptyInv(), hungerT: 0, hurtCd: 0,
+      grid: emptyGrid(),
       socket: sock, lastMove: Date.now(),
     };
     // starter kit: torches so night one isn't miserable

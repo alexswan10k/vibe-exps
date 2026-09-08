@@ -94,7 +94,9 @@ export type ClientMsg =
   | { t: "reqChunk"; cx: number; cz: number }
   | { t: "edit"; op: "break" | "place"; x: number; y: number; z: number; block?: number; heldItem?: number }
   | { t: "move"; p: Vec3; yaw: number; pitch: number }
-  | { t: "craft"; recipe: string; fromTable: boolean }
+  | { t: "gridPut"; slot: number; g: number; all: boolean }
+  | { t: "gridTake"; g: number }
+  | { t: "craftTake" }
   | { t: "smelt"; action: "start" | "take"; x: number; y: number; z: number }
   | { t: "attackMob"; id: number; weapon?: number }
   | { t: "chat"; msg: string }
@@ -110,6 +112,7 @@ export type ServerMsg =
   | { t: "players"; list: PublicPlayer[] }
   | { t: "mobs"; list: MobWire[] }
   | { t: "inv"; slots: InvSlot[] }
+  | { t: "grid"; cells: InvSlot[]; result: InvSlot }
   | { t: "vitals"; hp: number; maxHp: number; hunger: number; dead: boolean }
   | { t: "time"; time: number }
   | { t: "chat"; from: string; msg: string }

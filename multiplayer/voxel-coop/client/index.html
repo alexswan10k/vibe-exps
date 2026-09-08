@@ -24,8 +24,12 @@
   <div class="inv-panel">
     <h3>Inventory <small>(E to close · click two slots to swap · G eats pork)</small></h3>
     <div id="inv-grid"></div>
-    <h3>Crafting <small>(click to craft)</small></h3>
-    <div id="recipe-list"></div>
+    <h3 id="craft-title">Crafting <small>(click item, then grid · shift-click = whole stack)</small></h3>
+    <div id="craft-area">
+      <div id="craft-grid"></div>
+      <div id="craft-arrow">→</div>
+      <div id="craft-result" class="slot"></div>
+    </div>
   </div>
 </div>
 
@@ -33,6 +37,21 @@
   <div class="dead-panel">
     <h1>☠ you died</h1>
     <button id="respawn-btn">respawn</button>
+  </div>
+</div>
+
+<div id="help" style="display:none">
+  <div class="help-panel">
+    <h2>🧱 how to survive</h2>
+    <ol>
+      <li><b>Hold LMB</b> on a tree → logs. Zombies come at night — hurry.</li>
+      <li><b>E</b> → craft planks, sticks, a <b>crafting table</b>. Place it (RMB).</li>
+      <li>Standing near the table: craft a <b>pickaxe</b> + <b>sword</b>.</li>
+      <li>Mine <b>stone → coal → iron</b>. <b>F</b> at a furnace smelts iron (ore + coal).</li>
+      <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack.</li>
+      <li><b>G</b> eats pork · <b>T</b> chat · <b>shift</b> sprint · <b>H</b> this panel</li>
+    </ol>
+    <button id="help-close">play (H)</button>
   </div>
 </div>
 

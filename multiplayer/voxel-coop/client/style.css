@@ -37,15 +37,27 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 .inv-panel h3 { margin: 8px 0; font-size: 15px; }
 .inv-panel small { opacity: .6; font-weight: 400; }
 #inv-grid { display: grid; grid-template-columns: repeat(9, 52px); gap: 4px; }
-#recipe-list { display: flex; flex-direction: column; gap: 4px; }
-.recipe { text-align: left; background: #2a2a33; color: #fff; border: 1px solid #555;
-  border-radius: 6px; padding: 6px 8px; cursor: pointer; opacity: .45; }
-.recipe.ok { opacity: 1; border-color: #55aa35; }
-.recipe small { display: block; opacity: .7; }
+#craft-area { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+#craft-grid { display: grid; grid-template-columns: repeat(3, 52px); gap: 4px; }
+#craft-grid.small { grid-template-columns: repeat(2, 52px); }
+#craft-grid.small .slot[data-g="2"],
+#craft-grid.small .slot[data-g="5"],
+#craft-grid.small .slot[data-g="6"],
+#craft-grid.small .slot[data-g="7"],
+#craft-grid.small .slot[data-g="8"] { display: none; }
+#craft-arrow { font-size: 24px; opacity: .7; }
+#craft-result { width: 64px; height: 64px; border-color: #55aa35; }
 #dead { position: fixed; inset: 0; background: rgba(60,0,0,.6); z-index: 6;
   display: flex; align-items: center; justify-content: center; }
 .dead-panel { text-align: center; }
 .dead-panel button { font-size: 18px; padding: 10px 24px; border-radius: 8px; cursor: pointer; }
+#help { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 7;
+  display: flex; align-items: center; justify-content: center; }
+.help-panel { background: #16161c; padding: 22px 26px; border-radius: 12px; width: 420px; }
+.help-panel h2 { margin: 0 0 8px; }
+.help-panel ol { margin: 0 0 12px; padding-left: 22px; font-size: 14px; line-height: 1.8; }
+.help-panel button { font-size: 15px; padding: 8px 20px; border-radius: 8px; cursor: pointer;
+  background: #55aa35; color: #fff; border: none; font-weight: 700; }
 #menu { position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 10;
   display: flex; align-items: center; justify-content: center; }
 .menu-panel { background: #16161c; padding: 26px 30px; border-radius: 12px; width: 380px;

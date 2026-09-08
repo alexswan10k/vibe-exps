@@ -27,19 +27,6 @@ export const HARDNESS = {
 
 export const PICK_MULT = { 108: 2.2, 109: 4.2, 110: 6.5 };
 
-export const RECIPES = [
-  { id: "planks", name: "Oak Planks ×4", needsTable: false, in: { 5: 1 }, out: "7 ×4" },
-  { id: "sticks", name: "Sticks ×4", needsTable: false, in: { 7: 2 }, out: "sticks ×4" },
-  { id: "table", name: "Crafting Table", needsTable: false, in: { 7: 4 }, out: "table" },
-  { id: "torch", name: "Torches ×4", needsTable: false, in: { 102: 1, 101: 1 }, out: "torches ×4" },
-  { id: "furnace", name: "Furnace (needs table)", needsTable: true, in: { 16: 8 }, out: "furnace" },
-  { id: "wood_pick", name: "Wooden Pickaxe (needs table)", needsTable: true, in: { 7: 3, 101: 2 }, out: "wood pick" },
-  { id: "stone_pick", name: "Stone Pickaxe (needs table)", needsTable: true, in: { 16: 3, 101: 2 }, out: "stone pick" },
-  { id: "iron_pick", name: "Iron Pickaxe (needs table)", needsTable: true, in: { 103: 3, 101: 2 }, out: "iron pick" },
-  { id: "wood_sword", name: "Wooden Sword (needs table)", needsTable: true, in: { 7: 2, 101: 1 }, out: "wood sword" },
-  { id: "stone_sword", name: "Stone Sword (needs table)", needsTable: true, in: { 16: 2, 101: 1 }, out: "stone sword" },
-];
-
 export function isPlaceable(id) {
   return Number.isInteger(id) && id >= 1 && id <= 16 && id !== 8 && id !== 10;
 }
