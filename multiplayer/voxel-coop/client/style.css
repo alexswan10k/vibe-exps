@@ -1,6 +1,7 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
-  font-family: system-ui, sans-serif; color: #fff; }
+  font-family: system-ui, sans-serif; color: #fff; overscroll-behavior: none; }
+#game canvas, #touch-ui, #look-zone, #joy, .tbtn { touch-action: none; }
 #game canvas { display: block; }
 #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   font-size: 22px; color: #fff; opacity: 0.8; pointer-events: none; mix-blend-mode: difference; }
@@ -85,3 +86,32 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 .menu-panel button { font-size: 16px; padding: 10px; border-radius: 8px; cursor: pointer;
   background: #55aa35; color: #fff; border: none; font-weight: 700; }
 .menu-panel .help { font-size: 12.5px; line-height: 1.7; opacity: .75; margin-top: 6px; }
+
+/* ---- touch controls ---- */
+#touch-toggle { position: fixed; top: 8px; right: 8px; z-index: 8; font-size: 20px;
+  background: rgba(0,0,0,.55); color: #fff; border: 1px solid #666; border-radius: 8px;
+  padding: 6px 10px; cursor: pointer; opacity: .6; }
+#touch-toggle.on { opacity: 1; border-color: #ffd23d; }
+#touch-ui { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+#look-zone { position: absolute; top: 0; right: 0; width: 60%; bottom: 140px; pointer-events: auto; }
+#joy { position: absolute; left: 24px; bottom: 90px; width: 128px; height: 128px;
+  border-radius: 50%; background: rgba(255,255,255,.08);
+  border: 2px solid rgba(255,255,255,.3); pointer-events: auto; }
+#joy-knob { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px;
+  border-radius: 50%; background: rgba(255,255,255,.35);
+  transform: translate(-50%, -50%); }
+#touch-btns { position: absolute; right: 16px; bottom: 90px; display: flex;
+  flex-direction: column; gap: 10px; pointer-events: auto; }
+.tbtn { width: 62px; height: 62px; border-radius: 50%; font-size: 26px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.5); border: 2px solid rgba(255,255,255,.4); }
+.tbtn.held { background: rgba(255,210,61,.5); border-color: #ffd23d; }
+#hotbar, #chat, #vitals { z-index: 4; }
+#hotbar, #chat, #vitals, #status, #hint { position: fixed; }
+@media (pointer: coarse) {
+  .slot { width: 60px; height: 60px; }
+  #inv-grid { grid-template-columns: repeat(9, 60px); }
+  .inv-panel { width: 600px; max-width: 96vw; }
+  #craft-grid { grid-template-columns: repeat(3, 60px); }
+  #craft-grid.small { grid-template-columns: repeat(2, 60px); }
+}

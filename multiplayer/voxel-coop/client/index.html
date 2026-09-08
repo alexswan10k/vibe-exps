@@ -2,13 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>voxel-coop 🧱 — LAN multiplayer</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="game"></div>
 <div id="crosshair">+</div>
+<button id="touch-toggle" title="touch controls">📱</button>
 <div id="status">not connected</div>
 <div id="hint"></div>
 <div id="vitals"></div>
@@ -42,16 +43,29 @@
   </div>
 </div>
 
+<div id="touch-ui" style="display:none">
+  <div id="look-zone"></div>
+  <div id="joy"><div id="joy-knob"></div></div>
+  <div id="touch-btns">
+    <div class="tbtn" id="tb-attack">⚔️</div>
+    <div class="tbtn" id="tb-mine">⛏️</div>
+    <div class="tbtn" id="tb-place">🧱</div>
+    <div class="tbtn" id="tb-jump">⬆️</div>
+    <div class="tbtn" id="tb-inv">🎒</div>
+  </div>
+</div>
+
 <div id="help" style="display:none">
   <div class="help-panel">
     <h2>🧱 how to survive</h2>
     <ol>
       <li><b>Hold LMB</b> on a tree → logs. Zombies come at night — hurry.</li>
       <li><b>E</b> → craft planks, sticks, a <b>crafting table</b>. Place it (RMB).</li>
-      <li>Standing near the table: craft a <b>pickaxe</b> + <b>sword</b>.</li>
+      <li><b>Right-click the table</b> to open 3×3 crafting. Craft a <b>pickaxe</b> + <b>sword</b>.</li>
       <li>Mine <b>stone → coal → iron</b>. <b>F</b> at a furnace smelts iron (ore + coal).</li>
       <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack.</li>
       <li><b>G</b> eats pork · <b>T</b> chat · <b>shift</b> sprint · <b>H</b> this panel</li>
+      <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
     </ol>
     <button id="help-close">play (H)</button>
   </div>

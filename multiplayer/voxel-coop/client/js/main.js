@@ -4,6 +4,7 @@ import { Net } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
 import { Entities } from "./entities.js";
+import { Touch } from "./touch.js";
 import { UI } from "./ui.js";
 
 const RENDER_DIST = 4;
@@ -130,19 +131,37 @@ function breakTime(block, heldId) {
 
 const mouse = { left: false, right: false };
 let lastSwing = 0;
+
+function tryAttack() {
+  const nowSwing = performance.now();
+  if (nowSwing - lastSwing < 330) return false;
+  const hitMob = entities.pickMob(player.eye(), player.lookDir());
+  if (hitMob === null) return false;
+  lastSwing = nowSwing;
+  const held = ui.heldItem();
+  net.attackMob(hitMob, held?.id);
+  return true;
+}
+
+const touch = new Touch(player, {
+  mine: (down) => {
+    if (!net.connected || ui.invOpen || dead) return;
+    mouse.left = down;
+    if (!down) { breaking = null; ui.breakProgress(null); }
+  },
+  place: () => { if (net.connected && !ui.invOpen && !dead) doPlace(); },
+  attack: () => { if (net.connected && !ui.invOpen && !dead) tryAttack(); },
+  inv: () => ui.toggleInv(),
+});
+if (!("ontouchstart" in window) && !(navigator.maxTouchPoints > 0)) {
+  $("touch-toggle").style.display = "none";
+}
+
 renderer.domElement.addEventListener("mousedown", (e) => {
   if (!net.connected || ui.invOpen || dead) return;
   if (!player.locked) { player.lock(); return; }
   if (e.button === 0) {
-    // attack mob first (client mirrors the server 330ms swing gate)
-    const nowSwing = performance.now();
-    const hitMob = entities.pickMob(player.eye(), player.lookDir());
-    if (hitMob !== null && nowSwing - lastSwing >= 330) {
-      lastSwing = nowSwing;
-      const held = ui.heldItem();
-      net.attackMob(hitMob, held?.id);
-      return;
-    }
+    if (tryAttack()) return;
     mouse.left = true;
     breaking = null;
   } else if (e.button === 2) {
@@ -157,6 +176,9 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 function doPlace() {
   const hit = world.raycast(player.eye(), player.lookDir(), 6);
   if (!hit) return;
+  // interactables first (MC behaviour): table opens crafting, furnace smelts
+  if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
+  if (hit.block === B.FURNACE) { net.smelt("start", hit.x, hit.y, hit.z); return; }
   const held = ui.heldItem();
   if (!held || !isPlaceable(held.id)) {
     ui.hint("select a block in hotbar (1-9) to place");
@@ -167,7 +189,8 @@ function doPlace() {
 }
 
 function tickBreaking(dt) {
-  if (!mouse.left || !player.locked || ui.invOpen || dead) {
+  // touch mode has no pointer lock; the MINE button is the gate instead
+  if (!mouse.left || (!player.locked && !touch.enabled) || ui.invOpen || dead) {
     if (breaking) { breaking = null; ui.breakProgress(null); }
     return;
   }
@@ -344,6 +367,11 @@ function frame() {
       lastTorch = now;
       updateTorchLights();
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
+      // unstick: if embedded in a block (stale spawn, lag), pop upward
+      if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {
+        player.pos.y += 1;
+        player.vel.set(0, 0, 0);
+      }
     }
     if (now - lastMoveSend > 66) {
       lastMoveSend = now;

@@ -39,7 +39,14 @@ export class Player {
   }
 
   lock() {
-    if (document.pointerLockElement !== this.dom) this.dom.requestPointerLock();
+    // no-op on touch devices (no pointer lock API)
+    if (typeof this.dom.requestPointerLock !== "function") return false;
+    if (document.pointerLockElement === this.dom) return true;
+    try {
+      const r = this.dom.requestPointerLock();
+      if (r && typeof r.catch === "function") r.catch(() => {});
+    } catch { /* must be called from a user gesture; canvas click retries */ }
+    return true;
   }
 
   eye() {
