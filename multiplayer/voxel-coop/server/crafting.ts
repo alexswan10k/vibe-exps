@@ -1,31 +1,76 @@
-// Crafting recipes, block drops, smelting. All validation server-side.
-
+// Shaped crafting recipes. Patterns are 3x3 row-major, 0 = empty.
+// Matching trims empty borders (allows translation) and allows mirroring.
 import { B, I, InvSlot } from "./protocol.ts";
 
-export interface Recipe {
+const L = B.LOG, P = B.PLANKS, C = B.COBBLE, S = I.STICK, K = I.COAL, G = I.IRON_INGOT;
+
+export interface ShapedRecipe {
   id: string;
   name: string;
-  needsTable: boolean;
-  // required items (itemId -> count), shapeless for simplicity
-  in: Record<number, number>;
+  needsTable: boolean; // also gated by size (3-wide never fits the 2x2)
+  pat: number[]; // length 9
   out: { id: number; n: number };
 }
 
-export const RECIPES: Recipe[] = [
-  { id: "planks", name: "Oak Planks ×4", needsTable: false, in: { [B.LOG]: 1 }, out: { id: B.PLANKS, n: 4 } },
-  { id: "sticks", name: "Sticks ×4", needsTable: false, in: { [B.PLANKS]: 2 }, out: { id: I.STICK, n: 4 } },
-  { id: "table", name: "Crafting Table", needsTable: false, in: { [B.PLANKS]: 4 }, out: { id: B.CRAFT_TABLE, n: 1 } },
-  { id: "torch", name: "Torches ×4", needsTable: false, in: { [I.COAL]: 1, [I.STICK]: 1 }, out: { id: B.TORCH, n: 4 } },
-  { id: "furnace", name: "Furnace", needsTable: true, in: { [B.COBBLE]: 8 }, out: { id: B.FURNACE, n: 1 } },
-  { id: "wood_pick", name: "Wooden Pickaxe", needsTable: true, in: { [B.PLANKS]: 3, [I.STICK]: 2 }, out: { id: I.WOOD_PICK, n: 1 } },
-  { id: "stone_pick", name: "Stone Pickaxe", needsTable: true, in: { [B.COBBLE]: 3, [I.STICK]: 2 }, out: { id: I.STONE_PICK, n: 1 } },
-  { id: "iron_pick", name: "Iron Pickaxe", needsTable: true, in: { [I.IRON_INGOT]: 3, [I.STICK]: 2 }, out: { id: I.IRON_PICK, n: 1 } },
-  { id: "wood_sword", name: "Wooden Sword", needsTable: true, in: { [B.PLANKS]: 2, [I.STICK]: 1 }, out: { id: I.WOOD_SWORD, n: 1 } },
-  { id: "stone_sword", name: "Stone Sword", needsTable: true, in: { [B.COBBLE]: 2, [I.STICK]: 1 }, out: { id: I.STONE_SWORD, n: 1 } },
+export const SHAPED: ShapedRecipe[] = [
+  { id: "planks", name: "Oak Planks ×4", needsTable: false, pat: [L, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: P, n: 4 } },
+  { id: "sticks", name: "Sticks ×4", needsTable: false, pat: [P, 0, 0, P, 0, 0, 0, 0, 0], out: { id: S, n: 4 } },
+  { id: "table", name: "Crafting Table", needsTable: false, pat: [P, P, 0, P, P, 0, 0, 0, 0], out: { id: B.CRAFT_TABLE, n: 1 } },
+  { id: "torch", name: "Torches ×4", needsTable: false, pat: [K, 0, 0, S, 0, 0, 0, 0, 0], out: { id: B.TORCH, n: 4 } },
+  { id: "furnace", name: "Furnace", needsTable: true, pat: [C, C, C, C, 0, C, C, C, C], out: { id: B.FURNACE, n: 1 } },
+  { id: "wood_pick", name: "Wooden Pickaxe", needsTable: true, pat: [P, P, P, 0, S, 0, 0, S, 0], out: { id: I.WOOD_PICK, n: 1 } },
+  { id: "stone_pick", name: "Stone Pickaxe", needsTable: true, pat: [C, C, C, 0, S, 0, 0, S, 0], out: { id: I.STONE_PICK, n: 1 } },
+  { id: "iron_pick", name: "Iron Pickaxe", needsTable: true, pat: [G, G, G, 0, S, 0, 0, S, 0], out: { id: I.IRON_PICK, n: 1 } },
+  { id: "wood_sword", name: "Wooden Sword", needsTable: true, pat: [0, P, 0, 0, P, 0, 0, S, 0], out: { id: I.WOOD_SWORD, n: 1 } },
+  { id: "stone_sword", name: "Stone Sword", needsTable: true, pat: [0, C, 0, 0, C, 0, 0, S, 0], out: { id: I.STONE_SWORD, n: 1 } },
 ];
 
-export function findRecipe(id: string): Recipe | undefined {
-  return RECIPES.find((r) => r.id === id);
+interface Trimmed { w: number; h: number; cells: number[]; }
+
+function trim(pat: number[]): Trimmed {
+  let x0 = 3, y0 = 3, x1 = -1, y1 = -1;
+  for (let y = 0; y < 3; y++) {
+    for (let x = 0; x < 3; x++) {
+      if (pat[y * 3 + x]) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    }
+  }
+  if (x1 < 0) return { w: 0, h: 0, cells: [] };
+  const cells: number[] = [];
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) cells.push(pat[y * 3 + x]);
+  }
+  return { w: x1 - x0 + 1, h: y1 - y0 + 1, cells };
+}
+
+function mirror(pat: number[]): number[] {
+  const out = new Array(9).fill(0);
+  for (let y = 0; y < 3; y++) {
+    for (let x = 0; x < 3; x++) out[y * 3 + (2 - x)] = pat[y * 3 + x];
+  }
+  return out;
+}
+
+const NORM = SHAPED.map((r) => ({ r, a: trim(r.pat), b: trim(mirror(r.pat)) }));
+
+function same(a: Trimmed, b: Trimmed): boolean {
+  if (a.w !== b.w || a.h !== b.h) return false;
+  return a.cells.every((v, i) => v === b.cells[i]);
+}
+
+/** Match a 9-cell grid (ids) against recipes. smallOnly = 2x2 inventory grid. */
+export function matchGrid(cells: number[], smallOnly: boolean): ShapedRecipe | null {
+  if (smallOnly) {
+    // table-only cells occupied -> no match
+    for (const i of [2, 5, 6, 7, 8]) if (cells[i]) return null;
+  }
+  const t = trim(cells);
+  if (t.w === 0) return null;
+  if (smallOnly && (t.w > 2 || t.h > 2)) return null;
+  for (const { r, a, b } of NORM) {
+    if (smallOnly && r.needsTable) continue;
+    if (same(t, a) || same(t, b)) return r;
+  }
+  return null;
 }
 
 // --- inventory helpers (slots array, id 0 = empty, max stack 64, tools don't stack) ---
@@ -94,19 +139,17 @@ export function giveItems(slots: InvSlot[], id: number, n: number): number {
   return n;
 }
 
-export function tryCraft(slots: InvSlot[], recipeId: string): { ok: boolean; reason?: string } {
-  const r = findRecipe(recipeId);
-  if (!r) return { ok: false, reason: "unknown recipe" };
-  if (!canAfford(slots, r.in)) return { ok: false, reason: "missing ingredients" };
-  // simulate: only commit if output fits
-  const backup = slots.map((s) => ({ ...s }));
-  removeItems(slots, r.in);
-  const left = giveItems(slots, r.out.id, r.out.n);
-  if (left > 0) {
-    for (let i = 0; i < slots.length; i++) slots[i] = backup[i];
-    return { ok: false, reason: "inventory full" };
+/** Would `n` of `id` fit in slots? (non-mutating) */
+export function canFit(slots: InvSlot[], id: number, n: number): boolean {
+  if (!isStackable(id)) {
+    return slots.some((s) => s.id === 0);
   }
-  return { ok: true };
+  let room = 0;
+  for (const s of slots) {
+    if (s.id === id) room += MAX_STACK - s.n;
+    else if (s.id === 0) room += MAX_STACK;
+  }
+  return room >= n;
 }
 
 // --- mining drops: block -> item granted on break (null = nothing) ---

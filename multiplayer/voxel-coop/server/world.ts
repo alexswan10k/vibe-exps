@@ -4,9 +4,12 @@
 import { B, CHUNK, WORLD_H, SEA_LEVEL, encodeRLE } from "./protocol.ts";
 
 function hash2(x: number, z: number, seed: number): number {
-  let h = seed ^ (x * 374761393) ^ (z * 668265263);
-  h = (h ^ (h >> 13)) * 1274126177;
-  h = h ^ (h >> 16);
+  // 32-bit integer hash — must use Math.imul (plain * overflows doubles
+  // past 2^53 and destroys uniformity).
+  let h = seed | 0;
+  h = Math.imul(h ^ Math.imul(x | 0, 374761393), 668265263) ^ Math.imul(z | 0, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
   return (h >>> 0) / 4294967295;
 }
 
@@ -15,24 +18,35 @@ function smooth(t: number): number {
 }
 
 // Deterministic value-noise height, no deps.
-export function terrainHeight(x: number, z: number, seed: number): number {
-  const s = 0.035;
-  const xi = Math.floor(x * s), zi = Math.floor(z * s);
-  const xf = x * s - xi, zf = z * s - zi;
+function vnoise(x: number, z: number, seed: number): number {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const xf = x - xi, zf = z - zi;
+  const u = smooth(xf), v = smooth(zf);
   const a = hash2(xi, zi, seed);
   const b = hash2(xi + 1, zi, seed);
   const c = hash2(xi, zi + 1, seed);
   const d = hash2(xi + 1, zi + 1, seed);
-  const n = a + (b - a) * smooth(xf) + ((c + (d - c) * smooth(xf)) - (a + (b - a) * smooth(xf))) * smooth(zf);
-  // second octave for detail
-  const m = hash2(Math.floor(x * 0.15), Math.floor(z * 0.15), seed ^ 0x9e3779b9);
-  const h = 14 + n * 16 + (m - 0.5) * 5;
-  return Math.max(2, Math.min(WORLD_H - 12, Math.floor(h)));
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+export function terrainHeight(x: number, z: number, seed: number): number {
+  const cont = vnoise(x * 0.008, z * 0.008, seed); // continents / oceans
+  const hills = vnoise(x * 0.035 + 100, z * 0.035 - 100, seed ^ 0x111); // rolling hills
+  const det = vnoise(x * 0.15, z * 0.15, seed ^ 0x222); // detail
+  let h = 8 + cont * 24 + (hills - 0.5) * 10 + (det - 0.5) * 3;
+  if (cont > 0.62) h += (cont - 0.62) * 40; // mountain ranges
+  return Math.max(2, Math.min(WORLD_H - 14, Math.floor(h)));
+}
+
+/** 0..1 forest density mask. */
+export function forestAt(x: number, z: number, seed: number): number {
+  return vnoise(x * 0.02 + 500, z * 0.02 - 500, seed ^ 0x333);
 }
 
 export function treeAt(x: number, z: number, seed: number): boolean {
-  const r = hash2(x, z, seed ^ 0x51ab);
-  return r > 0.985;
+  const dense = forestAt(x, z, seed) > 0.55;
+  const thresh = dense ? 0.93 : 0.993; // forests vs lone trees
+  return hash2(x, z, seed ^ 0x51ab) > thresh;
 }
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -101,18 +115,19 @@ export class World {
         const tx = x - dx, tz = z - dz;
         if (!treeAt(tx, tz, this.seed)) continue;
         const th = terrainHeight(tx, tz, this.seed);
-        if (th <= SEA_LEVEL + 1 || th >= 27) continue;
-        const trunkH = 4 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2);
-        if (dx === 0 && dz === 0 && y > th && y <= th + trunkH) return B.LOG;
-        if (y >= th + trunkH - 1 && y <= th + trunkH + 1) {
-          const adx = Math.abs(dx), adz = Math.abs(dz);
-          if (adx + adz <= 3 && !(adx === 0 && adz === 0 && y <= th + trunkH)) {
-            if (y === th + trunkH + 1) {
-              if (adx + adz <= 1) return B.LEAVES;
-            } else {
-              if (adx + adz <= 2 || (adx <= 2 && adz <= 2 && (adx < 2 || adz < 2))) return B.LEAVES;
-            }
-          }
+        if (th <= SEA_LEVEL + 1 || th >= 28) continue; // not on beach / snow
+        const trunkH = 4 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2); // 4-5
+        const top = th + trunkH;
+        if (dx === 0 && dz === 0 && y > th && y <= top) return B.LOG;
+        // leaf canopy: two full layers, a ring, then a cap
+        const dy = y - top;
+        const adx = Math.abs(dx), adz = Math.abs(dz);
+        if (dy === -2 || dy === -1) {
+          if (adx <= 2 && adz <= 2 && !(adx === 2 && adz === 2)) return B.LEAVES;
+        } else if (dy === 0) {
+          if (adx + adz <= 2 && !(adx === 0 && adz === 0)) return B.LEAVES;
+        } else if (dy === 1) {
+          if (adx + adz <= 1) return B.LEAVES;
         }
       }
     }

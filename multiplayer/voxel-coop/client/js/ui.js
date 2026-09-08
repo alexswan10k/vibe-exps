@@ -1,5 +1,5 @@
-// HUD + menus: hotbar, inventory, crafting book, chat, vitals, connect menu.
-import { B, BLOCK_NAME, RECIPES } from "./config.js";
+// HUD + menus: hotbar, inventory, crafting grid, chat, vitals, connect menu.
+import { BLOCK_NAME } from "./config.js";
 
 const ICON_COLOR = {
   1: "#55aa35", 2: "#7a5230", 3: "#888", 4: "#e3d79b", 5: "#5a3a1a",
@@ -22,10 +22,14 @@ export class UI {
     this.el = (id) => document.getElementById(id);
     this.hotbarSel = 0;
     this.slots = [];
+    this.gridCells = Array.from({ length: 9 }, () => ({ id: 0, n: 0 }));
+    this.gridResult = { id: 0, n: 0 };
     this.invOpen = false;
     this.swapIdx = null;
     this.nearTable = false;
-    this.onCraft = null;
+    this.onGridPut = null;
+    this.onGridTake = null;
+    this.onCraftTake = null;
     this.onChat = null;
     this.onRespawn = null;
     this.onEat = null;
@@ -53,24 +57,42 @@ export class UI {
       d.addEventListener("click", () => this.clickInv(i));
       inv.appendChild(d);
     }
-    const rb = this.el("recipe-list");
+    const rb = this.el("craft-grid");
     rb.innerHTML = "";
-    for (const r of RECIPES) {
-      const b = document.createElement("button");
-      b.className = "recipe";
-      b.dataset.id = r.id;
-      b.addEventListener("click", () => this.onCraft?.(r.id));
-      rb.appendChild(b);
+    for (let g = 0; g < 9; g++) {
+      const d = document.createElement("div");
+      d.className = "slot";
+      d.dataset.g = g;
+      d.addEventListener("click", (e) => this.clickGrid(g, e.shiftKey));
+      rb.appendChild(d);
     }
+    rb.classList.add("small");
+    this.el("craft-result").addEventListener("click", () => {
+      if (this.gridResult?.id) this.onCraftTake?.();
+    });
   }
 
   clickInv(i) {
     if (this.swapIdx === null) {
       if (this.slots[i]?.id) { this.swapIdx = i; this.renderInv(); }
-    } else {
-      if (this.swapIdx !== i) this.onMoveItem?.(this.swapIdx, i);
+    } else if (this.swapIdx === i) {
       this.swapIdx = null;
       this.renderInv();
+    } else {
+      // second, different slot: swap them (inventory management)
+      this.onMoveItem?.(this.swapIdx, i);
+      this.swapIdx = null;
+      this.renderInv();
+    }
+  }
+
+  clickGrid(g, all) {
+    if (this.swapIdx !== null) {
+      // deposit from selected inventory slot (click = 1, shift-click = stack)
+      this.onGridPut?.(this.swapIdx, g, all);
+    } else {
+      // take back into inventory
+      this.onGridTake?.(g);
     }
   }
 
@@ -81,6 +103,7 @@ export class UI {
         if (n >= 1 && n <= 9) { this.hotbarSel = n - 1; this.renderHotbar(); }
       }
       if (e.code === "KeyE" && !this.chatFocused()) this.toggleInv();
+      if (e.code === "KeyH" && !this.chatFocused()) this.toggleHelp();
       if (e.code === "KeyG") {
         const s = this.slots[this.hotbarSel];
         if (s?.id === 104) this.onEat?.(this.hotbarSel);
@@ -103,14 +126,30 @@ export class UI {
   toggleInv(force) {
     this.invOpen = force ?? !this.invOpen;
     this.el("inventory").style.display = this.invOpen ? "flex" : "none";
-    if (this.invOpen) { this.renderInv(); this.renderRecipes(); }
+    if (this.invOpen) { this.renderInv(); this.renderGrid(); }
     if (!this.invOpen && document.pointerLockElement) document.exitPointerLock?.();
+  }
+
+  toggleHelp(force) {
+    const h = this.el("help");
+    const show = force ?? h.style.display === "none";
+    h.style.display = show ? "flex" : "none";
+    if (show) {
+      try { localStorage.setItem("voxelcoop.helpSeen", "1"); } catch { /* noop */ }
+      if (document.pointerLockElement) document.exitPointerLock?.();
+    }
+  }
+
+  maybeShowHelp() {
+    let seen = null;
+    try { seen = localStorage.getItem("voxelcoop.helpSeen"); } catch { /* noop */ }
+    if (!seen) this.toggleHelp(true);
   }
 
   setSlots(slots) {
     this.slots = slots;
     this.renderHotbar();
-    if (this.invOpen) { this.renderInv(); this.renderRecipes(); }
+    if (this.invOpen) this.renderInv();
   }
 
   heldItem() {
@@ -141,25 +180,30 @@ export class UI {
     }
   }
 
-  renderRecipes() {
-    const counts = {};
-    for (const s of this.slots) if (s?.id) counts[s.id] = (counts[s.id] ?? 0) + s.n;
-    for (const b of this.el("recipe-list").children) {
-      const r = RECIPES.find((x) => x.id === b.dataset.id);
-      const need = Object.entries(r.in)
-        .map(([id, n]) => `${BLOCK_NAME[id] ?? id}×${n}`)
-        .join(" + ");
-      const ok = Object.entries(r.in).every(([id, n]) => (counts[id] ?? 0) >= n) &&
-        (!r.needsTable || this.nearTable);
-      b.innerHTML = `<b>${r.name}</b><small>${need} → ${r.out}${r.needsTable && !this.nearTable ? " · needs table nearby" : ""}</small>`;
-      b.classList.toggle("ok", ok);
+  setGrid(cells, result) {
+    this.gridCells = cells;
+    this.gridResult = result;
+    if (this.invOpen) this.renderGrid();
+  }
+
+  renderGrid() {
+    const kids = this.el("craft-grid").children;
+    for (let g = 0; g < 9; g++) {
+      kids[g].innerHTML = this.slotHTML(this.gridCells[g]);
+      kids[g].classList.toggle("sel", false);
     }
+    this.el("craft-result").innerHTML = this.slotHTML(this.gridResult);
+    this.el("craft-result").style.opacity = this.gridResult?.id ? "1" : "0.35";
   }
 
   setNearTable(v) {
     if (v === this.nearTable) return;
     this.nearTable = v;
-    if (this.invOpen) this.renderRecipes();
+    this.el("craft-grid").classList.toggle("small", !v);
+    this.el("craft-title").innerHTML = v
+      ? `Crafting table (3×3) <small>(click item, then grid · shift-click = whole stack)</small>`
+      : `Crafting (2×2) <small>(stand near a table for 3×3)</small>`;
+    if (this.invOpen) this.renderGrid();
   }
 
   setVitals(hp, maxHp, hunger, dead) {

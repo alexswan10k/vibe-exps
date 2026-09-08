@@ -4,9 +4,7 @@ import { B, CHUNK, WORLD_H } from "./config.js";
 
 const OPAQUE = new Set([1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16]);
 
-function px(n) { return Math.floor(n * 255); }
-
-// tiny deterministic rng for textures
+// --- pixel-art texture painters (16x16) ---
 function rng(seed) {
   let s = seed >>> 0;
   return () => {
@@ -15,31 +13,10 @@ function rng(seed) {
   };
 }
 
-function canvasTex(base, vary, seed, topStrip) {
+function makeCanvas(paint, seed) {
   const c = document.createElement("canvas");
   c.width = c.height = 16;
-  const g = c.getContext("2d");
-  const r = rng(seed);
-  const [br, bg, bb] = base;
-  for (let y = 0; y < 16; y++) {
-    for (let x = 0; x < 16; x++) {
-      const v = (r() - 0.5) * vary;
-      g.fillStyle = `rgb(${px((br + v))},${px((bg + v))},${px((bb + v))})`;
-      g.fillRect(x, y, 1, 1);
-    }
-  }
-  if (topStrip) {
-    // grass-style: green top rows with jagged edge
-    const rr = rng(seed + 99);
-    for (let x = 0; x < 16; x++) {
-      const depth = 3 + Math.floor(rr() * 3);
-      for (let y = 0; y < depth; y++) {
-        const v = (rr() - 0.5) * 0.08;
-        g.fillStyle = `rgb(${px(0.33 + v)},${px(0.75 + v)},${px(0.3 + v)})`;
-        g.fillRect(x, y, 1, 1);
-      }
-    }
-  }
+  paint(c.getContext("2d"), rng(seed));
   const t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
@@ -47,30 +24,148 @@ function canvasTex(base, vary, seed, topStrip) {
   return t;
 }
 
+function noiseFill(g, r, base, vary) {
+  const [br, bg, bb] = base;
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const v = (r() - 0.5) * vary;
+      g.fillStyle = `rgb(${conv(br + v)},${conv(bg + v)},${conv(bb + v)})`;
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+}
+function conv(n) { return Math.max(0, Math.min(255, Math.floor(n * 255))); }
+function blobs(g, r, color, count, size) {
+  g.fillStyle = color;
+  for (let i = 0; i < count; i++) {
+    const x = Math.floor(r() * (16 - size)), y = Math.floor(r() * (16 - size));
+    g.fillRect(x, y, size, size);
+  }
+}
+
+const DIRT = [0.47, 0.32, 0.17];
+const GRASS_GREEN = [0.36, 0.72, 0.27];
+const STONE = [0.5, 0.5, 0.52];
+
+function paintDirt(g, r) { noiseFill(g, r, DIRT, 0.1); }
+function paintGrassTop(g, r) { noiseFill(g, r, GRASS_GREEN, 0.12); }
+function paintGrassSide(g, r) {
+  noiseFill(g, r, DIRT, 0.1);
+  const rr = rng(913);
+  for (let x = 0; x < 16; x++) {
+    const depth = 3 + Math.floor(rr() * 3);
+    for (let y = 0; y < depth; y++) {
+      const v = (rr() - 0.5) * 0.1;
+      g.fillStyle = `rgb(${conv(GRASS_GREEN[0] + v)},${conv(GRASS_GREEN[1] + v)},${conv(GRASS_GREEN[2] + v)})`;
+      g.fillRect(x, y, 1, 1);
+    }
+  }
+}
+function paintBark(g, r) {
+  noiseFill(g, r, [0.32, 0.21, 0.1], 0.08);
+  // dark vertical stripes
+  for (let x = 0; x < 16; x++) {
+    if (x % 4 === 1) {
+      g.fillStyle = "rgba(30,18,6,0.55)";
+      g.fillRect(x, 0, 1, 16);
+    }
+  }
+}
+function paintRings(g, r) {
+  noiseFill(g, r, [0.62, 0.45, 0.24], 0.06);
+  g.fillStyle = "rgba(70,45,20,0.7)";
+  // concentric squares
+  for (let k = 0; k < 4; k++) {
+    const o = k * 2;
+    g.fillRect(o, o, 16 - o * 2, 1);
+    g.fillRect(o, 15 - o, 16 - o * 2, 1);
+    g.fillRect(o, o, 1, 16 - o * 2);
+    g.fillRect(15 - o, o, 1, 16 - o * 2);
+  }
+}
+function paintStone(g, r) { noiseFill(g, r, STONE, 0.07); }
+function paintCoalOre(g, r) { paintStone(g, r); blobs(g, r, "#141414", 6, 2); }
+function paintIronOre(g, r) { paintStone(g, r); blobs(g, r, "#d9975f", 6, 2); }
+function paintPlanks(g, r) {
+  noiseFill(g, r, [0.6, 0.43, 0.21], 0.05);
+  g.fillStyle = "rgba(60,38,15,0.8)";
+  for (let y = 3; y < 16; y += 4) g.fillRect(0, y, 16, 1);
+  g.fillRect(4, 0, 1, 3); g.fillRect(11, 4, 1, 4); g.fillRect(5, 8, 1, 4); g.fillRect(12, 12, 1, 4);
+}
+function paintTableTop(g, r) {
+  paintPlanks(g, r);
+  g.fillStyle = "rgba(40,24,8,0.9)";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16); g.fillRect(15, 0, 1, 16);
+  g.fillRect(7, 1, 2, 14); g.fillRect(1, 7, 14, 2);
+}
+function paintTableSide(g, r) {
+  paintPlanks(g, r);
+  g.fillStyle = "rgba(40,24,8,0.85)";
+  g.fillRect(0, 0, 16, 2);
+}
+function paintFurnace(g, r) {
+  noiseFill(g, r, [0.42, 0.42, 0.44], 0.08);
+  g.fillStyle = "rgba(20,20,22,0.7)";
+  for (let y = 3; y < 16; y += 4) g.fillRect(0, y, 16, 1);
+}
+function paintFurnaceFront(g, r) {
+  paintFurnace(g, r);
+  g.fillStyle = "#0a0a0a";
+  g.fillRect(5, 8, 6, 6);
+  g.fillStyle = "#3a3a3a";
+  g.fillRect(5, 8, 6, 1);
+}
+function paintCobble(g, r) {
+  noiseFill(g, r, [0.45, 0.45, 0.47], 0.06);
+  g.fillStyle = "rgba(25,25,28,0.8)";
+  // jittered mortar grid
+  for (let i = 0; i < 4; i++) {
+    const y = i * 4 + Math.floor(r() * 2);
+    g.fillRect(0, y, 16, 1);
+    const x = i * 4 + Math.floor(r() * 2);
+    g.fillRect(x, 0, 1, 16);
+  }
+}
+function paintLeaves(g, r) {
+  noiseFill(g, r, [0.13, 0.45, 0.13], 0.14);
+  blobs(g, r, "rgba(8,30,8,0.8)", 14, 1);
+}
+function paintSand(g, r) { noiseFill(g, r, [0.85, 0.78, 0.55], 0.07); }
+function paintSnow(g, r) { noiseFill(g, r, [0.92, 0.93, 0.95], 0.04); }
+function paintBedrock(g, r) { noiseFill(g, r, [0.12, 0.12, 0.13], 0.14); }
+
 export function makeMaterials() {
-  const M = (tex, opts = {}) =>
-    new THREE.MeshLambertMaterial({ map: tex, ...opts });
-  const flat = (r, g, b, opts = {}) =>
-    new THREE.MeshLambertMaterial({ color: new THREE.Color(r, g, b), ...opts });
+  const M = (tex, opts = {}) => new THREE.MeshLambertMaterial({ map: tex, ...opts });
+  const dirt = M(makeCanvas(paintDirt, 12));
+  const stone = M(makeCanvas(paintStone, 13));
+  const planks = M(makeCanvas(paintPlanks, 17));
+  const grassSide = M(makeCanvas(paintGrassSide, 11));
+  const grassTop = M(makeCanvas(paintGrassTop, 110));
+  const bark = M(makeCanvas(paintBark, 15));
+  const rings = M(makeCanvas(paintRings, 150));
+  const tableSide = M(makeCanvas(paintTableSide, 23));
+  const tableTop = M(makeCanvas(paintTableTop, 230));
+  const furnace = M(makeCanvas(paintFurnace, 24));
+  const furnaceFront = M(makeCanvas(paintFurnaceFront, 240));
+  // BoxGeometry face order: +x, -x, +y, -y, +z, -z
   return {
-    [B.GRASS]: M(canvasTex([0.45, 0.3, 0.15], 0.09, 11, true)),
-    [B.DIRT]: M(canvasTex([0.45, 0.3, 0.15], 0.1, 12)),
-    [B.STONE]: M(canvasTex([0.5, 0.5, 0.52], 0.07, 13)),
-    [B.SAND]: M(canvasTex([0.85, 0.78, 0.55], 0.07, 14)),
-    [B.LOG]: M(canvasTex([0.35, 0.22, 0.1], 0.12, 15)),
-    [B.LEAVES]: M(canvasTex([0.15, 0.5, 0.15], 0.16, 16)),
-    [B.PLANKS]: M(canvasTex([0.6, 0.42, 0.2], 0.06, 17)),
-    [B.BEDROCK]: M(canvasTex([0.12, 0.12, 0.13], 0.12, 18)),
-    [B.SNOW]: M(canvasTex([0.92, 0.93, 0.95], 0.04, 19)),
-    [B.WATER]: new THREE.MeshLambertMaterial({
-      color: 0x3355dd, transparent: true, opacity: 0.7,
-    }),
-    [B.COAL_ORE]: M(canvasTex([0.4, 0.4, 0.42], 0.08, 21)),
-    [B.IRON_ORE]: M(canvasTex([0.55, 0.45, 0.38], 0.08, 22)),
-    [B.CRAFT_TABLE]: M(canvasTex([0.55, 0.38, 0.18], 0.1, 23)),
-    [B.FURNACE]: M(canvasTex([0.35, 0.35, 0.37], 0.09, 24)),
-    [B.TORCH]: flat(1.0, 0.8, 0.3, { emissive: 0xaa6611 }),
-    [B.COBBLE]: M(canvasTex([0.45, 0.45, 0.47], 0.12, 26)),
+    [B.GRASS]: [grassSide, grassSide, grassTop, dirt, grassSide, grassSide],
+    [B.DIRT]: dirt,
+    [B.STONE]: stone,
+    [B.SAND]: M(makeCanvas(paintSand, 14)),
+    [B.LOG]: [bark, bark, rings, rings, bark, bark],
+    [B.LEAVES]: M(makeCanvas(paintLeaves, 16)),
+    [B.PLANKS]: planks,
+    [B.BEDROCK]: M(makeCanvas(paintBedrock, 18)),
+    [B.SNOW]: M(makeCanvas(paintSnow, 19)),
+    [B.WATER]: new THREE.MeshLambertMaterial({ color: 0x3355dd, transparent: true, opacity: 0.7 }),
+    [B.COAL_ORE]: M(makeCanvas(paintCoalOre, 21)),
+    [B.IRON_ORE]: M(makeCanvas(paintIronOre, 22)),
+    [B.CRAFT_TABLE]: [tableSide, tableSide, tableTop, planks, tableSide, tableSide],
+    [B.FURNACE]: [furnace, furnace, stone, stone, furnaceFront, furnace],
+    [B.TORCH]: new THREE.MeshLambertMaterial({ color: 0xffcf4d, emissive: 0xaa6611 }),
+    [B.COBBLE]: M(makeCanvas(paintCobble, 26)),
   };
 }
 

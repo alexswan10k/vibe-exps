@@ -12,8 +12,8 @@ deno task dev
 ```
 
 Both players just open the URL — the client is served by the server
-(same-origin, so no CORS headaches). `file://` also works if you pass
-`?server=<lan-ip>:8000`, CORS `*` is enabled for that path.
+(same-origin, so no CORS headaches). The server prints its LAN URLs on
+startup (`--allow-sys` lets it list your network interfaces).
 
 ## Layout
 
@@ -35,8 +35,9 @@ data/             world.json + players.json (gitignored saves)
 - infinite seeded terrain (hills, beaches, snow peaks, oceans, trees, ores)
 - hold-to-mine with tool tiers (wood → stone → iron), bedrock unbreakable
 - survival: hearts, hunger, fall damage, starvation, death/respawn
-- inventory (36 slots) + recipe-book crafting (planks → table → picks/swords/furnace/torches);
-  table recipes require a placed table within 4 blocks (enforced server-side)
+- inventory (36 slots) + Minecraft-style shaped crafting grid (2×2, 3×3 near
+  a placed table): click an item, click grid cells (shift-click = whole stack),
+  click the result. Translation + mirror tolerant, server-validated.
 - furnace: 1 iron ore + 1 coal → 1 iron ingot (8s)
 - torches emit real flickering point light (nearest 6, pooled)
 - fall damage, swing rate-limit (3 hits/sec) on mob attacks

@@ -6,7 +6,7 @@ import { PORT } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
-import { dropFor, giveItems, removeItems, countOf, tryCraft, findRecipe, smeltTick, SMELT_TIME, FurnaceState } from "./crafting.ts";
+import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, smeltTick, SMELT_TIME, FurnaceState } from "./crafting.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
 const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
@@ -54,6 +54,14 @@ function sendVitals(pl: Player): void {
 }
 function sendInv(pl: Player): void {
   if (pl.socket) send(pl.socket, { t: "inv", slots: pl.slots });
+}
+function sendGrid(pl: Player): void {
+  const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
+  const recipe = matchGrid(pl.grid.map((c) => c.id), !nearTable);
+  const result = recipe && (!recipe.needsTable || nearTable)
+    ? { id: recipe.out.id, n: recipe.out.n }
+    : { id: 0, n: 0 };
+  if (pl.socket) send(pl.socket, { t: "grid", cells: pl.grid, result });
 }
 
 const fkey = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -159,23 +167,58 @@ function onMessage(pl: Player, raw: string): void {
       pl.lastMove = Date.now();
       break;
     }
-    case "craft": {
+    case "gridPut": {
       if (pl.dead) break;
-      const recipe = findRecipe(m.recipe);
+      const { slot, g, all } = m;
+      if (!Number.isInteger(slot) || !Number.isInteger(g) || slot < 0 || slot >= 36 || g < 0 || g >= 9) break;
+      const src = pl.slots[slot];
+      if (!src.id) break;
+      const dst = pl.grid[g];
+      if (dst.id && dst.id !== src.id) break;
+      if (dst.id && (!isStackable(src.id) || dst.n >= 64)) break;
+      let n = all ? src.n : 1;
+      if (dst.id) n = Math.min(n, 64 - dst.n);
+      dst.id = src.id;
+      dst.n += n;
+      src.n -= n;
+      if (src.n <= 0) { src.id = 0; src.n = 0; }
+      sendInv(pl);
+      sendGrid(pl);
+      break;
+    }
+    case "gridTake": {
+      if (pl.dead) break;
+      const g = m.g;
+      if (!Number.isInteger(g) || g < 0 || g >= 9) break;
+      const cell = pl.grid[g];
+      if (!cell.id) break;
+      const left = giveItems(pl.slots, cell.id, cell.n);
+      cell.n = left;
+      if (left <= 0) { cell.id = 0; cell.n = 0; }
+      sendInv(pl);
+      sendGrid(pl);
+      break;
+    }
+    case "craftTake": {
+      if (pl.dead) break;
+      const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
+      const recipe = matchGrid(pl.grid.map((c) => c.id), !nearTable);
       if (!recipe) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "unknown recipe" });
+        if (pl.socket) send(pl.socket, { t: "denied", reason: "no recipe matches" });
         break;
       }
-      if (recipe.needsTable && !world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4)) {
+      if (recipe.needsTable && !nearTable) {
         if (pl.socket) send(pl.socket, { t: "denied", reason: "need a crafting table nearby" });
         break;
       }
-      const r = tryCraft(pl.slots, m.recipe);
-      if (!r.ok) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: r.reason ?? "craft failed" });
-      } else {
-        sendInv(pl);
+      if (!canFit(pl.slots, recipe.out.id, recipe.out.n)) {
+        if (pl.socket) send(pl.socket, { t: "denied", reason: "inventory full" });
+        break;
       }
+      for (const c of pl.grid) { c.id = 0; c.n = 0; }
+      giveItems(pl.slots, recipe.out.id, recipe.out.n);
+      sendInv(pl);
+      sendGrid(pl);
       break;
     }
     case "smelt": {
@@ -300,6 +343,7 @@ async function handler(req: Request): Promise<Response> {
           console.log(`[join] ${name} (id=${pl.id})`);
           send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, motd: "voxel-coop 🧱" });
           sendInv(pl);
+          sendGrid(pl);
           sendVitals(pl);
           broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
         } catch { socket.close(1008, "bad hello"); }

@@ -58,7 +58,9 @@ export class Net {
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }
-  craft(recipe, fromTable) { this.send({ t: "craft", recipe, fromTable }); }
+  gridPut(slot, g, all) { this.send({ t: "gridPut", slot, g, all }); }
+  gridTake(g) { this.send({ t: "gridTake", g }); }
+  craftTake() { this.send({ t: "craftTake" }); }
   smelt(action, x, y, z) { this.send({ t: "smelt", action, x, y, z }); }
   attackMob(id, weapon) { this.send({ t: "attackMob", id, weapon }); }
   chat(msg) { this.send({ t: "chat", msg }); }
