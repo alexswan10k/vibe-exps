@@ -1,6 +1,6 @@
 // Server-side lifeforms: passive wanderers + night zombies that chase players.
 
-import { MobWire, Vec3 } from "./protocol.ts";
+import { MobWire, Vec3, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 
 export interface Mob {
@@ -38,6 +38,7 @@ let nextId = 1;
 
 export class MobSim {
   mobs = new Map<number, Mob>();
+  peaceful = false;
 
   spawn(kind: Mob["kind"], x: number, y: number, z: number): Mob {
     const m: Mob = {
@@ -62,8 +63,14 @@ export class MobSim {
 
   /** Keep population around players: spawn passive by day, zombies at night. */
   maintain(world: World, players: Vec3[], night: boolean): void {
+    // peaceful: no zombies, evict any leftovers (e.g. after flag flip / dawn)
+    if (this.peaceful) {
+      for (const m of [...this.mobs.values()]) {
+        if (m.kind === "zombie") this.mobs.delete(m.id);
+      }
+    }
     const wantPassive = Math.min(10, players.length * 5);
-    const wantZombie = night ? players.length * 3 : 0;
+    const wantZombie = !this.peaceful && night ? players.length * 3 : 0;
     let passive = 0, zombies = 0;
     for (const m of this.mobs.values()) {
       if (m.kind === "zombie") zombies++;
@@ -97,10 +104,25 @@ export class MobSim {
     }
   }
 
-  tick(dt: number, world: World, players: { p: Vec3; hurt: (dmg: number) => void }[]): void {
-    for (const m of this.mobs.values()) {
+  /** Exposed to open sky? (for zombie sunburn) */
+  exposed(world: World, m: Mob): boolean {
+    const x = Math.floor(m.p[0]), z = Math.floor(m.p[2]);
+    for (let y = Math.floor(m.p[1]) + 1; y < WORLD_H; y++) {
+      if (world.isSolid(x, y, z)) return false;
+    }
+    return true;
+  }
+
+  tick(dt: number, world: World, players: { p: Vec3; hurt: (dmg: number) => void }[], night: boolean): void {
+    for (const m of [...this.mobs.values()]) {
       const st = STATS[m.kind];
       m.atkCd -= dt;
+      // zombies burn in daylight (no drops — only player kills pay out)
+      if (m.kind === "zombie" && !night && !this.peaceful && this.exposed(world, m)) {
+        m.hp -= 2.5 * dt;
+        if (m.hp <= 0) this.mobs.delete(m.id);
+        continue;
+      }
       if (m.kind === "zombie") {
         // chase nearest player within 24 blocks
         let best: { p: Vec3; hurt: (dmg: number) => void } | null = null;

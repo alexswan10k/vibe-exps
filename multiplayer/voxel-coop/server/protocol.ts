@@ -111,6 +111,7 @@ export type ServerMsg =
   | { t: "block"; x: number; y: number; z: number; block: number }
   | { t: "players"; list: PublicPlayer[] }
   | { t: "mobs"; list: MobWire[] }
+  | { t: "mobHit"; id: number }
   | { t: "inv"; slots: InvSlot[] }
   | { t: "grid"; cells: InvSlot[]; result: InvSlot }
   | { t: "vitals"; hp: number; maxHp: number; hunger: number; dead: boolean }

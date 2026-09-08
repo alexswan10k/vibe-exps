@@ -6,7 +6,8 @@ host plays, second player joins over the same Wi-Fi.
 ## Run
 
 ```sh
-deno task dev
+deno task dev          # survival (default)
+deno task peaceful     # no zombies, hunger tops up (chill building)
 # local:  http://localhost:8000/
 # player 2: http://<your-lan-ip>:8000/   (printed on startup)
 ```
@@ -41,7 +42,11 @@ data/             world.json + players.json (gitignored saves)
 - furnace: 1 iron ore + 1 coal → 1 iron ingot (8s)
 - torches emit real flickering point light (nearest 6, pooled)
 - fall damage, swing rate-limit (3 hits/sec) on mob attacks
-- lifeforms: pigs, cows, chickens, sheep; zombies hunt you at night (pork/wool/feather/coal drops)
+- lifeforms: pigs, cows, chickens, sheep; zombies hunt at night and **burn in
+  daylight**. Click mobs to hit them (hit-flash + knockback, 3 swings/sec);
+  stone sword drops a zombie in 4 hits. Drops: pork/wool/feather/coal.
+- recipe **book** under the crafting grid: green = buildable with what you're
+  carrying, pattern preview included, click to auto-fill the grid.
 - day/night cycle, chat (T), coop player avatars + name tags
 - world + inventories persist across restarts
 

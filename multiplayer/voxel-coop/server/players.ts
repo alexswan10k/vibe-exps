@@ -83,17 +83,23 @@ export class Players {
   }
 
   /** Hunger drains, starvation damages, regen when full. Returns true if vitals changed. */
-  tick(dt: number): boolean {
+  tick(dt: number, peaceful = false): boolean {
     let changed = false;
     for (const pl of this.all.values()) {
       if (pl.hurtCd > 0) pl.hurtCd -= dt;
       if (pl.dead) continue;
-      pl.hungerT += dt;
-      if (pl.hungerT > 12) {
-        pl.hungerT = 0;
-        if (pl.hunger > 0) {
-          pl.hunger -= 1;
-          changed = true;
+      if (peaceful) {
+        // MC peaceful: hunger tops up, no starvation
+        if (pl.hunger < 20) { pl.hunger = Math.min(20, pl.hunger + dt * 2); changed = true; }
+        if (pl.hp < pl.maxHp) { pl.hp = Math.min(pl.maxHp, pl.hp + dt * 1.5); changed = true; }
+      } else {
+        pl.hungerT += dt;
+        if (pl.hungerT > 12) {
+          pl.hungerT = 0;
+          if (pl.hunger > 0) {
+            pl.hunger -= 1;
+            changed = true;
+          }
         }
       }
       if (pl.hunger <= 0) {

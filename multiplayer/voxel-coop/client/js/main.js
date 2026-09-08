@@ -129,13 +129,16 @@ function breakTime(block, heldId) {
 }
 
 const mouse = { left: false, right: false };
+let lastSwing = 0;
 renderer.domElement.addEventListener("mousedown", (e) => {
   if (!net.connected || ui.invOpen || dead) return;
   if (!player.locked) { player.lock(); return; }
   if (e.button === 0) {
-    // attack mob first?
+    // attack mob first (client mirrors the server 330ms swing gate)
+    const nowSwing = performance.now();
     const hitMob = entities.pickMob(player.eye(), player.lookDir());
-    if (hitMob !== null) {
+    if (hitMob !== null && nowSwing - lastSwing >= 330) {
+      lastSwing = nowSwing;
       const held = ui.heldItem();
       net.attackMob(hitMob, held?.id);
       return;
@@ -229,8 +232,45 @@ net.on("chunk", (m) => {
 net.on("block", (m) => world.setLocal(m.x, m.y, m.z, m.block));
 net.on("players", (m) => entities.setPlayers(m.list));
 net.on("mobs", (m) => entities.setMobs(m.list));
+net.on("mobHit", (m) => {
+  entities.flash(m.id);
+  ui.pulse();
+});
 net.on("inv", (m) => ui.setSlots(m.slots));
-net.on("grid", (m) => ui.setGrid(m.cells, m.result));
+let pendingFill = null; // {puts:[{slot,g}]} — fired once the grid echo shows empty
+function fireFill() {
+  const p = pendingFill;
+  pendingFill = null;
+  for (const put of p.puts) net.gridPut(put.slot, put.g, false);
+}
+net.on("grid", (m) => {
+  ui.setGrid(m.cells, m.result);
+  if (pendingFill && m.cells.every((c) => !c.id)) fireFill();
+});
+ui.onAutoFill = (recipe) => {
+  // plan one unit per pattern cell from the current inventory snapshot
+  const avail = {};
+  ui.slots.forEach((s, i) => {
+    if (s?.id) (avail[s.id] ??= []).push({ slot: i, left: s.n });
+  });
+  const puts = [];
+  for (let g = 0; g < 9; g++) {
+    const id = recipe.pat[g];
+    if (!id) continue;
+    const src = (avail[id] ?? []).find((a) => a.left > 0);
+    if (!src) { ui.hint("not enough materials"); return; }
+    src.left -= 1;
+    puts.push({ slot: src.slot, g });
+  }
+  // clear the grid first (takes only ever add back, so the plan stays valid)
+  ui.gridCells.forEach((c, g) => { if (c.id) net.gridTake(g); });
+  if (ui.gridCells.every((c) => !c.id)) {
+    pendingFill = null;
+    for (const put of puts) net.gridPut(put.slot, put.g, false);
+  } else {
+    pendingFill = { puts };
+  }
+};
 net.on("vitals", (m) => {
   dead = m.dead;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);

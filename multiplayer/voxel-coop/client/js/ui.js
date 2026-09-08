@@ -1,20 +1,12 @@
-// HUD + menus: hotbar, inventory, crafting grid, chat, vitals, connect menu.
+// HUD + menus: hotbar, inventory, crafting grid, recipe book, chat, vitals.
 import { BLOCK_NAME } from "./config.js";
-
-const ICON_COLOR = {
-  1: "#55aa35", 2: "#7a5230", 3: "#888", 4: "#e3d79b", 5: "#5a3a1a",
-  6: "#2c7a2c", 7: "#a0713d", 8: "#222", 9: "#f4f6f8", 10: "#4472dd",
-  11: "#555", 12: "#b08a6a", 13: "#8a5a20", 14: "#555558", 15: "#ffcf4d",
-  16: "#777", 101: "#8a5f30", 102: "#1a1a1a", 103: "#e8e8e8", 104: "#f0a0a0",
-  105: "#eee", 106: "#fff", 108: "#a0713d", 109: "#888", 110: "#e8e8e8",
-  111: "#a0713d", 113: "#888",
-};
+import { SHAPED_CLIENT } from "./recipes.js";
+import { itemIconURL } from "./icons.js";
 
 export function iconFor(id) {
   if (!id) return null;
-  const color = ICON_COLOR[id] ?? "#f0f";
   const name = BLOCK_NAME[id] ?? `?${id}`;
-  return { color, name };
+  return { img: itemIconURL(id), name };
 }
 
 export class UI {
@@ -30,6 +22,7 @@ export class UI {
     this.onGridPut = null;
     this.onGridTake = null;
     this.onCraftTake = null;
+    this.onAutoFill = null;
     this.onChat = null;
     this.onRespawn = null;
     this.onEat = null;
@@ -70,6 +63,52 @@ export class UI {
     this.el("craft-result").addEventListener("click", () => {
       if (this.gridResult?.id) this.onCraftTake?.();
     });
+    this.buildBook();
+  }
+
+  miniHTML(id) {
+    if (!id) return `<span></span>`;
+    return `<span style="background-image:url(${itemIconURL(id)})"></span>`;
+  }
+
+  buildBook() {
+    const book = this.el("recipe-book");
+    book.innerHTML = "";
+    for (const r of SHAPED_CLIENT) {
+      const d = document.createElement("div");
+      d.className = "book-row";
+      d.dataset.id = r.id;
+      d.innerHTML = `<div class="mini">${r.pat.map((id) => this.miniHTML(id)).join("")}</div>
+        <div class="out" style="background-image:url(${itemIconURL(r.out.id)})"></div>
+        <div class="lbl"><b>${r.name}</b><small></small></div>`;
+      d.addEventListener("click", () => {
+        if (d.classList.contains("ok")) this.onAutoFill?.(r);
+      });
+      book.appendChild(d);
+    }
+  }
+
+  renderBook() {
+    const counts = {};
+    for (const s of this.slots) if (s?.id) counts[s.id] = (counts[s.id] ?? 0) + s.n;
+    const need = (r) => {
+      const m = {};
+      for (const id of r.pat) if (id) m[id] = (m[id] ?? 0) + 1;
+      return m;
+    };
+    for (const d of this.el("recipe-book").children) {
+      const r = SHAPED_CLIENT.find((x) => x.id === d.dataset.id);
+      const m = need(r);
+      const missing = Object.entries(m)
+        .filter(([id, n]) => (counts[id] ?? 0) < n)
+        .map(([id, n]) => `${BLOCK_NAME[id]}×${n - (counts[id] ?? 0)}`);
+      const tableOk = !r.needsTable || this.nearTable;
+      const ok = missing.length === 0 && tableOk;
+      d.classList.toggle("ok", ok);
+      d.querySelector("small").textContent = ok
+        ? "click to fill grid"
+        : [...(tableOk ? [] : ["needs table nearby"]), ...missing.map((s) => "need " + s)].join(" · ");
+    }
   }
 
   clickInv(i) {
@@ -126,7 +165,7 @@ export class UI {
   toggleInv(force) {
     this.invOpen = force ?? !this.invOpen;
     this.el("inventory").style.display = this.invOpen ? "flex" : "none";
-    if (this.invOpen) { this.renderInv(); this.renderGrid(); }
+    if (this.invOpen) { this.renderInv(); this.renderGrid(); this.renderBook(); }
     if (!this.invOpen && document.pointerLockElement) document.exitPointerLock?.();
   }
 
@@ -149,7 +188,7 @@ export class UI {
   setSlots(slots) {
     this.slots = slots;
     this.renderHotbar();
-    if (this.invOpen) this.renderInv();
+    if (this.invOpen) { this.renderInv(); this.renderBook(); }
   }
 
   heldItem() {
@@ -159,7 +198,8 @@ export class UI {
   slotHTML(s) {
     if (!s?.id) return "";
     const ic = iconFor(s.id);
-    return `<div class="icon" style="background:${ic.color}"></div>
+    const bg = ic.img ? `background-image:url(${ic.img})` : "background:#f0f";
+    return `<div class="icon" style="${bg}"></div>
       <span class="cnt">${s.n > 1 ? s.n : ""}</span>
       <span class="nm">${ic.name}</span>`;
   }
@@ -203,7 +243,7 @@ export class UI {
     this.el("craft-title").innerHTML = v
       ? `Crafting table (3×3) <small>(click item, then grid · shift-click = whole stack)</small>`
       : `Crafting (2×2) <small>(stand near a table for 3×3)</small>`;
-    if (this.invOpen) this.renderGrid();
+    if (this.invOpen) { this.renderGrid(); this.renderBook(); }
   }
 
   setVitals(hp, maxHp, hunger, dead) {
@@ -226,6 +266,13 @@ export class UI {
 
   status(t) { this.el("status").textContent = t; }
   hint(t) { this.el("hint").textContent = t; }
+
+  pulse() {
+    const c = this.el("crosshair");
+    c.classList.remove("hit");
+    void c.offsetWidth; // restart animation
+    c.classList.add("hit");
+  }
 
   breakProgress(fracOrNull) {
     const b = this.el("breakbar");
