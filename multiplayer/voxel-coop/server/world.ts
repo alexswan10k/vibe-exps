@@ -183,11 +183,21 @@ export class World {
   }
 
   findSpawn(): [number, number, number] {
-    for (let r = 0; r < 200; r += 8) {
+    for (let r = 0; r < 400; r += 8) {
       const x = r === 0 ? 0.5 : Math.floor(hash2(r, 7, this.seed) * r * 2 - r) + 0.5;
       const z = r === 0 ? 0.5 : Math.floor(hash2(r, 13, this.seed) * r * 2 - r) + 0.5;
-      const h = terrainHeight(Math.floor(x), Math.floor(z), this.seed);
-      if (h > SEA_LEVEL + 1 && h < 26) return [x, h + 2.5, z];
+      const xi = Math.floor(x), zi = Math.floor(z);
+      const h = terrainHeight(xi, zi, this.seed);
+      if (h <= SEA_LEVEL + 1 || h >= 26) continue;
+      const top = this.get(xi, h, zi);
+      if (top !== B.GRASS && top !== B.SAND) continue;
+      // clear headroom: no trunks/leaves (or player builds) above
+      let clear = true;
+      for (let y = h + 1; y <= h + 7; y++) {
+        if (this.get(xi, y, zi) !== B.AIR) { clear = false; break; }
+      }
+      if (!clear) continue;
+      return [xi + 0.5, h + 2.5, zi + 0.5];
     }
     return [0.5, 30, 0.5];
   }

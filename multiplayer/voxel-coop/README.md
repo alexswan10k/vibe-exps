@@ -49,6 +49,8 @@ data/             world.json + players.json (gitignored saves)
   carrying, pattern preview included, click to auto-fill the grid.
 - day/night cycle, chat (T), coop player avatars + name tags
 - world + inventories persist across restarts
+- touch controls for iPad: tap 📱 for joystick + drag-look + jump/mine/place/
+  attack/inventory buttons (hold ⛏️ to mine, tap hotbar slots to select)
 
 ## Protocol (WS JSON)
 
