@@ -74,6 +74,7 @@ data/             world.json + players.json (gitignored saves)
 - render distance 6 chunks (fog to match), far chunks unload as you walk
 - unique names (_2 suffix), chat rate-limit, heartbeat ping + exponential-backoff reconnect
 - feel: wheel cycles hotbar, coyote-time + jump buffer, sprint FOV kick, synth SFX (M mute), damage vignette, animated water
+- real-time sun shadows (1024 PCF-soft cascade around you, P toggles, auto-off on touch) + first-person hand: arm + held block/tool/food with swing, walk-bob, switch pop, and eat animations
 - world + inventories persist across restarts
 - touch controls for iPad: tap 📱 for joystick + drag-look + jump/mine/place/
   attack/inventory buttons (hold ⛏️ to mine, tap hotbar slots to select)

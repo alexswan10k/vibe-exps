@@ -37,8 +37,10 @@ export class Entities {
         const mat = flashable(new THREE.MeshLambertMaterial({ color: st.color }));
         const body = new THREE.Mesh(new THREE.BoxGeometry(...st.body), mat);
         body.position.y = st.body[1] / 2;
+        body.castShadow = true;
         const head = new THREE.Mesh(new THREE.BoxGeometry(...st.head), mat);
         head.position.set(0, st.body[1] + st.head[1] / 2 - 0.08, st.body[2] / 2 + st.head[2] / 2 - 0.1);
+        head.castShadow = true;
         node.add(body, head);
         if (st.eyes) {
           const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
@@ -98,11 +100,13 @@ export class Entities {
           new THREE.MeshLambertMaterial({ color: shirt }),
         );
         body.position.y = 0.9;
+        body.castShadow = true;
         const head = new THREE.Mesh(
           new THREE.BoxGeometry(0.5, 0.5, 0.5),
           new THREE.MeshLambertMaterial({ color: 0xf0c8a0 }),
         );
         head.position.y = 1.95;
+        head.castShadow = true;
         group.add(body, head);
         // name tag
         const cv = document.createElement("canvas");

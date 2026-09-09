@@ -6,6 +6,7 @@ import { Player } from "./player.js";
 import { Entities } from "./entities.js";
 import { Touch } from "./touch.js";
 import { CrackOverlay, Particles } from "./fx.js";
+import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
 
@@ -21,6 +22,13 @@ const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 50
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// real-time shadows: single 1024 cascade glued to the player (see applyTime).
+// cheap enough on desktop; auto-off on touch / legacy poll mode, P toggles.
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+let shadowsOn = true;
+try { shadowsOn = localStorage.getItem("voxelcoop.shadows") !== "0"; } catch { /* noop */ }
+renderer.shadowMap.enabled = shadowsOn;
 $("game").appendChild(renderer.domElement);
 addEventListener("resize", () => {
   camera.aspect = innerWidth / innerHeight;
@@ -31,8 +39,27 @@ addEventListener("resize", () => {
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 0.75);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+{
+  // ortho box around the player; light position/target move every frame in applyTime
+  const S = 45;
+  const c = sun.shadow.camera;
+  c.left = -S; c.right = S; c.top = S; c.bottom = -S; c.near = 1; c.far = 220;
+  c.updateProjectionMatrix();
+}
+sun.shadow.bias = -0.0008;
 scene.add(sun);
 scene.add(sun.target);
+function setShadows(on) {
+  shadowsOn = on;
+  renderer.shadowMap.enabled = on;
+  sun.castShadow = on;
+  try { localStorage.setItem("voxelcoop.shadows", on ? "1" : "0"); } catch { /* noop */ }
+  // toggling shadowMap at runtime needs a material refresh
+  scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+  ui.hint(on ? "shadows on" : "shadows off (faster)");
+}
 
 // pooled torch lights: only the nearest few get a real light (perf)
 const TORCH_LIGHTS = 6;
@@ -109,6 +136,11 @@ function breakColor(block) {
 }
 const entities = new Entities(scene);
 const ui = new UI();
+scene.add(camera); // the held-item viewmodel rides on the camera
+const hand = new Hand(camera, world.materials);
+window.voxHand = hand; // handy for screenshots/tests
+window.voxUI = ui;
+window.voxDbg = { renderer, sun, scene, setShadows };
 // damage vignette overlay (styled in style.css) + mute button; created here if missing
 if (!document.getElementById("dmg-vignette")) {
   const d = document.createElement("div");
@@ -265,6 +297,7 @@ function tryAttack() {
   lastSwing = nowSwing;
   const held = ui.heldItem();
   net.attackMob(hitMob, held?.id);
+  hand.swing();
   ui.pulse(); // instant feedback; mobHit echo pulses again on confirm
   return true;
 }
@@ -287,6 +320,16 @@ const touch = new Touch(player, {
 if (!("ontouchstart" in window) && !(navigator.maxTouchPoints > 0)) {
   $("touch-toggle").style.display = "none";
 }
+// shadows default off on touch devices + legacy poll mode (old iPads) unless the user chose
+try {
+  if (localStorage.getItem("voxelcoop.shadows") === null &&
+      (touch.enabled || new URLSearchParams(location.search).get("transport") === "poll" ||
+       (("ontouchstart" in window) && navigator.maxTouchPoints > 0))) {
+    renderer.shadowMap.enabled = false;
+    sun.castShadow = false;
+    shadowsOn = false;
+  }
+} catch { /* noop */ }
 
 renderer.domElement.addEventListener("mousedown", (e) => {
   if (!net?.connected || ui.invOpen || dead) return;
@@ -319,6 +362,7 @@ function doPlace() {
   }
   const tx = hit.x + hit.nx, ty = hit.y + hit.ny, tz = hit.z + hit.nz;
   net.edit("place", tx, ty, tz, held.id, held.id);
+  hand.swing();
   audio.place();
 }
 
@@ -356,6 +400,11 @@ function tickBreaking(dt) {
     breaking.lastPuff = nowPuff;
     particles.burst(breaking.x + 0.5, breaking.y + 0.5, breaking.z + 0.5, breakColor(breaking.block), 2);
   }
+  // keep swinging while grinding (swing() itself gates on the in-flight swing)
+  if (nowPuff - (breaking.lastSwing ?? 0) > 450) {
+    breaking.lastSwing = nowPuff;
+    hand.swing();
+  }
   if (breaking.prog >= breaking.need) {
     const held = ui.heldItem();
     net.edit("break", breaking.x, breaking.y, breaking.z, undefined, held?.id);
@@ -368,6 +417,7 @@ function tickBreaking(dt) {
 // furnace / bed interact
 addEventListener("keydown", (e) => {
   if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
+  if (e.code === "KeyP" && !ui.chatFocused()) { setShadows(!shadowsOn); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
     if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
@@ -528,7 +578,7 @@ ui.onCraftTake = () => net.craftTake();
 ui.onCraftDirect = (id, n) => net.craftDirect(id, n);
 ui.onChat = (msg) => (net.sendChat ? net.sendChat(msg) : net.chat(msg));
 ui.onRespawn = () => net.respawn();
-ui.onEat = (slot) => net.eat(slot);
+ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
 $("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
@@ -586,6 +636,9 @@ function frame() {
   entities.update(dt, camera);
   particles.update(dt);
   world.tickAnim(now);
+  // held-item viewmodel follows the hotbar, bobs while walking
+  hand.setHeld(ui.heldItem()?.id);
+  hand.update(dt, myId >= 0 && Math.hypot(player.vel.x, player.vel.z) > 0.8 && player.onGround);
   // splash on water entry
   if (myId >= 0 && net?.connected && !dead) {
     const inWater = player.inWater(world);

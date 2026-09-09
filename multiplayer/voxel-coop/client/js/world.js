@@ -369,6 +369,8 @@ export class WorldClient {
         mesh.setMatrixAt(i, this.dummy.matrix);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       this.dummy.scale.set(1, 1, 1);
       group.add(mesh);
     }
