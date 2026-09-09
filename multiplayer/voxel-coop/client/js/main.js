@@ -1,5 +1,5 @@
 // voxel-coop client entry: scene, networking, chunk streaming, mining, day/night.
-import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, isPlaceable, resolveServerUrl, httpBase } from "./config.js";
+import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, resolveServerUrl, httpBase } from "./config.js";
 import { Net, PollNet } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
@@ -7,14 +7,16 @@ import { Entities } from "./entities.js";
 import { Touch } from "./touch.js";
 import { CrackOverlay, Particles } from "./fx.js";
 import { UI } from "./ui.js";
+import { audio } from "./audio.js";
 
-const RENDER_DIST = 4;
+const RENDER_DIST = 6;
+const UNLOAD_DIST = 8;
 const $ = (id) => document.getElementById(id);
 
 // ---------- three.js setup ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 30, 110);
+scene.fog = new THREE.Fog(0x87ceeb, 40, 150);
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -54,6 +56,41 @@ function updateTorchLights() {
 }
 
 const world = new WorldClient(scene, makeMaterials());
+
+// visible sun + moon + stars (the directional light alone shows no disc)
+function skyDisc(color, r, opacity) {
+  const m = new THREE.Mesh(
+    new THREE.CircleGeometry(r, 24),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, fog: false, depthWrite: false }),
+  );
+  m.renderOrder = -10;
+  m.frustumCulled = false;
+  scene.add(m);
+  return m;
+}
+const sunDisc = skyDisc(0xffdd55, 14, 1);
+const sunGlow = skyDisc(0xffeeaa, 26, 0.25);
+const moonDisc = skyDisc(0xe8ecf4, 10, 0.9);
+const starGeo = new THREE.BufferGeometry();
+{
+  const N = 420, pos = new Float32Array(N * 3), R = 420;
+  for (let i = 0; i < N; i++) {
+    const t = Math.random() * Math.PI * 2, u = Math.random() * 2 - 1;
+    const s = Math.sqrt(1 - u * u);
+    pos[i * 3] = Math.cos(t) * s * R;
+    pos[i * 3 + 1] = Math.abs(u) * R * 0.98 + 2;
+    pos[i * 3 + 2] = Math.sin(t) * s * R;
+  }
+  starGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+}
+const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+  color: 0xffffff, size: 1.6, sizeAttenuation: false,
+  transparent: true, opacity: 0, fog: false, depthWrite: false,
+}));
+stars.renderOrder = -10;
+stars.frustumCulled = false;
+scene.add(stars);
+window.voxSky = { sunDisc, sunGlow, moonDisc, stars }; // handy for screenshots/tests
 const player = new Player(camera, renderer.domElement);
 player.onFallDamage = (dmg) => net.fall(dmg);
 const crack = new CrackOverlay(scene);
@@ -64,12 +101,35 @@ const BREAK_COLORS = {
   1: 0x5cb84a, 2: 0x7a5230, 3: 0x808080, 4: 0xd9c78c, 5: 0x5a3a1a,
   6: 0x228b22, 7: 0x9c6f34, 8: 0x1e1e1e, 9: 0xeeeeee, 11: 0x555555,
   12: 0xc08a5a, 13: 0x8a5a20, 14: 0x6b6b6e, 15: 0xffcf4d, 16: 0x737373,
+  17: 0xcfe4ec, 18: 0xf4c20d, 19: 0x5ff2e0, 20: 0x9c6f34, 21: 0x8c8c90,
+  22: 0x8a5f30, 23: 0xc22f2f,
 };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
 }
 const entities = new Entities(scene);
 const ui = new UI();
+// damage vignette overlay (styled in style.css) + mute button; created here if missing
+if (!document.getElementById("dmg-vignette")) {
+  const d = document.createElement("div");
+  d.id = "dmg-vignette";
+  document.body.appendChild(d);
+}
+if (!document.getElementById("mute-btn")) {
+  const b = document.createElement("button");
+  b.id = "mute-btn";
+  b.textContent = "🔊";
+  b.title = "mute (M)";
+  b.addEventListener("click", () => audio.toggleMute());
+  document.body.appendChild(b);
+}
+function flashDamage() {
+  const d = document.getElementById("dmg-vignette");
+  if (!d) return;
+  d.classList.remove("show");
+  void d.offsetWidth;
+  d.classList.add("show");
+}
 let net = null;
 let welcomed = false;
 let connectEpoch = 0;
@@ -140,6 +200,19 @@ function applyTime(t) {
     player.pos.z + 30,
   );
   sun.target.position.copy(player.pos);
+  // sun/moon discs ride the same direction as the light; stars hang overhead
+  const eye = player.eye();
+  const sd = new THREE.Vector3().copy(sun.position).sub(player.pos).normalize();
+  for (const [m, s] of [[sunDisc, 1], [sunGlow, 1], [moonDisc, -1]]) {
+    m.position.copy(eye).addScaledVector(sd, 380 * s);
+    m.lookAt(camera.position);
+  }
+  const sunUp = Math.max(0, Math.min(1, elev * 3 + 0.25));
+  sunDisc.material.opacity = sunUp;
+  sunGlow.material.opacity = 0.25 * sunUp;
+  moonDisc.material.opacity = 0.9 * night;
+  stars.position.copy(eye);
+  stars.material.opacity = night * 0.9;
 }
 
 // ---------- chunk streaming ----------
@@ -157,19 +230,28 @@ function streamChunks() {
       }
     }
   }
+  // unload far chunks so long walks don't leak meshes (nearest 6 torch lights unaffected)
+  for (const k of [...world.chunks.keys()]) {
+    const [cx, cz] = k.split(",").map(Number);
+    if (Math.hypot(cx - pcx, cz - pcz) > UNLOAD_DIST) {
+      pendingChunks.delete(k);
+      world.dropChunk(cx, cz);
+    }
+  }
 }
 
 // ---------- mining ----------
 function breakTime(block, heldId) {
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
-  const mult = PICK_MULT[heldId] ?? 1;
-  const isPickable = [3, 11, 12, 14, 16].includes(block);
-  if (isPickable) {
-    if (!PICK_MULT[heldId]) return base * 3.3; // by hand: very slow
+  const mult = toolMultFor(block, heldId);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21].includes(block);
+  if (isStone) {
+    // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
+    if (mult <= 1) return base * 3.3;
     return base / mult;
   }
-  return base / (PICK_MULT[heldId] ? 1.5 : 1);
+  return base / mult;
 }
 
 const mouse = { left: false, right: false };
@@ -226,9 +308,10 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 function doPlace() {
   const hit = world.raycast(player.eye(), player.lookDir(), 6);
   if (!hit) return;
-  // interactables first (MC behaviour): table opens crafting, furnace smelts
+  // interactables first (MC behaviour): table opens crafting, furnace smelts, bed sets spawn
   if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
   if (hit.block === B.FURNACE) { net.smelt("start", hit.x, hit.y, hit.z); return; }
+  if (hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); return; }
   const held = ui.heldItem();
   if (!held || !isPlaceable(held.id)) {
     ui.hint("select a block in hotbar (1-9) to place");
@@ -236,6 +319,7 @@ function doPlace() {
   }
   const tx = hit.x + hit.nx, ty = hit.y + hit.ny, tz = hit.z + hit.nz;
   net.edit("place", tx, ty, tz, held.id, held.id);
+  audio.place();
 }
 
 function tickBreaking(dt) {
@@ -276,15 +360,18 @@ function tickBreaking(dt) {
     const held = ui.heldItem();
     net.edit("break", breaking.x, breaking.y, breaking.z, undefined, held?.id);
     particles.burst(breaking.x + 0.5, breaking.y + 0.5, breaking.z + 0.5, breakColor(breaking.block), 14);
+    audio.breakBlock();
     clearBreak();
   }
 }
 
-// furnace interact
+// furnace / bed interact
 addEventListener("keydown", (e) => {
+  if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
     if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
+    else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
   }
   if (e.code === "KeyT" && !ui.chatFocused()) {
     e.preventDefault();
@@ -321,8 +408,15 @@ net.on("mobs", (m) => entities.setMobs(m.list));
 net.on("mobHit", (m) => {
   entities.flash(m.id);
   ui.pulse();
+  audio.hit();
 });
-net.on("inv", (m) => ui.setSlots(m.slots));
+let prevInvTotal = 0;
+net.on("inv", (m) => {
+  const total = (m.slots ?? []).reduce((a, s) => a + (s?.n ?? 0), 0);
+  if (total > prevInvTotal && prevInvTotal > 0) audio.pickup();
+  prevInvTotal = total;
+  ui.setSlots(m.slots);
+});
 let pendingFill = null; // {puts:[{slot,g}]} — fired once the grid echo shows empty
 function fireFill() {
   const p = pendingFill;
@@ -357,13 +451,23 @@ ui.onAutoFill = (recipe) => {
     pendingFill = { puts };
   }
 };
+let prevHp = -1;
+let prevHunger = -1;
 net.on("vitals", (m) => {
   if (m.dead && !dead) ui.releaseLock?.();
   dead = m.dead;
+  if (prevHp >= 0 && m.hp < prevHp) { audio.hurt(); flashDamage(); }
+  if (prevHunger >= 0 && m.hunger > prevHunger) audio.eat();
+  prevHp = m.hp;
+  prevHunger = m.hunger;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
 net.on("time", (m) => applyTime(m.time));
 net.on("chat", (m) => ui.chatMsg(m.from, m.msg));
+net.on("ping", () => {
+  // net.js auto-replies pong; lastPingMs drives a subtle status readout
+  if (net.lastPingMs > 0) ui.status(`connected · ${Math.round(net.lastPingMs)}ms`);
+});
 net.on("smeltState", (m) => {
   const s = m.states[0];
   ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
@@ -402,6 +506,7 @@ function connectGame(serverUrl, name) {
   net.connect(serverUrl, name);
 }
 $("menu-join").addEventListener("click", () => {
+  audio.ensure();
   const name = $("menu-name").value.trim().slice(0, 16) || "player";
   try { localStorage.setItem("voxelcoop.name", name); } catch { /* noop */ }
   connectGame($("menu-server").value.trim(), name);
@@ -420,7 +525,8 @@ $("menu-join").addEventListener("click", () => {
 ui.onGridPut = (slot, g, all) => net.gridPut(slot, g, all);
 ui.onGridTake = (g) => net.gridTake(g);
 ui.onCraftTake = () => net.craftTake();
-ui.onChat = (msg) => net.chat(msg);
+ui.onCraftDirect = (id, n) => net.craftDirect(id, n);
+ui.onChat = (msg) => (net.sendChat ? net.sendChat(msg) : net.chat(msg));
 ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => net.eat(slot);
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
@@ -473,12 +579,31 @@ function frame() {
     // contextual hint for furnace
     if (!dead) {
       const hit = world.raycast(player.eye(), player.lookDir(), 6);
-      if (hit?.block === B.FURNACE) ui.hint("F: smelt 1 iron ore + 1 coal → iron ingot");
+      if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
       else if (hit && ui.el("hint").textContent.startsWith("F: smelt")) ui.hint("");
     }
   }
   entities.update(dt, camera);
   particles.update(dt);
+  world.tickAnim(now);
+  // splash on water entry
+  if (myId >= 0 && net?.connected && !dead) {
+    const inWater = player.inWater(world);
+    if (inWater && !frame._wasInWater) {
+      audio.splash();
+      particles.splashBurst(player.pos.x, player.pos.y + 1, player.pos.z);
+    }
+    frame._wasInWater = inWater;
+  }
+  // sprint FOV: 75 -> 82 while sprinting (player.js owns .sprinting incl. onGround gate)
+  if (window.player === undefined) window.player = player;
+  {
+    const targetFov = player.sprinting ? 82 : 75;
+    if (Math.abs(camera.fov - targetFov) > 0.05) {
+      camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 8);
+      camera.updateProjectionMatrix();
+    }
+  }
   applyTime(serverTime); // cheap enough; keeps sun glued to player
   renderer.render(scene, camera);
 }

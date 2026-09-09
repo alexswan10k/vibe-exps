@@ -12,12 +12,13 @@ export interface Mob {
   dir: number; // yaw radians
   wanderT: number;
   atkCd: number;
+  fleeT: number; // >0 while fleeing after being hurt (chickens sprint)
 }
 
 const STATS: Record<string, { hp: number; speed: number; dmg: number }> = {
   pig: { hp: 10, speed: 1.6, dmg: 0 },
   cow: { hp: 12, speed: 1.3, dmg: 0 },
-  chicken: { hp: 5, speed: 2.2, dmg: 0 },
+  chicken: { hp: 5, speed: 2.8, dmg: 0 },
   sheep: { hp: 10, speed: 1.5, dmg: 0 },
   zombie: { hp: 20, speed: 2.6, dmg: 3 },
 };
@@ -26,10 +27,29 @@ export function mobDrops(kind: string): { id: number; n: number }[] {
   // item ids reused from protocol (blocks as items, 104 pork, 105 wool, 106 feather)
   switch (kind) {
     case "pig": return [{ id: 104, n: 1 + Math.floor(Math.random() * 2) }];
-    case "cow": return [{ id: 104, n: 1 }];
-    case "chicken": return [{ id: 106, n: 1 + Math.floor(Math.random() * 2) }];
-    case "sheep": return [{ id: 105, n: 1 + Math.floor(Math.random() * 2) }];
-    case "zombie": return Math.random() < 0.3 ? [{ id: 102, n: 1 }] : [];
+    case "cow": {
+      const drops = [{ id: 132, n: 1 + Math.floor(Math.random() * 2) }]; // raw beef
+      if (Math.random() < 0.5) drops.push({ id: 105, n: 1 });
+      return drops;
+    }
+    case "chicken": {
+      const drops = [{ id: 134, n: 1 }]; // raw chicken
+      if (Math.random() < 0.6) drops.push({ id: 106, n: 1 + Math.floor(Math.random() * 2) });
+      return drops;
+    }
+    case "sheep": {
+      const drops = [{ id: 105, n: 1 + Math.floor(Math.random() * 2) }];
+      if (Math.random() < 0.5) drops.push({ id: 104, n: 1 }); // 0-1 pork
+      return drops;
+    }
+    case "zombie": {
+      const drops: { id: number; n: number }[] = [];
+      if (Math.random() < 0.3) drops.push({ id: 102, n: 1 }); // coal
+      if (Math.random() < 0.1) drops.push({ id: 103, n: 1 }); // iron ingot
+      if (Math.random() < 0.05) drops.push({ id: 115, n: 1 }); // apple
+      if (Math.random() < 0.02) drops.push({ id: 123, n: 1 }); // rare diamond
+      return drops;
+    }
     default: return [];
   }
 }
@@ -44,7 +64,7 @@ export class MobSim {
     const m: Mob = {
       id: nextId++, kind, p: [x, y, z],
       hp: STATS[kind].hp, maxHp: STATS[kind].hp,
-      dir: Math.random() * Math.PI * 2, wanderT: 0, atkCd: 0,
+      dir: Math.random() * Math.PI * 2, wanderT: 0, atkCd: 0, fleeT: 0,
     };
     this.mobs.set(m.id, m);
     return m;
@@ -58,6 +78,10 @@ export class MobSim {
       this.mobs.delete(id);
       return undefined; // died
     }
+    if (m.kind === "chicken") {
+      m.fleeT = 3; // sprint away for 3s when hurt
+      m.dir = Math.random() * Math.PI * 2;
+    }
     return m;
   }
 
@@ -69,7 +93,7 @@ export class MobSim {
         if (m.kind === "zombie") this.mobs.delete(m.id);
       }
     }
-    const wantPassive = Math.min(10, players.length * 5);
+    const wantPassive = Math.min(12, players.length * 5);
     const wantZombie = !this.peaceful && night ? players.length * 3 : 0;
     let passive = 0, zombies = 0;
     for (const m of this.mobs.values()) {
@@ -145,6 +169,12 @@ export class MobSim {
         } else {
           this.wander(m, dt, world, st.speed * 0.4);
         }
+      } else if (m.fleeT > 0) {
+        // hurt chicken: sprint straight ahead, no idle pauses
+        m.fleeT -= dt;
+        const dx = -Math.sin(m.dir) * st.speed * 1.6 * dt;
+        const dz = -Math.cos(m.dir) * st.speed * 1.6 * dt;
+        this.step(m, dx, dz, world);
       } else {
         this.wander(m, dt, world, st.speed);
       }

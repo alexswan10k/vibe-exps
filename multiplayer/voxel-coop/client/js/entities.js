@@ -12,6 +12,13 @@ function flashable(mat) {
   return mat;
 }
 
+function hueFor(id) {
+  const s = String(id);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+  return h;
+}
+
 export class Entities {
   constructor(scene) {
     this.scene = scene;
@@ -53,7 +60,7 @@ export class Entities {
         bar.position.z = 0.001;
         barBg.add(bar);
         this.scene.add(barBg);
-        e = { node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0 };
+        e = { node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0, kind: m.kind, eyeMat: st.eyes ? eyeMat : null };
         this.mobs.set(m.id, e);
       }
       e.target = new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
@@ -84,9 +91,11 @@ export class Entities {
       let e = this.remotes.get(p.id);
       if (!e) {
         const group = new THREE.Group();
+        const hue = hueFor(p.id) / 360;
+        const shirt = new THREE.Color().setHSL(hue, 0.65, 0.55);
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.6, 1.8, 0.6),
-          new THREE.MeshLambertMaterial({ color: 0x3b82f6 }),
+          new THREE.MeshLambertMaterial({ color: shirt }),
         );
         body.position.y = 0.9;
         const head = new THREE.Mesh(
@@ -112,7 +121,7 @@ export class Entities {
         tag.position.y = 2.6;
         group.add(tag);
         this.scene.add(group);
-        e = { group, target: null, yaw: 0 };
+        e = { group, target: null, yaw: 0, lastPos: null, bobT: 0 };
         this.remotes.set(p.id, e);
       }
       e.target = new THREE.Vector3(p.p[0], p.p[1], p.p[2]);
@@ -143,21 +152,38 @@ export class Entities {
   }
 
   update(dt, camera) {
-    const k = Math.min(1, dt * 10);
+    const kMob = Math.min(1, dt * 10);
+    const kPlayer = Math.min(1, dt * 12);
     const now = performance.now();
     for (const [, e] of this.mobs) {
       if (!e.target) continue;
-      e.node.position.lerp(e.target, k);
+      e.node.position.lerp(e.target, kMob);
       e.barBg.position.copy(e.node.position);
       e.barBg.position.y += e.topY + 0.3;
       if (camera) e.barBg.quaternion.copy(camera.quaternion);
-      // hit flash
-      e.mat.emissive.setHex(now < e.flashUntil ? 0xff2222 : e.mat.userData.baseEmissive);
+      // hit flash + squash
+      const flashing = now < e.flashUntil;
+      e.mat.emissive.setHex(flashing ? 0xff2222 : e.mat.userData.baseEmissive);
+      if (flashing) e.node.scale.set(1.15, 0.85, 1.15);
+      else e.node.scale.set(1, 1, 1);
+      // zombie eyes glow pulse
+      if (e.eyeMat) {
+        const p = 0.5 + 0.5 * Math.sin(now / 240);
+        e.eyeMat.color.setRGB(1, 0.13 + p * 0.25, 0.13);
+      }
     }
     for (const [, e] of this.remotes) {
       if (!e.target) continue;
-      e.group.position.lerp(e.target.clone().add(new THREE.Vector3(0, -1.62, 0)), k);
+      e.group.position.lerp(e.target.clone().add(new THREE.Vector3(0, -1.62, 0)), kPlayer);
       e.group.rotation.y = e.yaw;
+      // walk bob: swing y when moving
+      const speed = e.lastPos ? e.group.position.distanceTo(e.lastPos) / Math.max(dt, 1e-4) : 0;
+      if (speed > 0.5) {
+        e.bobT += dt * 10;
+        e.group.position.y += Math.sin(e.bobT) * 0.03;
+      }
+      e.lastPos = e.lastPos ?? new THREE.Vector3();
+      e.lastPos.copy(e.group.position);
     }
   }
 }

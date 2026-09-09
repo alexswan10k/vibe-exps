@@ -99,6 +99,9 @@ export class World {
       const r = hash2(x * 3 + y * 7, z * 5 - y, this.seed ^ 0x0e3);
       if (y < h - 1 && r > 0.986 && y <= 22) return B.COAL_ORE;
       if (y < h - 2 && r > 0.993 && y <= 14) return B.IRON_ORE;
+      const r2 = hash2(x * 5 - y * 3, z * 7 + y, this.seed ^ 0x60d);
+      if (y < h - 3 && r2 > 0.9965 && y <= 9) return B.DIAMOND_ORE;
+      if (y < h - 2 && r2 > 0.9945 && y <= 12) return B.GOLD_ORE;
       return B.STONE;
     }
     if (y < h) return B.DIRT;
@@ -159,7 +162,7 @@ export class World {
 
   isSolid(x: number, y: number, z: number): boolean {
     const b = this.get(x, y, z);
-    return b !== B.AIR && b !== B.WATER;
+    return b !== B.AIR && b !== B.WATER && b !== B.LADDER; // ladders are climb-through
   }
 
   /** True if `block` exists within `r` blocks (cube) of pos. */

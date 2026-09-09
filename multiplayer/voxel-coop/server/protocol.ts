@@ -25,13 +25,29 @@ export const B = {
   FURNACE: 14,
   TORCH: 15,
   COBBLE: 16,
+  GLASS: 17,
+  GOLD_ORE: 18,
+  DIAMOND_ORE: 19,
+  FENCE: 20,
+  STONE_BRICK: 21,
+  LADDER: 22,
+  BED: 23,
 } as const;
 
 export const BLOCK_NAME: Record<number, string> = {
   0: "air", 1: "grass", 2: "dirt", 3: "stone", 4: "sand", 5: "log",
   6: "leaves", 7: "planks", 8: "bedrock", 9: "snow", 10: "water",
   11: "coal ore", 12: "iron ore", 13: "crafting table", 14: "furnace",
-  15: "torch", 16: "cobble",
+  15: "torch", 16: "cobble", 17: "glass", 18: "gold ore", 19: "diamond ore",
+  20: "fence", 21: "stone bricks", 22: "ladder", 23: "bed",
+  107: "cooked pork", 114: "iron sword", 115: "apple",
+  116: "wood axe", 117: "stone axe", 118: "iron axe",
+  119: "wood shovel", 120: "stone shovel", 121: "iron shovel",
+  122: "gold ingot", 123: "diamond",
+  124: "gold pick", 125: "gold sword", 126: "diamond pick", 127: "diamond sword",
+  128: "gold axe", 129: "diamond axe", 130: "gold shovel", 131: "diamond shovel",
+  132: "raw beef", 133: "steak", 134: "raw chicken", 135: "roast chicken",
+  136: "golden apple",
 };
 
 // Item ids: placeable blocks reuse block id; tools/materials use 100+.
@@ -43,45 +59,94 @@ export const I = {
   RAW_PORK: 104,
   WOOL: 105,
   FEATHER: 106,
+  COOKED_PORK: 107,
   WOOD_PICK: 108,
   STONE_PICK: 109,
   IRON_PICK: 110,
   WOOD_SWORD: 111,
   STONE_SWORD: 113,
+  IRON_SWORD: 114,
+  APPLE: 115,
+  WOOD_AXE: 116,
+  STONE_AXE: 117,
+  IRON_AXE: 118,
+  WOOD_SHOVEL: 119,
+  STONE_SHOVEL: 120,
+  IRON_SHOVEL: 121,
+  GOLD_INGOT: 122,
+  DIAMOND: 123,
+  GOLD_PICK: 124,
+  GOLD_SWORD: 125,
+  DIAMOND_PICK: 126,
+  DIAMOND_SWORD: 127,
+  GOLD_AXE: 128,
+  DIAMOND_AXE: 129,
+  GOLD_SHOVEL: 130,
+  DIAMOND_SHOVEL: 131,
+  RAW_BEEF: 132,
+  STEAK: 133,
+  RAW_CHICKEN: 134,
+  COOKED_CHICKEN: 135,
+  GOLDEN_APPLE: 136,
 } as const;
 
 // Seconds to break by hand (Infinity = unbreakable)
 export const HARDNESS: Record<number, number> = {
   1: 0.7, 2: 0.6, 3: 4.0, 4: 0.55, 5: 1.8, 6: 0.3, 7: 1.8,
   8: Infinity, 9: 0.7, 10: Infinity, 11: 4.5, 12: 5.5,
-  13: 1.8, 14: 4.5, 15: 0.15, 16: 4.0,
+  13: 1.8, 14: 4.5, 15: 0.15, 16: 4.0, 17: 0.4, 18: 5.5, 19: 6.5,
+  20: 1.8, 21: 4.0, 22: 0.4, 23: 1.2,
 };
 
 // Which tool class speeds up which blocks. "pick" for stone/ores, "any" otherwise.
 export const TOOL_CLASS: Record<number, "pick" | "any"> = {
   1: "any", 2: "any", 3: "pick", 4: "any", 5: "any", 6: "any", 7: "any",
   8: "pick", 9: "any", 10: "any", 11: "pick", 12: "pick",
-  13: "any", 14: "pick", 15: "any", 16: "pick",
+  13: "any", 14: "pick", 15: "any", 16: "pick", 17: "any", 18: "pick",
+  19: "pick", 20: "any", 21: "pick", 22: "any", 23: "any",
 };
 
 export const PICK_MULT: Record<number, number> = {
-  108: 2.2, 109: 4.2, 110: 6.5,
+  108: 2.2, 109: 4.2, 110: 6.5, 124: 8.0, 126: 10,
 };
+// Axe-effective: log / planks / table / fence / ladder / bed. Shovel-effective: grass / dirt / sand / snow.
+export const AXE_MULT: Record<number, number> = {
+  116: 2.2, 117: 4.2, 118: 6.5, 128: 8.0, 129: 10,
+};
+export const SHOVEL_MULT: Record<number, number> = {
+  119: 2.2, 120: 4.2, 121: 6.5, 130: 8.0, 131: 10,
+};
+export const AXE_BLOCKS = new Set([5, 7, 13, 20, 22, 23]);
+export const SHOVEL_BLOCKS = new Set([1, 2, 4, 9]);
+export function toolMultFor(block: number, heldId: number | undefined): number {
+  if (heldId === undefined) return 1;
+  if (PICK_MULT[heldId] && (block === 3 || block === 11 || block === 12 || block === 14 || block === 16)) return PICK_MULT[heldId];
+  if (AXE_MULT[heldId] && AXE_BLOCKS.has(block)) return AXE_MULT[heldId];
+  if (SHOVEL_MULT[heldId] && SHOVEL_BLOCKS.has(block)) return SHOVEL_MULT[heldId];
+  if (PICK_MULT[heldId] || AXE_MULT[heldId] || SHOVEL_MULT[heldId]) return 1.5; // wrong tool: slight edge
+  return 1;
+}
 export const SWORD_MULT: Record<number, number> = {
-  111: 4, 113: 6,
+  111: 4, 113: 6, 114: 8,
+  116: 5, 117: 7, 118: 9, // axes hit hard, swing slow (rate-limit handles it)
+  119: 2, 120: 3, 121: 4, // shovels are weak weapons
+  125: 5, 127: 10, // gold sword = wood tier, diamond sword = endgame
+  128: 6, 129: 9, 130: 3, 131: 5,
 };
 
 export function pickTier(itemId: number | undefined): number {
+  if (itemId === 126) return 4; // diamond
   if (itemId === 110) return 3;
-  if (itemId === 109) return 2;
+  if (itemId === 109 || itemId === 124) return 2; // stone + gold
   if (itemId === 108) return 1;
   return 0;
 }
 // Minimum pick tier required to actually drop the block (else it just breaks to nothing)
 export function requiredTier(block: number): number {
-  if (block === 3 || block === 16) return 1; // stone/cobble need wood pick+
+  if (block === 3 || block === 16 || block === 21) return 1; // stone/cobble/brick need wood pick+
   if (block === 11) return 1; // coal
   if (block === 12) return 2; // iron needs stone pick+
+  if (block === 18 || block === 19) return 3; // gold/diamond need iron pick+
   if (block === 14) return 1;
   return 0;
 }
@@ -97,12 +162,15 @@ export type ClientMsg =
   | { t: "gridPut"; slot: number; g: number; all: boolean }
   | { t: "gridTake"; g: number }
   | { t: "craftTake" }
+  | { t: "craftDirect"; id: string; n?: number }
   | { t: "smelt"; action: "start" | "take"; x: number; y: number; z: number }
   | { t: "attackMob"; id: number; weapon?: number }
   | { t: "chat"; msg: string }
   | { t: "respawn" }
+  | { t: "setBed"; x: number; y: number; z: number }
   | { t: "eat"; slot: number }
   | { t: "fall"; dmg: number }
+  | { t: "pong"; now: number }
   | { t: "moveItem"; from: number; to: number };
 
 export type ServerMsg =
@@ -118,6 +186,7 @@ export type ServerMsg =
   | { t: "time"; time: number }
   | { t: "chat"; from: string; msg: string }
   | { t: "smeltState"; states: FurnaceWire[] }
+  | { t: "ping"; now: number }
   | { t: "denied"; reason: string };
 
 export interface InvSlot {

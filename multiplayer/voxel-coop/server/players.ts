@@ -17,6 +17,7 @@ export interface Player {
   grid: InvSlot[]; // 3x3 crafting grid (2x2 inventory view uses cells 0,1,3,4)
   hungerT: number;
   hurtCd: number;
+  bedSpawn: Vec3 | null; // set by sleeping in a bed (setBed), used on respawn
   socket: WebSocket | null;
   isPoll: boolean; // legacy HTTP-poll transport (no websocket)
   outbox: ServerMsg[]; // queued messages for poll players
@@ -34,6 +35,18 @@ export function emptyGrid(): InvSlot[] {
 
 let nextId = 1;
 
+// Edible items: id -> { hunger restored, hp healed }.
+export const FOOD: Record<number, { hunger: number; hp: number }> = {
+  104: { hunger: 4, hp: 2 }, // raw pork
+  107: { hunger: 8, hp: 6 }, // cooked pork
+  115: { hunger: 3, hp: 1 }, // apple
+  132: { hunger: 3, hp: 1 }, // raw beef
+  133: { hunger: 8, hp: 8 }, // steak (best regular food)
+  134: { hunger: 2, hp: 0 }, // raw chicken (risky snack)
+  135: { hunger: 6, hp: 4 }, // roast chicken
+  136: { hunger: 10, hp: 20 }, // golden apple (full heal)
+};
+
 export class Players {
   all = new Map<number, Player>();
 
@@ -44,7 +57,7 @@ export class Players {
       p: [...spawn] as Vec3, yaw: 0, pitch: 0,
       hp: 20, maxHp: 20, hunger: 20, dead: false,
       slots: emptyInv(), hungerT: 0, hurtCd: 0,
-      grid: emptyGrid(),
+      grid: emptyGrid(), bedSpawn: null,
       socket: sock, isPoll: sock === null, outbox: [], lastPoll: Date.now(),
       lastMove: Date.now(),
     };
@@ -70,7 +83,7 @@ export class Players {
   }
 
   respawn(pl: Player, spawn: Vec3): void {
-    pl.p = [...spawn] as Vec3;
+    pl.p = pl.bedSpawn ? [...pl.bedSpawn] as Vec3 : [...spawn] as Vec3;
     pl.hp = pl.maxHp;
     pl.hunger = 20;
     pl.dead = false;
@@ -78,11 +91,13 @@ export class Players {
 
   eat(pl: Player, slotIdx: number): boolean {
     const s = pl.slots[slotIdx];
-    if (!s || s.id !== 104 || s.n <= 0) return false; // only raw pork for now (+4 hunger, heals 2)
+    if (!s || s.n <= 0) return false;
+    const food = FOOD[s.id];
+    if (!food) return false;
     s.n -= 1;
     if (s.n <= 0) { s.id = 0; s.n = 0; }
-    pl.hunger = Math.min(20, pl.hunger + 4);
-    pl.hp = Math.min(pl.maxHp, pl.hp + 2);
+    pl.hunger = Math.min(20, pl.hunger + food.hunger);
+    pl.hp = Math.min(pl.maxHp, pl.hp + food.hp);
     return true;
   }
 

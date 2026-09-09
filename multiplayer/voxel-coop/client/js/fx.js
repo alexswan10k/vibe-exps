@@ -86,8 +86,7 @@ export class Particles {
     this.tmpColor = new THREE.Color();
   }
 
-  burst(x, y, z, hex, n = 12) {
-    this.tmpColor.setHex(hex);
+  burst(x, y, z, hex, n = 12) {    this.tmpColor.setHex(hex);
     for (let k = 0; k < n; k++) {
       const i = this.cursor;
       this.cursor = (this.cursor + 1) % this.max;
@@ -104,6 +103,9 @@ export class Particles {
       this.life[i] = 0.4 + Math.random() * 0.3;
     }
   }
+
+  healBurst(x, y, z, n = 14) { this.burst(x, y, z, 0x44dd44, n); }
+  splashBurst(x, y, z, n = 14) { this.burst(x, y, z, 0x4499ff, n); }
 
   update(dt) {
     let any = false;
