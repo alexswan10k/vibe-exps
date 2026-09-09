@@ -6,7 +6,7 @@ import { PORT } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
-import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, smeltTick, SMELT_TIME, FurnaceState } from "./crafting.ts";
+import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState } from "./crafting.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
 const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
@@ -20,8 +20,36 @@ mobs.peaceful = Deno.args.includes("--peaceful") || Deno.args.includes("--peace"
 const furnaces = new Map<string, FurnaceState & { owner: number }>();
 const spawn = world.findSpawn();
 
-// ---- player persistence (pos + inventory across restarts) ----
-interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[] }
+/** Unique display names: if base is taken by a live player, append _2/_3… (fits 16 chars). */
+function uniqueName(raw: string): string {
+  const base = raw.slice(0, 16) || "player";
+  const taken = new Set([...players.all.values()].map((p) => p.name));
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 100; i++) {
+    const suffix = `_${i}`;
+    const cand = base.slice(0, 16 - suffix.length) + suffix;
+    if (!taken.has(cand)) return cand;
+  }
+  return `${base.slice(0, 11)}_${Date.now() % 10000}`;
+}
+
+// ---- chat rate-limit: max 5 msgs / 5s per player ----
+const chatTimes = new Map<number, number[]>();
+function checkChatRate(id: number): boolean {
+  const now = Date.now();
+  const arr = chatTimes.get(id) ?? [];
+  const recent = arr.filter((t) => now - t < 5000);
+  if (recent.length >= 5) {
+    chatTimes.set(id, recent);
+    return false;
+  }
+  recent.push(now);
+  chatTimes.set(id, recent);
+  return true;
+}
+
+// ---- player persistence (pos + inventory + bed spawn across restarts) ----
+interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3 }
 let savedPlayers: Record<string, SavedPlayer> = {};
 try {
   savedPlayers = JSON.parse(await Deno.readTextFile(SAVE_PLAYERS));
@@ -30,7 +58,7 @@ async function persistPlayers(): Promise<void> {
   try {
     const d: Record<string, SavedPlayer> = { ...savedPlayers };
     for (const pl of players.all.values()) {
-      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots };
+      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined };
     }
     await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
     await Deno.writeTextFile(SAVE_PLAYERS, JSON.stringify(d));
@@ -40,21 +68,25 @@ async function persistPlayers(): Promise<void> {
 function send(sock: WebSocket, msg: ServerMsg): void {
   if (sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(msg));
 }
+/** Route to a player via websocket or, for legacy poll clients, the outbox. */
+function sendTo(pl: Player, msg: ServerMsg): void {
+  if (pl.socket) {
+    send(pl.socket, msg);
+  } else if (pl.isPoll) {
+    pl.outbox.push(msg);
+    if (pl.outbox.length > 150) pl.outbox.splice(0, pl.outbox.length - 150);
+  }
+}
 function broadcast(msg: ServerMsg, exceptId?: number): void {
-  const raw = JSON.stringify(msg);
   for (const pl of players.all.values()) {
-    if (pl.id !== exceptId && pl.socket && pl.socket.readyState === WebSocket.OPEN) {
-      pl.socket.send(raw);
-    }
+    if (pl.id !== exceptId) sendTo(pl, msg);
   }
 }
 function sendVitals(pl: Player): void {
-  if (pl.socket) {
-    send(pl.socket, { t: "vitals", hp: Math.ceil(pl.hp), maxHp: pl.maxHp, hunger: Math.floor(pl.hunger), dead: pl.dead });
-  }
+  sendTo(pl, { t: "vitals", hp: Math.ceil(pl.hp), maxHp: pl.maxHp, hunger: Math.floor(pl.hunger), dead: pl.dead });
 }
 function sendInv(pl: Player): void {
-  if (pl.socket) send(pl.socket, { t: "inv", slots: pl.slots });
+  sendTo(pl, { t: "inv", slots: pl.slots });
 }
 function sendGrid(pl: Player): void {
   const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
@@ -62,7 +94,35 @@ function sendGrid(pl: Player): void {
   const result = recipe && (!recipe.needsTable || nearTable)
     ? { id: recipe.out.id, n: recipe.out.n }
     : { id: 0, n: 0 };
-  if (pl.socket) send(pl.socket, { t: "grid", cells: pl.grid, result });
+  sendTo(pl, { t: "grid", cells: pl.grid, result });
+}
+
+/** Shared join for websocket + legacy poll transports. */
+function joinGame(rawName: string, sock: WebSocket | null): Player {
+  const name = uniqueName(rawName.slice(0, 16) || "player");
+  const pl = players.add(name, spawn, sock);
+  const saved = savedPlayers[name];
+  if (saved) {
+    pl.p = saved.p;
+    pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
+    if (Array.isArray(saved.bed) && saved.bed.length === 3 && saved.bed.every(Number.isFinite)) {
+      pl.bedSpawn = saved.bed as Vec3;
+    }
+  }
+  console.log(`[join] ${name} (id=${pl.id}${sock ? "" : " poll"})`);
+  sendInv(pl);
+  sendGrid(pl);
+  sendVitals(pl);
+  broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
+  return pl;
+}
+
+function leaveGame(pl: Player): void {
+  console.log(`[leave] ${pl.name}`);
+  players.remove(pl.id);
+  chatTimes.delete(pl.id);
+  broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
+  void persistPlayers();
 }
 
 const fkey = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -89,14 +149,14 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
   if (pl.dead) return;
   if (!checkRate(pl.id)) return;
   if (dist(pl.p, x, y, z) > 7.5) {
-    if (pl.socket) send(pl.socket, { t: "denied", reason: "too far" });
+    sendTo(pl, { t: "denied", reason: "too far" });
     return;
   }
   if (op === "break") {
     const cur = world.get(x, y, z);
     if (cur === B.AIR || cur === B.WATER) return;
     if (cur === B.BEDROCK) {
-      if (pl.socket) send(pl.socket, { t: "denied", reason: "bedrock is unbreakable" });
+      sendTo(pl, { t: "denied", reason: "bedrock is unbreakable" });
       return;
     }
     if (HARDNESS[cur] === Infinity) return;
@@ -133,13 +193,66 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
       if (dx < 0.8 && dz < 0.8 && y + 0.5 < mob.p[1] + 0.6 && y + 0.5 > mob.p[1] - 1.2) return;
     }
     if (countOf(pl.slots, block) <= 0) {
-      if (pl.socket) send(pl.socket, { t: "denied", reason: "none of those in inventory" });
+      sendTo(pl, { t: "denied", reason: "none of those in inventory" });
       return;
     }
     removeItems(pl.slots, { [block]: 1 });
     world.set(x, y, z, block);
     sendInv(pl);
     broadcast({ t: "block", x, y, z, block });
+  }
+}
+
+// ---- chat commands (/help /players /spawn /time) ----
+function sendPlayersSnapshot(): void {
+  for (const q of players.all.values()) {
+    sendTo(q, { t: "players", list: players.wire(q.id) });
+  }
+}
+
+/** Returns true if msg was a slash command (handled, not broadcast). */
+function handleChatCommand(pl: Player, msg: string): boolean {
+  if (!msg.startsWith("/")) return false;
+  const parts = msg.slice(1).trim().split(/\s+/);
+  const cmd = (parts[0] ?? "").toLowerCase();
+  const arg = parts.slice(1).join(" ").trim();
+  switch (cmd) {
+    case "help":
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /time <0..1|day|night|morning>" });
+      return true;
+    case "players": {
+      const names = [...players.all.values()].map((p) => p.name);
+      sendTo(pl, { t: "chat", from: "server", msg: `online (${names.length}): ${names.join(", ")}` });
+      return true;
+    }
+    case "spawn":
+      pl.p = [...spawn] as Vec3;
+      pl.lastMove = Date.now();
+      sendPlayersSnapshot();
+      sendTo(pl, { t: "chat", from: "server", msg: "teleported to spawn" });
+      return true;
+    case "time": {
+      let v: number | null = null;
+      const a = arg.toLowerCase();
+      if (a === "day") v = 0.3;
+      else if (a === "morning") v = 0.25;
+      else if (a === "night") v = 0.8;
+      else if (a !== "") {
+        const n = Number(a);
+        if (Number.isFinite(n) && n >= 0 && n <= 1) v = n;
+      }
+      if (v === null) {
+        sendTo(pl, { t: "chat", from: "server", msg: "usage: /time <0..1|day|night|morning>" });
+        return true;
+      }
+      world.time = v;
+      broadcast({ t: "time", time: world.time });
+      broadcast({ t: "chat", from: "server", msg: `${pl.name} set time to ${v}` });
+      return true;
+    }
+    default:
+      sendTo(pl, { t: "chat", from: "server", msg: `unknown command: /${cmd} (try /help)` });
+      return true;
   }
 }
 
@@ -151,7 +264,7 @@ function onMessage(pl: Player, raw: string): void {
     case "reqChunk": {
       const { cx, cz } = m;
       if (!Number.isInteger(cx) || !Number.isInteger(cz) || Math.abs(cx) > 64 || Math.abs(cz) > 64) return;
-      if (pl.socket) send(pl.socket, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
+      sendTo(pl, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
       break;
     }
     case "edit":
@@ -206,19 +319,31 @@ function onMessage(pl: Player, raw: string): void {
       const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
       const recipe = matchGrid(pl.grid.map((c) => c.id), !nearTable);
       if (!recipe) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "no recipe matches" });
+        sendTo(pl, { t: "denied", reason: "no recipe matches" });
         break;
       }
       if (recipe.needsTable && !nearTable) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "need a crafting table nearby" });
+        sendTo(pl, { t: "denied", reason: "need a crafting table nearby" });
         break;
       }
       if (!canFit(pl.slots, recipe.out.id, recipe.out.n)) {
-        if (pl.socket) send(pl.socket, { t: "denied", reason: "inventory full" });
+        sendTo(pl, { t: "denied", reason: "inventory full" });
         break;
       }
       for (const c of pl.grid) { c.id = 0; c.n = 0; }
       giveItems(pl.slots, recipe.out.id, recipe.out.n);
+      sendInv(pl);
+      sendGrid(pl);
+      break;
+    }
+    case "craftDirect": {
+      if (pl.dead) break;
+      const nearTable = world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.CRAFT_TABLE, 4);
+      const res = craftDirect(pl.slots, String(m.id ?? ""), Math.floor(m.n ?? 1) || 1, nearTable);
+      if (!res.ok) {
+        sendTo(pl, { t: "denied", reason: res.reason ?? "can't craft that" });
+        break;
+      }
       sendInv(pl);
       sendGrid(pl);
       break;
@@ -230,15 +355,22 @@ function onMessage(pl: Player, raw: string): void {
       if (m.action === "start") {
         const ex = furnaces.get(k);
         if (ex?.active) break;
-        // needs 1 iron ore block + 1 coal
-        if (countOf(pl.slots, B.IRON_ORE) < 1 || countOf(pl.slots, 102) < 1) {
-          if (pl.socket) send(pl.socket, { t: "denied", reason: "need 1 iron ore + 1 coal" });
+        // pick the first smeltable input the player can afford (pork > sand > iron)
+        const cands = [104, 134, 132, B.SAND, B.IRON_ORE, B.GOLD_ORE];
+        let input = -1;
+        for (const c of cands) {
+          const r = smeltInputFor(c);
+          if (r && countOf(pl.slots, c) >= 1 && countOf(pl.slots, 102) >= 1) { input = c; break; }
+        }
+        if (input < 0) {
+          sendTo(pl, { t: "denied", reason: "need iron ore, sand, or raw pork + coal" });
           break;
         }
-        removeItems(pl.slots, { [B.IRON_ORE]: 1, 102: 1 });
-        furnaces.set(k, { x, y, z, progress: 0, active: true, owner: pl.id });
+        const recipe = smeltInputFor(input)!;
+        removeItems(pl.slots, recipe.in);
+        furnaces.set(k, { x, y, z, progress: 0, active: true, owner: pl.id, input });
         sendInv(pl);
-        if (pl.socket) send(pl.socket, { t: "chat", from: "server", msg: `smelting started (${SMELT_TIME}s)` });
+        sendTo(pl, { t: "chat", from: "server", msg: `smelting started (${SMELT_TIME}s)` });
       } else {
         const ex = furnaces.get(k);
         if (ex && !ex.active && ex.progress >= 0 && (ex as { done?: boolean }).done) {
@@ -260,11 +392,13 @@ function onMessage(pl: Player, raw: string): void {
       if (!mob) break;
       if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 4.5) break;
       const swordMult = m.weapon !== undefined ? (SWORD_MULT[m.weapon] ?? 1) : 1;
-      const dmg = (m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110 ? 2 : 1) * swordMult;
-      // knockback away from the player
+      const isPick = m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110;
+      const dmg = (m.weapon === undefined ? 2 : isPick ? 2 : 1) * swordMult;
+      // small knockback away from the player (big shoves knock mobs out of
+      // reach and make melee miserable)
       const kx = mob.p[0] - pl.p[0], kz = mob.p[2] - pl.p[2];
       const kl = Math.hypot(kx, kz) || 1;
-      mob.p[0] += (kx / kl) * 1.1;
+      mob.p[0] += (kx / kl) * 0.45;
       mob.p[2] += (kz / kl) * 1.1;
       broadcast({ t: "mobHit", id: mob.id });
       const alive = mobs.hurt(mob.id, dmg);
@@ -275,10 +409,19 @@ function onMessage(pl: Player, raw: string): void {
       break;
     }
     case "chat": {
+      if (!checkChatRate(pl.id)) {
+        sendTo(pl, { t: "denied", reason: "chat too fast" });
+        break;
+      }
       const msg = m.msg.slice(0, 200);
+      if (handleChatCommand(pl, msg)) break;
       broadcast({ t: "chat", from: pl.name, msg });
       break;
     }
+    case "pong":
+      // heartbeat reply (see ClientMsg augmentation note at top): keep WS alive.
+      pl.lastMove = Date.now();
+      break;
     case "eat": {
       if (players.eat(pl, m.slot)) { sendInv(pl); sendVitals(pl); }
       break;
@@ -310,12 +453,32 @@ function onMessage(pl: Player, raw: string): void {
     }
     case "respawn": {
       if (pl.dead) {
+        // bed gone? fall back to world spawn instead of stranding the player
+        if (pl.bedSpawn && world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 2, pl.bedSpawn[2]) !== B.BED &&
+            world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 1, pl.bedSpawn[2]) !== B.BED) {
+          pl.bedSpawn = null;
+        }
         players.respawn(pl, spawn);
         sendVitals(pl);
-        if (pl.socket) {
-          send(pl.socket, { t: "chat", from: "server", msg: "respawned" });
-        }
+        sendTo(pl, { t: "chat", from: "server", msg: pl.bedSpawn ? "respawned at your bed" : "respawned" });
       }
+      break;
+    }
+    case "setBed": {
+      if (pl.dead) break;
+      const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
+      if (![x, y, z].every(Number.isFinite) || y < 1 || y >= 48) break;
+      if (world.get(x, y, z) !== B.BED) {
+        sendTo(pl, { t: "denied", reason: "no bed there" });
+        break;
+      }
+      if (dist(pl.p, x, y, z) > 7.5) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      pl.bedSpawn = [x + 0.5, y + 2.5, z + 0.5];
+      void persistPlayers();
+      sendTo(pl, { t: "chat", from: "server", msg: "🛏 spawn set — you'll wake up here" });
       break;
     }
   }
@@ -340,32 +503,15 @@ async function handler(req: Request): Promise<Response> {
         try {
           const m = JSON.parse(data);
           if (m.t !== "hello") { socket.close(1008, "hello first"); return; }
-          const name = String(m.name || "player").slice(0, 16);
-          pl = players.add(name, spawn, socket);
-          // restore saved inventory/pos
-          const saved = savedPlayers[name];
-          if (saved) {
-            pl.p = saved.p;
-            pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
-          }
-          console.log(`[join] ${name} (id=${pl.id})`);
+          pl = joinGame(String(m.name || "player"), socket);
           send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, motd: "voxel-coop 🧱" });
-          sendInv(pl);
-          sendGrid(pl);
-          sendVitals(pl);
-          broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
         } catch { socket.close(1008, "bad hello"); }
         return;
       }
       onMessage(pl, data);
     };
     socket.onclose = () => {
-      if (pl) {
-        console.log(`[leave] ${pl.name}`);
-        players.remove(pl.id);
-        broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
-        void persistPlayers();
-      }
+      if (pl) leaveGame(pl);
     };
     socket.onerror = () => { try { socket.close(); } catch { /* noop */ } };
     return response;
@@ -374,11 +520,38 @@ async function handler(req: Request): Promise<Response> {
   if (url.pathname === "/api/status") {
     return withCors(Response.json({
       game: "voxel-coop",
+      mode: mobs.peaceful ? "peaceful" : "survival",
       seed: world.seed,
       time: world.time,
       players: players.all.size,
       names: [...players.all.values()].map((p) => p.name),
     }));
+  }
+
+  // legacy transport for devices without working websockets (old iPads):
+  // POST /api/join {name} -> welcome; POST /api/poll {id, msgs} -> {msgs}
+  if (url.pathname === "/api/join" && req.method === "POST") {
+    let body: { name?: unknown };
+    try { body = await req.json(); } catch { return withCors(new Response("bad json", { status: 400 })); }
+    const pl = joinGame(String(body.name || "player"), null);
+    return withCors(Response.json({
+      t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p,
+      time: world.time, motd: "voxel-coop 🧱 (poll mode)",
+    }));
+  }
+  if (url.pathname === "/api/poll" && req.method === "POST") {
+    let body: { id?: unknown; msgs?: unknown };
+    try { body = await req.json(); } catch { return withCors(new Response("bad json", { status: 400 })); }
+    const pl = players.all.get(Number(body.id));
+    if (!pl || !pl.isPoll) return withCors(new Response("no session", { status: 404 }));
+    pl.lastPoll = Date.now();
+    if (Array.isArray(body.msgs)) {
+      for (const m of body.msgs.slice(0, 50)) {
+        try { onMessage(pl, JSON.stringify(m)); } catch { /* skip bad msg */ }
+      }
+    }
+    const out = pl.outbox.splice(0, 100);
+    return withCors(Response.json({ msgs: out }));
   }
 
   // static client
@@ -388,6 +561,12 @@ async function handler(req: Request): Promise<Response> {
 }
 
 // ---- tick loops ----
+// WS heartbeat: clients auto-reply {t:"pong"} which bumps pl.lastMove.
+setInterval(() => {
+  if (players.all.size === 0) return;
+  broadcast({ t: "ping", now: Date.now() });
+}, 15000);
+
 let mobT = 0, slowT = 0;
 setInterval(() => {
   const dt = 0.1;
@@ -416,9 +595,7 @@ setInterval(() => {
   }
   // players broadcast at 10Hz
   for (const pl of players.all.values()) {
-    if (pl.socket && pl.socket.readyState === WebSocket.OPEN) {
-      send(pl.socket, { t: "players", list: players.wire(pl.id) });
-    }
+    sendTo(pl, { t: "players", list: players.wire(pl.id) });
   }
   // furnaces
   let furnaceChanged = false;
@@ -429,12 +606,13 @@ setInterval(() => {
       if (done) {
         const owner = players.all.get(f.owner);
         if (owner) {
-          const left = giveItems(owner.slots, 103, 1);
+          const out = smeltOutput(f.input ?? B.IRON_ORE) ?? { id: 103, n: 1 };
+          const left = giveItems(owner.slots, out.id, out.n);
           sendInv(owner);
           if (owner.socket) {
             send(owner.socket, left > 0
-              ? { t: "chat", from: "server", msg: "smelt done but inventory full — ingot lost" }
-              : { t: "chat", from: "server", msg: "⛏ smelt complete: +1 iron ingot" });
+              ? { t: "chat", from: "server", msg: "smelt done but inventory full — item lost" }
+              : { t: "chat", from: "server", msg: `⛏ smelt complete: +${out.n} ${BLOCK_NAME[out.id] ?? out.id}` });
           }
         }
         furnaces.delete(k);
@@ -447,6 +625,18 @@ setInterval(() => {
       slowT = 0;
       broadcast({ t: "time", time: world.time });
       void persistPlayers();
+      // evict legacy poll clients that stopped polling
+      const now = Date.now();
+      for (const pl of [...players.all.values()]) {
+        if (pl.isPoll && now - pl.lastPoll > 15000) leaveGame(pl);
+      }
+      // stale WS watch: log sockets with no move/pong for 60s (no close —
+      // close/evict stays with the poll path + socket onclose above).
+      for (const pl of [...players.all.values()]) {
+        if (!pl.isPoll && now - pl.lastMove > 60000) {
+          console.log(`[stale] ${pl.name} (id=${pl.id}) idle ${Math.round((now - pl.lastMove) / 1000)}s — no move/pong`);
+        }
+      }
     }
     const states: FurnaceWire[] = [...furnaces.values()].map((f) => ({
       x: f.x, y: f.y, z: f.z, progress: f.progress / SMELT_TIME, ready: false,

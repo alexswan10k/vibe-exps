@@ -1,6 +1,6 @@
 // HUD + menus: hotbar, inventory, crafting grid, recipe book, chat, vitals.
 import { BLOCK_NAME } from "./config.js";
-import { SHAPED_CLIENT } from "./recipes.js";
+import { SHAPED_CLIENT, SMELT_CLIENT } from "./recipes.js";
 import { itemIconURL } from "./icons.js";
 
 export function iconFor(id) {
@@ -23,12 +23,24 @@ export class UI {
     this.onGridTake = null;
     this.onCraftTake = null;
     this.onAutoFill = null;
+    this.onCraftDirect = null; // (recipeId, n) => void — 1-click server-side craft
+    this.bookQuery = "";
+    this.bookFilter = "all";
+    this.bookPage = 0;
+    this.bookPageSize = 6;
+    this._bookRows = []; // sorted/filtered rows from the last renderBook (for paging)
+    this.onChatClosed = null;
+    // injected by main.js (needs the player): show/hide the mouse pointer
+    this.requestLock = null;
+    this.releaseLock = null;
     this.onChat = null;
     this.onRespawn = null;
-    this.onEat = null;
+    this.  onEat = null;
     this.onMoveItem = null;
+    this._hintToken = 0;
     this.buildSlots();
     this.bindKeys();
+    this.bindWheel();
   }
 
   buildSlots() {
@@ -48,6 +60,7 @@ export class UI {
       d.className = "slot";
       d.dataset.i = i;
       d.addEventListener("click", () => this.clickInv(i));
+      d.addEventListener("dblclick", () => this.eatInv(i));
       inv.appendChild(d);
     }
     const rb = this.el("craft-grid");
@@ -78,36 +91,158 @@ export class UI {
       const d = document.createElement("div");
       d.className = "book-row";
       d.dataset.id = r.id;
-      d.innerHTML = `<div class="mini">${r.pat.map((id) => this.miniHTML(id)).join("")}</div>
-        <div class="out" style="background-image:url(${itemIconURL(r.out.id)})"></div>
-        <div class="lbl"><b>${r.name}</b><small></small></div>`;
-      d.addEventListener("click", () => {
-        if (d.classList.contains("ok")) this.onAutoFill?.(r);
+      d.innerHTML = `<div class="out" style="background-image:url(${itemIconURL(r.out.id)})"></div>
+        <div class="lbl"><b>${r.name}</b><small class="desc">${r.desc ?? ""}</small><div class="ing"></div><small class="need"></small></div>
+        <div class="acts"><button class="craft1">Craft</button><button class="fill" title="fill the crafting grid instead">▦</button></div>`;
+      d.querySelector(".craft1").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!d.classList.contains("ok")) return;
+        const max = Number(d.dataset.max ?? 1);
+        const n = e.shiftKey ? max : 1;
+        if (this.onCraftDirect) this.onCraftDirect(r.id, n);
+        else this.onAutoFill?.(r);
+      });
+      d.querySelector(".fill").addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.onAutoFill?.(r);
       });
       book.appendChild(d);
     }
+    // furnace cheat-sheet (static)
+    const sm = this.el("book-smelt-list");
+    if (sm) {
+      sm.textContent = SMELT_CLIENT.map((s) => `${s.inName}+${s.fuel}→${s.outName}`).join(" · ");
+    }
+    // search + filters (reset to first page on any change)
+    this.el("book-search")?.addEventListener("input", (e) => {
+      this.bookQuery = e.target.value.trim().toLowerCase();
+      this.bookPage = 0;
+      this.renderBook();
+      this.fitLayout();
+    });
+    this.el("book-filters")?.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      this.bookFilter = b.dataset.cat;
+      for (const x of this.el("book-filters").children) x.classList.toggle("on", x === b);
+      this.bookPage = 0;
+      this.renderBook();
+      this.fitLayout();
+    });
+    // pager
+    this.el("book-prev")?.addEventListener("click", () => {
+      if (this.bookPage > 0) { this.bookPage--; this.applyPage(); }
+    });
+    this.el("book-next")?.addEventListener("click", () => {
+      this.bookPage++; this.applyPage();
+    });
+    addEventListener("resize", () => { if (this.invOpen) this.fitLayout(); });
+  }
+
+  bookCost(r) {
+    const m = new Map();
+    for (const id of r.pat) if (id) m.set(id, (m.get(id) ?? 0) + 1);
+    return m;
   }
 
   renderBook() {
+    const book = this.el("recipe-book");
+    if (!book) return;
     const counts = {};
     for (const s of this.slots) if (s?.id) counts[s.id] = (counts[s.id] ?? 0) + s.n;
-    const need = (r) => {
-      const m = {};
-      for (const id of r.pat) if (id) m[id] = (m[id] ?? 0) + 1;
-      return m;
-    };
-    for (const d of this.el("recipe-book").children) {
+    const rows = [];
+    for (const d of book.children) {
       const r = SHAPED_CLIENT.find((x) => x.id === d.dataset.id);
-      const m = need(r);
-      const missing = Object.entries(m)
-        .filter(([id, n]) => (counts[id] ?? 0) < n)
-        .map(([id, n]) => `${BLOCK_NAME[id]}×${n - (counts[id] ?? 0)}`);
+      if (!r) continue;
+      const cost = this.bookCost(r);
+      let afford = Infinity;
+      const missing = [];
+      for (const [id, n] of cost) {
+        const have = counts[id] ?? 0;
+        afford = Math.min(afford, Math.floor(have / n));
+        if (have < n) missing.push({ id, need: n - have });
+      }
+      if (afford === Infinity) afford = 0;
       const tableOk = !r.needsTable || this.nearTable;
-      const ok = missing.length === 0 && tableOk;
+      const ok = afford >= 1 && tableOk;
+      // filters
+      const q = this.bookQuery;
+      const hay = `${r.name} ${r.desc ?? ""} ${[...cost.keys()].map((id) => BLOCK_NAME[id] ?? "").join(" ")}`.toLowerCase();
+      let show = !q || hay.includes(q);
+      if (show && this.bookFilter === "ok") show = ok;
+      else if (show && ["tools", "blocks", "basics", "food"].includes(this.bookFilter)) show = r.cat === this.bookFilter;
       d.classList.toggle("ok", ok);
-      d.querySelector("small").textContent = ok
-        ? "click to fill grid"
-        : [...(tableOk ? [] : ["needs table nearby"]), ...missing.map((s) => "need " + s)].join(" · ");
+      d.dataset.max = String(afford);
+      // ingredient chips: icon + have/need
+      const ing = d.querySelector(".ing");
+      ing.innerHTML = [...cost.entries()].map(([id, n]) => {
+        const have = counts[id] ?? 0;
+        const cls = have >= n ? "h" : "m";
+        const nm = BLOCK_NAME[id] ?? `?${id}`;
+        return `<span class="${cls}" title="${nm}: have ${have}, need ${n}"><i style="background-image:url(${itemIconURL(id)})"></i>${have}/${n}</span>`;
+      }).join("");
+      const need = d.querySelector(".need");
+      need.textContent = ok
+        ? (afford > 1 ? `ready ×${afford} (shift-click = all)` : "ready — click Craft")
+        : [...(!tableOk ? ["needs table nearby"] : []), ...missing.map(({ id, need: k }) => `need ${BLOCK_NAME[id]}×${k}`)].join(" · ");
+      const btn = d.querySelector(".craft1");
+      btn.disabled = !ok;
+      btn.textContent = ok && afford > 1 ? "Craft" : "Craft";
+      rows.push({ d, ok, show, miss: missing.length, name: r.name });
+    }
+    // craftable first, then fewest missing, then name
+    rows.sort((a, b) => Number(b.ok) - Number(a.ok) || a.miss - b.miss || a.name.localeCompare(b.name));
+    for (const { d } of rows) book.appendChild(d);
+    this._bookRows = rows;
+    const pages = Math.max(1, Math.ceil(rows.filter((r) => r.show).length / this.bookPageSize));
+    if (this.bookPage > pages - 1) this.bookPage = pages - 1;
+    this.applyPage();
+  }
+
+  /** Show only the current page slice (no scrolling — pager flips pages). */
+  applyPage() {
+    const book = this.el("recipe-book");
+    if (!book || this._bookRows.length === 0) return;
+    const vis = this._bookRows.filter((r) => r.show);
+    const pages = Math.max(1, Math.ceil(vis.length / this.bookPageSize));
+    if (this.bookPage > pages - 1) this.bookPage = pages - 1;
+    if (this.bookPage < 0) this.bookPage = 0;
+    const start = this.bookPage * this.bookPageSize;
+    const onPage = new Set(vis.slice(start, start + this.bookPageSize).map((r) => r.d));
+    for (const { d, show } of this._bookRows) {
+      d.style.display = show && onPage.has(d) ? "" : "none";
+    }
+    const info = this.el("book-pageinfo");
+    if (info) {
+      info.textContent = vis.length === 0
+        ? "no recipes match"
+        : `${start + 1}–${Math.min(start + this.bookPageSize, vis.length)} of ${vis.length}`;
+    }
+    const prev = this.el("book-prev"), next = this.el("book-next");
+    if (prev) prev.disabled = this.bookPage <= 0;
+    if (next) next.disabled = this.bookPage >= pages - 1;
+  }
+
+  /**
+   * Shrink-to-fit: measure the book area and pick a page size so the whole
+   * panel fits the viewport with zero scrolling. Called on open / resize /
+   * filter change (never during gameplay ticks).
+   */
+  fitLayout() {
+    if (!this.invOpen) return;
+    const book = this.el("recipe-book");
+    const panel = book?.closest(".inv-panel");
+    if (!book || !panel) return;
+    const first = [...book.children].find((d) => d.style.display !== "none");
+    const rowH = (first ? first.offsetHeight : 80) + 6;
+    const availH = book.clientHeight;
+    this.bookPageSize = Math.max(1, Math.floor((availH + 6) / Math.max(1, rowH)));
+    this.applyPage();
+    // belt + braces: if the panel still overflows (short viewport), drop a row per round
+    let guard = 30;
+    while (panel.scrollHeight > panel.clientHeight + 1 && this.bookPageSize > 1 && guard-- > 0) {
+      this.bookPageSize--;
+      this.applyPage();
     }
   }
 
@@ -125,6 +260,27 @@ export class UI {
     }
   }
 
+  static EDIBLE = new Set([104, 107, 115, 132, 133, 134, 135, 136]);
+
+  eatInv(i) {
+    const s = this.slots[i];
+    if (s?.id && UI.EDIBLE.has(s.id)) this.onEat?.(i);
+  }
+
+  bindWheel() {
+    const cycle = (e) => {
+      if (this.chatFocused()) return;
+      if (e.deltaY > 0) this.hotbarSel = (this.hotbarSel + 1) % 9;
+      else if (e.deltaY < 0) this.hotbarSel = (this.hotbarSel + 8) % 9;
+      else return;
+      this.renderHotbar();
+      e.preventDefault();
+    };
+    this.el("hotbar")?.addEventListener("wheel", cycle, { passive: false });
+    // game canvas container (#game holds the renderer canvas)
+    this.el("game")?.addEventListener("wheel", cycle, { passive: false });
+  }
+
   clickGrid(g, all) {
     if (this.swapIdx !== null) {
       // deposit from selected inventory slot (click = 1, shift-click = stack)
@@ -137,23 +293,32 @@ export class UI {
 
   bindKeys() {
     document.addEventListener("keydown", (e) => {
+      if (this.chatFocused()) return;
       if (e.code.startsWith("Digit")) {
         const n = Number(e.code.slice(5));
         if (n >= 1 && n <= 9) { this.hotbarSel = n - 1; this.renderHotbar(); }
       }
-      if (e.code === "KeyE" && !this.chatFocused()) this.toggleInv();
-      if (e.code === "KeyH" && !this.chatFocused()) this.toggleHelp();
+      if (e.code === "KeyE") this.toggleInv();
+      if (e.code === "Escape" || e.key === "Escape") {
+        if (this.invOpen) this.toggleInv(false);
+      }
+      if (e.code === "KeyH") this.toggleHelp();
       if (e.code === "KeyG") {
         const s = this.slots[this.hotbarSel];
-        if (s?.id === 104) this.onEat?.(this.hotbarSel);
+        if (s?.id && UI.EDIBLE.has(s.id)) this.onEat?.(this.hotbarSel);
       }
     });
+    this.el("chat-input").addEventListener("focus", () => this.releaseLock?.());
     this.el("chat-input").addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter" && e.target.value.trim()) {
         this.onChat?.(e.target.value.trim().slice(0, 200));
         e.target.value = "";
         e.target.blur();
+        this.onChatClosed?.();
+      } else if (e.key === "Escape") {
+        e.target.blur();
+        this.onChatClosed?.();
       }
     });
   }
@@ -165,8 +330,12 @@ export class UI {
   toggleInv(force) {
     this.invOpen = force ?? !this.invOpen;
     this.el("inventory").style.display = this.invOpen ? "flex" : "none";
-    if (this.invOpen) { this.renderInv(); this.renderGrid(); this.renderBook(); }
-    if (!this.invOpen && document.pointerLockElement) document.exitPointerLock?.();
+    // minecraft rules: opening a GUI frees the mouse, closing re-engages look
+    if (this.invOpen) {
+      this.releaseLock?.(); this.renderInv(); this.renderGrid(); this.renderBook();
+      requestAnimationFrame(() => this.fitLayout());
+    }
+    else this.requestLock?.();
   }
 
   toggleHelp(force) {
@@ -175,8 +344,14 @@ export class UI {
     h.style.display = show ? "flex" : "none";
     if (show) {
       try { localStorage.setItem("voxelcoop.helpSeen", "1"); } catch { /* noop */ }
-      if (document.pointerLockElement) document.exitPointerLock?.();
+      this.releaseLock?.();
+    } else {
+      this.requestLock?.();
     }
+  }
+
+  helpOpen() {
+    return this.el("help").style.display !== "none";
   }
 
   maybeShowHelp() {
@@ -247,25 +422,42 @@ export class UI {
   }
 
   setVitals(hp, maxHp, hunger, dead) {
+    const hpN = Math.max(0, Math.ceil(hp));
+    const maxN = Math.max(1, Math.ceil(maxHp));
+    const huN = Math.max(0, Math.ceil(hunger));
     const hearts = "❤".repeat(Math.max(0, Math.ceil(hp / 2))) + "🖤".repeat(Math.max(0, Math.ceil((maxHp - hp) / 2)));
     const drum = "🍖".repeat(Math.ceil(hunger / 2));
     this.el("vitals").innerHTML =
-      `<span class="hp">${hearts || "💀"}</span><span class="hunger">${drum}</span>`;
+      `<span class="hp" title="health ${hpN}/${maxN}">${hearts || "💀"}</span>` +
+      `<span class="vnum" title="health ${hpN}/${maxN}">${hpN}/${maxN}</span>` +
+      `<span class="hunger" title="hunger ${huN}/20">${drum}</span>` +
+      `<span class="vnum" title="hunger ${huN}/20">${huN}/20</span>`;
     this.el("dead").style.display = dead ? "flex" : "none";
   }
 
   chatMsg(from, msg) {
     const log = this.el("chat-log");
     const d = document.createElement("div");
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mm = String(now.getMinutes()).padStart(2, "0");
     d.innerHTML = `<b></b><span></span>`;
-    d.children[0].textContent = from + ": ";
+    d.children[0].textContent = `[${hh}:${mm}] ${from}: `;
     d.children[1].textContent = msg;
     log.appendChild(d);
-    while (log.children.length > 40) log.removeChild(log.firstChild);
+    while (log.children.length > 60) log.removeChild(log.firstChild);
+    log.scrollTop = log.scrollHeight;
   }
 
   status(t) { this.el("status").textContent = t; }
-  hint(t) { this.el("hint").textContent = t; }
+  hint(t) {
+    const tok = ++this._hintToken;
+    this.el("hint").textContent = t;
+    if (!t) return;
+    setTimeout(() => {
+      if (tok === this._hintToken) this.el("hint").textContent = "";
+    }, 3500);
+  }
 
   pulse() {
     const c = this.el("crosshair");

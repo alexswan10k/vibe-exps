@@ -16,8 +16,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
   font-size: 18px; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; }
 #hotbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 4px; }
-.slot { width: 52px; height: 52px; background: rgba(0,0,0,.55); border: 2px solid #888;
-  border-radius: 6px; position: relative; cursor: pointer; }
+.slot { background: rgba(0,0,0,.55); border: 2px solid #888;
+  border-radius: 6px; position: relative; cursor: pointer;
+  width: auto; height: auto; aspect-ratio: 1 / 1; min-width: 0; min-height: 0; }
+#hotbar .slot { width: 52px; height: 52px; aspect-ratio: auto; flex: none; }
 .slot.sel { border-color: #ffd23d; }
 .slot.swap { border-color: #4dd2ff; }
 .slot .icon { position: absolute; inset: 6px; border-radius: 3px;
@@ -36,33 +38,67 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
   border-radius: 6px; padding: 5px 8px; }
 #inventory { position: fixed; inset: 0; background: rgba(0,0,0,.55);
   display: flex; align-items: center; justify-content: center; z-index: 5; }
-.inv-panel { background: #1c1c22; border-radius: 10px; padding: 14px 16px;
-  max-height: 90vh; overflow-y: auto; width: 480px; }
-.inv-panel h3 { margin: 8px 0; font-size: 15px; }
+.inv-panel { background: #1c1c22; border-radius: 10px; padding: 12px 18px;
+  width: min(1120px, 97vw); height: min(860px, 96dvh);
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; }
+.inv-panel h3 { margin: 6px 0; font-size: 15px; }
 .inv-panel small { opacity: .6; font-weight: 400; }
-#inv-grid { display: grid; grid-template-columns: repeat(9, 52px); gap: 4px; }
+/* 36 slots, 9 per row, capped size and centered — never giant, never overrun */
+#inv-grid { display: grid; grid-template-columns: repeat(9, minmax(0, 60px)); gap: 6px;
+  justify-content: center; align-content: start; min-width: 0; }
+/* crafting (left) + recipe book (right) side by side, stretched to fill */
+.inv-cols { display: grid; grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+  gap: 20px; align-items: stretch; margin-top: 2px; min-height: 0; min-width: 0; }
+.inv-craft-col, .inv-book-col { min-height: 0; min-width: 0; }
+.inv-book-col { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 0; }
 #craft-area { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-#craft-grid { display: grid; grid-template-columns: repeat(3, 52px); gap: 4px; }
-#craft-grid.small { grid-template-columns: repeat(2, 52px); }
+#craft-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 54px)); gap: 6px; }
+#craft-grid.small { grid-template-columns: repeat(2, minmax(0, 54px)); }
 #craft-grid.small .slot[data-g="2"],
 #craft-grid.small .slot[data-g="5"],
 #craft-grid.small .slot[data-g="6"],
 #craft-grid.small .slot[data-g="7"],
 #craft-grid.small .slot[data-g="8"] { display: none; }
-#craft-arrow { font-size: 24px; opacity: .7; }
-#craft-result { width: 64px; height: 64px; border-color: #55aa35; }
-#recipe-book { display: flex; flex-direction: column; gap: 4px; margin-top: 4px;
-  max-height: 220px; overflow-y: auto; }
+#craft-arrow { font-size: 24px; opacity: .7; flex: none; }
+#craft-result.slot { width: 64px; flex: none; border-color: #55aa35; }
+/* multi-column recipe grid, paged by JS — never scrolls */
+#recipe-book { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  gap: 6px; margin-top: 6px; overflow: hidden; align-content: start;
+  min-height: 0; min-width: 0; }
+#book-foot { display: flex; align-items: center; gap: 12px; margin-top: 6px; min-height: 0; }
+#book-pager { display: flex; align-items: center; gap: 6px; flex: none; }
+#book-pager button { background: #2a2a33; color: #fff; border: 1px solid #555;
+  border-radius: 6px; padding: 3px 12px; font-size: 15px; cursor: pointer; }
+#book-pager button:disabled { opacity: .35; cursor: default; }
+#book-pageinfo { font-size: 12px; opacity: .8; white-space: nowrap; }
+#book-smelt { font-size: 11px; opacity: .7; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; min-width: 0; }
+#book-smelt-list { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* narrow screens: stack columns and fall back to scrolling (too little room to fit) */
+@media (max-width: 820px) {
+  .inv-panel { height: auto; max-height: 94dvh; overflow-y: auto;
+    grid-template-rows: none; display: block; }
+  .inv-cols { grid-template-columns: minmax(0, 1fr); }
+  #recipe-book { grid-template-columns: minmax(0, 1fr); overflow: visible; }
+  #book-foot { flex-wrap: wrap; }
+  #inv-grid { gap: 4px; }
+}
+@media (max-width: 560px) {
+  .slot .nm { font-size: 7px; }
+  .slot .cnt { font-size: 11px; }
+  .inv-panel { padding: 10px 12px; }
+}
 .book-row { display: flex; align-items: center; gap: 8px; background: #2a2a33;
-  border: 1px solid #555; border-radius: 6px; padding: 4px 6px; opacity: .45; }
+  border: 1px solid #555; border-radius: 6px; padding: 4px 6px; opacity: .45;
+  min-width: 0; overflow: hidden; }
 .book-row.ok { opacity: 1; border-color: #55aa35; cursor: pointer; }
 .book-row .mini { display: grid; grid-template-columns: repeat(3, 16px); gap: 1px; }
 .book-row .mini span { width: 16px; height: 16px; background: #101014; border-radius: 2px;
   background-size: cover; image-rendering: pixelated; }
 .book-row .out { width: 34px; height: 34px; background-size: cover;
-  image-rendering: pixelated; border-radius: 4px; flex-shrink: 0; }
-.book-row .lbl { font-size: 12px; }
-.book-row .lbl small { display: block; opacity: .65; }
+  image-rendering: pixelated; border-radius: 4px; flex: none; }
+.book-row .lbl { font-size: 12px; flex: 1; min-width: 0; }
+.book-row .lbl small { display: block; opacity: .65; overflow-wrap: anywhere; }
 #dead { position: fixed; inset: 0; background: rgba(60,0,0,.6); z-index: 6;
   display: flex; align-items: center; justify-content: center; }
 .dead-panel { text-align: center; }
@@ -71,9 +107,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
   display: flex; align-items: center; justify-content: center; }
 .help-panel { background: #16161c; padding: 22px 26px; border-radius: 12px; width: 420px; }
 .help-panel h2 { margin: 0 0 8px; }
-.help-panel ol { margin: 0 0 12px; padding-left: 22px; font-size: 14px; line-height: 1.8; }
+.help-panel ol { margin: 0 0 12px; padding-left: 22px; font-size: 14px; line-height: 1.65; }
 .help-panel button { font-size: 15px; padding: 8px 20px; border-radius: 8px; cursor: pointer;
-  background: #55aa35; color: #fff; border: none; font-weight: 700; }
+  background: #55aa35; color: #fff; border: none; font-weight: 700; position: sticky; bottom: 0; }
 #menu { position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 10;
   display: flex; align-items: center; justify-content: center; }
 .menu-panel { background: #16161c; padding: 26px 30px; border-radius: 12px; width: 380px;
@@ -109,9 +145,59 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #hotbar, #chat, #vitals { z-index: 4; }
 #hotbar, #chat, #vitals, #status, #hint { position: fixed; }
 @media (pointer: coarse) {
-  .slot { width: 60px; height: 60px; }
-  #inv-grid { grid-template-columns: repeat(9, 60px); }
-  .inv-panel { width: 600px; max-width: 96vw; }
-  #craft-grid { grid-template-columns: repeat(3, 60px); }
-  #craft-grid.small { grid-template-columns: repeat(2, 60px); }
+  #hotbar .slot { width: 60px; height: 60px; }
+  .inv-panel { width: 96vw; }
 }
+
+/* ---- game-feel / UX upgrades (appended) ---- */
+.slot.sel { animation: selglow 1.6s ease-in-out infinite; box-shadow: 0 0 10px rgba(255,210,61,.8); }
+@keyframes selglow { 0%,100% { box-shadow: 0 0 4px rgba(255,210,61,.5); } 50% { box-shadow: 0 0 12px rgba(255,210,61,.95); } }
+#chat-log div { animation: chatin .3s ease-out; transition: opacity .5s ease; }
+@keyframes chatin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+#vitals .vnum { font-size: 12px; font-weight: 700; opacity: .9; margin: 0 6px 0 4px; vertical-align: middle; text-shadow: 1px 1px 0 #000; }
+#breakbar { height: 12px; border: 1px solid rgba(255,255,255,.35); }
+#breakbar div { transition: width .08s linear; }
+.help-panel { max-height: 86vh; overflow: auto; }
+.menu-panel .menu-foot { font-size: 12px; line-height: 1.6; opacity: .65; border-top: 1px solid #333; padding-top: 8px; }
+
+/* ---- visuals+audio upgrades (appended) ---- */
+#crosshair.targeting::after { content: ""; position: absolute; top: 50%; left: 50%;
+  width: 4px; height: 4px; border-radius: 50%; background: #ffd23d;
+  transform: translate(-50%, -50%); }
+#vitals .hp, #vitals .hunger { font-variant-numeric: tabular-nums; }
+#vitals .num { font-size: 12px; opacity: 0.85; margin-left: 6px; }
+#mute-btn { position: fixed; bottom: 64px; right: 8px; z-index: 9; font-size: 20px;
+  background: rgba(0,0,0,.55); color: #fff; border: 1px solid #666; border-radius: 8px;
+  padding: 6px 10px; cursor: pointer; opacity: 0.7; }
+#mute-btn:hover { opacity: 1; }
+#dmg-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 3; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,.55) 100%); }
+#dmg-vignette.show { animation: dmgflash 0.6s ease-out; }
+@keyframes dmgflash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---- recipe book v2 (search + 1-click craft) ---- */
+#book-tools { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 6px; }
+#book-search { background: #0e0e12; color: #fff; border: 1px solid #444;
+  border-radius: 6px; padding: 7px 10px; font-size: 13px; width: 100%; }
+#book-filters { display: flex; gap: 6px; flex-wrap: wrap; }
+#book-filters button { background: #2a2a33; color: #ccc; border: 1px solid #555;
+  border-radius: 20px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+#book-filters button.on { background: #55aa35; border-color: #55aa35; color: #fff; font-weight: 700; }
+.book-row .lbl .desc { opacity: .55; }
+.book-row .ing { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.book-row .ing span { display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; padding: 1px 6px 1px 2px; border-radius: 10px; background: #101014; }
+.book-row .ing span i { width: 16px; height: 16px; background-size: cover;
+  image-rendering: pixelated; border-radius: 3px; display: inline-block; }
+.book-row .ing span.h { color: #9ccc65; }
+.book-row .ing span.m { color: #e57373; }
+.book-row .need { color: #ffd23d; }
+.book-row.ok .need { color: #9ccc65; }
+.book-row .acts { display: flex; flex-direction: column; gap: 4px; margin-left: auto; flex: none; }
+.book-row .acts .craft1 { background: #55aa35; color: #fff; border: none;
+  border-radius: 6px; padding: 6px 12px; font-weight: 700; cursor: pointer; font-size: 13px; }
+.book-row .acts .craft1:disabled { background: #444; color: #888; cursor: default; opacity: .6; }
+.book-row .acts .fill { background: transparent; color: #888; border: 1px solid #555;
+  border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 12px; }
+.book-row .acts .fill:hover { color: #fff; border-color: #888; }
+#book-smelt { font-size: 12px; opacity: .7; margin-top: 6px; line-height: 1.6; }

@@ -2,7 +2,7 @@
 // Layout matches server: index = (y * CHUNK + z) * CHUNK + x.
 import { B, CHUNK, WORLD_H } from "./config.js";
 
-const OPAQUE = new Set([1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16]);
+const OPAQUE = new Set([1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23]);
 
 // --- pixel-art texture painters (16x16) ---
 function rng(seed) {
@@ -135,6 +135,49 @@ function paintSand(g, r) { noiseFill(g, r, [0.85, 0.78, 0.55], 0.07); }
 function paintSnow(g, r) { noiseFill(g, r, [0.92, 0.93, 0.95], 0.04); }
 function paintBedrock(g, r) { noiseFill(g, r, [0.12, 0.12, 0.13], 0.14); }
 function paintWater(g) { g.fillStyle = "#4472dd"; g.fillRect(0, 0, 16, 16); }
+function paintGlass(g, r) {
+  noiseFill(g, r, [0.78, 0.88, 0.92], 0.05);
+  g.fillStyle = "rgba(255,255,255,0.9)";
+  g.fillRect(2, 2, 4, 1); g.fillRect(2, 2, 1, 4); // shine corner
+  g.fillStyle = "rgba(120,150,170,0.9)";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16); g.fillRect(15, 0, 1, 16); // frame
+}
+function paintGoldOre(g, r) { paintStone(g, r); blobs(g, r, "#f4c20d", 6, 2); }
+function paintDiamondOre(g, r) { paintStone(g, r); blobs(g, r, "#5ff2e0", 5, 2); }
+function paintFence(g, r) {
+  noiseFill(g, r, [0.6, 0.43, 0.21], 0.05);
+  g.fillStyle = "rgba(35,22,8,0.9)";
+  g.fillRect(0, 0, 16, 16); // gaps read as dark (full-cube fence)
+  g.fillStyle = "#9c6f34";
+  g.fillRect(2, 0, 3, 16); g.fillRect(11, 0, 3, 16); // posts
+  g.fillRect(0, 3, 16, 3); g.fillRect(0, 10, 16, 3); // rails
+}
+function paintBrick(g, r) {
+  noiseFill(g, r, [0.55, 0.55, 0.57], 0.05);
+  g.fillStyle = "rgba(25,25,28,0.85)";
+  for (let y = 0; y < 16; y += 4) g.fillRect(0, y, 16, 1);
+  for (let y = 0; y < 16; y += 4) {
+    const off = (y / 4) % 2 === 0 ? 0 : 4;
+    for (let x = off; x < 16; x += 8) g.fillRect(x, y, 1, 4);
+  }
+}
+function paintLadder(g, r) {
+  g.fillStyle = "#3a2c14"; g.fillRect(0, 0, 16, 16);
+  noiseFill(g, r, [0.55, 0.4, 0.2], 0.06);
+  g.fillStyle = "#8a5f30";
+  g.fillRect(1, 0, 3, 16); g.fillRect(12, 0, 3, 16); // rails
+  for (let y = 2; y < 16; y += 4) g.fillRect(1, y, 14, 2); // rungs
+}
+function paintBedSide(g, r) {
+  noiseFill(g, r, [0.6, 0.43, 0.21], 0.05);
+  g.fillStyle = "#c22f2f"; g.fillRect(0, 0, 16, 6); // blanket over foot
+  g.fillStyle = "#e8e8e8"; g.fillRect(0, 6, 16, 3); // sheet
+}
+function paintBedTop(g, r) {
+  noiseFill(g, r, [0.76, 0.18, 0.18], 0.05);
+  g.fillStyle = "#e8e8e8"; g.fillRect(0, 10, 16, 6); // pillow end
+}
 function paintTorchIcon(g, r) {
   g.fillStyle = "#8a5f30"; g.fillRect(7, 6, 2, 10);
   noiseFill(g, r, [1.0, 0.8, 0.3], 0.1);
@@ -149,7 +192,9 @@ const ICON_PAINT = {
   7: [paintPlanks, 17], 8: [paintBedrock, 18], 9: [paintSnow, 19],
   10: [paintWater, 0], 11: [paintCoalOre, 21], 12: [paintIronOre, 22],
   13: [paintTableTop, 230], 14: [paintFurnaceFront, 240],
-  15: [paintTorchIcon, 7], 16: [paintCobble, 26],
+  15: [paintTorchIcon, 7], 16: [paintCobble, 26], 17: [paintGlass, 27],
+  18: [paintGoldOre, 28], 19: [paintDiamondOre, 29], 20: [paintFence, 30],
+  21: [paintBrick, 31], 22: [paintLadder, 32], 23: [paintBedTop, 33],
 };
 const iconCache = new Map();
 export function blockIconURL(block) {
@@ -177,6 +222,8 @@ export function makeMaterials() {
   const tableTop = M(makeCanvas(paintTableTop, 230));
   const furnace = M(makeCanvas(paintFurnace, 24));
   const furnaceFront = M(makeCanvas(paintFurnaceFront, 240));
+  const bedSide = M(makeCanvas(paintBedSide, 34));
+  const bedTop = M(makeCanvas(paintBedTop, 33));
   // BoxGeometry face order: +x, -x, +y, -y, +z, -z
   return {
     [B.GRASS]: [grassSide, grassSide, grassTop, dirt, grassSide, grassSide],
@@ -195,6 +242,13 @@ export function makeMaterials() {
     [B.FURNACE]: [furnace, furnace, stone, stone, furnaceFront, furnace],
     [B.TORCH]: new THREE.MeshLambertMaterial({ color: 0xffcf4d, emissive: 0xaa6611 }),
     [B.COBBLE]: M(makeCanvas(paintCobble, 26)),
+    [B.GLASS]: M(makeCanvas(paintGlass, 27), { transparent: true, opacity: 0.85 }),
+    [B.GOLD_ORE]: M(makeCanvas(paintGoldOre, 28)),
+    [B.DIAMOND_ORE]: M(makeCanvas(paintDiamondOre, 29)),
+    [B.FENCE]: M(makeCanvas(paintFence, 30)),
+    [B.STONE_BRICK]: M(makeCanvas(paintBrick, 31)),
+    [B.LADDER]: M(makeCanvas(paintLadder, 32)),
+    [B.BED]: [bedSide, bedSide, bedTop, planks, bedSide, bedSide],
   };
 }
 
@@ -215,6 +269,22 @@ export class WorldClient {
     this.chunks.set(`${cx},${cz}`, data);
     this.remesh(cx, cz);
     // remesh neighbours so border faces update
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (this.chunks.has(`${cx + dx},${cz + dz}`)) this.remesh(cx + dx, cz + dz);
+    }
+  }
+
+  /** Drop a far-away chunk (frees meshes + data). Remaining neighbours remesh. */
+  dropChunk(cx, cz) {
+    const key = `${cx},${cz}`;
+    const old = this.meshes.get(key);
+    if (old) {
+      this.scene.remove(old);
+      old.children.forEach((m) => m.dispose?.());
+      this.meshes.delete(key);
+    }
+    this.chunks.delete(key);
+    this.torches.delete(key);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       if (this.chunks.has(`${cx + dx},${cz + dz}`)) this.remesh(cx + dx, cz + dz);
     }
@@ -299,6 +369,8 @@ export class WorldClient {
         mesh.setMatrixAt(i, this.dummy.matrix);
       });
       mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       this.dummy.scale.set(1, 1, 1);
       group.add(mesh);
     }
@@ -307,9 +379,17 @@ export class WorldClient {
     this.torches.set(key, torchList);
   }
 
+  /** Subtle ambient animation: water opacity pulse + torch glow flicker. */
+  tickAnim(timeMs) {
+    const t = timeMs / 1000;
+    const water = this.materials[B.WATER];
+    if (water) water.opacity = 0.62 + 0.08 * Math.sin(t * 1.6);
+    const torch = this.materials[B.TORCH];
+    if (torch) torch.emissiveIntensity = 1 + 0.18 * Math.sin(t * 7.3);
+  }
+
   /** Nearest torch positions to p ( block coords ), up to `n` within `maxDist`. */
-  nearestTorches(p, n, maxDist) {
-    const scored = [];
+  nearestTorches(p, n, maxDist) {    const scored = [];
     for (const list of this.torches.values()) {
       for (const t of list) {
         const d2 = (t[0] - p.x) ** 2 + (t[1] - p.y) ** 2 + (t[2] - p.z) ** 2;

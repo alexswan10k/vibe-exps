@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>voxel-coop 🧱 — LAN multiplayer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧱</text></svg>">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,21 +19,41 @@
 
 <div id="chat">
   <div id="chat-log"></div>
-  <input id="chat-input" placeholder="chat… (T)" maxlength="200" autocomplete="off">
+  <input id="chat-input" placeholder="chat… (T) · /help /players /spawn /time" maxlength="200" autocomplete="off">
 </div>
 
 <div id="inventory" style="display:none">
   <div class="inv-panel">
-    <h3>Inventory <small>(E to close · click two slots to swap · G eats pork)</small></h3>
+    <h3>Inventory <small>(E / ESC to close · click two slots to swap · double-click food to eat · G eats food)</small></h3>
     <div id="inv-grid"></div>
-    <h3 id="craft-title">Crafting <small>(click item, then grid · shift-click = whole stack)</small></h3>
-    <div id="craft-area">
-      <div id="craft-grid"></div>
-      <div id="craft-arrow">→</div>
-      <div id="craft-result" class="slot"></div>
+    <div class="inv-cols">
+      <div class="inv-craft-col">
+        <h3 id="craft-title">Crafting <small>(click item, then grid · shift-click = whole stack)</small></h3>
+        <div id="craft-area">
+          <div id="craft-grid"></div>
+          <div id="craft-arrow">→</div>
+          <div id="craft-result" class="slot"></div>
+        </div>
+      </div>
+      <div class="inv-book-col">
+        <h3>Recipe book <small>(craftable first · Craft = 1-click, no grid needed)</small></h3>
+        <div id="book-tools">
+          <input id="book-search" placeholder="search recipes…" autocomplete="off">
+          <div id="book-filters">
+            <button data-cat="all" class="on">all</button><button data-cat="ok">✓ craftable</button><button data-cat="tools">tools</button><button data-cat="blocks">blocks</button><button data-cat="basics">basics</button><button data-cat="food">food</button>
+          </div>
+        </div>
+        <div id="recipe-book"></div>
+        <div id="book-foot">
+          <div id="book-pager">
+            <button id="book-prev" title="previous page">‹</button>
+            <span id="book-pageinfo"></span>
+            <button id="book-next" title="next page">›</button>
+          </div>
+          <div id="book-smelt"><b>Furnace:</b> <span id="book-smelt-list"></span></div>
+        </div>
+      </div>
     </div>
-    <h3>Recipe book <small>(green = you can build it · click to fill the grid)</small></h3>
-    <div id="recipe-book"></div>
   </div>
 </div>
 
@@ -60,11 +81,13 @@
     <h2>🧱 how to survive</h2>
     <ol>
       <li><b>Hold LMB</b> on a tree → logs. Zombies come at night — hurry.</li>
-      <li><b>E</b> → craft planks, sticks, a <b>crafting table</b>. Place it (RMB).</li>
-      <li><b>Right-click the table</b> to open 3×3 crafting. Craft a <b>pickaxe</b> + <b>sword</b>.</li>
-      <li>Mine <b>stone → coal → iron</b>. <b>F</b> at a furnace smelts iron (ore + coal).</li>
+      <li><b>E</b> → recipe book: search, filter, <b>Craft</b> 1-click (shift = all). ▦ fills the grid the old way.</li>
+      <li>Craft a <b>pickaxe</b> (stone), <b>axe</b> (logs), <b>shovel</b> (dirt), + <b>sword</b>. Place the table (RMB) for 3×3.</li>
+      <li>Mine <b>stone → coal → iron → gold → diamond</b> (deeper = richer). <b>F</b> smelts: iron, gold, pork, beef, chicken, <b>sand → glass</b>.</li>
+      <li><b>Bed</b> (RMB or F): sets your spawn. <b>Ladders</b>: Space climbs. Cows → beef, chickens → drumsticks.</li>
       <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack.</li>
-      <li><b>G</b> eats pork · <b>T</b> chat · <b>shift</b> sprint · <b>H</b> this panel</li>
+      <li><b>G</b> eats pork · <b>T</b> chat · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li><b>wheel / 1-9</b> cycle hotbar · <b>double-click food</b> in inventory to eat · <b>ESC</b> closes inventory/panels</li>
       <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
     </ol>
     <button id="help-close">play (H)</button>
@@ -82,8 +105,10 @@
       <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
       <b>hold LMB</b> mine · <b>RMB</b> place · <b>click mob</b> attack<br>
       <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>G</b> eat pork<br>
-      <b>F</b> use furnace (look at it) · <b>T</b> chat · <b>shift</b> sprint
+      <b>F</b> use furnace (look at it) · <b>T</b> chat · <b>shift</b> sprint<br>
+      old iPad with no websocket? open this page with <b>?transport=poll</b>
     </div>
+    <div class="menu-foot">wheel = hotbar · E inventory (ESC close) · double-click food = eat · shift sprint · H help</div>
   </div>
 </div>
 
