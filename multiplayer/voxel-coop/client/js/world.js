@@ -240,7 +240,7 @@ export function makeMaterials() {
     [B.IRON_ORE]: M(makeCanvas(paintIronOre, 22)),
     [B.CRAFT_TABLE]: [tableSide, tableSide, tableTop, planks, tableSide, tableSide],
     [B.FURNACE]: [furnace, furnace, stone, stone, furnaceFront, furnace],
-    [B.TORCH]: new THREE.MeshLambertMaterial({ color: 0xffcf4d, emissive: 0xaa6611 }),
+    [B.TORCH]: new THREE.MeshLambertMaterial({ color: 0xffd97a, emissive: 0xff9a1f, emissiveIntensity: 1.6 }),
     [B.COBBLE]: M(makeCanvas(paintCobble, 26)),
     [B.GLASS]: M(makeCanvas(paintGlass, 27), { transparent: true, opacity: 0.85 }),
     [B.GOLD_ORE]: M(makeCanvas(paintGoldOre, 28)),
@@ -307,11 +307,12 @@ export class WorldClient {
     const lx = x - cx * CHUNK, lz = z - cz * CHUNK;
     c[WorldClient.idx(lx, y, lz)] = v;
     this.remesh(cx, cz);
-    // edits on a chunk border change face-culling in the neighbour's mesh too
-    if (lx === 0) this.remesh(cx - 1, cz);
-    if (lx === CHUNK - 1) this.remesh(cx + 1, cz);
-    if (lz === 0) this.remesh(cx, cz - 1);
-    if (lz === CHUNK - 1) this.remesh(cx, cz + 1);
+    // edits near a chunk border change face-culling AND baked torchlight halo
+    // (HALO=4) in the neighbour's mesh too
+    if (lx < 5) this.remesh(cx - 1, cz);
+    if (lx >= CHUNK - 5) this.remesh(cx + 1, cz);
+    if (lz < 5) this.remesh(cx, cz - 1);
+    if (lz >= CHUNK - 5) this.remesh(cx, cz + 1);
   }
 
   remesh(cx, cz) {
@@ -334,6 +335,112 @@ export class WorldClient {
       const o = this.get(x, y, z);
       return o === undefined ? B.STONE : o; // treat unknown as opaque to avoid holes
     };
+    const passable = (b) => b === B.GLASS || !OPAQUE.has(b);
+    // ---- baked torchlight: flood-fill through air (Minecraft-style) ----
+    // expanded volume so light bleeds correctly across chunk borders
+    const HALO = 4, EW = CHUNK + HALO * 2;
+    const eIdx = (ex, y, ez) => (y * EW + ez) * EW + ex;
+    const light = new Uint8Array(EW * WORLD_H * EW);
+    const occ = new Uint8Array(EW * WORLD_H * EW); // 1 = blocks light
+    const queue = []; // growable: dense torch builds re-enqueue cells often
+    let qh = 0;
+    for (let ey = 0; ey < WORLD_H; ey++) {
+      for (let eez = 0; eez < EW; eez++) {
+        for (let eex = 0; eex < EW; eex++) {
+          const wx = cx * CHUNK + eex - HALO, wz = cz * CHUNK + eez - HALO;
+          const b = getL(wx, ey, wz);
+          const ei = eIdx(eex, ey, eez);
+          if (!passable(b)) occ[ei] = 1;
+          if (b === B.TORCH) {
+            light[ei] = 14;
+            queue.push(ei);
+          }
+        }
+      }
+    }
+    const exOf = (ei) => ei % EW;
+    const ezOf = (ei) => Math.floor(ei / EW) % EW;
+    const eyOf = (ei) => Math.floor(ei / (EW * EW));
+    while (qh < queue.length) {
+      const cur = queue[qh++];
+      const lv = light[cur];
+      if (lv <= 1) continue;
+      const nl = lv - 1;
+      const cex = exOf(cur), cey = eyOf(cur), cez = ezOf(cur);
+      // 6 neighbours
+      if (cex > 0) {
+        const n = cur - 1;
+        if (!occ[n] && light[n] < nl) {
+          // water dims light faster
+          const wx = cx * CHUNK + (cex - 1) - HALO, wz = cz * CHUNK + cez - HALO;
+          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
+          const fl = nl - extra;
+          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+        }
+      }
+      if (cex < EW - 1) {
+        const n = cur + 1;
+        if (!occ[n] && light[n] < nl) {
+          const wx = cx * CHUNK + (cex + 1) - HALO, wz = cz * CHUNK + cez - HALO;
+          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
+          const fl = nl - extra;
+          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+        }
+      }
+      if (cez > 0) {
+        const n = cur - EW;
+        if (!occ[n] && light[n] < nl) {
+          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + (cez - 1) - HALO;
+          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
+          const fl = nl - extra;
+          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+        }
+      }
+      if (cez < EW - 1) {
+        const n = cur + EW;
+        if (!occ[n] && light[n] < nl) {
+          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + (cez + 1) - HALO;
+          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
+          const fl = nl - extra;
+          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+        }
+      }
+      if (cey > 0) {
+        const n = cur - EW * EW;
+        if (!occ[n] && light[n] < nl) {
+          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + cez - HALO;
+          const extra = getL(wx, cey - 1, wz) === B.WATER ? 1 : 0;
+          const fl = nl - extra;
+          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+        }
+      }
+      if (cey < WORLD_H - 1) {
+        const n = cur + EW * EW;
+        if (!occ[n] && light[n] < nl) {
+          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + cez - HALO;
+          const extra = getL(wx, cey + 1, wz) === B.WATER ? 1 : 0;
+          const fl = nl - extra;
+          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+        }
+      }
+    }
+    const lightAt = (wx, y, wz) => {
+      const eex = wx - cx * CHUNK + HALO, eez = wz - cz * CHUNK + HALO;
+      if (eex < 0 || eex >= EW || eez < 0 || eez >= EW || y < 0 || y >= WORLD_H) return 0;
+      return light[eIdx(eex, y, eez)];
+    };
+    // sky visibility per column: open to the sky => full bright, else depth shade.
+    // top-down scan for the first opaque roof; cheap (16x16 columns).
+    const skyOpen = new Uint8Array(CHUNK * CHUNK);
+    for (let lz = 0; lz < CHUNK; lz++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        let open = true;
+        for (let y = WORLD_H - 1; y >= 0; y--) {
+          if (OPAQUE.has(data[WorldClient.idx(lx, y, lz)])) { open = false; break; }
+        }
+        skyOpen[lz * CHUNK + lx] = open ? 1 : 0;
+      }
+    }
     for (let y = 0; y < WORLD_H; y++) {
       for (let z = 0; z < CHUNK; z++) {
         for (let x = 0; x < CHUNK; x++) {
@@ -368,10 +475,37 @@ export class WorldClient {
         if (b === B.WATER) this.dummy.position.y -= 0.12;
         this.dummy.updateMatrix();
         mesh.setMatrixAt(i, this.dummy.matrix);
-        // depth darkening: caves fall off to 35% by y=4, surface untouched.
-        // (torch emissive survives — placed torches still glow in the dark.)
-        const shade = Math.min(1, 0.35 + 0.65 * Math.max(0, (y - 4) / 20));
-        mesh.setColorAt(i, this.shadeColor.setRGB(shade, shade, shade));
+        // lighting: sky (open columns full-bright, roofed columns fall off
+        // to 32% by y=4 so caves are dark) vs baked torch flood-fill.
+        // torch wins near flames and tints warm orange.
+        if (b === B.TORCH) {
+          mesh.setColorAt(i, this.shadeColor.setRGB(1, 1, 1));
+        } else {
+          const lx = wx - cx * CHUNK, lz = wz - cz * CHUNK;
+          let tl;
+          if (!OPAQUE.has(b) || b === B.GLASS) {
+            tl = lightAt(wx, y, wz); // transparent: its own cell
+          } else {
+            tl = Math.max(
+              lightAt(wx + 1, y, wz), lightAt(wx - 1, y, wz),
+              lightAt(wx, y + 1, wz), lightAt(wx, y - 1, wz),
+              lightAt(wx, y, wz + 1), lightAt(wx, y, wz - 1),
+            );
+          }
+          const t = tl / 14;
+          const depthShade = Math.min(1, 0.32 + 0.68 * Math.max(0, (y - 4) / 20));
+          const sky = skyOpen[lz * CHUNK + lx] ? 1 : depthShade;
+          const bright = Math.max(sky, Math.min(1, 0.32 + t * 0.85));
+          if (t > 0.01) {
+            mesh.setColorAt(i, this.shadeColor.setRGB(
+              Math.min(1, bright + t * 0.16),
+              Math.min(1, bright + t * 0.05),
+              Math.max(0, bright - t * 0.1),
+            ));
+          } else {
+            mesh.setColorAt(i, this.shadeColor.setRGB(bright, bright, bright));
+          }
+        }
       });
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -391,7 +525,7 @@ export class WorldClient {
     const water = this.materials[B.WATER];
     if (water) water.opacity = 0.62 + 0.08 * Math.sin(t * 1.6);
     const torch = this.materials[B.TORCH];
-    if (torch) torch.emissiveIntensity = 1 + 0.18 * Math.sin(t * 7.3);
+    if (torch) torch.emissiveIntensity = 1.6 + 0.35 * Math.sin(t * 7.3) + 0.12 * Math.sin(t * 13.7);
   }
 
   /** Nearest torch positions to p ( block coords ), up to `n` within `maxDist`. */

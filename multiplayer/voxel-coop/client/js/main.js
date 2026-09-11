@@ -61,25 +61,77 @@ function setShadows(on) {
   ui.hint(on ? "shadows on" : "shadows off (faster)");
 }
 
-// pooled torch lights: only the nearest few get a real light (perf)
-const TORCH_LIGHTS = 6;
+// pooled torch lights + flame glow sprites. Baked flood-fill in world.js
+// guarantees every torch tints its walls (no pop-in at the pool edge); the
+// pool adds live flicker + speculars where the eye actually is.
+const TORCH_LIGHTS = 12;
+const TORCH_DIST = 22;
 const torchPool = [];
-for (let i = 0; i < TORCH_LIGHTS; i++) {
-  const l = new THREE.PointLight(0xffa845, 0, 14, 2);
-  scene.add(l);
-  torchPool.push(l);
+function makeFlameTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, "rgba(255,240,200,1)");
+  grad.addColorStop(0.25, "rgba(255,190,90,0.85)");
+  grad.addColorStop(0.55, "rgba(255,120,30,0.28)");
+  grad.addColorStop(1, "rgba(255,90,10,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  return t;
 }
-function updateTorchLights() {
-  const near = world.nearestTorches(player.pos, TORCH_LIGHTS, 26);
+const flameTex = makeFlameTexture();
+for (let i = 0; i < TORCH_LIGHTS; i++) {
+  const l = new THREE.PointLight(0xffa845, 0, TORCH_DIST, 1.4);
+  scene.add(l);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flameTex, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  s.scale.set(1.1, 1.1, 1);
+  scene.add(s);
+  torchPool.push({ light: l, sprite: s });
+}
+// dedicated hand light: carrying a torch lights the way like a lantern
+const heldLight = new THREE.PointLight(0xffb45e, 0, 17, 1.4);
+scene.add(heldLight);
+let cachedNear = [];
+let lastTorchSearch = 0;
+function updateTorchLights(now) {
+  // re-search nearest infrequently (sort over all torches), flicker every frame
+  if (now - lastTorchSearch > 250) {
+    lastTorchSearch = now;
+    cachedNear = world.nearestTorches(player.pos, TORCH_LIGHTS, 34);
+  }
   for (let i = 0; i < TORCH_LIGHTS; i++) {
-    if (i < near.length) {
-      torchPool[i].position.set(near[i][0], near[i][1], near[i][2]);
-      // flicker
-      torchPool[i].intensity = 1.0 + Math.sin(performance.now() / 130 + i * 2.1) * 0.12;
+    const p = torchPool[i];
+    if (i < cachedNear.length) {
+      p.light.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
+      p.sprite.position.copy(p.light.position);
+      const f = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
+      p.light.intensity = 1.5 + f;
+      p.sprite.material.opacity = 0.75 + f * 0.9;
+      const s = 1.0 + f * 0.35;
+      p.sprite.scale.set(s, s, 1);
+      p.sprite.visible = true;
     } else {
-      torchPool[i].intensity = 0;
+      p.light.intensity = 0;
+      p.sprite.visible = false;
     }
   }
+  // held torch lantern
+  try {
+    const held = window.voxUI?.heldItem?.();
+    const eye = player.eye();
+    if (held?.id === B.TORCH && !dead) {
+      const d = player.lookDir();
+      heldLight.position.set(eye.x + d.x * 0.6, eye.y - 0.15, eye.z + d.z * 0.6);
+      heldLight.intensity = 1.35 + Math.sin(now / 120) * 0.14 + Math.sin(now / 43) * 0.06;
+    } else {
+      heldLight.intensity = 0;
+    }
+  } catch { /* UI not ready yet */ }
 }
 
 const world = new WorldClient(scene, makeMaterials());
@@ -262,7 +314,7 @@ function streamChunks() {
       }
     }
   }
-  // unload far chunks so long walks don't leak meshes (nearest 6 torch lights unaffected)
+  // unload far chunks so long walks don't leak meshes (nearest torch lights unaffected)
   for (const k of [...world.chunks.keys()]) {
     const [cx, cz] = k.split(",").map(Number);
     if (Math.hypot(cx - pcx, cz - pcz) > UNLOAD_DIST) {
@@ -608,9 +660,9 @@ function frame() {
     tickBreaking(dt);
 
     if (now - lastStream > 400) { lastStream = now; streamChunks(); }
+    updateTorchLights(now); // search 4Hz internally, flicker every frame
     if (now - lastTorch > 500) {
       lastTorch = now;
-      updateTorchLights();
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
       // unstick: if embedded in a block (stale spawn, lag), pop upward
       if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {

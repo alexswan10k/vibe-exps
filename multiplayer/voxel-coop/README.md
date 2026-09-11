@@ -63,7 +63,7 @@ data/             world.json + players.json (gitignored saves)
 - glass, gold/diamond ores, fences, bricks, ladders, beds (all mine back to themselves)
 - food: raw pork / cooked pork / apple (leaves + zombies drop apples, G or double-click eats)
 - iron sword (8 dmg) + wood/stone swords, tool tiers wood → stone → iron
-- torches emit real flickering point light (nearest 6, pooled)
+- torches light properly: baked flood-fill glow (tints walls through openings, never through rock) + nearest-12 flickering point lights with flame sprites + carrying a torch works as a lantern
 - fall damage, swing rate-limit (3 hits/sec) on mob attacks
 - lifeforms: pigs, cows, chickens, sheep; zombies hunt at night and **burn in
   daylight**. Click mobs to hit them (hit-flash + knockback, 3 swings/sec);
@@ -72,7 +72,7 @@ data/             world.json + players.json (gitignored saves)
   carrying, pattern preview included, click to auto-fill the grid.
 - day/night cycle with visible sun + glow, moon, and stars; chat (T, with /help /players /spawn /time), coop player avatars + name tags
 - render distance 6 chunks (fog to match), far chunks unload as you walk
-- procedural caves: worm tunnels + pockets (9% of deep rock), walk-in 1×1 staircase entrances ~1/1400 columns, depth-darkened walls so torches matter, stair floors immune to carving (the way back never dissolves)
+- procedural caves: meandering spaghetti tunnels (wider deep down) + vertical shafts + big caverns deep / rooms up high (~7-11% of deep rock), walk-in staircase entrances (east or south, ~30 per 192² area, 3×3 cleared porch), stalactites/stalagmites, cave-wall ores boosted ~3×, stair shell immune to carving (the way back never dissolves or floats)
 - unique names (_2 suffix), chat rate-limit, heartbeat ping + exponential-backoff reconnect
 - feel: wheel cycles hotbar, coyote-time + jump buffer, sprint FOV kick, synth SFX (M mute), damage vignette, animated water
 - real-time sun shadows (1024 PCF-soft cascade around you, P toggles, auto-off on touch) + first-person hand: arm + held block/tool/food with swing, walk-bob, switch pop, and eat animations

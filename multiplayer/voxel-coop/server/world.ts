@@ -83,60 +83,150 @@ export function treeAt(x: number, z: number, seed: number): boolean {
   return hash2(x, z, seed ^ 0x51ab) > thresh;
 }
 
-// Cave mouths: straight 1-wide, 3-tall staircases descending eastward from a
-// 1x1 surface notch. Every step is exactly 1 down / 1 up with full headroom,
-// so they're walkable both ways with zero jumps needed beyond a normal hop.
-// Rarity ~1/1400 columns. The stairs usually pierce worm tunnels on the way
-// down (9% carve density); below the last step you dig or spelunk sideways.
-const MOUTH_KEEP = 0.954;
+// Cave mouths: walk-in 1-wide, 3-tall staircases descending from a surface
+// notch. Every step is exactly 1 down with full headroom, walkable both ways.
+// Two orientations (eastward + southward, picked by hash) so entrances don't
+// all line up. Rarity ~1/650 columns on an 8-block grid. A 3x3 porch is
+// cleared above the notch so mouths read from a distance; stairs pierce the
+// tunnel network on the way down, and below the last step you spelunk out.
+const MOUTH_KEEP = 0.93;
+function mouthDir(mx: number, mz: number, seed: number): number {
+  return hash2(mx ^ 0x5bd1, mz ^ 0x11fd, seed ^ 0x90e1) < 0.5 ? 0 : 1; // 0=E, 1=S
+}
 export function mouthOriginAt(mx: number, mz: number, seed: number): number {
   // returns surface height, or -1 for "no mouth here"
   if ((mx & 7) !== 0 || (mz & 7) !== 0) return -1; // grid-aligned (cheap to scan)
   if (hash2(mx, mz, seed ^ 0x90e1) < MOUTH_KEEP) return -1;
   const h = terrainHeight(mx, mz, seed);
-  if (h <= SEA_LEVEL + 1 || h < 12) return -1; // no ocean/beach mouths, need depth
+  if (h <= SEA_LEVEL + 1 || h < 14) return -1; // no ocean/beach mouths, need depth
   if (treeAt(mx, mz, seed)) return -1; // no floating trees over the notch
   return h;
 }
 
 // 0 = not a stair cell, 1 = stair corridor (air), 2 = load-bearing stair floor.
 function stairCell(x: number, y: number, z: number, seed: number): number {
-  if ((z & 7) !== 0 || y < 4) return 0;
-  const gx = x - ((((x % 8) + 8) % 8)); // greatest multiple of 8 <= x
-  for (let mx = gx; mx >= x - 28; mx -= 8) {
-    if (hash2(mx, z, seed ^ 0x90e1) < MOUTH_KEEP) continue;
-    const h = terrainHeight(mx, z, seed);
-    if (h <= SEA_LEVEL + 1 || h < 12) continue;
-    if (treeAt(mx, z, seed)) continue;
-    const t = x - mx;
-    const bottom = Math.max(6, h - 12);
-    if (t < 0 || t > h - bottom) continue;
-    // never behead a trunk where the stair crosses a lower slope sideways
-    if (treeAt(x, z, seed) && y > terrainHeight(x, z, seed)) continue;
-    if (y >= h - t && y <= h - t + 2) return 1;
-    if (y === h - t - 1) return 2;
+  if (y < 4) return 0;
+  // eastward stairs live on rows with (z&7)==0, southward on cols with (x&7)==0
+  for (let m = 0; m < 2; m++) {
+    if (m === 0 && (z & 7) !== 0) continue;
+    if (m === 1 && (x & 7) !== 0) continue;
+    const along = m === 0 ? x : z;
+    const fixed = m === 0 ? z : x;
+    const g = along - ((((along % 8) + 8) % 8)); // greatest multiple of 8 <= along
+    for (let mo = g; mo >= along - 30; mo -= 8) {
+      const mx = m === 0 ? mo : fixed;
+      const mz = m === 0 ? fixed : mo;
+      if (hash2(mx, mz, seed ^ 0x90e1) < MOUTH_KEEP) continue;
+      if (mouthDir(mx, mz, seed) !== m) continue;
+      const h = terrainHeight(mx, mz, seed);
+      if (h <= SEA_LEVEL + 1 || h < 14) continue;
+      if (treeAt(mx, mz, seed)) continue;
+      const t = along - mo;
+      const bottom = Math.max(6, h - 14);
+      if (t < 0 || t > h - bottom) continue;
+      // never behead a trunk where the stair crosses a lower slope sideways
+      if (treeAt(x, z, seed) && y > terrainHeight(x, z, seed)) continue;
+      if (y >= h - t && y <= h - t + 2) return 1;
+      if (y === h - t - 1) return 2;
+    }
   }
   return 0;
 }
 
-// Worm tunnels (two noises near 0.5 = tube) + rare cheese pockets. Caller
-// guarantees y in [4, h-2]: 2+ blocks of roof everywhere, so the tunnel
-// system itself never breaches the surface (mouths are the entrances).
-const WORM_R2 = 0.0035;
-const POCKET_T = 0.74;
-function carvedAt(x: number, y: number, z: number, seed: number, h: number): boolean {
-  const s = 0.055;
-  const a = vnoise3(x * s, y * s * 1.4, z * s, seed ^ 0xca1e);
-  const b = vnoise3(x * s + 317.7, y * s * 1.4, z * s - 113.3, seed ^ 0xca2e);
+// True if (x,y,z) is within 1 block of any stair corridor/floor: the stair
+// shell. Worms never carve the shell, so the walkway keeps walls + a support
+// pillar underneath and never floats, opens into a void sideways, or loses
+// its ceiling. Pockets may still open at distance >= 2 (see carvedAt).
+function nearStair(x: number, y: number, z: number, seed: number): boolean {
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        if (stairCell(x + dx, y + dy, z + dz, seed) !== 0) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Procedural caves: three layers, all deterministic value-noise.
+//  1. spaghetti worms — two meandering tubes (main + branch). Radius grows
+//     with depth (2-wide up high, 3-4 wide deep) so tunnels are walkable.
+//     A vertical sine meander keeps them 3D, not flat pancakes.
+//  2. vertical shafts — narrow chimneys linking levels (rare, 2x2).
+//  3. cheese chambers — low-frequency blobs: medium rooms up high, big
+//     caverns deep down (up to ~9 wide, 5 tall).
+// Caller guarantees y in [4, h-2]: 2+ blocks of roof everywhere, so the
+// tunnel system itself never breaches the surface (mouths are the entrances).
+function wormDist2(x: number, y: number, z: number, seed: number, branch: boolean): number {
+  const s = branch ? 0.085 : 0.045;
+  const ox = branch ? 317.7 : 0;
+  const oz = branch ? -113.3 : 0;
+  const sx = branch ? 0xca2e : 0xca1e;
+  // meander: bend the sample point so tubes curve vertically instead of
+  // running flat along y
+  const bend = Math.sin(y * 0.35 + x * 0.05) * 1.6 + Math.sin(z * 0.07 + y * 0.2) * 1.6;
+  const a = vnoise3((x + bend) * s + ox, y * s * 1.5, (z - bend * 0.7) * s + oz, seed ^ sx);
+  const b = vnoise3((x - bend) * s + ox + 51.3, y * s * 1.5, (z + bend) * s + oz - 27.1, seed ^ (sx + 1));
   const dx = a - 0.5, dz = b - 0.5;
-  const worm = dx * dx + dz * dz < WORM_R2;
-  const pocket = !worm && y <= h - 3 &&
-    vnoise3(x * 0.028 + 731.3, y * 0.028, z * 0.028 - 57.9, seed ^ 0xca3e) > POCKET_T;
-  if (!worm && !pocket) return false;
-  // stair floors are load-bearing: chambers may open beside the stairs,
-  // but the way back up never dissolves (only runs on carve-positive cells)
-  if (stairCell(x, y, z, seed) === 2) return false;
-  return true;
+  return dx * dx + dz * dz;
+}
+function carvedAt(x: number, y: number, z: number, seed: number, h: number): boolean {
+  const depth = Math.max(0, Math.min(1, (h - y) / Math.max(1, h - 4))); // 0=top 1=deep
+  // main worm: R 0.04 -> 0.065 with depth (≈2-wide up high, 3-wide deep)
+  const rMain = 0.04 + depth * 0.025;
+  if (wormDist2(x, y, z, seed, false) < rMain * rMain) {
+    if (nearStair(x, y, z, seed)) return false;
+    return true;
+  }
+  // branch worm: thinner, only mid/deep so the surface isn't Swiss cheese
+  if (depth > 0.35) {
+    const rBr = 0.032 + depth * 0.015;
+    if (wormDist2(x, y, z, seed, true) < rBr * rBr) {
+      if (nearStair(x, y, z, seed)) return false;
+      return true;
+    }
+  }
+  // vertical shaft: columnar noise (stretched in y) — rare chimneys (~1-2%)
+  if (y > 5 && y <= h - 3) {
+    const sh = vnoise3(x * 0.07 + 911.7, y * 0.012, z * 0.07 - 433.1, seed ^ 0xc4a1);
+    if (Math.abs(sh - 0.5) < 0.012 && hash3(x >> 1, 7, z >> 1, seed ^ 0x511f) > 0.8) {
+      if (nearStair(x, y, z, seed)) return false;
+      return true;
+    }
+  }
+  // cheese chambers: big caverns are the INTERSECTION of two independent
+  // low-frequency blobs (~1% shallow, ~3% deep, stable across seeds — a single
+  // low-freq noise would hollow out whole 100-block regions wherever its blob
+  // sits high). Medium rooms are a rare single noise throughout.
+  if (y <= h - 3) {
+    const n1 = vnoise3(x * 0.03 + 731.3, y * 0.036, z * 0.03 - 57.9, seed ^ 0xca3e);
+    const t1 = 0.74 - depth * 0.05;
+    if (n1 > t1) {
+      const n2 = vnoise3(x * 0.033 + 173.1, y * 0.04, z * 0.033 + 91.7, seed ^ 0xca5e);
+      if (n2 > 0.72 - depth * 0.05) {
+        if (!nearStair(x, y, z, seed)) return true;
+      }
+    } else {
+      const med = vnoise3(x * 0.055 + 41.7, y * 0.06, z * 0.055 - 91.2, seed ^ 0xca4e);
+      if (med > 0.885 - depth * 0.03) {
+        if (!nearStair(x, y, z, seed)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Halo test: within ~2 blocks of a carve (slightly fatter worm / looser
+// chamber). Used to boost ore rates on cave walls so tunnels sparkle.
+function caveHalo(x: number, y: number, z: number, seed: number, h: number): boolean {
+  const depth = Math.max(0, Math.min(1, (h - y) / Math.max(1, h - 4)));
+  const rMain = 0.04 + depth * 0.025 + 0.03;
+  if (wormDist2(x, y, z, seed, false) < rMain * rMain) return true;
+  if (depth > 0.35) {
+    const rBr = 0.032 + depth * 0.015 + 0.025;
+    if (wormDist2(x, y, z, seed, true) < rBr * rBr) return true;
+  }
+  return vnoise3(x * 0.03 + 731.3, y * 0.036, z * 0.03 - 57.9, seed ^ 0xca3e) > 0.68;
 }
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -183,19 +273,59 @@ export class World {
   baseBlock(x: number, y: number, z: number): number {
     if (y < 0 || y >= WORLD_H) return B.AIR;
     if (y === 0) return B.BEDROCK;
+    if (y === 1 && hash3(x, y, z, this.seed) < 0.5) return B.BEDROCK; // rough floor, no void peeks
     const h = terrainHeight(x, z, this.seed);
     // cave staircases (incl. the surface notch) carve first …
     if (y >= 4 && stairCell(x, y, z, this.seed) === 1) return B.AIR;
-    // … then worms + pockets carve stone AND dirt bands (never bedrock, never the top 2 roof layers)
-    if (y >= 4 && y <= h - 2 && carvedAt(x, y, z, this.seed, h)) return B.AIR;
+    // entrance porch: clear headroom + leaves in a 3x3 around the notch so
+    // mouths read from a distance instead of hiding under a tree canopy
+    if (y > h && y <= h + 2) {
+      const qx = x - ((((x % 8) + 8) % 8));
+      const qz = z - ((((z % 8) + 8) % 8));
+      for (let ox = -1; ox <= 1; ox++) {
+        for (let oz = -1; oz <= 1; oz++) {
+          if (mouthOriginAt(qx + ox, qz + oz, this.seed) >= 0) {
+            const mh = terrainHeight(qx + ox, qz + oz, this.seed);
+            if (y > mh && y <= mh + 2 && Math.abs(x - (qx + ox)) <= 1 && Math.abs(z - (qz + oz)) <= 1) {
+              return B.AIR;
+            }
+          }
+        }
+      }
+    }
+    // … then worms + shafts + chambers carve stone AND dirt bands (never
+    // bedrock, never the top 2 roof layers)
+    if (y >= 4 && y <= h - 2 && carvedAt(x, y, z, this.seed, h)) {
+      // stalactites hang from cave ceilings, stalagmites rise from floors —
+      // rare single-block stone teeth that make big rooms read as caves.
+      // Never inside the stair corridor (checked above) and never sealing a
+      // 1-tall gap (need headroom on the opposite side).
+      if (y <= h - 4 && y + 1 <= h - 2 && !carvedAt(x, y + 1, z, this.seed, h)) {
+        const aboveStone = y + 1 <= terrainHeight(x, z, this.seed) - 4;
+        if (aboveStone && hash3(x, y, z, this.seed ^ 0x5a1) > 0.9) return B.STONE;
+      }
+      if (y >= 5 && y - 1 >= 4 && !carvedAt(x, y - 1, z, this.seed, h) && carvedAt(x, y + 1, z, this.seed, h)) {
+        const belowStone = y - 1 <= terrainHeight(x, z, this.seed) - 4;
+        if (belowStone && hash3(x, y, z, this.seed ^ 0x5a2) > 0.93) return B.STONE;
+      }
+      return B.AIR;
+    }
     if (y <= h - 4) {
-      // ores sprinkled in stone
+      // ores sprinkled in stone — boosted ~3x on cave walls (halo) so
+      // spelunking pays: tunnels sparkle instead of running bare.
+      const halo = y >= 4 && y <= h - 2 && caveHalo(x, y, z, this.seed, h);
       const r = hash2(x * 3 + y * 7, z * 5 - y, this.seed ^ 0x0e3);
-      if (y < h - 1 && r > 0.986 && y <= 22) return B.COAL_ORE;
-      if (y < h - 2 && r > 0.993 && y <= 14) return B.IRON_ORE;
+      // rarest first: iron shares hash r with coal, so it must win ties
+      // (a high r would otherwise always return coal first)
+      if (y < h - 2) {
+        if (halo ? (y <= 14 && r > 0.979) : (r > 0.993 && y <= 14)) return B.IRON_ORE;
+      }
+      if (halo) {
+        if (y <= 22 && r > 0.958) return B.COAL_ORE;
+      } else if (y < h - 1 && r > 0.986 && y <= 22) return B.COAL_ORE;
       const r2 = hash2(x * 5 - y * 3, z * 7 + y, this.seed ^ 0x60d);
-      if (y < h - 3 && r2 > 0.9965 && y <= 9) return B.DIAMOND_ORE;
-      if (y < h - 2 && r2 > 0.9945 && y <= 12) return B.GOLD_ORE;
+      if (y < h - 3 && (halo ? (y <= 9 && r2 > 0.989) : (r2 > 0.9965 && y <= 9))) return B.DIAMOND_ORE;
+      if (y < h - 2 && (halo ? (y <= 12 && r2 > 0.983) : (r2 > 0.9945 && y <= 12))) return B.GOLD_ORE;
       return B.STONE;
     }
     if (y < h) return B.DIRT;
