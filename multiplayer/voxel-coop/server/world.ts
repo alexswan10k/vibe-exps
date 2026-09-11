@@ -1,7 +1,7 @@
 // Authoritative voxel world: seeded terrain gen, block overrides, persistence.
 // Coordinates: x,z unbounded, y in [0, WORLD_H).
 
-import { B, CHUNK, WORLD_H, SEA_LEVEL, encodeRLE } from "./protocol.ts";
+import { B, CHUNK, WORLD_H, SEA_LEVEL, WALK_THROUGH, encodeRLE } from "./protocol.ts";
 
 function hash2(x: number, z: number, seed: number): number {
   // 32-bit integer hash — must use Math.imul (plain * overflows doubles
@@ -72,15 +72,126 @@ export function terrainHeight(x: number, z: number, seed: number): number {
   return Math.max(2, Math.min(WORLD_H - 14, Math.floor(h)));
 }
 
-/** 0..1 forest density mask. */
-export function forestAt(x: number, z: number, seed: number): number {
-  return vnoise(x * 0.02 + 500, z * 0.02 - 500, seed ^ 0x333);
+// Biomes: picked per column from temperature + moisture fields with an
+// altitude cooldown (mountains are cold, shores are beaches). Thresholds were
+// tuned by census over generated terrain, not by gut feel (see task notes).
+export const BIOME = {
+  OCEAN: 0, BEACH: 1, DESERT: 2, SAVANNA: 3, PLAINS: 4, FOREST: 5,
+  JUNGLE: 6, TAIGA: 7, TUNDRA: 8, SWAMP: 9, MOUNTAIN: 10,
+} as const;
+
+export function biomeAt(x: number, z: number, seed: number, hh?: number): number {
+  const h = hh ?? terrainHeight(x, z, seed);
+  if (h <= SEA_LEVEL - 2) return BIOME.OCEAN; // lake/ocean floor
+  if (h <= SEA_LEVEL + 1) return BIOME.BEACH; // shores + shallows
+  let temp = vnoise(x * 0.004 + 900, z * 0.004 - 300, seed ^ 0xb10c);
+  const moist = vnoise(x * 0.005 - 700, z * 0.005 + 200, seed ^ 0xb20e);
+  temp -= Math.max(0, h - 18) * 0.012; // altitude cools
+  if (h >= 27) return BIOME.TUNDRA; // snowcaps (surface is snow anyway)
+  if (h >= 23) return BIOME.MOUNTAIN; // high exposed rock
+  if (temp > 0.60 && moist < 0.42) return BIOME.DESERT;
+  if (temp > 0.56 && moist < 0.52) return BIOME.SAVANNA;
+  if (moist > 0.58 && temp > 0.50) return BIOME.JUNGLE;
+  if (moist > 0.57 && h <= SEA_LEVEL + 4) return BIOME.SWAMP;
+  if (temp < 0.30) return BIOME.TUNDRA; // cold barrens
+  if (temp < 0.40) return BIOME.TAIGA;
+  if (moist > 0.50) return BIOME.FOREST;
+  return BIOME.PLAINS;
+}
+
+// Tree kinds: 0 = none, 1 = oak, 2 = pine (taiga spire), 3 = jungle giant.
+export function treeTypeAt(x: number, z: number, seed: number): number {
+  const h = terrainHeight(x, z, seed);
+  if (h <= SEA_LEVEL + 1 || h >= 26) return 0;
+  const bio = biomeAt(x, z, seed);
+  let dens: number;
+  switch (bio) {
+    case BIOME.DESERT:
+    case BIOME.BEACH:
+    case BIOME.TUNDRA:
+    case BIOME.MOUNTAIN:
+    case BIOME.OCEAN:
+      return 0;
+    case BIOME.SAVANNA: dens = 0.97; break;
+    case BIOME.PLAINS: dens = 0.988; break;
+    case BIOME.FOREST: dens = 0.87; break;
+    case BIOME.JUNGLE: dens = 0.82; break;
+    case BIOME.TAIGA: dens = 0.89; break;
+    case BIOME.SWAMP: dens = 0.95; break;
+    default: dens = 0.99;
+  }
+  if (hash2(x, z, seed ^ 0x51ab) <= dens) return 0;
+  if (bio === BIOME.TAIGA) return 2;
+  if (bio === BIOME.JUNGLE) return 3;
+  return 1;
 }
 
 export function treeAt(x: number, z: number, seed: number): boolean {
-  const dense = forestAt(x, z, seed) > 0.55;
-  const thresh = dense ? 0.93 : 0.993; // forests vs lone trees
-  return hash2(x, z, seed ^ 0x51ab) > thresh;
+  return treeTypeAt(x, z, seed) !== 0;
+}
+
+// Small ground vegetation for a surface column (GRASS/DIRT only, y == h+1).
+// Returns a block id or B.AIR. Frequencies are per-column keep rates.
+function plantAt(x: number, z: number, bio: number, seed: number): number {
+  const r1 = hash2(x, z, seed ^ 0xf011);
+  const r2 = hash2(x * 7 + 3, z * 7 - 1, seed ^ 0xf022);
+  switch (bio) {
+    case BIOME.SAVANNA:
+      if (r1 > 0.62) return B.TALL_GRASS;
+      break;
+    case BIOME.PLAINS:
+      if (r1 > 0.78) return B.TALL_GRASS;
+      if (r1 < 0.03) return r2 < 0.5 ? B.FLOWER_RED : B.FLOWER_YELLOW;
+      break;
+    case BIOME.FOREST:
+      if (r1 > 0.88) return B.TALL_GRASS;
+      if (r1 < 0.02) return r2 < 0.5 ? B.MUSHROOM_RED : B.MUSHROOM_BROWN;
+      break;
+    case BIOME.JUNGLE:
+      if (r1 > 0.70) return B.TALL_GRASS;
+      if (r1 < 0.03) return r2 < 0.5 ? B.MUSHROOM_RED : B.MUSHROOM_BROWN;
+      break;
+    case BIOME.TAIGA:
+      if (r1 > 0.92) return B.TALL_GRASS;
+      break;
+    case BIOME.SWAMP:
+      if (r1 > 0.85) return B.TALL_GRASS;
+      if (r1 < 0.04) return r2 < 0.5 ? B.MUSHROOM_RED : B.MUSHROOM_BROWN;
+      break;
+    default:
+      break;
+  }
+  return B.AIR;
+}
+
+// Desert cactus column height (0 = no cactus here).
+function cactusHeightAt(x: number, z: number, seed: number): number {
+  const r = hash2(x, z, seed ^ 0xcac7);
+  if (r <= 0.962) return 0;
+  return 1 + (hash2(x * 3 + 1, z * 3 - 2, seed ^ 0xcac8) > 0.5 ? 1 : 0) +
+    (hash2(x * 5 - 1, z * 5 + 4, seed ^ 0xcac9) > 0.8 ? 1 : 0);
+}
+
+// Reed (sugar-cane) column height, for wet shores. 0 = none.
+function reedHeightAt(x: number, z: number, h: number, seed: number): number {
+  if (h < SEA_LEVEL || h > SEA_LEVEL + 2) return 0;
+  // needs water next door: lowest neighbouring column at/below sea level
+  let shore = false;
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+    if (terrainHeight(x + dx, z + dz, seed) <= SEA_LEVEL) { shore = true; break; }
+  }
+  if (!shore) return 0;
+  const bio = biomeAt(x, z, seed);
+  const thresh = bio === BIOME.SWAMP ? 0.86 : 0.93;
+  if (hash2(x, z, seed ^ 0xeeeD) <= thresh) return 0;
+  return hash2(x * 3 - 5, z * 3 + 7, seed ^ 0xeeeF) > 0.7 ? 3 : 2;
+}
+
+// Blotchy clay/gravel patch mask for shores and lakebeds.
+function shorePatchAt(x: number, z: number, seed: number): number {
+  if (vnoise(x * 0.09, z * 0.09, seed ^ 0xc14) > 0.62) return B.CLAY;
+  if (vnoise(x * 0.11 + 37, z * 0.11 - 91, seed ^ 0x6a4) > 0.64) return B.GRAVEL;
+  return 0;
 }
 
 // Cave mouths: walk-in 1-wide, 3-tall staircases descending from a surface
@@ -231,8 +342,43 @@ function caveHalo(x: number, y: number, z: number, seed: number, h: number): boo
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
+interface TreeRoot { dx: number; dz: number; kind: number; th: number; trunkH: number; top: number }
+interface ColInfo { h: number; bio: number; trees: TreeRoot[] }
+
 export class World {
   seed: number;
+  // per-column memo: height + biome + nearby tree roots. baseBlock hits the
+  // same column up to WORLD_H times per chunk, and sky cells would otherwise
+  // recompute 25 neighbour terrains each. FIFO-capped (pure fn of x,z,seed).
+  private colCache = new Map<string, ColInfo>();
+  colInfo(x: number, z: number): ColInfo {
+    const k = x + "," + z;
+    const hit = this.colCache.get(k);
+    if (hit) return hit;
+    if (this.colCache.size > 4096) {
+      const first = this.colCache.keys().next().value;
+      if (first !== undefined) this.colCache.delete(first);
+    }
+    const h = terrainHeight(x, z, this.seed);
+    const bio = biomeAt(x, z, this.seed, h);
+    const trees: TreeRoot[] = [];
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        const tx = x - dx, tz = z - dz;
+        const kind = treeTypeAt(tx, tz, this.seed);
+        if (kind === 0) continue;
+        const th = terrainHeight(tx, tz, this.seed);
+        if (th <= SEA_LEVEL + 1 || th >= 28) continue;
+        const trunkH = kind === 3 ? 6 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2)
+          : kind === 2 ? 5 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2)
+          : 4 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2);
+        trees.push({ dx, dz, kind, th, trunkH, top: th + trunkH });
+      }
+    }
+    const c: ColInfo = { h, bio, trees };
+    this.colCache.set(k, c);
+    return c;
+  }
   overrides = new Map<string, number>(); // player edits (incl. placed & removed)
   time = 0.25; // 0..1, 0.25 = morning
   savePath: string;
@@ -269,12 +415,22 @@ export class World {
     }
   }
 
+  /** Wipe all player edits and reseed: a brand-new world on the same server. */
+  resetWorld(seed: number): void {
+    this.seed = seed;
+    this.overrides.clear();
+    this.colCache.clear();
+    this.time = 0.25;
+    this.saveTimer = 0;
+    void this.save();
+  }
+
   // Base terrain block (before overrides). Returns B.* id.
   baseBlock(x: number, y: number, z: number): number {
     if (y < 0 || y >= WORLD_H) return B.AIR;
     if (y === 0) return B.BEDROCK;
     if (y === 1 && hash3(x, y, z, this.seed) < 0.5) return B.BEDROCK; // rough floor, no void peeks
-    const h = terrainHeight(x, z, this.seed);
+    const { h, bio } = this.colInfo(x, z);
     // cave staircases (incl. the surface notch) carve first …
     if (y >= 4 && stairCell(x, y, z, this.seed) === 1) return B.AIR;
     // entrance porch: clear headroom + leaves in a 3x3 around the notch so
@@ -328,33 +484,113 @@ export class World {
       if (y < h - 2 && (halo ? (y <= 12 && r2 > 0.983) : (r2 > 0.9945 && y <= 12))) return B.GOLD_ORE;
       return B.STONE;
     }
-    if (y < h) return B.DIRT;
+    // dirt band + surface are biome-driven (stone zone above is untouched)
+    if (y < h) {
+      if (bio === BIOME.DESERT) {
+        if (y === h - 1) return B.SAND;
+        return B.SANDSTONE; // dunes sit on rock, not dirt
+      }
+      if (bio === BIOME.BEACH || bio === BIOME.OCEAN) {
+        if (y >= h - 2) return B.SAND;
+        return B.DIRT;
+      }
+      if (bio === BIOME.MOUNTAIN || bio === BIOME.TUNDRA) {
+        if (hash3(x, y, z, this.seed ^ 0x9a4) > 0.55) return B.GRAVEL;
+        return B.DIRT;
+      }
+      return B.DIRT;
+    }
     if (y === h) {
-      if (h <= SEA_LEVEL + 1) return B.SAND;
-      if (h >= 27) return B.SNOW;
+      if (bio === BIOME.OCEAN || bio === BIOME.BEACH) {
+        const patch = shorePatchAt(x, z, this.seed);
+        if (patch) return patch;
+        return B.SAND;
+      }
+      if (bio === BIOME.DESERT) return B.SAND;
+      if (bio === BIOME.MOUNTAIN) {
+        // exposed rock on steeps, gravel aprons elsewhere
+        const slope = Math.max(
+          Math.abs(terrainHeight(x + 1, z, this.seed) - h),
+          Math.abs(terrainHeight(x - 1, z, this.seed) - h),
+          Math.abs(terrainHeight(x, z + 1, this.seed) - h),
+          Math.abs(terrainHeight(x, z - 1, this.seed) - h),
+        );
+        if (slope >= 3) return B.STONE;
+        return hash2(x, z, this.seed ^ 0x90c4) > 0.45 ? B.GRAVEL : B.STONE;
+      }
+      if (h >= 27 || bio === BIOME.TUNDRA) return B.SNOW;
+      if (bio === BIOME.TAIGA) {
+        if (vnoise(x * 0.07 + 11, z * 0.07 - 43, this.seed ^ 0x7a16) > 0.58) return B.SNOW;
+        return B.GRASS;
+      }
+      if (bio === BIOME.SWAMP) {
+        if (h <= SEA_LEVEL + 2) {
+          const patch = shorePatchAt(x, z, this.seed);
+          if (patch) return patch;
+        }
+        if (vnoise(x * 0.08 - 17, z * 0.08 + 29, this.seed ^ 0x5a4) < 0.45) return B.DIRT;
+        return B.GRASS;
+      }
       return B.GRASS;
     }
     // above surface
     if (y <= SEA_LEVEL) return B.WATER;
-    // per-column tree check: is (x,z) part of a tree rooted nearby?
-    for (let dx = -2; dx <= 2; dx++) {
-      for (let dz = -2; dz <= 2; dz++) {
-        const tx = x - dx, tz = z - dz;
-        if (!treeAt(tx, tz, this.seed)) continue;
-        const th = terrainHeight(tx, tz, this.seed);
-        if (th <= SEA_LEVEL + 1 || th >= 28) continue; // not on beach / snow
-        const trunkH = 4 + Math.floor(hash2(tx, tz, this.seed ^ 0x77) * 2); // 4-5
-        const top = th + trunkH;
-        if (dx === 0 && dz === 0 && y > th && y <= top) return B.LOG;
-        // leaf canopy: two full layers, a ring, then a cap
+    // desert cacti: 1-3 tall soldiers on the sand
+    if (bio === BIOME.DESERT && y <= h + 3) {
+      const ch = cactusHeightAt(x, z, this.seed);
+      if (ch > 0 && y <= h + ch && this.baseBlock(x, h, z) === B.SAND) return B.CACTUS;
+    }
+    // reeds on wet shores (beach + swamp), 2-3 tall
+    if (y <= h + 3) {
+      const rh = reedHeightAt(x, z, h, this.seed);
+      if (rh > 0 && y <= h + rh) return B.REEDS;
+    }
+    // ground phrases: flowers, tufts, mushrooms on grass/dirt only
+    if (y === h + 1) {
+      const surf = this.baseBlock(x, h, z);
+      if (surf === B.GRASS || surf === B.DIRT) {
+        const pl = plantAt(x, z, bio, this.seed);
+        if (pl !== B.AIR) return pl;
+      }
+    }
+    // cached nearby tree roots (computed once per column in colInfo)
+    for (const root of this.colInfo(x, z).trees) {
+      {
+        const { dx, dz, kind, th, top } = root;
+        const log = kind === 2 ? B.PINE_LOG : B.LOG;
+        const leaf = kind === 2 ? B.PINE_LEAVES : B.LEAVES;
+        if (dx === 0 && dz === 0 && y > th && y <= top) return log;
+        // canopies: oak = broad hat, pine = narrow spire, jungle = big table
         const dy = y - top;
         const adx = Math.abs(dx), adz = Math.abs(dz);
-        if (dy === -2 || dy === -1) {
-          if (adx <= 2 && adz <= 2 && !(adx === 2 && adz === 2)) return B.LEAVES;
-        } else if (dy === 0) {
-          if (adx + adz <= 2 && !(adx === 0 && adz === 0)) return B.LEAVES;
-        } else if (dy === 1) {
-          if (adx + adz <= 1) return B.LEAVES;
+        if (kind === 2) {
+          if (dy === -3 || dy === -2) {
+            if (adx <= 1 && adz <= 1 && !(adx === 1 && adz === 1)) return leaf;
+          } else if (dy === -1) {
+            if (adx + adz <= 1 && !(adx === 0 && adz === 0)) return leaf;
+          } else if (dy === 0) {
+            if (adx + adz === 1) return leaf;
+          } else if (dy === 1) {
+            if (adx === 0 && adz === 0) return leaf;
+          }
+        } else if (kind === 3) {
+          if (dy === -3 || dy === -2) {
+            if (adx <= 2 && adz <= 2 && !(adx === 2 && adz === 2)) return leaf;
+          } else if (dy === -1) {
+            if (adx <= 2 && adz <= 2 && !(adx === 2 && adz === 2)) return leaf;
+          } else if (dy === 0) {
+            if (adx + adz <= 2 && !(adx === 0 && adz === 0)) return leaf;
+          } else if (dy === 1) {
+            if (adx + adz <= 1) return leaf;
+          }
+        } else {
+          if (dy === -2 || dy === -1) {
+            if (adx <= 2 && adz <= 2 && !(adx === 2 && adz === 2)) return leaf;
+          } else if (dy === 0) {
+            if (adx + adz <= 2 && !(adx === 0 && adz === 0)) return leaf;
+          } else if (dy === 1) {
+            if (adx + adz <= 1) return leaf;
+          }
         }
       }
     }
@@ -386,7 +622,8 @@ export class World {
 
   isSolid(x: number, y: number, z: number): boolean {
     const b = this.get(x, y, z);
-    return b !== B.AIR && b !== B.WATER && b !== B.LADDER; // ladders are climb-through
+    // ladders are climb-through, small plants are walk-through
+    return b !== B.AIR && b !== B.WATER && b !== B.LADDER && !WALK_THROUGH.has(b);
   }
 
   /** True if `block` exists within `r` blocks (cube) of pos. */
@@ -409,22 +646,76 @@ export class World {
     return 0;
   }
 
+  /** True if any player edit exists within `r` of a cell (mines, builds). */
+  hasEditNear(x: number, y: number, z: number, r: number): boolean {
+    for (const k of this.overrides.keys()) {
+      const [ox, oy, oz] = k.split(",").map(Number);
+      if (Math.abs(ox - x) <= r && Math.abs(oy - y) <= r && Math.abs(oz - z) <= r) return true;
+    }
+    return false;
+  }
+
+  /** True if a saved logout spot should be abandoned for fresh spawn:
+   *  entombed solid (stale seed, filled in), or deep below the terrain in a
+   *  natural pocket — logged out in a cave, not in a player-dug base.
+   *  Sleeping under a tree or in your mine keeps its spot. */
+  shouldRescueToSurface(x: number, y: number, z: number): boolean {
+    const xi = Math.floor(x), yf = Math.floor(y), zi = Math.floor(z);
+    if (this.isSolid(xi, yf, zi) && this.isSolid(xi, yf + 1, zi)) return true; // buried
+    if (yf >= terrainHeight(xi, zi, this.seed) - 1) return false; // on/above surface
+    return !this.hasEditNear(xi, yf, zi, 6); // cave, not a base
+  }
+
   findSpawn(): [number, number, number] {
-    for (let r = 0; r < 400; r += 8) {
-      const x = r === 0 ? 0.5 : Math.floor(hash2(r, 7, this.seed) * r * 2 - r) + 0.5;
-      const z = r === 0 ? 0.5 : Math.floor(hash2(r, 13, this.seed) * r * 2 - r) + 0.5;
-      const xi = Math.floor(x), zi = Math.floor(z);
-      const h = terrainHeight(xi, zi, this.seed);
-      if (h <= SEA_LEVEL + 1 || h >= 26) continue;
-      const top = this.get(xi, h, zi);
-      if (top !== B.GRASS && top !== B.SAND) continue;
-      // clear headroom: no trunks/leaves (or player builds) above
-      let clear = true;
-      for (let y = h + 1; y <= h + 7; y++) {
-        if (this.get(xi, y, zi) !== B.AIR) { clear = false; break; }
+    // two passes: grassland first (never a desert/cactus start), sand as fallback.
+    // A spawn must be open-air surface: solid cave-free footing (no stair
+    // shaft roof that collapses into the cave system), no walk-in entrance
+    // within a few blocks (no waking up inside/on a hole), clear headroom.
+    for (const want of [B.GRASS, B.SAND] as const) {
+      for (let r = 0; r < 1200; r += 8) {
+        const x = r === 0 ? 0.5 : Math.floor(hash2(r, 7, this.seed) * r * 2 - r) + 0.5;
+        const z = r === 0 ? 0.5 : Math.floor(hash2(r, 13, this.seed) * r * 2 - r) + 0.5;
+        const xi = Math.floor(x), zi = Math.floor(z);
+        const h = terrainHeight(xi, zi, this.seed);
+        if (h <= SEA_LEVEL + 1 || h >= 26) continue;
+        const top = this.get(xi, h, zi);
+        if (top !== want) continue;
+        if (want === B.SAND && biomeAt(xi, zi, this.seed) === BIOME.DESERT) continue;
+        // footing: no cave carve or stair shaft in the top 5 layers — the
+        // floor you wake up on must not be a 1-thick roof over a tunnel
+        let solid = true;
+        for (let y = h - 4; y <= h; y++) {
+          if (carvedAt(xi, y, zi, this.seed, h) || stairCell(xi, y, zi, this.seed) === 1) {
+            solid = false;
+            break;
+          }
+        }
+        if (!solid) continue;
+        // clear headroom: no trunks/leaves (or player builds) above.
+        // walk-through plants don't block a spawn.
+        let clear = true;
+        for (let y = h + 1; y <= h + 7; y++) {
+          const b = this.get(xi, y, zi);
+          if (b !== B.AIR && !WALK_THROUGH.has(b)) { clear = false; break; }
+        }
+        if (!clear) continue;
+        // no staircase or entrance mouth next door (checked last: costliest)
+        let lonely = true;
+        for (let dx = -2; dx <= 2 && lonely; dx++) {
+          for (let dz = -2; dz <= 2 && lonely; dz++) {
+            for (let y = h - 2; y <= h + 2; y++) {
+              if (stairCell(xi + dx, y, zi + dz, this.seed) === 1) { lonely = false; break; }
+            }
+          }
+        }
+        for (let dx = -3; dx <= 3 && lonely; dx++) {
+          for (let dz = -3; dz <= 3 && lonely; dz++) {
+            if (mouthOriginAt(xi + dx, zi + dz, this.seed) >= 0) lonely = false;
+          }
+        }
+        if (!lonely) continue;
+        return [xi + 0.5, h + 2.5, zi + 0.5];
       }
-      if (!clear) continue;
-      return [xi + 0.5, h + 2.5, zi + 0.5];
     }
     return [0.5, 30, 0.5];
   }

@@ -21,6 +21,22 @@ Old iPad with broken websockets? Open the page with `?transport=poll`
 HTTP POST (`/api/join` + `/api/poll`), ~4Hz — playable on LAN, laggier
 than sockets. Check `/api/status` for `mode` + who's online.
 
+## Fresh world
+
+In-game chat (T): `/reset` → `/reset yes` (random seed), or
+`/reset 12345` → `/reset yes` (that exact seed — good for revisiting a
+world). Everyone is teleported to the new spawn with starter inventory;
+builds, edits, mobs and saved players are wiped.
+
+From the terminal (server stopped): `deno task reset` wipes
+`data/world.json` + `data/players.json` — the next start generates a
+fresh random world.
+
+Spawns are open-air surface only (no cave roofs, no entrance shafts next
+door). If you log out deep underground with no builds nearby you wake up
+on the surface; your dug-out base keeps its spot. `/spawn` teleports back
+to the surface anytime.
+
 ## Layout
 
 ```
@@ -39,6 +55,11 @@ data/             world.json + players.json (gitignored saves)
 ## Features
 
 - infinite seeded terrain (hills, beaches, snow peaks, oceans, trees, ores)
+- 11 biomes from temperature + moisture + altitude: desert (sandstone, cacti),
+  savanna, plains (flowers), forest, jungle (towering trees), taiga (pines,
+  snow-dusted), tundra, swamp (clay, mushrooms, reeds), rocky mountains,
+  beaches with clay/gravel shores, ocean beds — herds follow the land
+  (sheep on snow, chickens on sand)
 - hold-to-mine with tool tiers (wood → stone → iron), bedrock unbreakable
 - survival: hearts, hunger, fall damage, starvation, death/respawn
 - inventory (36 slots) + Minecraft-style shaped crafting grid (2×2, 3×3 near
@@ -52,14 +73,17 @@ data/             world.json + players.json (gitignored saves)
   shovels (dirt/sand/grass/snow) — wood → stone → iron → gold → diamond tiers
 - mining: coal → iron → **gold + diamond ores** deep down (iron pick+ to drop);
   diamond pick mines everything, diamond sword 2-shots zombies
-- building: fences, stone bricks (2×2 cobble, no table), climbable ladders
-  (Space up), glass from sand
+- building: fences, stone bricks (2×2 cobble, no table), sandstone (2×2 sand),
+  red brick (smelt clay + coal → ×4), climbable ladders (Space up), glass from sand
+- vegetation you can walk through (and it never blocks your spawn): tall grass,
+  poppies, dandelions, red/brown mushrooms, shore reeds (1 reed → 2 sticks),
+  pine logs → planks just like oak
 - food chain: pigs → pork, cows → beef → steak (best), chickens → drumsticks;
   apples, golden apples (8 gold + apple = full heal); beds set your spawn (RMB/F)
 - furnace: iron ore → ingot, gold ore → ingot, raw pork → cooked pork,
   raw beef → steak, raw chicken → roast chicken, sand → glass (8s each)
 - furnace: iron ore → ingot, raw pork → cooked pork, sand → glass (8s each)
-- furnace: iron/gold ore → ingots, pork/beef/chicken → cooked, sand → glass (8s each)
+- furnace: iron/gold ore → ingots, pork/beef/chicken → cooked, sand → glass, clay → brick ×4 (8s each)
 - glass, gold/diamond ores, fences, bricks, ladders, beds (all mine back to themselves)
 - food: raw pork / cooked pork / apple (leaves + zombies drop apples, G or double-click eats)
 - iron sword (8 dmg) + wood/stone swords, tool tiers wood → stone → iron

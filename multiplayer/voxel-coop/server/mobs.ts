@@ -1,6 +1,6 @@
 // Server-side lifeforms: passive wanderers + night zombies that chase players.
 
-import { MobWire, Vec3, WORLD_H } from "./protocol.ts";
+import { B, MobWire, Vec3, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 
 export interface Mob {
@@ -102,7 +102,7 @@ export class MobSim {
     }
     if (players.length === 0) return;
     const anchor = players[Math.floor(Math.random() * players.length)];
-    const trySpawn = (kind: Mob["kind"]) => {
+    const trySpawn = (kind: Mob["kind"] | "any-passive") => {
       const a = Math.random() * Math.PI * 2;
       const r = 12 + Math.random() * 14;
       const x = Math.round(anchor[0] + Math.cos(a) * r);
@@ -110,11 +110,20 @@ export class MobSim {
       const g = world.groundHeight(x, z);
       if (g < 2 || world.get(x, g, z) === 10) return; // don't spawn in ocean
       if (kind === "zombie" && g > 40) return;
+      if (kind === "any-passive") {
+        // biome-flavoured herds: sheep rule the snow, chickens the hot sands,
+        // pigs + cows the green lands. Ground cover decides the pool.
+        const gb = world.get(x, g, z);
+        let pool: Mob["kind"][];
+        if (gb === B.SNOW) pool = ["sheep", "sheep", "pig", "cow"];
+        else if (gb === B.SAND) pool = ["chicken", "chicken", "pig", "sheep"];
+        else pool = ["pig", "cow", "chicken", "sheep"];
+        kind = pool[Math.floor(Math.random() * pool.length)];
+      }
       this.spawn(kind, x + 0.5, g + 1.2, z + 0.5);
     };
     if (passive < wantPassive) {
-      const kinds = ["pig", "cow", "chicken", "sheep"] as const;
-      trySpawn(kinds[Math.floor(Math.random() * kinds.length)]);
+      trySpawn("any-passive");
     }
     if (zombies < wantZombie) trySpawn("zombie");
     // despawn strays far from everyone

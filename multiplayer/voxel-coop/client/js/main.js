@@ -1,5 +1,5 @@
 // voxel-coop client entry: scene, networking, chunk streaming, mining, day/night.
-import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, resolveServerUrl, httpBase } from "./config.js";
+import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, WALK_THROUGH, resolveServerUrl, httpBase } from "./config.js";
 import { Net, PollNet } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
@@ -16,12 +16,16 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- three.js setup ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 40, 150);
+scene.background = new THREE.Color(0x3e9ed6);
+scene.fog = new THREE.Fog(0x3e9ed6, 40, 150);
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// sRGB output: textures are authored in sRGB and decoded on upload, so the
+// framebuffer must re-encode — otherwise mids crush (dark everything) while
+// bright blocks still clip. Light levels below are tuned for this pipeline.
+renderer.outputEncoding = THREE.sRGBEncoding;
 // real-time shadows: single 1024 cascade glued to the player (see applyTime).
 // cheap enough on desktop; auto-off on touch / legacy poll mode, P toggles.
 renderer.shadowMap.enabled = true;
@@ -83,7 +87,9 @@ function makeFlameTexture() {
 }
 const flameTex = makeFlameTexture();
 for (let i = 0; i < TORCH_LIGHTS; i++) {
-  const l = new THREE.PointLight(0xffa845, 0, TORCH_DIST, 1.4);
+  // modest intensity + tight decay: a warm pool near the flame, not a
+  // nuclear glow — the baked flood-fill already carries torchlight further
+  const l = new THREE.PointLight(0xffa845, 0, TORCH_DIST, 2);
   scene.add(l);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flameTex, transparent: true, opacity: 0,
@@ -94,7 +100,7 @@ for (let i = 0; i < TORCH_LIGHTS; i++) {
   torchPool.push({ light: l, sprite: s });
 }
 // dedicated hand light: carrying a torch lights the way like a lantern
-const heldLight = new THREE.PointLight(0xffb45e, 0, 17, 1.4);
+const heldLight = new THREE.PointLight(0xffb45e, 0, 17, 2);
 scene.add(heldLight);
 let cachedNear = [];
 let lastTorchSearch = 0;
@@ -110,7 +116,7 @@ function updateTorchLights(now) {
       p.light.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
       p.sprite.position.copy(p.light.position);
       const f = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
-      p.light.intensity = 1.5 + f;
+      p.light.intensity = 1.1 + f;
       p.sprite.material.opacity = 0.75 + f * 0.9;
       const s = 1.0 + f * 0.35;
       p.sprite.scale.set(s, s, 1);
@@ -127,7 +133,7 @@ function updateTorchLights(now) {
     if (held?.id === B.TORCH && !dead) {
       const d = player.lookDir();
       heldLight.position.set(eye.x + d.x * 0.6, eye.y - 0.15, eye.z + d.z * 0.6);
-      heldLight.intensity = 1.35 + Math.sin(now / 120) * 0.14 + Math.sin(now / 43) * 0.06;
+      heldLight.intensity = 1.0 + Math.sin(now / 120) * 0.1 + Math.sin(now / 43) * 0.05;
     } else {
       heldLight.intensity = 0;
     }
@@ -181,7 +187,9 @@ const BREAK_COLORS = {
   6: 0x228b22, 7: 0x9c6f34, 8: 0x1e1e1e, 9: 0xeeeeee, 11: 0x555555,
   12: 0xc08a5a, 13: 0x8a5a20, 14: 0x6b6b6e, 15: 0xffcf4d, 16: 0x737373,
   17: 0xcfe4ec, 18: 0xf4c20d, 19: 0x5ff2e0, 20: 0x9c6f34, 21: 0x8c8c90,
-  22: 0x8a5f30, 23: 0xc22f2f,
+  22: 0x8a5f30, 23: 0xc22f2f, 24: 0xd6c48c, 25: 0x3f8f38, 26: 0x9ea6b5,
+  27: 0x9e4030, 28: 0x857c72, 29: 0x5a3a1a, 30: 0x1a5230, 31: 0x4da64a,
+  32: 0xd42a2a, 33: 0xf2d024, 34: 0xc22f2f, 35: 0x7a5a38, 36: 0x6bad4d,
 };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
@@ -273,11 +281,11 @@ function applyTime(t) {
   const elev = Math.sin(ang);
   const day = Math.max(0, Math.min(1, elev * 2 + 0.25));
   const night = 1 - day;
-  const sky = new THREE.Color(0x87ceeb).lerp(new THREE.Color(0x060913), night * 0.92);
+  const sky = new THREE.Color(0x3e9ed6).lerp(new THREE.Color(0x060913), night * 0.92);
   scene.background = sky;
   scene.fog.color.copy(sky);
-  ambient.intensity = 0.65 * day + 0.18;
-  sun.intensity = 0.75 * Math.max(0, day);
+  ambient.intensity = 0.55 * day + 0.04;
+  sun.intensity = 0.55 * Math.max(0, day);
   sun.position.set(
     player.pos.x + Math.cos(ang) * 60,
     Math.max(8, elev * 80),
@@ -329,7 +337,7 @@ function breakTime(block, heldId) {
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
   const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21].includes(block);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27].includes(block);
   if (isStone) {
     // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
     if (mult <= 1) return base * 3.3;
@@ -412,7 +420,10 @@ function doPlace() {
     ui.hint("select a block in hotbar (1-9) to place");
     return;
   }
-  const tx = hit.x + hit.nx, ty = hit.y + hit.ny, tz = hit.z + hit.nz;
+  // flowers/grass don't block placement — the new block replaces them
+  const tx = WALK_THROUGH.has(hit.block) ? hit.x : hit.x + hit.nx;
+  const ty = WALK_THROUGH.has(hit.block) ? hit.y : hit.y + hit.ny;
+  const tz = WALK_THROUGH.has(hit.block) ? hit.z : hit.z + hit.nz;
   net.edit("place", tx, ty, tz, held.id, held.id);
   hand.swing();
   audio.place();
@@ -565,6 +576,19 @@ net.on("vitals", (m) => {
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
 net.on("time", (m) => applyTime(m.time));
+net.on("reset", (m) => {
+  // server wiped the world: drop every cached chunk (seed changed, old
+  // terrain is stale), teleport to the new spawn, re-stream from scratch
+  for (const k of [...world.chunks.keys()]) {
+    const [cx, cz] = k.split(",").map(Number);
+    world.dropChunk(cx, cz);
+  }
+  pendingChunks.clear();
+  player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
+  spawnPos = m.spawn;
+  streamChunks();
+  ui.status(`fresh world — seed ${m.seed}`);
+});
 net.on("chat", (m) => ui.chatMsg(m.from, m.msg));
 net.on("ping", () => {
   // net.js auto-replies pong; lastPingMs drives a subtle status readout

@@ -113,7 +113,7 @@ const PAINTERS = {
 
 export function itemIconURL(id) {
   if (!id) return "";
-  if (id >= 1 && id <= 23) return blockIconURL(id);
+  if (id >= 1 && id <= 36) return blockIconURL(id);
   const hit = cache.get(id);
   if (hit) return hit;
   const paint = PAINTERS[id];

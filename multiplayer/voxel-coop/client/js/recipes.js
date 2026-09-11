@@ -4,9 +4,13 @@
 // cat: basics | tools | blocks | food — used for picker filters. desc: 1-line usage hint.
 const L = 5, P = 7, C = 16, S = 101, K = 102, G = 103;
 const N = 122, D = 123, W = 105, A = 115;
+const PL = 29, SA = 4, SS = 24, RD = 36;
 
 export const SHAPED_CLIENT = [
   { id: "planks", name: "Oak Planks ×4", needsTable: false, cat: "basics", desc: "logs → building blocks", out: { id: 7, n: 4 }, pat: [L, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "pine_planks", name: "Pine Planks ×4", needsTable: false, cat: "basics", desc: "pine logs → building blocks", out: { id: 7, n: 4 }, pat: [PL, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "sandstone", name: "Sandstone ×4", needsTable: false, cat: "blocks", desc: "2×2 sand, desert building", out: { id: 24, n: 4 }, pat: [SA, SA, 0, SA, SA, 0, 0, 0, 0] },
+  { id: "reed_sticks", name: "Sticks ×2", needsTable: false, cat: "basics", desc: "a reed → tool handles", out: { id: 101, n: 2 }, pat: [RD, 0, 0, 0, 0, 0, 0, 0, 0] },
   { id: "sticks", name: "Sticks ×4", needsTable: false, cat: "basics", desc: "handles for every tool", out: { id: 101, n: 4 }, pat: [P, 0, 0, P, 0, 0, 0, 0, 0] },
   { id: "table", name: "Crafting Table", needsTable: false, cat: "blocks", desc: "unlocks 3×3 recipes nearby", out: { id: 13, n: 1 }, pat: [P, P, 0, P, P, 0, 0, 0, 0] },
   { id: "torch", name: "Torches ×4", needsTable: false, cat: "blocks", desc: "light vs night zombies", out: { id: 15, n: 4 }, pat: [K, 0, 0, S, 0, 0, 0, 0, 0] },
@@ -43,6 +47,7 @@ export const SMELT_CLIENT = [
   { inId: 12, inName: "iron ore", fuel: "coal", outId: 103, outName: "iron ingot" },
   { inId: 104, inName: "raw pork", fuel: "coal", outId: 107, outName: "cooked pork" },
   { inId: 4, inName: "sand", fuel: "coal", outId: 17, outName: "glass" },
+  { inId: 26, inName: "clay", fuel: "coal", outId: 27, outName: "brick ×4" },
   { inId: 18, inName: "gold ore", fuel: "coal", outId: 122, outName: "gold ingot" },
   { inId: 132, inName: "raw beef", fuel: "coal", outId: 133, outName: "steak" },
   { inId: 134, inName: "raw chicken", fuel: "coal", outId: 135, outName: "roast chicken" },

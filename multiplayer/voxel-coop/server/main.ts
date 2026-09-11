@@ -1,10 +1,10 @@
 // voxel-coop server: plain-HTTP LAN server (no TLS), static client + WS game loop.
 // Run: deno task dev   ->   http://<lan-ip>:8000/
 
-import { B, BLOCK_NAME, HARDNESS, TOOL_CLASS, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
+import { B, BLOCK_NAME, HARDNESS, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
 import { PORT } from "./protocol.ts";
 import { World } from "./world.ts";
-import { Players, Player } from "./players.ts";
+import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
 import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState } from "./crafting.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
@@ -18,7 +18,7 @@ const players = new Players();
 const mobs = new MobSim();
 mobs.peaceful = Deno.args.includes("--peaceful") || Deno.args.includes("--peace");
 const furnaces = new Map<string, FurnaceState & { owner: number }>();
-const spawn = world.findSpawn();
+let spawn = world.findSpawn();
 
 /** Unique display names: if base is taken by a live player, append _2/_3… (fits 16 chars). */
 function uniqueName(raw: string): string {
@@ -103,7 +103,16 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
   const pl = players.add(name, spawn, sock);
   const saved = savedPlayers[name];
   if (saved) {
-    pl.p = saved.p;
+    // stale underground logout (cave, or a world that moved on without you)
+    // wakes up on the surface — unless it's your own dug-out base nearby.
+    // inventory and bed are still restored.
+    if (Array.isArray(saved.p) && saved.p.length === 3 && saved.p.every(Number.isFinite) &&
+        world.shouldRescueToSurface(saved.p[0], saved.p[1], saved.p[2])) {
+      console.log(`[join] ${name} saved spot was underground — fresh spawn`);
+      sendTo(pl, { t: "chat", from: "server", msg: "☀ your last spot was underground — woke up on the surface" });
+    } else {
+      pl.p = saved.p;
+    }
     pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
     if (Array.isArray(saved.bed) && saved.bed.length === 3 && saved.bed.every(Number.isFinite)) {
       pl.bedSpawn = saved.bed as Vec3;
@@ -121,6 +130,7 @@ function leaveGame(pl: Player): void {
   console.log(`[leave] ${pl.name}`);
   players.remove(pl.id);
   chatTimes.delete(pl.id);
+  pendingReset.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
   void persistPlayers();
 }
@@ -178,7 +188,8 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
     if (block === undefined || block === B.AIR || block === B.WATER || block === B.BEDROCK) return;
     if (!(Object.values(B) as number[]).includes(block)) return;
     const cur = world.get(x, y, z);
-    if (cur !== B.AIR && cur !== B.WATER) return;
+    // walk-through flora doesn't block placement — it gets replaced
+    if (cur !== B.AIR && cur !== B.WATER && !WALK_THROUGH.has(cur)) return;
     // don't place inside any live player (feet..head box)
     for (const other of players.all.values()) {
       if (other.dead) continue;
@@ -203,12 +214,47 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
   }
 }
 
-// ---- chat commands (/help /players /spawn /time) ----
+// ---- chat commands (/help /players /spawn /time /reset) ----
 function sendPlayersSnapshot(): void {
   for (const q of players.all.values()) {
     sendTo(q, { t: "players", list: players.wire(q.id) });
   }
 }
+
+/** Fresh world, fresh players: new seed, no edits/mobs/furnaces, everyone
+ *  teleported to the new spawn with starter inventory. savedPlayers is wiped
+ *  so offline players rejoin fresh too (no spawning inside new terrain). */
+function doReset(requestedSeed: number | null, by: string): void {
+  const seed = requestedSeed ?? Math.floor(Math.random() * 1e9);
+  world.resetWorld(seed);
+  furnaces.clear();
+  mobs.mobs.clear();
+  spawn = world.findSpawn();
+  savedPlayers = {};
+  void persistPlayers();
+  for (const pl of players.all.values()) {
+    pl.p = [...spawn] as Vec3;
+    pl.slots = emptyInv();
+    giveItems(pl.slots, 15, 8); // starter torches, same as fresh join
+    pl.grid = emptyGrid();
+    pl.hp = pl.maxHp;
+    pl.hunger = 20;
+    pl.dead = false;
+    pl.bedSpawn = null;
+    pl.lastMove = Date.now();
+    sendTo(pl, { t: "reset", seed, spawn: [...spawn] as Vec3 });
+    sendInv(pl);
+    sendGrid(pl);
+    sendVitals(pl);
+  }
+  sendPlayersSnapshot();
+  broadcast({ t: "time", time: world.time });
+  broadcast({ t: "chat", from: "server", msg: `🌍 ${by} reset the world (seed ${seed})` });
+  console.log(`[reset] by ${by}, seed=${seed}`);
+}
+
+// /reset needs a confirm (no take-backs): first call stages, second runs.
+const pendingReset = new Map<number, { seed: number | null; at: number }>();
 
 /** Returns true if msg was a slash command (handled, not broadcast). */
 function handleChatCommand(pl: Player, msg: string): boolean {
@@ -218,7 +264,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /time <0..1|day|night|morning>" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /time <0..1|day|night|morning> /reset [seed]" });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -248,6 +294,32 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       world.time = v;
       broadcast({ t: "time", time: world.time });
       broadcast({ t: "chat", from: "server", msg: `${pl.name} set time to ${v}` });
+      return true;
+    }
+    case "reset": {
+      const a = arg.toLowerCase();
+      const pending = pendingReset.get(pl.id);
+      const fresh = !pending || Date.now() - pending.at > 30000;
+      if ((a === "yes" || a === "confirm") && pending && !fresh) {
+        pendingReset.delete(pl.id);
+        doReset(pending.seed, pl.name);
+        return true;
+      }
+      let seed: number | null = null;
+      if (a !== "" && a !== "yes" && a !== "confirm") {
+        const n = Number(a);
+        if (!Number.isInteger(n) || n < 0 || n >= 2 ** 31) {
+          sendTo(pl, { t: "chat", from: "server", msg: "usage: /reset [seed 0..2147483647] — then /reset yes to confirm" });
+          return true;
+        }
+        seed = n;
+      }
+      pendingReset.set(pl.id, { seed, at: Date.now() });
+      sendTo(pl, {
+        t: "chat",
+        from: "server",
+        msg: `⚠ reset the world${seed !== null ? ` with seed ${seed}` : " with a random seed"}? EVERYTHING (terrain, builds, inventories) is wiped. Type /reset yes within 30s.`,
+      });
       return true;
     }
     default:
@@ -356,7 +428,7 @@ function onMessage(pl: Player, raw: string): void {
         const ex = furnaces.get(k);
         if (ex?.active) break;
         // pick the first smeltable input the player can afford (pork > sand > iron)
-        const cands = [104, 134, 132, B.SAND, B.IRON_ORE, B.GOLD_ORE];
+        const cands = [104, 134, 132, B.SAND, B.CLAY, B.IRON_ORE, B.GOLD_ORE];
         let input = -1;
         for (const c of cands) {
           const r = smeltInputFor(c);
@@ -375,7 +447,8 @@ function onMessage(pl: Player, raw: string): void {
         const ex = furnaces.get(k);
         if (ex && !ex.active && ex.progress >= 0 && (ex as { done?: boolean }).done) {
           (ex as { done?: boolean }).done = false;
-          const left = giveItems(pl.slots, 103, 1);
+          const out = smeltOutput(ex.input ?? B.IRON_ORE) ?? { id: 103, n: 1 };
+          const left = giveItems(pl.slots, out.id, out.n);
           if (left > 0) (ex as { done?: boolean }).done = true; // inventory full, keep it
           else { furnaces.delete(k); sendInv(pl); }
         }

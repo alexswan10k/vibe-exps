@@ -2,7 +2,9 @@
 // Layout matches server: index = (y * CHUNK + z) * CHUNK + x.
 import { B, CHUNK, WORLD_H } from "./config.js";
 
-const OPAQUE = new Set([1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23]);
+const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30]);
+// Walk-through vegetation (mirrors server WALK_THROUGH): cross-quad billboards.
+const PLANTS = new Set([31, 32, 33, 34, 35, 36]);
 
 // --- pixel-art texture painters (16x16) ---
 function rng(seed) {
@@ -184,6 +186,121 @@ function paintTorchIcon(g, r) {
   g.fillStyle = "#ffcf4d"; g.fillRect(5, 1, 6, 6);
   g.fillStyle = "#fff08a"; g.fillRect(6, 2, 3, 3);
 }
+function paintSandstone(g, r) {
+  noiseFill(g, r, [0.84, 0.76, 0.53], 0.06);
+  g.fillStyle = "rgba(120,100,60,0.8)";
+  g.fillRect(0, 13, 16, 1); // chisel line near the base
+  g.fillStyle = "rgba(255,250,230,0.5)";
+  g.fillRect(0, 0, 16, 1); // sun-bleached top edge
+}
+function paintCactusSide(g, r) {
+  noiseFill(g, r, [0.25, 0.55, 0.22], 0.1);
+  for (let x = 1; x < 16; x += 4) {
+    g.fillStyle = "rgba(15,60,15,0.6)";
+    g.fillRect(x, 0, 1, 16); // ribs
+  }
+  g.fillStyle = "#e8f0d8";
+  for (let i = 0; i < 10; i++) {
+    g.fillRect(Math.floor(r() * 16), Math.floor(r() * 16), 1, 1); // spikes
+  }
+}
+function paintCactusTop(g, r) {
+  noiseFill(g, r, [0.32, 0.62, 0.28], 0.08);
+  g.fillStyle = "rgba(15,60,15,0.7)";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16); g.fillRect(15, 0, 1, 16);
+}
+function paintClay(g, r) { noiseFill(g, r, [0.62, 0.65, 0.72], 0.06); }
+function paintBrickRed(g, r) {
+  noiseFill(g, r, [0.62, 0.25, 0.18], 0.06);
+  g.fillStyle = "rgba(220,215,205,0.85)"; // pale mortar
+  for (let y = 0; y < 16; y += 4) g.fillRect(0, y, 16, 1);
+  for (let y = 0; y < 16; y += 4) {
+    const off = (y / 4) % 2 === 0 ? 0 : 4;
+    for (let x = off; x < 16; x += 8) g.fillRect(x, y, 1, 4);
+  }
+}
+function paintGravel(g, r) {
+  noiseFill(g, r, [0.52, 0.48, 0.44], 0.08);
+  const tones = ["#6b625a", "#7a7068", "#57504a", "#8a7f74"];
+  for (let i = 0; i < 26; i++) {
+    g.fillStyle = tones[Math.floor(r() * tones.length)];
+    g.fillRect(Math.floor(r() * 15), Math.floor(r() * 15), 2, 1);
+    g.fillRect(Math.floor(r() * 15), Math.floor(r() * 15), 1, 2);
+  }
+}
+function paintPineBark(g, r) {
+  noiseFill(g, r, [0.25, 0.17, 0.1], 0.09);
+  for (let x = 0; x < 16; x++) {
+    if (x % 3 === 0) {
+      g.fillStyle = "rgba(15,8,3,0.6)";
+      g.fillRect(x, 0, 1, 16);
+    }
+  }
+}
+function paintPineRings(g, r) {
+  noiseFill(g, r, [0.5, 0.36, 0.2], 0.07);
+  g.fillStyle = "rgba(50,32,14,0.75)";
+  for (let k = 0; k < 4; k++) {
+    const o = k * 2;
+    g.fillRect(o, o, 16 - o * 2, 1);
+    g.fillRect(o, 15 - o, 16 - o * 2, 1);
+    g.fillRect(o, o, 1, 16 - o * 2);
+    g.fillRect(15 - o, o, 1, 16 - o * 2);
+  }
+}
+function paintPineLeaves(g, r) {
+  noiseFill(g, r, [0.1, 0.32, 0.18], 0.13);
+  blobs(g, r, "rgba(6,22,10,0.8)", 14, 1);
+}
+// --- transparent cross-quad flora: backgrounds stay empty, only pixels drawn
+function paintTallGrass(g, r) {
+  g.clearRect(0, 0, 16, 16);
+  for (let i = 0; i < 9; i++) {
+    const x = 1 + Math.floor(r() * 14);
+    const h = 5 + Math.floor(r() * 8);
+    const v = (r() - 0.5) * 0.12;
+    g.fillStyle = `rgb(${conv(0.3 + v)},${conv(0.62 + v)},${conv(0.25 + v)})`;
+    g.fillRect(x, 16 - h, 1, h);
+    if (r() < 0.5) g.fillRect(x + (r() < 0.5 ? 1 : -1), 16 - h + 2, 1, 3); // bent tip
+  }
+}
+function paintFlower(g, r, head) {
+  g.clearRect(0, 0, 16, 16);
+  g.fillStyle = "#2f7a24";
+  g.fillRect(7, 7, 2, 9); // stem
+  g.fillRect(4, 10, 3, 1); g.fillRect(9, 12, 3, 1); // leaves
+  g.fillStyle = head;
+  g.fillRect(5, 3, 6, 5); // petals
+  g.fillStyle = "rgba(255,255,255,0.85)";
+  g.fillRect(7, 4, 2, 2); // heart
+}
+function paintFlowerRed(g, r) { paintFlower(g, r, "#d42a2a"); }
+function paintFlowerYellow(g, r) { paintFlower(g, r, "#f2d024"); }
+function paintMushroom(g, r, cap, dots) {
+  g.clearRect(0, 0, 16, 16);
+  g.fillStyle = "#ddd5c2";
+  g.fillRect(7, 8, 2, 8); // stem
+  g.fillStyle = cap;
+  g.fillRect(4, 4, 8, 5); // cap
+  g.fillRect(5, 3, 6, 1);
+  if (dots) {
+    g.fillStyle = "#ffffff";
+    g.fillRect(5, 5, 2, 2); g.fillRect(9, 6, 2, 2); g.fillRect(7, 4, 1, 1);
+  }
+}
+function paintMushroomRed(g, r) { paintMushroom(g, r, "#c22f2f", true); }
+function paintMushroomBrown(g, r) { paintMushroom(g, r, "#7a5a38", false); }
+function paintReeds(g, r) {
+  g.clearRect(0, 0, 16, 16);
+  for (const x of [4, 8, 11]) {
+    const v = (r() - 0.5) * 0.1;
+    g.fillStyle = `rgb(${conv(0.42 + v)},${conv(0.68 + v)},${conv(0.3 + v)})`;
+    g.fillRect(x, 0, 2, 16);
+    g.fillStyle = "rgba(60,90,40,0.9)";
+    g.fillRect(x, 4, 2, 1); g.fillRect(x, 10, 2, 1); // joints
+  }
+}
 
 // Representative face per block for inventory icons (data URLs, cached).
 const ICON_PAINT = {
@@ -195,6 +312,11 @@ const ICON_PAINT = {
   15: [paintTorchIcon, 7], 16: [paintCobble, 26], 17: [paintGlass, 27],
   18: [paintGoldOre, 28], 19: [paintDiamondOre, 29], 20: [paintFence, 30],
   21: [paintBrick, 31], 22: [paintLadder, 32], 23: [paintBedTop, 33],
+  24: [paintSandstone, 34], 25: [paintCactusSide, 35], 26: [paintClay, 36],
+  27: [paintBrickRed, 37], 28: [paintGravel, 38], 29: [paintPineRings, 39],
+  30: [paintPineLeaves, 40], 31: [paintTallGrass, 41], 32: [paintFlowerRed, 42],
+  33: [paintFlowerYellow, 43], 34: [paintMushroomRed, 44], 35: [paintMushroomBrown, 45],
+  36: [paintReeds, 46],
 };
 const iconCache = new Map();
 export function blockIconURL(block) {
@@ -224,6 +346,14 @@ export function makeMaterials() {
   const furnaceFront = M(makeCanvas(paintFurnaceFront, 240));
   const bedSide = M(makeCanvas(paintBedSide, 34));
   const bedTop = M(makeCanvas(paintBedTop, 33));
+  const cactusSide = M(makeCanvas(paintCactusSide, 35));
+  const cactusTop = M(makeCanvas(paintCactusTop, 350));
+  const pineBark = M(makeCanvas(paintPineBark, 351));
+  const pineRings = M(makeCanvas(paintPineRings, 352));
+  // cross-quad flora: alpha-tested, double-sided, top-lit via up normals
+  const F = (paint, seed) => new THREE.MeshLambertMaterial({
+    map: makeCanvas(paint, seed), alphaTest: 0.5, side: THREE.DoubleSide,
+  });
   // BoxGeometry face order: +x, -x, +y, -y, +z, -z
   return {
     [B.GRASS]: [grassSide, grassSide, grassTop, dirt, grassSide, grassSide],
@@ -249,7 +379,41 @@ export function makeMaterials() {
     [B.STONE_BRICK]: M(makeCanvas(paintBrick, 31)),
     [B.LADDER]: M(makeCanvas(paintLadder, 32)),
     [B.BED]: [bedSide, bedSide, bedTop, planks, bedSide, bedSide],
+    [B.SANDSTONE]: M(makeCanvas(paintSandstone, 34)),
+    [B.CACTUS]: [cactusSide, cactusSide, cactusTop, cactusTop, cactusSide, cactusSide],
+    [B.CLAY]: M(makeCanvas(paintClay, 36)),
+    [B.BRICK]: M(makeCanvas(paintBrickRed, 37)),
+    [B.GRAVEL]: M(makeCanvas(paintGravel, 38)),
+    [B.PINE_LOG]: [pineBark, pineBark, pineRings, pineRings, pineBark, pineBark],
+    [B.PINE_LEAVES]: M(makeCanvas(paintPineLeaves, 40)),
+    [B.TALL_GRASS]: F(paintTallGrass, 41),
+    [B.FLOWER_RED]: F(paintFlowerRed, 42),
+    [B.FLOWER_YELLOW]: F(paintFlowerYellow, 43),
+    [B.MUSHROOM_RED]: F(paintMushroomRed, 44),
+    [B.MUSHROOM_BROWN]: F(paintMushroomBrown, 45),
+    [B.REEDS]: F(paintReeds, 46),
   };
+}
+
+// Two intersecting vertical quads (X shape from above) for flora.
+// Base sits at y=0 of the block cell; normals point up so sun lights them
+// like grass tops. UVs map the full 16x16 sprite onto each quad.
+function makeCrossGeometry() {
+  const g = new THREE.BufferGeometry();
+  const v = new Float32Array([
+    -0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0, // X-facing quad
+    0, 0, -0.5, 0, 0, 0.5, 0, 1, 0.5, 0, 1, -0.5, // Z-facing quad
+  ]);
+  const n = new Float32Array([
+    0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0,
+    0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0,
+  ]);
+  const uv = new Float32Array([0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1]);
+  g.setAttribute("position", new THREE.BufferAttribute(v, 3));
+  g.setAttribute("normal", new THREE.BufferAttribute(n, 3));
+  g.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  g.setIndex([0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7]);
+  return g;
 }
 
 export class WorldClient {
@@ -260,6 +424,7 @@ export class WorldClient {
     this.meshes = new Map(); // "cx,cz" -> THREE.Group
     this.torches = new Map(); // "cx,cz" -> [[x,y,z],...] for light pooling
     this.geo = new THREE.BoxGeometry(1, 1, 1);
+    this.crossGeo = makeCrossGeometry();
     this.dummy = new THREE.Object3D();
     this.shadeColor = new THREE.Color();
   }
@@ -429,18 +594,11 @@ export class WorldClient {
       if (eex < 0 || eex >= EW || eez < 0 || eez >= EW || y < 0 || y >= WORLD_H) return 0;
       return light[eIdx(eex, y, eez)];
     };
-    // sky visibility per column: open to the sky => full bright, else depth shade.
-    // top-down scan for the first opaque roof; cheap (16x16 columns).
-    const skyOpen = new Uint8Array(CHUNK * CHUNK);
-    for (let lz = 0; lz < CHUNK; lz++) {
-      for (let lx = 0; lx < CHUNK; lx++) {
-        let open = true;
-        for (let y = WORLD_H - 1; y >= 0; y--) {
-          if (OPAQUE.has(data[WorldClient.idx(lx, y, lz)])) { open = false; break; }
-        }
-        skyOpen[lz * CHUNK + lx] = open ? 1 : 0;
-      }
-    }
+    // NOTE: no per-column sky table — sky is decided per block below from
+    // the cell directly above it (open air => full bright, roofed => depth
+    // shade). A column scan can't work: the surface block itself is opaque,
+    // so every land column would read "roofed" and the whole overworld
+    // would render at cave shade.
     for (let y = 0; y < WORLD_H; y++) {
       for (let z = 0; z < CHUNK; z++) {
         for (let x = 0; x < CHUNK; x++) {
@@ -467,21 +625,28 @@ export class WorldClient {
     for (const [b, list] of byType) {
       const mat = this.materials[b];
       if (!mat) continue;
-      const mesh = new THREE.InstancedMesh(this.geo, mat, list.length);
+      const isPlant = PLANTS.has(b);
+      const mesh = new THREE.InstancedMesh(isPlant ? this.crossGeo : this.geo, mat, list.length);
       list.forEach(([wx, y, wz], i) => {
-        this.dummy.position.set(wx + 0.5, y + 0.5, wz + 0.5);
-        if (b === B.TORCH) this.dummy.scale.set(0.25, 0.6, 0.25);
-        else this.dummy.scale.set(1, 1, 1);
-        if (b === B.WATER) this.dummy.position.y -= 0.12;
+        if (isPlant) {
+          // cross quads stand on the block floor, full height
+          this.dummy.position.set(wx + 0.5, y, wz + 0.5);
+          this.dummy.scale.set(1, 1, 1);
+        } else {
+          this.dummy.position.set(wx + 0.5, y + 0.5, wz + 0.5);
+          if (b === B.TORCH) this.dummy.scale.set(0.25, 0.6, 0.25);
+          else this.dummy.scale.set(1, 1, 1);
+          if (b === B.WATER) this.dummy.position.y -= 0.12;
+        }
         this.dummy.updateMatrix();
         mesh.setMatrixAt(i, this.dummy.matrix);
-        // lighting: sky (open columns full-bright, roofed columns fall off
-        // to 32% by y=4 so caves are dark) vs baked torch flood-fill.
-        // torch wins near flames and tints warm orange.
+        // lighting: open sky above => full bright, roofed blocks fall off
+        // toward ~8% by y=4 so caves stay dark (values are linear; the
+        // renderer re-encodes to sRGB). Baked torch flood-fill wins near
+        // flames and tints warm orange.
         if (b === B.TORCH) {
           mesh.setColorAt(i, this.shadeColor.setRGB(1, 1, 1));
         } else {
-          const lx = wx - cx * CHUNK, lz = wz - cz * CHUNK;
           let tl;
           if (!OPAQUE.has(b) || b === B.GLASS) {
             tl = lightAt(wx, y, wz); // transparent: its own cell
@@ -493,9 +658,13 @@ export class WorldClient {
             );
           }
           const t = tl / 14;
-          const depthShade = Math.min(1, 0.32 + 0.68 * Math.max(0, (y - 4) / 20));
-          const sky = skyOpen[lz * CHUNK + lx] ? 1 : depthShade;
-          const bright = Math.max(sky, Math.min(1, 0.32 + t * 0.85));
+          const depthShade = Math.min(1, 0.08 + 0.92 * Math.max(0, (y - 4) / 20));
+          // sky above? the cell overhead decides: open air (and not water)
+          // => full bright surface; anything roofed falls to depth shade so
+          // caves, mine tunnels and canopy floors stay dark.
+          const above = getL(wx, y + 1, wz);
+          const sky = (!OPAQUE.has(above) && above !== B.WATER) ? 1 : depthShade;
+          const bright = Math.max(sky, Math.min(1, 0.08 + t * 0.9));
           if (t > 0.01) {
             mesh.setColorAt(i, this.shadeColor.setRGB(
               Math.min(1, bright + t * 0.16),
@@ -509,7 +678,7 @@ export class WorldClient {
       });
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      mesh.castShadow = true;
+      mesh.castShadow = !isPlant; // alpha-tested quads would speckle the shadow map
       mesh.receiveShadow = true;
       this.dummy.scale.set(1, 1, 1);
       group.add(mesh);

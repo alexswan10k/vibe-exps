@@ -15,6 +15,9 @@ export interface ShapedRecipe {
 
 export const SHAPED: ShapedRecipe[] = [
   { id: "planks", name: "Oak Planks ×4", needsTable: false, pat: [L, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: P, n: 4 } },
+  { id: "pine_planks", name: "Pine Planks ×4", needsTable: false, pat: [B.PINE_LOG, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: P, n: 4 } },
+  { id: "sandstone", name: "Sandstone ×4", needsTable: false, pat: [B.SAND, B.SAND, 0, B.SAND, B.SAND, 0, 0, 0, 0], out: { id: B.SANDSTONE, n: 4 } },
+  { id: "reed_sticks", name: "Sticks ×2", needsTable: false, pat: [B.REEDS, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: S, n: 2 } },
   { id: "sticks", name: "Sticks ×4", needsTable: false, pat: [P, 0, 0, P, 0, 0, 0, 0, 0], out: { id: S, n: 4 } },
   { id: "table", name: "Crafting Table", needsTable: false, pat: [P, P, 0, P, P, 0, 0, 0, 0], out: { id: B.CRAFT_TABLE, n: 1 } },
   { id: "torch", name: "Torches ×4", needsTable: false, pat: [K, 0, 0, S, 0, 0, 0, 0, 0], out: { id: B.TORCH, n: 4 } },
@@ -244,6 +247,24 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.LOG: return { id: B.LOG, n: 1 };
     case B.PLANKS: return { id: B.PLANKS, n: 1 };
     case B.SNOW: return { id: B.SNOW, n: 1 };
+    case B.SANDSTONE: return { id: B.SANDSTONE, n: 1 };
+    case B.CACTUS: return { id: B.CACTUS, n: 1 };
+    case B.CLAY: return { id: B.CLAY, n: 1 };
+    case B.BRICK: return { id: B.BRICK, n: 1 };
+    case B.GRAVEL: return { id: B.GRAVEL, n: 1 };
+    case B.PINE_LOG: return { id: B.PINE_LOG, n: 1 };
+    case B.PINE_LEAVES: {
+      const r = Math.random();
+      if (r < 0.05) return { id: I.APPLE, n: 1 };
+      if (r < 0.15) return { id: I.STICK, n: 1 };
+      return null;
+    }
+    case B.TALL_GRASS: return null; // whispy, nothing to take
+    case B.FLOWER_RED: return { id: B.FLOWER_RED, n: 1 };
+    case B.FLOWER_YELLOW: return { id: B.FLOWER_YELLOW, n: 1 };
+    case B.MUSHROOM_RED: return { id: B.MUSHROOM_RED, n: 1 };
+    case B.MUSHROOM_BROWN: return { id: B.MUSHROOM_BROWN, n: 1 };
+    case B.REEDS: return { id: B.REEDS, n: 1 };
     case B.COAL_ORE: return { id: I.COAL, n: 1 };
     case B.IRON_ORE: return { id: B.IRON_ORE, n: 1 }; // smelt in furnace
     case B.COBBLE: return { id: B.COBBLE, n: 1 };
@@ -281,6 +302,7 @@ export const SMELT_RECIPES: Record<number, SmeltRecipe> = {
   12: { in: { 12: 1, 102: 1 }, out: { id: 103, n: 1 } }, // iron ore + coal -> iron ingot
   104: { in: { 104: 1, 102: 1 }, out: { id: 107, n: 1 } }, // raw pork + coal -> cooked pork
   4: { in: { 4: 1, 102: 1 }, out: { id: B.GLASS, n: 1 } }, // sand + coal -> glass
+  26: { in: { 26: 1, 102: 1 }, out: { id: B.BRICK, n: 4 } }, // clay + coal -> brick x4
   18: { in: { 18: 1, 102: 1 }, out: { id: 122, n: 1 } }, // gold ore + coal -> gold ingot
   132: { in: { 132: 1, 102: 1 }, out: { id: 133, n: 1 } }, // raw beef + coal -> steak
   134: { in: { 134: 1, 102: 1 }, out: { id: 135, n: 1 } }, // raw chicken + coal -> roast chicken
