@@ -13,6 +13,18 @@ function hash2(x: number, z: number, seed: number): number {
   return (h >>> 0) / 4294967295;
 }
 
+function hash3(x: number, y: number, z: number, seed: number): number {
+  // same discipline as hash2, extended to 3 inputs (imul coerces to int32 —
+  // large constants wrap but stay deterministic).
+  let h = seed | 0;
+  h = Math.imul(h ^ Math.imul(x | 0, 374761393), 668265263);
+  h = Math.imul(h ^ Math.imul(y | 0, 2246822519), 3266489917);
+  h = Math.imul(h ^ Math.imul(z | 0, 668265263), 374761393);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967295;
+}
+
 function smooth(t: number): number {
   return t * t * (3 - 2 * t);
 }
@@ -27,6 +39,28 @@ function vnoise(x: number, z: number, seed: number): number {
   const c = hash2(xi, zi + 1, seed);
   const d = hash2(xi + 1, zi + 1, seed);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+// Trilinear value noise in 3D (for caves). Same lattice discipline as vnoise.
+function vnoise3(x: number, y: number, z: number, seed: number): number {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = smooth(xf), v = smooth(yf), w = smooth(zf);
+  const c000 = hash3(xi, yi, zi, seed);
+  const c100 = hash3(xi + 1, yi, zi, seed);
+  const c010 = hash3(xi, yi + 1, zi, seed);
+  const c110 = hash3(xi + 1, yi + 1, zi, seed);
+  const c001 = hash3(xi, yi, zi + 1, seed);
+  const c101 = hash3(xi + 1, yi, zi + 1, seed);
+  const c011 = hash3(xi, yi + 1, zi + 1, seed);
+  const c111 = hash3(xi + 1, yi + 1, zi + 1, seed);
+  const x00 = c000 + (c100 - c000) * u;
+  const x10 = c010 + (c110 - c010) * u;
+  const x01 = c001 + (c101 - c001) * u;
+  const x11 = c011 + (c111 - c011) * u;
+  const y0 = x00 + (x10 - x00) * v;
+  const y1 = x01 + (x11 - x01) * v;
+  return y0 + (y1 - y0) * w;
 }
 
 export function terrainHeight(x: number, z: number, seed: number): number {
@@ -47,6 +81,62 @@ export function treeAt(x: number, z: number, seed: number): boolean {
   const dense = forestAt(x, z, seed) > 0.55;
   const thresh = dense ? 0.93 : 0.993; // forests vs lone trees
   return hash2(x, z, seed ^ 0x51ab) > thresh;
+}
+
+// Cave mouths: straight 1-wide, 3-tall staircases descending eastward from a
+// 1x1 surface notch. Every step is exactly 1 down / 1 up with full headroom,
+// so they're walkable both ways with zero jumps needed beyond a normal hop.
+// Rarity ~1/1400 columns. The stairs usually pierce worm tunnels on the way
+// down (9% carve density); below the last step you dig or spelunk sideways.
+const MOUTH_KEEP = 0.954;
+export function mouthOriginAt(mx: number, mz: number, seed: number): number {
+  // returns surface height, or -1 for "no mouth here"
+  if ((mx & 7) !== 0 || (mz & 7) !== 0) return -1; // grid-aligned (cheap to scan)
+  if (hash2(mx, mz, seed ^ 0x90e1) < MOUTH_KEEP) return -1;
+  const h = terrainHeight(mx, mz, seed);
+  if (h <= SEA_LEVEL + 1 || h < 12) return -1; // no ocean/beach mouths, need depth
+  if (treeAt(mx, mz, seed)) return -1; // no floating trees over the notch
+  return h;
+}
+
+// 0 = not a stair cell, 1 = stair corridor (air), 2 = load-bearing stair floor.
+function stairCell(x: number, y: number, z: number, seed: number): number {
+  if ((z & 7) !== 0 || y < 4) return 0;
+  const gx = x - ((((x % 8) + 8) % 8)); // greatest multiple of 8 <= x
+  for (let mx = gx; mx >= x - 28; mx -= 8) {
+    if (hash2(mx, z, seed ^ 0x90e1) < MOUTH_KEEP) continue;
+    const h = terrainHeight(mx, z, seed);
+    if (h <= SEA_LEVEL + 1 || h < 12) continue;
+    if (treeAt(mx, z, seed)) continue;
+    const t = x - mx;
+    const bottom = Math.max(6, h - 12);
+    if (t < 0 || t > h - bottom) continue;
+    // never behead a trunk where the stair crosses a lower slope sideways
+    if (treeAt(x, z, seed) && y > terrainHeight(x, z, seed)) continue;
+    if (y >= h - t && y <= h - t + 2) return 1;
+    if (y === h - t - 1) return 2;
+  }
+  return 0;
+}
+
+// Worm tunnels (two noises near 0.5 = tube) + rare cheese pockets. Caller
+// guarantees y in [4, h-2]: 2+ blocks of roof everywhere, so the tunnel
+// system itself never breaches the surface (mouths are the entrances).
+const WORM_R2 = 0.0035;
+const POCKET_T = 0.74;
+function carvedAt(x: number, y: number, z: number, seed: number, h: number): boolean {
+  const s = 0.055;
+  const a = vnoise3(x * s, y * s * 1.4, z * s, seed ^ 0xca1e);
+  const b = vnoise3(x * s + 317.7, y * s * 1.4, z * s - 113.3, seed ^ 0xca2e);
+  const dx = a - 0.5, dz = b - 0.5;
+  const worm = dx * dx + dz * dz < WORM_R2;
+  const pocket = !worm && y <= h - 3 &&
+    vnoise3(x * 0.028 + 731.3, y * 0.028, z * 0.028 - 57.9, seed ^ 0xca3e) > POCKET_T;
+  if (!worm && !pocket) return false;
+  // stair floors are load-bearing: chambers may open beside the stairs,
+  // but the way back up never dissolves (only runs on carve-positive cells)
+  if (stairCell(x, y, z, seed) === 2) return false;
+  return true;
 }
 
 const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
@@ -94,6 +184,10 @@ export class World {
     if (y < 0 || y >= WORLD_H) return B.AIR;
     if (y === 0) return B.BEDROCK;
     const h = terrainHeight(x, z, this.seed);
+    // cave staircases (incl. the surface notch) carve first …
+    if (y >= 4 && stairCell(x, y, z, this.seed) === 1) return B.AIR;
+    // … then worms + pockets carve stone AND dirt bands (never bedrock, never the top 2 roof layers)
+    if (y >= 4 && y <= h - 2 && carvedAt(x, y, z, this.seed, h)) return B.AIR;
     if (y <= h - 4) {
       // ores sprinkled in stone
       const r = hash2(x * 3 + y * 7, z * 5 - y, this.seed ^ 0x0e3);

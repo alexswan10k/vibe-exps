@@ -261,6 +261,7 @@ export class WorldClient {
     this.torches = new Map(); // "cx,cz" -> [[x,y,z],...] for light pooling
     this.geo = new THREE.BoxGeometry(1, 1, 1);
     this.dummy = new THREE.Object3D();
+    this.shadeColor = new THREE.Color();
   }
 
   static idx(x, y, z) { return (y * CHUNK + z) * CHUNK + x; }
@@ -367,8 +368,13 @@ export class WorldClient {
         if (b === B.WATER) this.dummy.position.y -= 0.12;
         this.dummy.updateMatrix();
         mesh.setMatrixAt(i, this.dummy.matrix);
+        // depth darkening: caves fall off to 35% by y=4, surface untouched.
+        // (torch emissive survives — placed torches still glow in the dark.)
+        const shade = Math.min(1, 0.35 + 0.65 * Math.max(0, (y - 4) / 20));
+        mesh.setColorAt(i, this.shadeColor.setRGB(shade, shade, shade));
       });
       mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       this.dummy.scale.set(1, 1, 1);

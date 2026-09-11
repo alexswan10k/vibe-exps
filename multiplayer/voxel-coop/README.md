@@ -72,6 +72,7 @@ data/             world.json + players.json (gitignored saves)
   carrying, pattern preview included, click to auto-fill the grid.
 - day/night cycle with visible sun + glow, moon, and stars; chat (T, with /help /players /spawn /time), coop player avatars + name tags
 - render distance 6 chunks (fog to match), far chunks unload as you walk
+- procedural caves: worm tunnels + pockets (9% of deep rock), walk-in 1×1 staircase entrances ~1/1400 columns, depth-darkened walls so torches matter, stair floors immune to carving (the way back never dissolves)
 - unique names (_2 suffix), chat rate-limit, heartbeat ping + exponential-backoff reconnect
 - feel: wheel cycles hotbar, coyote-time + jump buffer, sprint FOV kick, synth SFX (M mute), damage vignette, animated water
 - real-time sun shadows (1024 PCF-soft cascade around you, P toggles, auto-off on touch) + first-person hand: arm + held block/tool/food with swing, walk-bob, switch pop, and eat animations
