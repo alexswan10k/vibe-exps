@@ -1,123 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Verse</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            font-family: sans-serif;
-        }
-
-        #crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20px;
-            height: 20px;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            mix-blend-mode: difference;
-        }
-
-        #crosshair::before,
-        #crosshair::after {
-            content: '';
-            position: absolute;
-            background: white;
-        }
-
-        #crosshair::before {
-            top: 9px;
-            left: 0;
-            width: 20px;
-            height: 2px;
-        }
-
-        #crosshair::after {
-            top: 0;
-            left: 9px;
-            width: 2px;
-            height: 20px;
-        }
-
-        #instructions {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            cursor: pointer;
-            z-index: 10;
-        }
-
-        #ui {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: white;
-            text-shadow: 1px 1px 0 #000;
-            pointer-events: none;
-        }
-
-        .block-slot {
-            display: inline-block;
-            width: 30px;
-            height: 30px;
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            margin-right: 5px;
-            text-align: center;
-            line-height: 30px;
-            font-weight: bold;
-        }
-
-        .block-slot.active {
-            border-color: yellow;
-            transform: scale(1.1);
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Voxel Verse — Co-op Survival</title>
+<link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-    <div id="crosshair"></div>
-    <div id="instructions">
-        <h1>Voxel Verse</h1>
-        <p>Click to Play</p>
-        <p>WASD to Move | SPACE to Jump</p>
-        <p>Left Click: Break Block | Right Click: Place Block</p>
-        <p>1-5: Change Block Color</p>
-    </div>
-    <div id="ui">
-        <div id="toolbar"></div>
-    </div>
+<div id="game-root"></div>
+<div id="crosshair"><div class="dot"></div></div>
+<div id="block-highlight-label"></div>
 
-    <button id="btn-toggle-touch">📱</button>
-    <!-- Touch Controls -->
-    <div id="touch-controls" style="display: none;">
-        <div id="joystick-zone">
-            <div id="joystick-knob"></div>
-        </div>
-        <div id="touch-buttons">
-            <div class="touch-btn" id="btn-break">🔨</div>
-            <div class="touch-btn" id="btn-place">🧱</div>
-            <div class="touch-btn" id="btn-jump">⬆️</div>
-        </div>
-        <div id="touch-look-zone"></div>
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="hud-top-left">
+    <div id="stats">FPS 60 · XYZ 0,0,0</div>
+    <div id="clock">☀ Day 1 — 08:00</div>
+    <div id="objective">🌱 Build, survive the night, invite a friend!</div>
+  </div>
+  <div id="hud-top-right">
+    <canvas id="minimap" width="132" height="132"></canvas>
+    <div id="coop-panel">
+      <div id="coop-status">🟢 Solo — press <b>C</b> for Co-op</div>
+      <div id="player-list"></div>
     </div>
+  </div>
+  <div id="hud-bottom-center">
+    <div id="vitals">
+      <div id="hearts"></div>
+      <div id="hunger"></div>
+    </div>
+    <div id="toolbar"></div>
+    <div id="hint">LMB break · RMB place · 1-9/wheel select · E eat · F fly · Shift sprint · C co-op · M map · H help</div>
+  </div>
+  <div id="chat-log"></div>
+  <div id="chat-input-row" class="hidden"><span>&gt;</span><input id="chat-input" maxlength="120" placeholder="Message + Enter (T to open)"></div>
+  <div id="toast-root"></div>
+  <div id="damage-vignette"></div>
+</div>
 
-    <!-- Game Logic -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="script.js"></script>
+<!-- Start / Pause menu -->
+<div id="menu">
+  <div class="menu-card">
+    <h1>⛏️ VOXEL VERSE</h1>
+    <p class="subtitle">Co-op voxel survival · infinite terrain · day/night · mobs · dungeons</p>
+    <div class="menu-row">
+      <label>Your name</label>
+      <input id="player-name" maxlength="12" value="Steve">
+    </div>
+    <div class="menu-row">
+      <label>World seed</label>
+      <input id="world-seed" type="number" value="1337">
+      <button id="btn-new-world" title="Generate new world from seed">🌍 New</button>
+    </div>
+    <div class="menu-row two">
+      <button id="btn-play">▶ PLAY</button>
+      <button id="btn-how">❓ HOW TO PLAY</button>
+    </div>
+    <div class="menu-grid">
+      <label>Mode <select id="opt-mode"><option value="survival">Survival</option><option value="creative">Creative</option></select></label>
+      <label>Render dist <select id="opt-render"><option>2</option><option>3</option><option selected>4</option><option>6</option></select></label>
+      <label>Mouse <input id="opt-sens" type="range" min="0.5" max="4" step="0.1" value="1"></label>
+      <label class="chk"><input id="opt-shadows" type="checkbox" checked> Shadows</label>
+      <label class="chk"><input id="opt-clouds" type="checkbox" checked> Clouds</label>
+      <label class="chk"><input id="opt-sound" type="checkbox" checked> Sound</label>
+    </div>
+    <div id="howto" class="hidden">
+      <b>WASD</b> move · <b>Space</b> jump / double-tap fly · <b>Shift</b> sprint · <b>F</b> fly toggle<br>
+      <b>Left click</b> mine / hit · <b>Right click</b> place · <b>1–9 / wheel</b> blocks · <b>E</b> eat dirt+apple<br>
+      <b>T</b> chat · <b>C</b> co-op room · <b>Q</b> drop torch · <b>Esc</b> menu · Survive the night — zombies come at dark!<br>
+      💡 Break grass for apples, kill pigs for pork, place <b>glowstone</b> to stay safe.
+    </div>
+    <div class="menu-foot">v2.0 “PERFECT” update · autosaves locally · co-op via room code (P2P)</div>
+  </div>
+</div>
+
+<!-- Co-op modal -->
+<div id="coop-modal" class="hidden">
+  <div class="menu-card small">
+    <h2>🤝 Co-op Multiplayer</h2>
+    <p>Host a room, share the 4-letter code. Same-WiFi tabs also auto-link (no code needed).</p>
+    <div class="menu-row"><label>Room code</label><input id="room-code" maxlength="6" placeholder="e.g. ABCD"><button id="btn-host">HOST</button><button id="btn-join">JOIN</button></div>
+    <div id="coop-info">Status: solo</div>
+    <div class="menu-row"><button id="btn-copy-link">📋 Copy invite</button><button id="btn-spawn-bot">🤖 Add helper bot</button><button id="btn-coop-close">Close</button></div>
+  </div>
+</div>
+
+<!-- Death screen -->
+<div id="death-screen" class="hidden">
+  <div class="menu-card small"><h2>💀 You died!</h2><p id="death-msg">The zombies got you.</p><button id="btn-respawn">Respawn</button></div>
+</div>
+
+<button id="btn-toggle-touch">📱</button>
+<div id="touch-controls" style="display:none">
+  <div id="joystick-zone"><div id="joystick-knob"></div></div>
+  <div id="touch-buttons">
+    <div class="touch-btn" id="btn-break">🔨</div>
+    <div class="touch-btn" id="btn-place">🧱</div>
+    <div class="touch-btn" id="btn-jump">⬆️</div>
+    <div class="touch-btn" id="btn-fly-t">🕊️</div>
+  </div>
+  <div id="touch-look-zone"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="script.js"></script>
 </body>
-
 </html>

@@ -1,113 +1,72 @@
-/* Reset and basic styles */
-body {
-    margin: 0;
-    overflow: hidden;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: none;
-    /* Prevent default touch actions like scrolling */
-}
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;font-family:'Segoe UI',system-ui,sans-serif;background:#0b1020;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none}
+canvas{display:block}
+.hidden{display:none!important}
+#game-root{position:fixed;inset:0}
 
-canvas {
-    display: block;
-}
+/* crosshair */
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:20;mix-blend-mode:difference}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:#fff;opacity:.9}
+#crosshair::before{top:9px;left:0;width:20px;height:2px}
+#crosshair::after{top:0;left:9px;width:2px;height:20px}
+#crosshair .dot{position:absolute;top:8px;left:8px;width:4px;height:4px;background:#fff;border-radius:50%}
+#block-highlight-label{position:fixed;top:calc(50% + 24px);left:50%;transform:translateX(-50%);font-size:12px;background:rgba(0,0,0,.55);padding:2px 8px;border-radius:8px;pointer-events:none;z-index:20;display:none}
 
-/* Touch Controls */
-#touch-controls {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    /* Let clicks pass through empty areas */
-    z-index: 100;
-}
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:15}
+#hud-top-left{position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:6px}
+#stats,#clock,#objective{background:rgba(0,0,0,.55);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.15);padding:6px 10px;border-radius:10px;font-size:13px;width:max-content;max-width:46vw}
+#objective{color:#ffe9a8}
+#hud-top-right{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+#minimap{border-radius:12px;border:2px solid rgba(255,255,255,.35);background:#06121f;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+#coop-panel{background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:6px 10px;font-size:12px;min-width:170px}
+#player-list{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+#hud-bottom-center{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px}
+#vitals{display:flex;gap:16px;font-size:18px;letter-spacing:2px;text-shadow:0 2px 4px #000}
+#toolbar{display:flex;gap:6px;pointer-events:none;background:rgba(0,0,0,.55);padding:8px;border-radius:14px;border:1px solid rgba(255,255,255,.2)}
+.block-slot{width:52px;height:52px;border-radius:10px;border:2px solid rgba(255,255,255,.25);position:relative;overflow:hidden;cursor:pointer;background-size:cover;box-shadow:inset 0 -6px 10px rgba(0,0,0,.35)}
+.block-slot.active{border-color:#ffe14d;transform:scale(1.08);box-shadow:0 0 14px #ffe14d88}
+.block-slot .k{position:absolute;top:1px;left:4px;font-size:11px;font-weight:800;text-shadow:0 1px 2px #000}
+.block-slot .n{position:absolute;bottom:1px;right:4px;font-size:12px;font-weight:800;text-shadow:0 1px 2px #000;background:rgba(0,0,0,.5);padding:0 4px;border-radius:6px}
+.block-slot .t{position:absolute;bottom:1px;left:4px;font-size:9px;opacity:.9;text-shadow:0 1px 2px #000}
+#hint{font-size:11px;opacity:.75;background:rgba(0,0,0,.4);padding:3px 10px;border-radius:8px;white-space:nowrap}
 
-#joystick-zone {
-    position: absolute;
-    bottom: 50px;
-    left: 50px;
-    width: 120px;
-    height: 120px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
-    pointer-events: auto;
-    touch-action: none;
-}
+/* chat */
+#chat-log{position:absolute;left:12px;bottom:120px;display:flex;flex-direction:column;gap:4px;max-width:340px}
+.chat-msg{background:rgba(0,0,0,.6);padding:4px 8px;border-radius:8px;font-size:13px;animation:fadein .2s}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}}
+#chat-input-row{position:absolute;left:12px;bottom:86px;background:rgba(0,0,0,.7);border:1px solid #ffe14d;padding:6px 10px;border-radius:10px;display:flex;gap:6px;pointer-events:auto}
+#chat-input{background:transparent;border:none;color:#fff;outline:none;width:280px}
+#toast-root{position:absolute;top:70px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center}
+.toast{background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #ffe14d66;padding:8px 14px;border-radius:12px;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.5);animation:fadein .25s}
+#damage-vignette{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 120px 40px rgba(255,0,0,.0);transition:box-shadow .2s}
+#damage-vignette.hit{box-shadow:inset 0 0 140px 60px rgba(255,0,0,.55)}
 
-#joystick-knob {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 50px;
-    height: 50px;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-}
+/* menus */
+#menu,#coop-modal,#death-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,20,40,.75),rgba(0,0,0,.88));z-index:50;backdrop-filter:blur(4px)}
+.menu-card{background:linear-gradient(160deg,#16213a,#0d1526);border:1px solid rgba(255,255,255,.18);border-radius:20px;padding:28px 30px;max-width:560px;width:92vw;box-shadow:0 20px 80px rgba(0,0,0,.6);text-align:center;max-height:92vh;overflow:auto}
+.menu-card.small{max-width:420px}
+.menu-card h1{margin:0;font-size:42px;letter-spacing:2px;background:linear-gradient(90deg,#7CFC00,#ffe14d,#55ccff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.subtitle{opacity:.8;margin:6px 0 16px}
+.menu-row{display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0}
+.menu-row label{font-size:13px;opacity:.8}
+.menu-row input,.menu-row select{background:#0b1322;border:1px solid #ffffff33;color:#fff;border-radius:8px;padding:8px 10px;font-size:14px}
+.menu-row.two button{flex:1}
+button{background:linear-gradient(180deg,#3b82f6,#1d4ed8);border:none;color:#fff;padding:10px 16px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px}
+button:hover{filter:brightness(1.15)}
+#btn-play{background:linear-gradient(180deg,#22c55e,#15803d);font-size:18px}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px;font-size:12px}
+.menu-grid input[type=range]{width:100%}
+.chk{display:flex;gap:6px;align-items:center}
+#howto{margin-top:12px;text-align:left;font-size:13px;line-height:1.7;background:rgba(255,255,255,.06);padding:10px 12px;border-radius:10px}
+.menu-foot{margin-top:12px;font-size:11px;opacity:.5}
 
-#touch-buttons {
-    position: absolute;
-    z-index: 95;
-    bottom: 50px;
-    right: 30px;
-    display: flex;
-    gap: 15px;
-    align-items: flex-end;
-    pointer-events: auto;
-}
-
-.touch-btn {
-    width: 60px;
-    height: 60px;
-    background: rgba(255, 255, 255, 0.2);
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    border-radius: 50%;
-    color: white;
-    font-size: 24px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
-    touch-action: manipulation;
-}
-
-.touch-btn:active {
-    background: rgba(255, 255, 255, 0.5);
-    transform: scale(0.95);
-}
-
-#touch-look-zone {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 50%;
-    /* Right half of the screen for looking */
-    height: 100%;
-    z-index: 90;
-    /* Behind buttons */
-    pointer-events: auto;
-    touch-action: none;
-}
-
-#btn-toggle-touch {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 40px;
-    height: 40px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid white;
-    border-radius: 5px;
-    color: white;
-    font-size: 20px;
-    z-index: 200;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
+/* touch */
+#btn-toggle-touch{position:fixed;top:10px;right:10px;width:40px;height:40px;background:rgba(0,0,0,.5);border:1px solid #fff;border-radius:8px;color:#fff;font-size:20px;z-index:200;cursor:pointer}
+#touch-controls{position:fixed;inset:0;pointer-events:none;z-index:100}
+#joystick-zone{position:absolute;bottom:90px;left:30px;width:120px;height:120px;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.3);border-radius:50%;pointer-events:auto;touch-action:none}
+#joystick-knob{position:absolute;top:50%;left:50%;width:50px;height:50px;background:rgba(255,255,255,.5);border-radius:50%;transform:translate(-50%,-50%)}
+#touch-buttons{position:absolute;bottom:90px;right:20px;display:flex;gap:10px;pointer-events:auto}
+.touch-btn{width:58px;height:58px;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.5);border-radius:50%;font-size:24px;display:flex;justify-content:center;align-items:center}
+#touch-look-zone{position:absolute;top:0;right:0;width:50%;height:100%;pointer-events:auto;touch-action:none}
+@media(max-width:700px){#hint{display:none}.menu-grid{grid-template-columns:1fr 1fr}#minimap{width:88px;height:88px}.block-slot{width:40px;height:40px}}

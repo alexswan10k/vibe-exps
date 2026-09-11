@@ -4,9 +4,14 @@
 // cat: basics | tools | blocks | food — used for picker filters. desc: 1-line usage hint.
 const L = 5, P = 7, C = 16, S = 101, K = 102, G = 103;
 const N = 122, D = 123, W = 105, A = 115;
+const PL = 29, SA = 4, SS = 24, RD = 36;
+const EM = 144, FH = 142;
 
 export const SHAPED_CLIENT = [
   { id: "planks", name: "Oak Planks ×4", needsTable: false, cat: "basics", desc: "logs → building blocks", out: { id: 7, n: 4 }, pat: [L, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "pine_planks", name: "Pine Planks ×4", needsTable: false, cat: "basics", desc: "pine logs → building blocks", out: { id: 7, n: 4 }, pat: [PL, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "sandstone", name: "Sandstone ×4", needsTable: false, cat: "blocks", desc: "2×2 sand, desert building", out: { id: 24, n: 4 }, pat: [SA, SA, 0, SA, SA, 0, 0, 0, 0] },
+  { id: "reed_sticks", name: "Sticks ×2", needsTable: false, cat: "basics", desc: "a reed → tool handles", out: { id: 101, n: 2 }, pat: [RD, 0, 0, 0, 0, 0, 0, 0, 0] },
   { id: "sticks", name: "Sticks ×4", needsTable: false, cat: "basics", desc: "handles for every tool", out: { id: 101, n: 4 }, pat: [P, 0, 0, P, 0, 0, 0, 0, 0] },
   { id: "table", name: "Crafting Table", needsTable: false, cat: "blocks", desc: "unlocks 3×3 recipes nearby", out: { id: 13, n: 1 }, pat: [P, P, 0, P, P, 0, 0, 0, 0] },
   { id: "torch", name: "Torches ×4", needsTable: false, cat: "blocks", desc: "light vs night zombies", out: { id: 15, n: 4 }, pat: [K, 0, 0, S, 0, 0, 0, 0, 0] },
@@ -36,6 +41,15 @@ export const SHAPED_CLIENT = [
   { id: "ladder", name: "Ladder ×3", needsTable: true, cat: "blocks", desc: "climb with Space", out: { id: 22, n: 3 }, pat: [S, 0, S, S, S, S, S, 0, S] },
   { id: "bed", name: "Bed", needsTable: true, cat: "blocks", desc: "right-click to set spawn", out: { id: 23, n: 1 }, pat: [P, P, P, W, W, W, 0, 0, 0] },
   { id: "golden_apple", name: "Golden Apple", needsTable: true, cat: "food", desc: "full heal +10 hunger", out: { id: 136, n: 1 }, pat: [N, N, N, N, A, N, N, N, N] },
+  { id: "tnt", name: "TNT ×2", needsTable: true, cat: "blocks", desc: "boom! F to ignite placed TNT", out: { id: 37, n: 2 }, pat: [SA, K, SA, K, SA, K, SA, K, SA] },
+  { id: "lamp", name: "Lamp ×4", needsTable: true, cat: "blocks", desc: "steady glow, lights like a torch", out: { id: 39, n: 4 }, pat: [17, 17, 17, 17, 15, 17, 17, 17, 17] },
+  { id: "wool_string", name: "Wool", needsTable: false, cat: "basics", desc: "spider string → sheep-free wool", out: { id: 105, n: 1 }, pat: [138, 138, 0, 138, 138, 0, 0, 0, 0] },
+  { id: "bone_sticks", name: "Sticks ×6", needsTable: false, cat: "basics", desc: "skeleton bones → handles", out: { id: 101, n: 6 }, pat: [137, 0, 0, 137, 0, 0, 0, 0, 0] },
+  { id: "bone_torch", name: "Torches ×4", needsTable: false, cat: "blocks", desc: "bone + stick torches", out: { id: 15, n: 4 }, pat: [137, 0, 0, S, 0, 0, 0, 0, 0] },
+  { id: "fishing_rod", name: "Fishing Rod", needsTable: true, cat: "tools", desc: "catch fish near water (R)", out: { id: 141, n: 1 }, pat: [0, 0, S, 0, S, 138, S, 0, 138] },
+  { id: "compass", name: "Compass", needsTable: true, cat: "tools", desc: "points home… (hold it)", out: { id: 145, n: 1 }, pat: [0, G, 0, G, K, G, 0, G, 0] },
+  { id: "emerald_block", name: "Emerald Block", needsTable: true, cat: "blocks", desc: "3×3 emeralds, store wealth", out: { id: 42, n: 1 }, pat: [EM, EM, EM, EM, EM, EM, EM, EM, EM] },
+  { id: "emerald_split", name: "Emerald ×9", needsTable: false, cat: "basics", desc: "block → 9 emeralds", out: { id: 144, n: 9 }, pat: [42, 0, 0, 0, 0, 0, 0, 0, 0] },
 ];
 
 /** Furnace cheat-sheet for the picker (mirrors server SMELT_RECIPES). */
@@ -43,7 +57,9 @@ export const SMELT_CLIENT = [
   { inId: 12, inName: "iron ore", fuel: "coal", outId: 103, outName: "iron ingot" },
   { inId: 104, inName: "raw pork", fuel: "coal", outId: 107, outName: "cooked pork" },
   { inId: 4, inName: "sand", fuel: "coal", outId: 17, outName: "glass" },
+  { inId: 26, inName: "clay", fuel: "coal", outId: 27, outName: "brick ×4" },
   { inId: 18, inName: "gold ore", fuel: "coal", outId: 122, outName: "gold ingot" },
   { inId: 132, inName: "raw beef", fuel: "coal", outId: 133, outName: "steak" },
   { inId: 134, inName: "raw chicken", fuel: "coal", outId: 135, outName: "roast chicken" },
+  { inId: 142, inName: "fish", fuel: "coal", outId: 143, outName: "cooked fish" },
 ];

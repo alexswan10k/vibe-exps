@@ -90,6 +90,7 @@ export class Net {
   setBed(x, y, z) { this.send({ t: "setBed", x, y, z }); }
   smelt(action, x, y, z) { this.send({ t: "smelt", action, x, y, z }); }
   attackMob(id, weapon) { this.send({ t: "attackMob", id, weapon }); }
+  ignite(x, y, z) { this.send({ t: "ignite", x, y, z }); }
   chat(msg) { this.send({ t: "chat", msg }); }
   sendChat(msg) { this.send({ t: "chat", msg }); }
   pong(now) { this.send({ t: "pong", now: now ?? Date.now() }); }
@@ -97,6 +98,10 @@ export class Net {
   eat(slot) { this.send({ t: "eat", slot }); }
   fall(dmg) { this.send({ t: "fall", dmg }); }
   moveItem(from, to) { this.send({ t: "moveItem", from, to }); }
+  fish() { this.send({ t: "fish" }); }
+  tame(id) { this.send({ t: "tame", id }); }
+  askTrade(id) { this.send({ t: "askTrade", id }); }
+  trade(id, slot) { this.send({ t: "trade", id, slot }); }
 }
 
 // Legacy HTTP-poll transport for devices without working websockets.
@@ -232,6 +237,7 @@ export class PollNet {
   setBed(x, y, z) { this.send({ t: "setBed", x, y, z }); }
   smelt(action, x, y, z) { this.send({ t: "smelt", action, x, y, z }); }
   attackMob(id, weapon) { this.send({ t: "attackMob", id, weapon }); }
+  ignite(x, y, z) { this.send({ t: "ignite", x, y, z }); }
   chat(msg) { this.send({ t: "chat", msg }); }
   sendChat(msg) { this.send({ t: "chat", msg }); }
   pong(now) { this.send({ t: "pong", now: now ?? Date.now() }); }
@@ -239,4 +245,8 @@ export class PollNet {
   eat(slot) { this.send({ t: "eat", slot }); }
   fall(dmg) { this.send({ t: "fall", dmg }); }
   moveItem(from, to) { this.send({ t: "moveItem", from, to }); }
+  fish() { this.send({ t: "fish" }); }
+  tame(id) { this.send({ t: "tame", id }); }
+  askTrade(id) { this.send({ t: "askTrade", id }); }
+  trade(id, slot) { this.send({ t: "trade", id, slot }); }
 }

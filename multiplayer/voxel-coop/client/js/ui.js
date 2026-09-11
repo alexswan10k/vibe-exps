@@ -37,6 +37,8 @@ export class UI {
     this.onRespawn = null;
     this.  onEat = null;
     this.onMoveItem = null;
+    this.onTrade = null; // (villagerId, slot) => void — wired in main.js to net.trade
+    this.tradeId = null;
     this._hintToken = 0;
     this.buildSlots();
     this.bindKeys();
@@ -76,6 +78,7 @@ export class UI {
     this.el("craft-result").addEventListener("click", () => {
       if (this.gridResult?.id) this.onCraftTake?.();
     });
+    this.el("trade-close")?.addEventListener("click", () => this.hideTrades());
     this.buildBook();
   }
 
@@ -301,6 +304,7 @@ export class UI {
       if (e.code === "KeyE") this.toggleInv();
       if (e.code === "Escape" || e.key === "Escape") {
         if (this.invOpen) this.toggleInv(false);
+        if (this.el("trade-modal")?.style.display !== "none") this.hideTrades(false);
       }
       if (e.code === "KeyH") this.toggleHelp();
       if (e.code === "KeyG") {
@@ -464,6 +468,52 @@ export class UI {
     c.classList.remove("hit");
     void c.offsetWidth; // restart animation
     c.classList.add("hit");
+  }
+
+  /** Villager trade modal. offers: [{give:{id,n}, get:{id,n}}]. */
+  showTrades(villagerId, offers) {
+    this.tradeId = villagerId;
+    const modal = this.el("trade-modal");
+    const list = this.el("trade-list");
+    if (!modal || !list) return;
+    list.innerHTML = "";
+    for (let i = 0; i < (offers ?? []).length; i++) {
+      const o = offers[i] ?? {};
+      const row = document.createElement("div");
+      row.className = "trade-row";
+      const giveBg = o.give?.id ? `background-image:url(${itemIconURL(o.give.id)})` : "background:#222";
+      const getBg = o.get?.id ? `background-image:url(${itemIconURL(o.get.id)})` : "background:#222";
+      const giveName = iconFor(o.give?.id)?.name ?? "?";
+      const getName = iconFor(o.get?.id)?.name ?? "?";
+      row.innerHTML = `<div class="ticon" style="${giveBg}"></div>` +
+        `<span class="tamt">${giveName} ×${o.give?.n ?? 1}</span>` +
+        `<span class="tarrow">→</span>` +
+        `<div class="ticon" style="${getBg}"></div>` +
+        `<span class="tamt">${getName} ×${o.get?.n ?? 1}</span>`;
+      const btn = document.createElement("button");
+      btn.textContent = "BUY";
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.onTrade?.(this.tradeId, i);
+      });
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+    if (!(offers ?? []).length) list.textContent = "no trades — try another villager";
+    modal.style.display = "flex";
+    // pointer lock must go so the cursor can click BUY
+    this.releaseLock?.();
+  }
+
+  hideTrades(relock = true) {
+    const modal = this.el("trade-modal");
+    if (modal) modal.style.display = "none";
+    this.tradeId = null;
+    if (relock) this.requestLock?.();
+  }
+
+  tradeOpen() {
+    return this.el("trade-modal")?.style.display !== "none";
   }
 
   breakProgress(fracOrNull) {

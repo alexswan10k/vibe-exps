@@ -69,6 +69,57 @@ function paintWool(g) {
   R(g, 4, 5, 2, 2, "#ffffff"); R(g, 9, 8, 2, 2, "#cfcfcf"); R(g, 6, 9, 3, 2, "#ffffff");
 }
 function paintFeather(g) { diag(g, 3, 12, 9, 1, "#cccccc"); diag(g, 5, 4, 6, 3, "#f4f4f4"); R(g, 10, 2, 3, 3, "#ffffff"); }
+function paintBone(g) {
+  R(g, 3, 6, 10, 3, "#e8e4d8"); R(g, 3, 4, 3, 3, "#e8e4d8"); R(g, 10, 9, 3, 3, "#e8e4d8");
+  R(g, 3, 6, 10, 1, "#ffffff"); R(g, 4, 5, 1, 1, "#ffffff"); R(g, 11, 9, 1, 1, "#cfcabb");
+}
+function paintString(g) {
+  g.fillStyle = "#e8e8e8";
+  for (let i = 0; i < 5; i++) { g.fillRect(3 + i * 2, 3 + (i % 2), 2, 9); }
+  R(g, 3, 3, 10, 1, "#ffffff");
+}
+function paintRod(g) {
+  diag(g, 2, 12, 9, 2, "#8a5f30"); // wooden handle diagonal
+  diag(g, 2, 12, 9, 1, "#a97c46");
+  R(g, 10, 2, 1, 9, "#e8e8e8"); // string curve (right column)
+  R(g, 9, 2, 3, 1, "#ffffff");
+  R(g, 9, 11, 2, 2, "#888888"); // hook
+  R(g, 9, 11, 1, 3, "#888888");
+  R(g, 9, 13, 2, 1, "#d8d8d8");
+}
+function paintFish(g) {
+  R(g, 2, 6, 9, 5, "#7a9aa8"); // blue-grey body
+  R(g, 2, 6, 9, 1, "#b8d0d8");
+  R(g, 2, 10, 9, 1, "#5a7a88");
+  R(g, 11, 5, 3, 7, "#5a7a88"); // tail
+  R(g, 12, 6, 2, 5, "#7a9aa8");
+  R(g, 4, 7, 2, 2, "#141414"); // eye
+  R(g, 4, 7, 1, 1, "#ffffff");
+}
+function paintCookedFish(g) {
+  R(g, 2, 6, 9, 5, "#c07838"); // orange-brown recolor
+  R(g, 2, 6, 9, 1, "#e0a058");
+  R(g, 2, 10, 9, 1, "#7a4a1a");
+  R(g, 11, 5, 3, 7, "#7a4a1a"); // tail
+  R(g, 12, 6, 2, 5, "#c07838");
+  R(g, 4, 7, 2, 2, "#3a2010"); // eye
+}
+function paintEmerald(g) {
+  R(g, 5, 2, 6, 12, "#3fe07a"); // green gem, like diamond painter
+  R(g, 5, 2, 6, 2, "#d0ffe0");
+  R(g, 3, 5, 10, 4, "#2ac060");
+  R(g, 5, 9, 6, 5, "#1a9050");
+  R(g, 6, 5, 2, 3, "#ffffff");
+}
+function paintCompass(g) {
+  R(g, 4, 2, 8, 12, "#888888"); // grey ring
+  R(g, 5, 3, 6, 10, "#1a1a1a"); // face
+  R(g, 6, 4, 4, 8, "#f4f4f4");
+  R(g, 7, 4, 2, 4, "#d42a2a"); // red needle (north)
+  R(g, 7, 8, 2, 4, "#888888"); // tail
+  R(g, 7, 7, 2, 2, "#141414"); // pin
+  R(g, 7, 7, 1, 1, "#ffffff");
+}
 
 function paintHandle(g) { diag(g, 3, 12, 9, 2, "#8a5f30"); }
 function paintPick(g, head) {
@@ -109,11 +160,14 @@ const PAINTERS = {
   130: (g) => paintShovel(g, "#f4c20d"), 131: (g) => paintShovel(g, "#5ff2e0"),
   132: paintBeef, 133: paintSteak, 134: paintRawChicken, 135: paintCookedChicken,
   136: paintGoldenApple,
+  137: paintBone, 138: paintString,
+  141: paintRod, 142: paintFish, 143: paintCookedFish, 144: paintEmerald,
+  145: paintCompass,
 };
 
 export function itemIconURL(id) {
   if (!id) return "";
-  if (id >= 1 && id <= 23) return blockIconURL(id);
+  if (id >= 1 && id <= 39) return blockIconURL(id);
   const hit = cache.get(id);
   if (hit) return hit;
   const paint = PAINTERS[id];

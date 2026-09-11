@@ -12,6 +12,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #hint { position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
   font-size: 13px; background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 6px;
   min-height: 1em; }
+#minimap { position: fixed; top: 8px; right: 8px; width: 132px; height: 132px;
+  border: 2px solid rgba(255,255,255,.4); border-radius: 10px; background: #06121f;
+  image-rendering: pixelated; z-index: 5; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
 #vitals { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   font-size: 18px; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; }
 #hotbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
@@ -201,3 +204,37 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
   border-radius: 6px; padding: 2px 6px; cursor: pointer; font-size: 12px; }
 .book-row .acts .fill:hover { color: #fff; border-color: #888; }
 #book-smelt { font-size: 12px; opacity: .7; margin-top: 6px; line-height: 1.6; }
+
+/* ---- toast banners (achievements / server events) ---- */
+#toast { position: fixed; top: 44px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  z-index: 9; pointer-events: none; }
+.toast-msg { background: rgba(20,16,4,.88); border: 2px solid #ffd23d; color: #ffe9a8;
+  padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 700;
+  text-shadow: 1px 1px 0 #000; box-shadow: 0 0 14px rgba(255,210,61,.5);
+  animation: toastfade 4s ease-out forwards; white-space: nowrap; max-width: 90vw;
+  overflow: hidden; text-overflow: ellipsis; }
+@keyframes toastfade { 0% { opacity: 0; transform: translateY(-8px); }
+  10% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---- villager trade modal (reuses inventory overlay look) ---- */
+#trade-modal { position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center; z-index: 8; }
+.trade-panel { background: #1c1c22; border-radius: 10px; padding: 16px 20px;
+  width: min(520px, 94vw); max-height: 86vh; overflow-y: auto; }
+.trade-panel h2 { margin: 0 0 10px; font-size: 17px; display: flex;
+  justify-content: space-between; align-items: center; }
+.trade-panel h2 button { background: #2a2a33; color: #fff; border: 1px solid #555;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 14px; }
+.trade-panel h2 button:hover { border-color: #888; }
+#trade-list { display: flex; flex-direction: column; gap: 8px; }
+.trade-row { display: flex; align-items: center; gap: 8px; background: #2a2a33;
+  border: 1px solid #555; border-radius: 6px; padding: 6px 8px; }
+.trade-row .ticon { width: 34px; height: 34px; background-size: cover;
+  image-rendering: pixelated; border-radius: 4px; flex: none; background-color: #101014; }
+.trade-row .tamt { font-size: 12px; }
+.trade-row .tarrow { opacity: .6; }
+.trade-row button { margin-left: auto; flex: none; background: #55aa35; color: #fff;
+  border: none; border-radius: 6px; padding: 6px 14px; font-weight: 700;
+  cursor: pointer; font-size: 13px; }
+.trade-row button:hover { background: #63bd40; }

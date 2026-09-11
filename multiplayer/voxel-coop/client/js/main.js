@@ -1,5 +1,5 @@
 // voxel-coop client entry: scene, networking, chunk streaming, mining, day/night.
-import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, resolveServerUrl, httpBase } from "./config.js";
+import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, WALK_THROUGH, resolveServerUrl, httpBase } from "./config.js";
 import { Net, PollNet } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
@@ -9,6 +9,7 @@ import { CrackOverlay, Particles } from "./fx.js";
 import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
+import { Minimap } from "./minimap.js";
 
 const RENDER_DIST = 6;
 const UNLOAD_DIST = 8;
@@ -16,12 +17,16 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- three.js setup ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 40, 150);
+scene.background = new THREE.Color(0x3e9ed6);
+scene.fog = new THREE.Fog(0x3e9ed6, 40, 150);
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+// sRGB output: textures are authored in sRGB and decoded on upload, so the
+// framebuffer must re-encode — otherwise mids crush (dark everything) while
+// bright blocks still clip. Light levels below are tuned for this pipeline.
+renderer.outputEncoding = THREE.sRGBEncoding;
 // real-time shadows: single 1024 cascade glued to the player (see applyTime).
 // cheap enough on desktop; auto-off on touch / legacy poll mode, P toggles.
 renderer.shadowMap.enabled = true;
@@ -61,25 +66,79 @@ function setShadows(on) {
   ui.hint(on ? "shadows on" : "shadows off (faster)");
 }
 
-// pooled torch lights: only the nearest few get a real light (perf)
-const TORCH_LIGHTS = 6;
+// pooled torch lights + flame glow sprites. Baked flood-fill in world.js
+// guarantees every torch tints its walls (no pop-in at the pool edge); the
+// pool adds live flicker + speculars where the eye actually is.
+const TORCH_LIGHTS = 12;
+const TORCH_DIST = 22;
 const torchPool = [];
-for (let i = 0; i < TORCH_LIGHTS; i++) {
-  const l = new THREE.PointLight(0xffa845, 0, 14, 2);
-  scene.add(l);
-  torchPool.push(l);
+function makeFlameTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, "rgba(255,240,200,1)");
+  grad.addColorStop(0.25, "rgba(255,190,90,0.85)");
+  grad.addColorStop(0.55, "rgba(255,120,30,0.28)");
+  grad.addColorStop(1, "rgba(255,90,10,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  return t;
 }
-function updateTorchLights() {
-  const near = world.nearestTorches(player.pos, TORCH_LIGHTS, 26);
+const flameTex = makeFlameTexture();
+for (let i = 0; i < TORCH_LIGHTS; i++) {
+  // modest intensity + tight decay: a warm pool near the flame, not a
+  // nuclear glow — the baked flood-fill already carries torchlight further
+  const l = new THREE.PointLight(0xffa845, 0, TORCH_DIST, 2);
+  scene.add(l);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flameTex, transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  }));
+  s.scale.set(1.1, 1.1, 1);
+  scene.add(s);
+  torchPool.push({ light: l, sprite: s });
+}
+// dedicated hand light: carrying a torch lights the way like a lantern
+const heldLight = new THREE.PointLight(0xffb45e, 0, 17, 2);
+scene.add(heldLight);
+let cachedNear = [];
+let lastTorchSearch = 0;
+function updateTorchLights(now) {
+  // re-search nearest infrequently (sort over all torches), flicker every frame
+  if (now - lastTorchSearch > 250) {
+    lastTorchSearch = now;
+    cachedNear = world.nearestTorches(player.pos, TORCH_LIGHTS, 34);
+  }
   for (let i = 0; i < TORCH_LIGHTS; i++) {
-    if (i < near.length) {
-      torchPool[i].position.set(near[i][0], near[i][1], near[i][2]);
-      // flicker
-      torchPool[i].intensity = 1.0 + Math.sin(performance.now() / 130 + i * 2.1) * 0.12;
+    const p = torchPool[i];
+    if (i < cachedNear.length) {
+      p.light.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
+      p.sprite.position.copy(p.light.position);
+      const f = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
+      p.light.intensity = 1.1 + f;
+      p.sprite.material.opacity = 0.75 + f * 0.9;
+      const s = 1.0 + f * 0.35;
+      p.sprite.scale.set(s, s, 1);
+      p.sprite.visible = true;
     } else {
-      torchPool[i].intensity = 0;
+      p.light.intensity = 0;
+      p.sprite.visible = false;
     }
   }
+  // held torch lantern
+  try {
+    const held = window.voxUI?.heldItem?.();
+    const eye = player.eye();
+    if (held?.id === B.TORCH && !dead) {
+      const d = player.lookDir();
+      heldLight.position.set(eye.x + d.x * 0.6, eye.y - 0.15, eye.z + d.z * 0.6);
+      heldLight.intensity = 1.0 + Math.sin(now / 120) * 0.1 + Math.sin(now / 43) * 0.05;
+    } else {
+      heldLight.intensity = 0;
+    }
+  } catch { /* UI not ready yet */ }
 }
 
 const world = new WorldClient(scene, makeMaterials());
@@ -117,6 +176,23 @@ const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
 stars.renderOrder = -10;
 stars.frustumCulled = false;
 scene.add(stars);
+// rain: one Points cloud recycled around the camera, visible in storms
+const RAIN_N = 700;
+const rainGeo = new THREE.BufferGeometry();
+const rainPos = new Float32Array(RAIN_N * 3);
+for (let i = 0; i < RAIN_N; i++) {
+  rainPos[i * 3] = (Math.random() - 0.5) * 40;
+  rainPos[i * 3 + 1] = Math.random() * 24;
+  rainPos[i * 3 + 2] = (Math.random() - 0.5) * 40;
+}
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+const rainPts = new THREE.Points(rainGeo, new THREE.PointsMaterial({
+  color: 0x9db8dd, size: 0.12, transparent: true, opacity: 0.7,
+  depthWrite: false, fog: false,
+}));
+rainPts.frustumCulled = false;
+rainPts.visible = false;
+scene.add(rainPts);
 window.voxSky = { sunDisc, sunGlow, moonDisc, stars }; // handy for screenshots/tests
 const player = new Player(camera, renderer.domElement);
 player.onFallDamage = (dmg) => net.fall(dmg);
@@ -129,13 +205,17 @@ const BREAK_COLORS = {
   6: 0x228b22, 7: 0x9c6f34, 8: 0x1e1e1e, 9: 0xeeeeee, 11: 0x555555,
   12: 0xc08a5a, 13: 0x8a5a20, 14: 0x6b6b6e, 15: 0xffcf4d, 16: 0x737373,
   17: 0xcfe4ec, 18: 0xf4c20d, 19: 0x5ff2e0, 20: 0x9c6f34, 21: 0x8c8c90,
-  22: 0x8a5f30, 23: 0xc22f2f,
+  22: 0x8a5f30, 23: 0xc22f2f, 24: 0xd6c48c, 25: 0x3f8f38, 26: 0x9ea6b5,
+  27: 0x9e4030, 28: 0x857c72, 29: 0x5a3a1a, 30: 0x1a5230, 31: 0x4da64a,
+  32: 0xd42a2a, 33: 0xf2d024, 34: 0xc22f2f, 35: 0x7a5a38, 36: 0x6bad4d,
+  37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8,
 };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
 }
 const entities = new Entities(scene);
 const ui = new UI();
+const minimap = new Minimap();
 scene.add(camera); // the held-item viewmodel rides on the camera
 const hand = new Hand(camera, world.materials);
 window.voxHand = hand; // handy for screenshots/tests
@@ -191,6 +271,8 @@ player.onLockChange = (locked) => {
 
 let myId = -1;
 let serverTime = 0.25;
+let serverRain = 0;
+let shake = 0; // explosion screenshake, decays in frame()
 let dead = false;
 let pendingChunks = new Set();
 let lastStream = 0;
@@ -202,6 +284,20 @@ function clearBreak() {
   crack.hide();
 }
 let spawnPos = [0.5, 30, 0.5];
+let mapMarkers = null; // latest {t:"markers", spawn, home?, bed?} from the server
+let lastFish = 0; // client-side fishing cooldown timestamp (ms)
+
+// achievement / event banner: stacked gold-bordered toasts, max 3, fade 4s (CSS)
+function showToast(text) {
+  const box = $("toast");
+  if (!box) return;
+  const d = document.createElement("div");
+  d.className = "toast-msg";
+  d.textContent = text;
+  box.appendChild(d);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
+  setTimeout(() => d.remove(), 4100);
+}
 
 function decodeRLE(rle) {
   const out = new Uint8Array(CHUNK * WORLD_H * CHUNK);
@@ -213,19 +309,25 @@ function decodeRLE(rle) {
   return out;
 }
 
-// ---------- day/night ----------
-function applyTime(t) {
+// ---------- day/night + weather ----------
+function applyTime(t, rain = 0) {
   serverTime = t;
+  serverRain = rain;
   // t: 0 = sunrise... map to sun angle
   const ang = (t - 0.25) * Math.PI * 2; // 0.25 -> morning
   const elev = Math.sin(ang);
   const day = Math.max(0, Math.min(1, elev * 2 + 0.25));
+  const gloom = Math.min(1, rain * 0.85); // storms eat the sun
+  const lit = day * (1 - gloom * 0.8);
   const night = 1 - day;
-  const sky = new THREE.Color(0x87ceeb).lerp(new THREE.Color(0x060913), night * 0.92);
+  const sky = new THREE.Color(0x3e9ed6).lerp(new THREE.Color(0x060913), Math.max(night * 0.92, gloom * 0.55));
+  if (gloom > 0.05) sky.lerp(new THREE.Color(0x4a5560), gloom * 0.45);
   scene.background = sky;
   scene.fog.color.copy(sky);
-  ambient.intensity = 0.65 * day + 0.18;
-  sun.intensity = 0.75 * Math.max(0, day);
+  scene.fog.near = 40 - gloom * 12;
+  scene.fog.far = 150 - gloom * 55;
+  ambient.intensity = 0.55 * lit + 0.04;
+  sun.intensity = 0.55 * Math.max(0, lit);
   sun.position.set(
     player.pos.x + Math.cos(ang) * 60,
     Math.max(8, elev * 80),
@@ -262,7 +364,7 @@ function streamChunks() {
       }
     }
   }
-  // unload far chunks so long walks don't leak meshes (nearest 6 torch lights unaffected)
+  // unload far chunks so long walks don't leak meshes (nearest torch lights unaffected)
   for (const k of [...world.chunks.keys()]) {
     const [cx, cz] = k.split(",").map(Number);
     if (Math.hypot(cx - pcx, cz - pcz) > UNLOAD_DIST) {
@@ -277,7 +379,7 @@ function breakTime(block, heldId) {
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
   const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21].includes(block);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42].includes(block);
   if (isStone) {
     // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
     if (mult <= 1) return base * 3.3;
@@ -349,7 +451,15 @@ addEventListener("mouseup", (e) => {
 addEventListener("contextmenu", (e) => e.preventDefault());
 
 function doPlace() {
-  const hit = world.raycast(player.eye(), player.lookDir(), 6);
+  const eye = player.eye(), dir = player.lookDir();
+  // RMB on a villager opens trades instead of placing (MC behaviour)
+  const mobId = entities.pickMob(eye, dir, 5);
+  if (mobId !== null && mobId !== undefined && entities.mobs.get(mobId)?.kind === "villager") {
+    net.askTrade(mobId);
+    ui.hint("🧑‍🌾 trading…");
+    return;
+  }
+  const hit = world.raycast(eye, dir, 6);
   if (!hit) return;
   // interactables first (MC behaviour): table opens crafting, furnace smelts, bed sets spawn
   if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
@@ -360,7 +470,10 @@ function doPlace() {
     ui.hint("select a block in hotbar (1-9) to place");
     return;
   }
-  const tx = hit.x + hit.nx, ty = hit.y + hit.ny, tz = hit.z + hit.nz;
+  // flowers/grass don't block placement — the new block replaces them
+  const tx = WALK_THROUGH.has(hit.block) ? hit.x : hit.x + hit.nx;
+  const ty = WALK_THROUGH.has(hit.block) ? hit.y : hit.y + hit.ny;
+  const tz = WALK_THROUGH.has(hit.block) ? hit.z : hit.z + hit.nz;
   net.edit("place", tx, ty, tz, held.id, held.id);
   hand.swing();
   audio.place();
@@ -414,14 +527,61 @@ function tickBreaking(dt) {
   }
 }
 
-// furnace / bed interact
+// furnace / bed / TNT interact
 addEventListener("keydown", (e) => {
   if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
+  if (e.code === "KeyN" && !ui.chatFocused()) {
+    const on = minimap.toggle();
+    ui.hint(on ? "🗺 minimap on (N)" : "🗺 minimap off (N)");
+    return;
+  }
   if (e.code === "KeyP" && !ui.chatFocused()) { setShadows(!shadowsOn); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
+    if (!net?.connected) return;
+    // F on a wolf attempts to tame it (keeps furnace/bed/TNT behaviour below)
+    const mobId = entities.pickMob(player.eye(), player.lookDir(), 5);
+    if (mobId !== null && mobId !== undefined && entities.mobs.get(mobId)?.kind === "wolf") {
+      net.tame(mobId);
+      ui.hint("🐺 you offer your hand…");
+      hand.swing();
+      return;
+    }
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
-    if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
+    if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
+    else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
+  }
+  if (e.code === "KeyR" && !ui.chatFocused()) {
+    if (!net?.connected || dead || ui.invOpen) return;
+    // cast the fishing rod (item 141) — 4s client-side cooldown
+    if (!(ui.slots ?? []).some((s) => s?.id === 141)) {
+      ui.hint("need a fishing rod (craft: sticks + string)");
+      return;
+    }
+    const nowF = performance.now();
+    if (nowF - lastFish < 4000) {
+      ui.hint(`🎣 recasting… ${Math.ceil((4000 - (nowF - lastFish)) / 1000)}s`);
+      return;
+    }
+    lastFish = nowF;
+    net.fish();
+    // local bobber FX: scan the look ray for water, else block hit, else mid-air
+    const eye = player.eye(), dir = player.lookDir();
+    let bx = null, by = null, bz = null;
+    for (let t = 0.5; t <= 6; t += 0.5) {
+      if (world.get(Math.floor(eye.x + dir.x * t), Math.floor(eye.y + dir.y * t), Math.floor(eye.z + dir.z * t)) === B.WATER) {
+        bx = eye.x + dir.x * t; by = eye.y + dir.y * t; bz = eye.z + dir.z * t;
+        break;
+      }
+    }
+    if (bx === null) {
+      const hitW = world.raycast(eye, dir, 6);
+      if (hitW) { bx = hitW.x + 0.5; by = hitW.y + 0.5; bz = hitW.z + 0.5; }
+      else { bx = eye.x + dir.x * 4; by = eye.y + dir.y * 4; bz = eye.z + dir.z * 4; }
+    }
+    particles.splashBurst(bx, by, bz);
+    audio.splash();
+    hand.swing();
   }
   if (e.code === "KeyT" && !ui.chatFocused()) {
     e.preventDefault();
@@ -438,6 +598,7 @@ net.on("welcome", (m) => {
   welcomed = true;
   myId = m.id;
   serverTime = m.time;
+  serverRain = m.rain ?? 0;
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
   spawnPos = m.spawn;
   ui.status(`playing as ${$("menu-name").value || "player"}`);
@@ -512,7 +673,32 @@ net.on("vitals", (m) => {
   prevHunger = m.hunger;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
-net.on("time", (m) => applyTime(m.time));
+net.on("time", (m) => applyTime(m.time, m.rain ?? 0));
+net.on("boom", (m) => {
+  // server-authoritative crater: shake, flash, debris, thunder
+  const cx = m.x + 0.5, cy = m.y + 0.5, cz = m.z + 0.5;
+  particles.burst(cx, cy, cz, 0xff8830, 40);
+  particles.burst(cx, cy + 1, cz, 0x555555, 30);
+  particles.burst(cx, cy + 2, cz, 0xffe9a8, 20);
+  audio.boom();
+  flashDamage();
+  const d = Math.hypot(player.pos.x - cx, player.pos.y - cy, player.pos.z - cz);
+  shake = Math.min(1.2, 1.4 - d / 18);
+  ui.hint("💥 BOOM!");
+});
+net.on("reset", (m) => {
+  // server wiped the world: drop every cached chunk (seed changed, old
+  // terrain is stale), teleport to the new spawn, re-stream from scratch
+  for (const k of [...world.chunks.keys()]) {
+    const [cx, cz] = k.split(",").map(Number);
+    world.dropChunk(cx, cz);
+  }
+  pendingChunks.clear();
+  player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
+  spawnPos = m.spawn;
+  streamChunks();
+  ui.status(`fresh world — seed ${m.seed}`);
+});
 net.on("chat", (m) => ui.chatMsg(m.from, m.msg));
 net.on("ping", () => {
   // net.js auto-replies pong; lastPingMs drives a subtle status readout
@@ -523,6 +709,16 @@ net.on("smeltState", (m) => {
   ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
 });
 net.on("denied", (m) => ui.hint(m.reason));
+net.on("toast", (m) => {
+  showToast(m.text);
+  audio.pickup();
+  ui.chatMsg("server", m.text);
+});
+net.on("tradeOffers", (m) => ui.showTrades(m.id, m.offers));
+net.on("markers", (m) => {
+  mapMarkers = m;
+  window.voxMarkers = m; // read by minimap.draw()
+});
 } // attachHandlers
 
 // ---------- menu ----------
@@ -580,6 +776,7 @@ ui.onChat = (msg) => (net.sendChat ? net.sendChat(msg) : net.chat(msg));
 ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
+ui.onTrade = (id, slot) => net.trade(id, slot);
 $("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
@@ -604,14 +801,38 @@ function frame() {
     player.euler.set(player.pitch, player.yaw, 0);
     camera.quaternion.setFromEuler(player.euler);
     camera.position.copy(player.eye());
+    if (shake > 0.01) {
+      camera.position.x += (Math.random() - 0.5) * shake * 0.7;
+      camera.position.y += (Math.random() - 0.5) * shake * 0.7;
+      shake *= Math.pow(0.02, dt); // fast decay
+    }
 
     tickBreaking(dt);
 
     if (now - lastStream > 400) { lastStream = now; streamChunks(); }
+    updateTorchLights(now); // search 4Hz internally, flicker every frame
+    // rain falls around the camera; drops recycle to the top
+    rainPts.visible = serverRain > 0.05;
+    if (rainPts.visible) {
+      const ex = player.pos.x, ey = player.pos.y, ez = player.pos.z;
+      rainPts.position.set(ex, ey - 6, ez);
+      const arr = rainGeo.attributes.position.array;
+      const fall = dt * (18 + serverRain * 10);
+      for (let i = 0; i < RAIN_N; i++) {
+        arr[i * 3 + 1] -= fall;
+        if (arr[i * 3 + 1] < 0) {
+          arr[i * 3] = (Math.random() - 0.5) * 40;
+          arr[i * 3 + 1] = 22 + Math.random() * 4;
+          arr[i * 3 + 2] = (Math.random() - 0.5) * 40;
+        }
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+      rainPts.material.opacity = 0.25 + serverRain * 0.5;
+    }
     if (now - lastTorch > 500) {
       lastTorch = now;
-      updateTorchLights();
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
+      minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8);
       // unstick: if embedded in a block (stale spawn, lag), pop upward
       if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {
         player.pos.y += 1;
@@ -626,11 +847,29 @@ function frame() {
         Math.round(player.pitch * 100) / 100,
       );
     }
-    // contextual hint for furnace
+    // contextual hint: lava warning > compass > furnace / TNT
     if (!dead) {
+      const feetB = world.get(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.3), Math.floor(player.pos.z));
+      const held = ui.heldItem();
       const hit = world.raycast(player.eye(), player.lookDir(), 6);
-      if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
-      else if (hit && ui.el("hint").textContent.startsWith("F: smelt")) ui.hint("");
+      if (feetB === B.LAVA) ui.hint("🔥 LAVA!");
+      else if (held?.id === 145) {
+        // compass: 8-way arrow + distance to home (if set) else spawn
+        const home = Array.isArray(mapMarkers?.home) ? mapMarkers.home : null;
+        const target = home ?? spawnPos;
+        const dx = target[0] - player.pos.x, dz = target[2] - player.pos.z;
+        const dist = Math.round(Math.hypot(dx, dz));
+        const bearing = Math.atan2(-dx, -dz);
+        const arrows = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
+        const idx = ((Math.round((player.yaw - bearing) / (Math.PI / 4)) % 8) + 8) % 8;
+        ui.hint(`🧭 ${home ? "home" : "spawn"} ${dist}m ${arrows[idx]}`);
+      }
+      else if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
+      else if (hit?.block === B.TNT) ui.hint("🧨 F: light it — RUN!");
+      else if (hit) {
+        const t = ui.el("hint").textContent;
+        if (t.startsWith("F: smelt") || t.startsWith("🧭") || t.startsWith("🔥")) ui.hint("");
+      }
     }
   }
   entities.update(dt, camera);
@@ -657,8 +896,8 @@ function frame() {
       camera.updateProjectionMatrix();
     }
   }
-  applyTime(serverTime); // cheap enough; keeps sun glued to player
+  applyTime(serverTime, serverRain); // cheap enough; keeps sun glued to player
   renderer.render(scene, camera);
 }
-applyTime(0.25);
+applyTime(0.25, 0);
 frame();

@@ -15,6 +15,9 @@ export interface ShapedRecipe {
 
 export const SHAPED: ShapedRecipe[] = [
   { id: "planks", name: "Oak Planks ×4", needsTable: false, pat: [L, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: P, n: 4 } },
+  { id: "pine_planks", name: "Pine Planks ×4", needsTable: false, pat: [B.PINE_LOG, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: P, n: 4 } },
+  { id: "sandstone", name: "Sandstone ×4", needsTable: false, pat: [B.SAND, B.SAND, 0, B.SAND, B.SAND, 0, 0, 0, 0], out: { id: B.SANDSTONE, n: 4 } },
+  { id: "reed_sticks", name: "Sticks ×2", needsTable: false, pat: [B.REEDS, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: S, n: 2 } },
   { id: "sticks", name: "Sticks ×4", needsTable: false, pat: [P, 0, 0, P, 0, 0, 0, 0, 0], out: { id: S, n: 4 } },
   { id: "table", name: "Crafting Table", needsTable: false, pat: [P, P, 0, P, P, 0, 0, 0, 0], out: { id: B.CRAFT_TABLE, n: 1 } },
   { id: "torch", name: "Torches ×4", needsTable: false, pat: [K, 0, 0, S, 0, 0, 0, 0, 0], out: { id: B.TORCH, n: 4 } },
@@ -44,6 +47,15 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "ladder", name: "Ladder ×3", needsTable: true, pat: [S, 0, S, S, S, S, S, 0, S], out: { id: B.LADDER, n: 3 } },
   { id: "bed", name: "Bed", needsTable: true, pat: [P, P, P, W, W, W, 0, 0, 0], out: { id: B.BED, n: 1 } },
   { id: "golden_apple", name: "Golden Apple", needsTable: true, pat: [N, N, N, N, A, N, N, N, N], out: { id: I.GOLDEN_APPLE, n: 1 } },
+  { id: "tnt", name: "TNT ×2", needsTable: true, pat: [B.SAND, K, B.SAND, K, B.SAND, K, B.SAND, K, B.SAND], out: { id: B.TNT, n: 2 } },
+  { id: "lamp", name: "Lamp ×4", needsTable: true, pat: [B.GLASS, B.GLASS, B.GLASS, B.GLASS, B.TORCH, B.GLASS, B.GLASS, B.GLASS, B.GLASS], out: { id: B.LAMP, n: 4 } },
+  { id: "wool_string", name: "Wool", needsTable: false, pat: [138, 138, 0, 138, 138, 0, 0, 0, 0], out: { id: W, n: 1 } },
+  { id: "bone_sticks", name: "Sticks ×6", needsTable: false, pat: [137, 0, 0, 137, 0, 0, 0, 0, 0], out: { id: S, n: 6 } },
+  { id: "bone_torch", name: "Torches ×4", needsTable: false, pat: [137, 0, 0, S, 0, 0, 0, 0, 0], out: { id: B.TORCH, n: 4 } },
+  { id: "fishing_rod", name: "Fishing Rod", needsTable: true, pat: [0, 0, S, 0, S, I.STRING, S, 0, I.STRING], out: { id: I.FISHING_ROD, n: 1 } },
+  { id: "compass", name: "Compass", needsTable: true, pat: [0, G, 0, G, K, G, 0, G, 0], out: { id: I.COMPASS, n: 1 } },
+  { id: "emerald_block", name: "Emerald Block", needsTable: true, pat: [I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD], out: { id: B.EMERALD_BLOCK, n: 1 } },
+  { id: "emerald_split", name: "Emerald ×9", needsTable: false, pat: [B.EMERALD_BLOCK, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: I.EMERALD, n: 9 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -96,7 +108,7 @@ export function matchGrid(cells: number[], smallOnly: boolean): ShapedRecipe | n
 
 // --- inventory helpers (slots array, id 0 = empty, max stack 64, tools don't stack) ---
 export const MAX_STACK = 64;
-const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL]);
+const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS]);
 
 export function isStackable(id: number): boolean {
   return !UNSTACKABLE.has(id);
@@ -244,6 +256,24 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.LOG: return { id: B.LOG, n: 1 };
     case B.PLANKS: return { id: B.PLANKS, n: 1 };
     case B.SNOW: return { id: B.SNOW, n: 1 };
+    case B.SANDSTONE: return { id: B.SANDSTONE, n: 1 };
+    case B.CACTUS: return { id: B.CACTUS, n: 1 };
+    case B.CLAY: return { id: B.CLAY, n: 1 };
+    case B.BRICK: return { id: B.BRICK, n: 1 };
+    case B.GRAVEL: return { id: B.GRAVEL, n: 1 };
+    case B.PINE_LOG: return { id: B.PINE_LOG, n: 1 };
+    case B.PINE_LEAVES: {
+      const r = Math.random();
+      if (r < 0.05) return { id: I.APPLE, n: 1 };
+      if (r < 0.15) return { id: I.STICK, n: 1 };
+      return null;
+    }
+    case B.TALL_GRASS: return null; // whispy, nothing to take
+    case B.FLOWER_RED: return { id: B.FLOWER_RED, n: 1 };
+    case B.FLOWER_YELLOW: return { id: B.FLOWER_YELLOW, n: 1 };
+    case B.MUSHROOM_RED: return { id: B.MUSHROOM_RED, n: 1 };
+    case B.MUSHROOM_BROWN: return { id: B.MUSHROOM_BROWN, n: 1 };
+    case B.REEDS: return { id: B.REEDS, n: 1 };
     case B.COAL_ORE: return { id: I.COAL, n: 1 };
     case B.IRON_ORE: return { id: B.IRON_ORE, n: 1 }; // smelt in furnace
     case B.COBBLE: return { id: B.COBBLE, n: 1 };
@@ -254,6 +284,12 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.GOLD_ORE: return { id: B.GOLD_ORE, n: 1 }; // smelt to ingot
     case B.DIAMOND_ORE: return { id: I.DIAMOND, n: 1 };
     case B.FENCE: return { id: B.FENCE, n: 1 };
+    case B.TNT: return { id: B.TNT, n: 1 };
+    case B.OBSIDIAN: return { id: B.OBSIDIAN, n: 1 };
+    case B.LAMP: return { id: B.LAMP, n: 1 };
+    case B.LAVA: return null; // unmineable (HARDNESS Infinity)
+    case B.EMERALD_ORE: return { id: I.EMERALD, n: 1 };
+    case B.EMERALD_BLOCK: return { id: B.EMERALD_BLOCK, n: 1 };
     case B.STONE_BRICK: return { id: B.STONE_BRICK, n: 1 };
     case B.LADDER: return { id: B.LADDER, n: 1 };
     case B.BED: return { id: B.BED, n: 1 };
@@ -281,9 +317,11 @@ export const SMELT_RECIPES: Record<number, SmeltRecipe> = {
   12: { in: { 12: 1, 102: 1 }, out: { id: 103, n: 1 } }, // iron ore + coal -> iron ingot
   104: { in: { 104: 1, 102: 1 }, out: { id: 107, n: 1 } }, // raw pork + coal -> cooked pork
   4: { in: { 4: 1, 102: 1 }, out: { id: B.GLASS, n: 1 } }, // sand + coal -> glass
+  26: { in: { 26: 1, 102: 1 }, out: { id: B.BRICK, n: 4 } }, // clay + coal -> brick x4
   18: { in: { 18: 1, 102: 1 }, out: { id: 122, n: 1 } }, // gold ore + coal -> gold ingot
   132: { in: { 132: 1, 102: 1 }, out: { id: 133, n: 1 } }, // raw beef + coal -> steak
   134: { in: { 134: 1, 102: 1 }, out: { id: 135, n: 1 } }, // raw chicken + coal -> roast chicken
+  142: { in: { 142: 1, 102: 1 }, out: { id: 143, n: 1 } }, // fish + coal -> cooked fish
 };
 
 /** Look up the smelt recipe for an input item id (null = not smeltable). */
@@ -321,3 +359,12 @@ export function smeltTick(f: FurnaceState, dt: number): boolean {
 // recipe.in), then removeItems(slots, recipe.in) and store `input` on the state.
 // On smeltTick() === true: grant smeltOutput(f.input ?? 12) via giveItems.
 // See the exact snippet in the task summary. ---
+
+export const VILLAGER_TRADES: { give: { id: number; n: number }; get: { id: number; n: number } }[] = [
+  { give: { id: B.COBBLE, n: 8 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.COAL, n: 4 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.WOOL, n: 6 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.EMERALD, n: 2 }, get: { id: B.TORCH, n: 8 } },
+  { give: { id: I.EMERALD, n: 3 }, get: { id: I.COOKED_PORK, n: 4 } },
+  { give: { id: I.EMERALD, n: 5 }, get: { id: I.DIAMOND, n: 1 } },
+];
