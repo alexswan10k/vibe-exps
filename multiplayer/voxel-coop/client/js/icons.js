@@ -69,6 +69,15 @@ function paintWool(g) {
   R(g, 4, 5, 2, 2, "#ffffff"); R(g, 9, 8, 2, 2, "#cfcfcf"); R(g, 6, 9, 3, 2, "#ffffff");
 }
 function paintFeather(g) { diag(g, 3, 12, 9, 1, "#cccccc"); diag(g, 5, 4, 6, 3, "#f4f4f4"); R(g, 10, 2, 3, 3, "#ffffff"); }
+function paintBone(g) {
+  R(g, 3, 6, 10, 3, "#e8e4d8"); R(g, 3, 4, 3, 3, "#e8e4d8"); R(g, 10, 9, 3, 3, "#e8e4d8");
+  R(g, 3, 6, 10, 1, "#ffffff"); R(g, 4, 5, 1, 1, "#ffffff"); R(g, 11, 9, 1, 1, "#cfcabb");
+}
+function paintString(g) {
+  g.fillStyle = "#e8e8e8";
+  for (let i = 0; i < 5; i++) { g.fillRect(3 + i * 2, 3 + (i % 2), 2, 9); }
+  R(g, 3, 3, 10, 1, "#ffffff");
+}
 
 function paintHandle(g) { diag(g, 3, 12, 9, 2, "#8a5f30"); }
 function paintPick(g, head) {
@@ -109,11 +118,12 @@ const PAINTERS = {
   130: (g) => paintShovel(g, "#f4c20d"), 131: (g) => paintShovel(g, "#5ff2e0"),
   132: paintBeef, 133: paintSteak, 134: paintRawChicken, 135: paintCookedChicken,
   136: paintGoldenApple,
+  137: paintBone, 138: paintString,
 };
 
 export function itemIconURL(id) {
   if (!id) return "";
-  if (id >= 1 && id <= 36) return blockIconURL(id);
+  if (id >= 1 && id <= 39) return blockIconURL(id);
   const hit = cache.get(id);
   if (hit) return hit;
   const paint = PAINTERS[id];

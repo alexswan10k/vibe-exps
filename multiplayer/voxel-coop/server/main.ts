@@ -48,8 +48,8 @@ function checkChatRate(id: number): boolean {
   return true;
 }
 
-// ---- player persistence (pos + inventory + bed spawn across restarts) ----
-interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3 }
+// ---- player persistence (pos + inventory + bed/home spawns across restarts) ----
+interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3 }
 let savedPlayers: Record<string, SavedPlayer> = {};
 try {
   savedPlayers = JSON.parse(await Deno.readTextFile(SAVE_PLAYERS));
@@ -58,7 +58,7 @@ async function persistPlayers(): Promise<void> {
   try {
     const d: Record<string, SavedPlayer> = { ...savedPlayers };
     for (const pl of players.all.values()) {
-      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined };
+      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined };
     }
     await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
     await Deno.writeTextFile(SAVE_PLAYERS, JSON.stringify(d));
@@ -117,6 +117,9 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
     if (Array.isArray(saved.bed) && saved.bed.length === 3 && saved.bed.every(Number.isFinite)) {
       pl.bedSpawn = saved.bed as Vec3;
     }
+    if (Array.isArray(saved.home) && saved.home.length === 3 && saved.home.every(Number.isFinite)) {
+      pl.home = saved.home as Vec3;
+    }
   }
   console.log(`[join] ${name} (id=${pl.id}${sock ? "" : " poll"})`);
   sendInv(pl);
@@ -136,6 +139,98 @@ function leaveGame(pl: Player): void {
 }
 
 const fkey = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
+// ---- weather: rolling rain storms (clients read `rain` off the time tick) ----
+let rain = 0; // 0..1 intensity
+let rainTarget = 0;
+let rainT = 20 + Math.random() * 30; // seconds until next shift
+function tickRain(dt: number): boolean {
+  rainT -= dt;
+  if (rainT <= 0) {
+    // storm every ~4-7 min, lasting 45-90s; otherwise a dry spell
+    if (rainTarget < 0.5 && Math.random() < 0.45) {
+      rainTarget = 1;
+      rainT = 45 + Math.random() * 45;
+      broadcast({ t: "chat", from: "server", msg: "🌧 a storm rolls in — undead walk in the gloom…" });
+    } else {
+      rainTarget = 0;
+      rainT = 150 + Math.random() * 180;
+      if (rain > 0.5) broadcast({ t: "chat", from: "server", msg: "☀ the storm passes" });
+    }
+  }
+  const before = rain;
+  rain += Math.sign(rainTarget - rain) * Math.min(Math.abs(rainTarget - rain), dt / 8);
+  return Math.abs(rain - before) > 0.001;
+}
+
+// ---- TNT: lit fuses + authoritative explosions ----
+interface Fuse { x: number; y: number; z: number; at: number; by: string }
+const fuses: Fuse[] = [];
+const BLAST_R = 5;
+const BLAST_IMMUNE = new Set<number>([B.BEDROCK, B.OBSIDIAN, B.WATER]);
+
+function explode(x: number, y: number, z: number, by: string): void {
+  const r = BLAST_R;
+  const chain: Fuse[] = [];
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dz = -r; dz <= r; dz++) {
+        const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (d > r) continue;
+        const bx = x + dx, byy = y + dy, bz = z + dz;
+        if (byy < 1 || byy >= 48) continue;
+        const cur = world.get(bx, byy, bz);
+        if (cur === B.AIR || BLAST_IMMUNE.has(cur)) continue;
+        // falloff: rim blocks survive more often (jagged crater, not a sphere)
+        if (d > 2 && Math.random() < (d - 2) / r * 0.6) continue;
+        if (cur === B.TNT) {
+          world.set(bx, byy, bz, B.AIR);
+          broadcast({ t: "block", x: bx, y: byy, z: bz, block: B.AIR });
+          chain.push({ x: bx, y: byy, z: bz, at: Date.now() + 400 + Math.random() * 300, by });
+          continue;
+        }
+        if (cur === B.FURNACE) furnaces.delete(fkey(bx, byy, bz));
+        world.set(bx, byy, bz, B.AIR);
+        broadcast({ t: "block", x: bx, y: byy, z: bz, block: B.AIR });
+      }
+    }
+  }
+  for (const c of chain) fuses.push(c);
+  // hurt players with falloff (obisidian shelters work — immune blocks stay)
+  for (const pl of players.all.values()) {
+    if (pl.dead) continue;
+    const d = Math.hypot(pl.p[0] - (x + 0.5), pl.p[1] - (y + 0.5), pl.p[2] - (z + 0.5));
+    if (d < 8) {
+      const dmg = Math.max(1, Math.round(24 * (1 - d / 8)));
+      const before = pl.hp;
+      players.hurt(pl, dmg);
+      sendVitals(pl);
+      if (pl.dead && before > 0) broadcast({ t: "chat", from: "server", msg: `💥 ${pl.name} was blown up${by ? ` by ${by}` : ""}` });
+    }
+  }
+  // shred mobs near the blast
+  for (const m of [...mobs.mobs.values()]) {
+    const d = Math.hypot(m.p[0] - (x + 0.5), m.p[1] - (y + 0.5), m.p[2] - (z + 0.5));
+    if (d < 7) {
+      const alive = mobs.hurt(m.id, Math.round(40 * (1 - d / 7)));
+      if (!alive) broadcast({ t: "chat", from: "server", msg: `💥 ${by || "someone"} blew up a ${m.kind}` });
+      else broadcast({ t: "mobHit", id: m.id });
+    }
+  }
+  broadcast({ t: "boom", x, y, z, r });
+  console.log(`[boom] at ${x},${y},${z} by ${by}`);
+}
+
+function tickFuses(): void {
+  if (fuses.length === 0) return;
+  const now = Date.now();
+  for (let i = fuses.length - 1; i >= 0; i--) {
+    if (fuses[i].at <= now) {
+      const f = fuses.splice(i, 1)[0];
+      explode(f.x, f.y, f.z, f.by);
+    }
+  }
+}
 
 // ---- edit validation ----
 const lastEdit = new Map<number, number>();
@@ -241,6 +336,7 @@ function doReset(requestedSeed: number | null, by: string): void {
     pl.hunger = 20;
     pl.dead = false;
     pl.bedSpawn = null;
+    pl.home = null;
     pl.lastMove = Date.now();
     sendTo(pl, { t: "reset", seed, spawn: [...spawn] as Vec3 });
     sendInv(pl);
@@ -248,7 +344,7 @@ function doReset(requestedSeed: number | null, by: string): void {
     sendVitals(pl);
   }
   sendPlayersSnapshot();
-  broadcast({ t: "time", time: world.time });
+  broadcast({ t: "time", time: world.time, rain });
   broadcast({ t: "chat", from: "server", msg: `🌍 ${by} reset the world (seed ${seed})` });
   console.log(`[reset] by ${by}, seed=${seed}`);
 }
@@ -264,7 +360,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /time <0..1|day|night|morning> /reset [seed]" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /time <0..1|day|night|morning> /rain /reset [seed]" });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -277,6 +373,28 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       sendPlayersSnapshot();
       sendTo(pl, { t: "chat", from: "server", msg: "teleported to spawn" });
       return true;
+    case "sethome":
+      pl.home = [pl.p[0], pl.p[1], pl.p[2]];
+      void persistPlayers();
+      sendTo(pl, { t: "chat", from: "server", msg: "🏠 home set — /home to return" });
+      return true;
+    case "home": {
+      if (!pl.home) {
+        sendTo(pl, { t: "chat", from: "server", msg: "no home yet — stand somewhere nice and type /sethome" });
+        return true;
+      }
+      pl.p = [...pl.home] as Vec3;
+      pl.lastMove = Date.now();
+      sendPlayersSnapshot();
+      sendTo(pl, { t: "chat", from: "server", msg: "🏠 teleported home" });
+      return true;
+    }
+    case "rain": {
+      rainTarget = rainTarget > 0.5 ? 0 : 1;
+      rainT = rainTarget > 0.5 ? 60 : 200;
+      broadcast({ t: "chat", from: "server", msg: `${pl.name} ${rainTarget > 0.5 ? "summoned a storm 🌧" : "cleared the skies ☀"}` });
+      return true;
+    }
     case "time": {
       let v: number | null = null;
       const a = arg.toLowerCase();
@@ -292,7 +410,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
         return true;
       }
       world.time = v;
-      broadcast({ t: "time", time: world.time });
+      broadcast({ t: "time", time: world.time, rain });
       broadcast({ t: "chat", from: "server", msg: `${pl.name} set time to ${v}` });
       return true;
     }
@@ -481,6 +599,23 @@ function onMessage(pl: Player, raw: string): void {
       }
       break;
     }
+    case "ignite": {
+      // F on a placed TNT block: pull it out of the world, light a 2.5s fuse
+      if (pl.dead) break;
+      const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
+      if (![x, y, z].every(Number.isFinite) || y < 1 || y >= 48) break;
+      if (dist(pl.p, x, y, z) > 7.5) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      if (world.get(x, y, z) !== B.TNT) break;
+      if (fuses.some((f) => f.x === x && f.y === y && f.z === z)) break;
+      world.set(x, y, z, B.AIR);
+      broadcast({ t: "block", x, y, z, block: B.AIR });
+      fuses.push({ x, y, z, at: Date.now() + 2500, by: pl.name });
+      broadcast({ t: "chat", from: "server", msg: `🧨 ${pl.name} lit TNT — RUN!` });
+      break;
+    }
     case "chat": {
       if (!checkChatRate(pl.id)) {
         sendTo(pl, { t: "denied", reason: "chat too fast" });
@@ -577,7 +712,7 @@ async function handler(req: Request): Promise<Response> {
           const m = JSON.parse(data);
           if (m.t !== "hello") { socket.close(1008, "hello first"); return; }
           pl = joinGame(String(m.name || "player"), socket);
-          send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, motd: "voxel-coop 🧱" });
+          send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, rain, motd: "voxel-coop 🧱" });
         } catch { socket.close(1008, "bad hello"); }
         return;
       }
@@ -596,6 +731,7 @@ async function handler(req: Request): Promise<Response> {
       mode: mobs.peaceful ? "peaceful" : "survival",
       seed: world.seed,
       time: world.time,
+      rain,
       players: players.all.size,
       names: [...players.all.values()].map((p) => p.name),
     }));
@@ -609,7 +745,7 @@ async function handler(req: Request): Promise<Response> {
     const pl = joinGame(String(body.name || "player"), null);
     return withCors(Response.json({
       t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p,
-      time: world.time, motd: "voxel-coop 🧱 (poll mode)",
+      time: world.time, rain, motd: "voxel-coop 🧱 (poll mode)",
     }));
   }
   if (url.pathname === "/api/poll" && req.method === "POST") {
@@ -644,6 +780,8 @@ let mobT = 0, slowT = 0;
 setInterval(() => {
   const dt = 0.1;
   world.tick(dt);
+  if (tickRain(dt)) mobs.rain = rain; else mobs.rain = rain;
+  tickFuses();
   // mob damage callback routes to vitals
   const wrappers = [...players.all.values()].map((pl) => ({
     p: pl.p,
@@ -696,7 +834,7 @@ setInterval(() => {
   if (slowT >= 2 || furnaceChanged) {
     if (slowT >= 2) {
       slowT = 0;
-      broadcast({ t: "time", time: world.time });
+      broadcast({ t: "time", time: world.time, rain });
       void persistPlayers();
       // evict legacy poll clients that stopped polling
       const now = Date.now();

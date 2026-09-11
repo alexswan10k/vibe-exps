@@ -9,6 +9,7 @@ import { CrackOverlay, Particles } from "./fx.js";
 import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
+import { Minimap } from "./minimap.js";
 
 const RENDER_DIST = 6;
 const UNLOAD_DIST = 8;
@@ -175,6 +176,23 @@ const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
 stars.renderOrder = -10;
 stars.frustumCulled = false;
 scene.add(stars);
+// rain: one Points cloud recycled around the camera, visible in storms
+const RAIN_N = 700;
+const rainGeo = new THREE.BufferGeometry();
+const rainPos = new Float32Array(RAIN_N * 3);
+for (let i = 0; i < RAIN_N; i++) {
+  rainPos[i * 3] = (Math.random() - 0.5) * 40;
+  rainPos[i * 3 + 1] = Math.random() * 24;
+  rainPos[i * 3 + 2] = (Math.random() - 0.5) * 40;
+}
+rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+const rainPts = new THREE.Points(rainGeo, new THREE.PointsMaterial({
+  color: 0x9db8dd, size: 0.12, transparent: true, opacity: 0.7,
+  depthWrite: false, fog: false,
+}));
+rainPts.frustumCulled = false;
+rainPts.visible = false;
+scene.add(rainPts);
 window.voxSky = { sunDisc, sunGlow, moonDisc, stars }; // handy for screenshots/tests
 const player = new Player(camera, renderer.domElement);
 player.onFallDamage = (dmg) => net.fall(dmg);
@@ -190,12 +208,14 @@ const BREAK_COLORS = {
   22: 0x8a5f30, 23: 0xc22f2f, 24: 0xd6c48c, 25: 0x3f8f38, 26: 0x9ea6b5,
   27: 0x9e4030, 28: 0x857c72, 29: 0x5a3a1a, 30: 0x1a5230, 31: 0x4da64a,
   32: 0xd42a2a, 33: 0xf2d024, 34: 0xc22f2f, 35: 0x7a5a38, 36: 0x6bad4d,
+  37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8,
 };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
 }
 const entities = new Entities(scene);
 const ui = new UI();
+const minimap = new Minimap();
 scene.add(camera); // the held-item viewmodel rides on the camera
 const hand = new Hand(camera, world.materials);
 window.voxHand = hand; // handy for screenshots/tests
@@ -251,6 +271,8 @@ player.onLockChange = (locked) => {
 
 let myId = -1;
 let serverTime = 0.25;
+let serverRain = 0;
+let shake = 0; // explosion screenshake, decays in frame()
 let dead = false;
 let pendingChunks = new Set();
 let lastStream = 0;
@@ -273,19 +295,25 @@ function decodeRLE(rle) {
   return out;
 }
 
-// ---------- day/night ----------
-function applyTime(t) {
+// ---------- day/night + weather ----------
+function applyTime(t, rain = 0) {
   serverTime = t;
+  serverRain = rain;
   // t: 0 = sunrise... map to sun angle
   const ang = (t - 0.25) * Math.PI * 2; // 0.25 -> morning
   const elev = Math.sin(ang);
   const day = Math.max(0, Math.min(1, elev * 2 + 0.25));
+  const gloom = Math.min(1, rain * 0.85); // storms eat the sun
+  const lit = day * (1 - gloom * 0.8);
   const night = 1 - day;
-  const sky = new THREE.Color(0x3e9ed6).lerp(new THREE.Color(0x060913), night * 0.92);
+  const sky = new THREE.Color(0x3e9ed6).lerp(new THREE.Color(0x060913), Math.max(night * 0.92, gloom * 0.55));
+  if (gloom > 0.05) sky.lerp(new THREE.Color(0x4a5560), gloom * 0.45);
   scene.background = sky;
   scene.fog.color.copy(sky);
-  ambient.intensity = 0.55 * day + 0.04;
-  sun.intensity = 0.55 * Math.max(0, day);
+  scene.fog.near = 40 - gloom * 12;
+  scene.fog.far = 150 - gloom * 55;
+  ambient.intensity = 0.55 * lit + 0.04;
+  sun.intensity = 0.55 * Math.max(0, lit);
   sun.position.set(
     player.pos.x + Math.cos(ang) * 60,
     Math.max(8, elev * 80),
@@ -477,13 +505,19 @@ function tickBreaking(dt) {
   }
 }
 
-// furnace / bed interact
+// furnace / bed / TNT interact
 addEventListener("keydown", (e) => {
   if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
+  if (e.code === "KeyN" && !ui.chatFocused()) {
+    const on = minimap.toggle();
+    ui.hint(on ? "🗺 minimap on (N)" : "🗺 minimap off (N)");
+    return;
+  }
   if (e.code === "KeyP" && !ui.chatFocused()) { setShadows(!shadowsOn); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
-    if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
+    if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
+    else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
   }
   if (e.code === "KeyT" && !ui.chatFocused()) {
@@ -501,6 +535,7 @@ net.on("welcome", (m) => {
   welcomed = true;
   myId = m.id;
   serverTime = m.time;
+  serverRain = m.rain ?? 0;
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
   spawnPos = m.spawn;
   ui.status(`playing as ${$("menu-name").value || "player"}`);
@@ -575,7 +610,19 @@ net.on("vitals", (m) => {
   prevHunger = m.hunger;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
-net.on("time", (m) => applyTime(m.time));
+net.on("time", (m) => applyTime(m.time, m.rain ?? 0));
+net.on("boom", (m) => {
+  // server-authoritative crater: shake, flash, debris, thunder
+  const cx = m.x + 0.5, cy = m.y + 0.5, cz = m.z + 0.5;
+  particles.burst(cx, cy, cz, 0xff8830, 40);
+  particles.burst(cx, cy + 1, cz, 0x555555, 30);
+  particles.burst(cx, cy + 2, cz, 0xffe9a8, 20);
+  audio.boom();
+  flashDamage();
+  const d = Math.hypot(player.pos.x - cx, player.pos.y - cy, player.pos.z - cz);
+  shake = Math.min(1.2, 1.4 - d / 18);
+  ui.hint("💥 BOOM!");
+});
 net.on("reset", (m) => {
   // server wiped the world: drop every cached chunk (seed changed, old
   // terrain is stale), teleport to the new spawn, re-stream from scratch
@@ -680,14 +727,38 @@ function frame() {
     player.euler.set(player.pitch, player.yaw, 0);
     camera.quaternion.setFromEuler(player.euler);
     camera.position.copy(player.eye());
+    if (shake > 0.01) {
+      camera.position.x += (Math.random() - 0.5) * shake * 0.7;
+      camera.position.y += (Math.random() - 0.5) * shake * 0.7;
+      shake *= Math.pow(0.02, dt); // fast decay
+    }
 
     tickBreaking(dt);
 
     if (now - lastStream > 400) { lastStream = now; streamChunks(); }
     updateTorchLights(now); // search 4Hz internally, flicker every frame
+    // rain falls around the camera; drops recycle to the top
+    rainPts.visible = serverRain > 0.05;
+    if (rainPts.visible) {
+      const ex = player.pos.x, ey = player.pos.y, ez = player.pos.z;
+      rainPts.position.set(ex, ey - 6, ez);
+      const arr = rainGeo.attributes.position.array;
+      const fall = dt * (18 + serverRain * 10);
+      for (let i = 0; i < RAIN_N; i++) {
+        arr[i * 3 + 1] -= fall;
+        if (arr[i * 3 + 1] < 0) {
+          arr[i * 3] = (Math.random() - 0.5) * 40;
+          arr[i * 3 + 1] = 22 + Math.random() * 4;
+          arr[i * 3 + 2] = (Math.random() - 0.5) * 40;
+        }
+      }
+      rainGeo.attributes.position.needsUpdate = true;
+      rainPts.material.opacity = 0.25 + serverRain * 0.5;
+    }
     if (now - lastTorch > 500) {
       lastTorch = now;
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
+      minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8);
       // unstick: if embedded in a block (stale spawn, lag), pop upward
       if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {
         player.pos.y += 1;
@@ -702,10 +773,11 @@ function frame() {
         Math.round(player.pitch * 100) / 100,
       );
     }
-    // contextual hint for furnace
+    // contextual hint for furnace / TNT
     if (!dead) {
       const hit = world.raycast(player.eye(), player.lookDir(), 6);
       if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
+      else if (hit?.block === B.TNT) ui.hint("🧨 F: light it — RUN!");
       else if (hit && ui.el("hint").textContent.startsWith("F: smelt")) ui.hint("");
     }
   }
@@ -733,8 +805,8 @@ function frame() {
       camera.updateProjectionMatrix();
     }
   }
-  applyTime(serverTime); // cheap enough; keeps sun glued to player
+  applyTime(serverTime, serverRain); // cheap enough; keeps sun glued to player
   renderer.render(scene, camera);
 }
-applyTime(0.25);
+applyTime(0.25, 0);
 frame();

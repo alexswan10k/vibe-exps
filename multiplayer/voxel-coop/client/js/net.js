@@ -90,6 +90,7 @@ export class Net {
   setBed(x, y, z) { this.send({ t: "setBed", x, y, z }); }
   smelt(action, x, y, z) { this.send({ t: "smelt", action, x, y, z }); }
   attackMob(id, weapon) { this.send({ t: "attackMob", id, weapon }); }
+  ignite(x, y, z) { this.send({ t: "ignite", x, y, z }); }
   chat(msg) { this.send({ t: "chat", msg }); }
   sendChat(msg) { this.send({ t: "chat", msg }); }
   pong(now) { this.send({ t: "pong", now: now ?? Date.now() }); }
@@ -232,6 +233,7 @@ export class PollNet {
   setBed(x, y, z) { this.send({ t: "setBed", x, y, z }); }
   smelt(action, x, y, z) { this.send({ t: "smelt", action, x, y, z }); }
   attackMob(id, weapon) { this.send({ t: "attackMob", id, weapon }); }
+  ignite(x, y, z) { this.send({ t: "ignite", x, y, z }); }
   chat(msg) { this.send({ t: "chat", msg }); }
   sendChat(msg) { this.send({ t: "chat", msg }); }
   pong(now) { this.send({ t: "pong", now: now ?? Date.now() }); }

@@ -103,9 +103,26 @@ data/             world.json + players.json (gitignored saves)
 - world + inventories persist across restarts
 - touch controls for iPad: tap 📱 for joystick + drag-look + jump/mine/place/
   attack/inventory buttons (hold ⛏️ to mine, tap hotbar slots to select)
+- 🧨 TNT (sand + coal) with server-authoritative explosions: jagged craters,
+  chain-detonation, player/mob falloff damage, screenshake + thunder. Aim at
+  placed TNT and press **F** to light the 2.5s fuse — obsidian (deep crust,
+  diamond-pick only) is blast-proof, so build your bunker first
+- 🏮 lamp blocks (glass + torch): steady baked flood-fill glow + live light,
+  just like torches — light up a base without torch spam
+- new mobs: **skeletons** (fast strafers, drop bones + string), **spiders**
+  (day-neutral, leap at night, drop string), and the rare nightly **ogre**
+  boss (90 HP, 8 dmg, drops diamonds + steak). Bones → sticks/torches,
+  string → wool in the recipe book
+- 🌧 rolling rain storms: grey skies, dim sun, ground-level rain streaks —
+  and overcast shields zombies/skeletons from burning, so storms are dangerous
+- 🗺 live minimap (N toggles): chunk-accurate top-down view with you (arrow),
+  mobs (red), co-op partners (cyan) and spawn (green)
+- `/sethome` + `/home` fast-travel (persists across restarts), `/rain` to
+  summon/clear storms, `/time` and `/spawn` as before
 
 ## Protocol (WS JSON)
 
 `hello → welcome`, `reqChunk → chunk` (RLE), `edit → block`,
 `move → players` (10Hz), `mobs` (2Hz), `inv`, `vitals`, `time`, `chat`,
-`craft`, `craftDirect`, `smelt`, `attackMob`, `eat`, `moveItem`, `respawn`, `ping → pong`.
+`craft`, `craftDirect`, `smelt`, `attackMob`, `ignite → boom` (TNT),
+`eat`, `moveItem`, `respawn`, `ping → pong`.

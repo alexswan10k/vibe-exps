@@ -10,6 +10,7 @@
 <body>
 <div id="game"></div>
 <div id="crosshair">+</div>
+<canvas id="minimap" width="132" height="132" title="minimap (N toggles)"></canvas>
 <button id="touch-toggle" title="touch controls">📱</button>
 <div id="status">not connected</div>
 <div id="hint"></div>
@@ -19,7 +20,7 @@
 
 <div id="chat">
   <div id="chat-log"></div>
-  <input id="chat-input" placeholder="chat… (T) · /help /players /spawn /time" maxlength="200" autocomplete="off">
+  <input id="chat-input" placeholder="chat… (T) · /help /players /spawn /sethome /home /rain" maxlength="200" autocomplete="off">
 </div>
 
 <div id="inventory" style="display:none">
@@ -85,8 +86,9 @@
       <li>Craft a <b>pickaxe</b> (stone), <b>axe</b> (logs), <b>shovel</b> (dirt), + <b>sword</b>. Place the table (RMB) for 3×3.</li>
       <li>Mine <b>stone → coal → iron → gold → diamond</b> (deeper = richer). <b>F</b> smelts: iron, gold, pork, beef, chicken, <b>sand → glass</b>. Caves wind below — stair-hole entrances drop in, ores show on the walls, bring torches.</li>
       <li><b>Bed</b> (RMB or F): sets your spawn. <b>Ladders</b>: Space climbs. Cows → beef, chickens → drumsticks.</li>
-      <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack.</li>
-      <li><b>G</b> eats pork · <b>T</b> chat · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack. <b>TNT</b>: place, aim, <b>F</b> to light — obsidian survives blasts.</li>
+      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li><b>/sethome /home</b> fast-travel · <b>/rain</b> summon storms (storms shield undead from sun!) · beware the 👹 <b>ogre</b></li>
       <li><b>wheel / 1-9</b> cycle hotbar · <b>double-click food</b> in inventory to eat · <b>ESC</b> closes inventory/panels</li>
       <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
     </ol>
@@ -105,7 +107,7 @@
       <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
       <b>hold LMB</b> mine · <b>RMB</b> place · <b>click mob</b> attack<br>
       <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>G</b> eat pork<br>
-      <b>F</b> use furnace (look at it) · <b>T</b> chat · <b>shift</b> sprint<br>
+      <b>F</b> use furnace / light TNT (look at it) · <b>T</b> chat · <b>N</b> minimap · <b>shift</b> sprint<br>
       old iPad with no websocket? open this page with <b>?transport=poll</b>
     </div>
     <div class="menu-foot">wheel = hotbar · E inventory (ESC close) · double-click food = eat · shift sprint · H help</div>

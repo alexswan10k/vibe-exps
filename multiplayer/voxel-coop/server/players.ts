@@ -18,6 +18,7 @@ export interface Player {
   hungerT: number;
   hurtCd: number;
   bedSpawn: Vec3 | null; // set by sleeping in a bed (setBed), used on respawn
+  home: Vec3 | null; // set by /sethome, jumped to with /home
   socket: WebSocket | null;
   isPoll: boolean; // legacy HTTP-poll transport (no websocket)
   outbox: ServerMsg[]; // queued messages for poll players
@@ -58,6 +59,7 @@ export class Players {
       hp: 20, maxHp: 20, hunger: 20, dead: false,
       slots: emptyInv(), hungerT: 0, hurtCd: 0,
       grid: emptyGrid(), bedSpawn: null,
+      home: null,
       socket: sock, isPoll: sock === null, outbox: [], lastPoll: Date.now(),
       lastMove: Date.now(),
     };

@@ -482,6 +482,8 @@ export class World {
       const r2 = hash2(x * 5 - y * 3, z * 7 + y, this.seed ^ 0x60d);
       if (y < h - 3 && (halo ? (y <= 9 && r2 > 0.989) : (r2 > 0.9965 && y <= 9))) return B.DIAMOND_ORE;
       if (y < h - 2 && (halo ? (y <= 12 && r2 > 0.983) : (r2 > 0.9945 && y <= 12))) return B.GOLD_ORE;
+      // obsidian crust near the floor: blast-proof building prize for deep miners
+      if (y <= 5 && hash3(x, y, z, this.seed ^ 0xb51) > 0.86) return B.OBSIDIAN;
       return B.STONE;
     }
     // dirt band + surface are biome-driven (stone zone above is untouched)

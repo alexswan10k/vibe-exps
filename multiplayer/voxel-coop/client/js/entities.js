@@ -5,6 +5,9 @@ const MOB_STYLE = {
   chicken: { color: 0xf2f2f2, body: [0.4, 0.45, 0.4], head: [0.3, 0.3, 0.3], headY: 0.5, eyes: false },
   sheep: { color: 0xdcdcdc, body: [0.9, 0.65, 0.65], head: [0.4, 0.4, 0.35], headY: 0.55, eyes: false },
   zombie: { color: 0x3a7d3a, body: [0.55, 0.9, 0.4], head: [0.45, 0.45, 0.45], headY: 1.15, eyes: true },
+  skeleton: { color: 0xd8d8d0, body: [0.5, 0.95, 0.35], head: [0.42, 0.42, 0.42], headY: 1.2, eyes: true },
+  spider: { color: 0x2a2a33, body: [0.9, 0.45, 0.7], head: [0.5, 0.35, 0.4], headY: 0.5, eyes: true },
+  ogre: { color: 0x5a7d4a, body: [1.3, 1.6, 1.0], head: [0.8, 0.7, 0.7], headY: 1.9, eyes: true },
 };
 
 function flashable(mat) {

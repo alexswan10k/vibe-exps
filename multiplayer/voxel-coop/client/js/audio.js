@@ -49,6 +49,12 @@ export class AudioSys {
   eat() { this.noise(0.12, 0.5, 700); this.tone(300, 0.09, "triangle", 0.35, 150); }
   hurt() { this.tone(160, 0.25, "sawtooth", 0.6, 60); }
   splash() { this.noise(0.25, 0.5, 1800); }
+  boom() {
+    this.noise(0.7, 0.9, 300);
+    this.tone(90, 0.6, "sawtooth", 0.7, 30);
+    setTimeout(() => this.noise(0.4, 0.4, 900), 120);
+  }
+  rain() { this.noise(0.4, 0.12, 4000); }
   toggleMute() {
     this.muted = !this.muted;
     const b = document.getElementById("mute-btn");

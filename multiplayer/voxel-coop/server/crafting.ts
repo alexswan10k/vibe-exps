@@ -47,6 +47,11 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "ladder", name: "Ladder ×3", needsTable: true, pat: [S, 0, S, S, S, S, S, 0, S], out: { id: B.LADDER, n: 3 } },
   { id: "bed", name: "Bed", needsTable: true, pat: [P, P, P, W, W, W, 0, 0, 0], out: { id: B.BED, n: 1 } },
   { id: "golden_apple", name: "Golden Apple", needsTable: true, pat: [N, N, N, N, A, N, N, N, N], out: { id: I.GOLDEN_APPLE, n: 1 } },
+  { id: "tnt", name: "TNT ×2", needsTable: true, pat: [B.SAND, K, B.SAND, K, B.SAND, K, B.SAND, K, B.SAND], out: { id: B.TNT, n: 2 } },
+  { id: "lamp", name: "Lamp ×4", needsTable: true, pat: [B.GLASS, B.GLASS, B.GLASS, B.GLASS, B.TORCH, B.GLASS, B.GLASS, B.GLASS, B.GLASS], out: { id: B.LAMP, n: 4 } },
+  { id: "wool_string", name: "Wool", needsTable: false, pat: [138, 138, 0, 138, 138, 0, 0, 0, 0], out: { id: W, n: 1 } },
+  { id: "bone_sticks", name: "Sticks ×6", needsTable: false, pat: [137, 0, 0, 137, 0, 0, 0, 0, 0], out: { id: S, n: 6 } },
+  { id: "bone_torch", name: "Torches ×4", needsTable: false, pat: [137, 0, 0, S, 0, 0, 0, 0, 0], out: { id: B.TORCH, n: 4 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -275,6 +280,9 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.GOLD_ORE: return { id: B.GOLD_ORE, n: 1 }; // smelt to ingot
     case B.DIAMOND_ORE: return { id: I.DIAMOND, n: 1 };
     case B.FENCE: return { id: B.FENCE, n: 1 };
+    case B.TNT: return { id: B.TNT, n: 1 };
+    case B.OBSIDIAN: return { id: B.OBSIDIAN, n: 1 };
+    case B.LAMP: return { id: B.LAMP, n: 1 };
     case B.STONE_BRICK: return { id: B.STONE_BRICK, n: 1 };
     case B.LADDER: return { id: B.LADDER, n: 1 };
     case B.BED: return { id: B.BED, n: 1 };

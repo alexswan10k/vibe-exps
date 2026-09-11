@@ -12,6 +12,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #hint { position: fixed; top: 8px; left: 50%; transform: translateX(-50%);
   font-size: 13px; background: rgba(0,0,0,.55); padding: 4px 10px; border-radius: 6px;
   min-height: 1em; }
+#minimap { position: fixed; top: 8px; right: 8px; width: 132px; height: 132px;
+  border: 2px solid rgba(255,255,255,.4); border-radius: 10px; background: #06121f;
+  image-rendering: pixelated; z-index: 5; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
 #vitals { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
   font-size: 18px; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; }
 #hotbar { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);

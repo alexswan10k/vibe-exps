@@ -40,6 +40,11 @@ export const SHAPED_CLIENT = [
   { id: "ladder", name: "Ladder ×3", needsTable: true, cat: "blocks", desc: "climb with Space", out: { id: 22, n: 3 }, pat: [S, 0, S, S, S, S, S, 0, S] },
   { id: "bed", name: "Bed", needsTable: true, cat: "blocks", desc: "right-click to set spawn", out: { id: 23, n: 1 }, pat: [P, P, P, W, W, W, 0, 0, 0] },
   { id: "golden_apple", name: "Golden Apple", needsTable: true, cat: "food", desc: "full heal +10 hunger", out: { id: 136, n: 1 }, pat: [N, N, N, N, A, N, N, N, N] },
+  { id: "tnt", name: "TNT ×2", needsTable: true, cat: "blocks", desc: "boom! F to ignite placed TNT", out: { id: 37, n: 2 }, pat: [SA, K, SA, K, SA, K, SA, K, SA] },
+  { id: "lamp", name: "Lamp ×4", needsTable: true, cat: "blocks", desc: "steady glow, lights like a torch", out: { id: 39, n: 4 }, pat: [17, 17, 17, 17, 15, 17, 17, 17, 17] },
+  { id: "wool_string", name: "Wool", needsTable: false, cat: "basics", desc: "spider string → sheep-free wool", out: { id: 105, n: 1 }, pat: [138, 138, 0, 138, 138, 0, 0, 0, 0] },
+  { id: "bone_sticks", name: "Sticks ×6", needsTable: false, cat: "basics", desc: "skeleton bones → handles", out: { id: 101, n: 6 }, pat: [137, 0, 0, 137, 0, 0, 0, 0, 0] },
+  { id: "bone_torch", name: "Torches ×4", needsTable: false, cat: "blocks", desc: "bone + stick torches", out: { id: 15, n: 4 }, pat: [137, 0, 0, S, 0, 0, 0, 0, 0] },
 ];
 
 /** Furnace cheat-sheet for the picker (mirrors server SMELT_RECIPES). */

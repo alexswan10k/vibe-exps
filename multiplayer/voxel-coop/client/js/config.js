@@ -11,6 +11,7 @@ export const B = {
   SANDSTONE: 24, CACTUS: 25, CLAY: 26, BRICK: 27, GRAVEL: 28,
   PINE_LOG: 29, PINE_LEAVES: 30, TALL_GRASS: 31, FLOWER_RED: 32,
   FLOWER_YELLOW: 33, MUSHROOM_RED: 34, MUSHROOM_BROWN: 35, REEDS: 36,
+  TNT: 37, OBSIDIAN: 38, LAMP: 39,
 };
 
 export const BLOCK_NAME = {
@@ -22,6 +23,7 @@ export const BLOCK_NAME = {
   24: "sandstone", 25: "cactus", 26: "clay", 27: "brick", 28: "gravel",
   29: "pine log", 30: "pine leaves", 31: "tall grass", 32: "poppy",
   33: "dandelion", 34: "red mushroom", 35: "brown mushroom", 36: "reeds",
+  37: "tnt", 38: "obsidian", 39: "lamp",
   101: "stick", 102: "coal", 103: "iron ingot", 104: "pork",
   105: "wool", 106: "feather", 107: "cooked pork", 108: "wood pick", 109: "stone pick",
   110: "iron pick", 111: "wood sword", 113: "stone sword", 114: "iron sword",
@@ -42,6 +44,7 @@ export const HARDNESS = {
   20: 1.8, 21: 4.0, 22: 0.4, 23: 1.2,
   24: 3.5, 25: 0.4, 26: 0.6, 27: 4.0, 28: 0.6, 29: 1.8, 30: 0.3,
   31: 0.05, 32: 0.05, 33: 0.05, 34: 0.05, 35: 0.05, 36: 0.3,
+  37: 0.5, 38: 14.0, 39: 0.4,
 };
 
 // Walk-through vegetation (mirrors server/protocol.ts).
@@ -54,7 +57,7 @@ const AXE_BLOCKS = new Set([5, 7, 13, 20, 22, 23, 29]);
 const SHOVEL_BLOCKS = new Set([1, 2, 4, 9, 26, 28]);
 export function toolMultFor(block, heldId) {
   if (heldId === undefined) return 1;
-  if (PICK_MULT[heldId] && [3, 11, 12, 14, 16, 18, 19, 21, 24, 27].includes(block)) return PICK_MULT[heldId];
+  if (PICK_MULT[heldId] && [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 38].includes(block)) return PICK_MULT[heldId];
   if (AXE_MULT[heldId] && AXE_BLOCKS.has(block)) return AXE_MULT[heldId];
   if (SHOVEL_MULT[heldId] && SHOVEL_BLOCKS.has(block)) return SHOVEL_MULT[heldId];
   if (PICK_MULT[heldId] || AXE_MULT[heldId] || SHOVEL_MULT[heldId]) return 1.5;
@@ -62,7 +65,7 @@ export function toolMultFor(block, heldId) {
 }
 
 export function isPlaceable(id) {
-  return Number.isInteger(id) && id >= 1 && id <= 36 && id !== 8 && id !== 10;
+  return Number.isInteger(id) && id >= 1 && id <= 39 && id !== 8 && id !== 10;
 }
 
 /** Resolve which server to connect to.
