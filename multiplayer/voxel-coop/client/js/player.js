@@ -78,7 +78,7 @@ export class Player {
         for (let bz = minZ; bz <= maxZ; bz++) {
           const b = world.get(bx, by, bz);
           if (b === undefined) continue;
-          if (b !== B.AIR && b !== B.WATER && b !== B.LADDER && !WALK_THROUGH.has(b)) {
+          if (b !== B.AIR && b !== B.WATER && b !== B.LAVA && b !== B.LADDER && !WALK_THROUGH.has(b)) {
             // precise AABB overlap: block box vs player box
             const px0 = x - RADIUS, px1 = x + RADIUS;
             const py0 = y, py1 = y + 1.8;

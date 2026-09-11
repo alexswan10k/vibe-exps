@@ -8,6 +8,9 @@ const MOB_STYLE = {
   skeleton: { color: 0xd8d8d0, body: [0.5, 0.95, 0.35], head: [0.42, 0.42, 0.42], headY: 1.2, eyes: true },
   spider: { color: 0x2a2a33, body: [0.9, 0.45, 0.7], head: [0.5, 0.35, 0.4], headY: 0.5, eyes: true },
   ogre: { color: 0x5a7d4a, body: [1.3, 1.6, 1.0], head: [0.8, 0.7, 0.7], headY: 1.9, eyes: true },
+  villager: { color: 0x7a5a3a, body: [0.55, 1.0, 0.4], head: [0.45, 0.5, 0.4], headY: 1.2, eyes: false },
+  wolf: { color: 0x8a8a8a, body: [0.8, 0.5, 0.45], head: [0.4, 0.4, 0.35], headY: 0.6, eyes: false },
+  wisp: { color: 0xaef2ff, body: [0.4, 0.6, 0.4], head: [0.35, 0.35, 0.35], headY: 0.8, eyes: true },
 };
 
 function flashable(mat) {
@@ -65,7 +68,7 @@ export class Entities {
         bar.position.z = 0.001;
         barBg.add(bar);
         this.scene.add(barBg);
-        e = { node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0, kind: m.kind, eyeMat: st.eyes ? eyeMat : null };
+        e = { id: m.id, node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0, kind: m.kind, eyeMat: st.eyes ? eyeMat : null };
         this.mobs.set(m.id, e);
       }
       e.target = new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
@@ -165,6 +168,8 @@ export class Entities {
     for (const [, e] of this.mobs) {
       if (!e.target) continue;
       e.node.position.lerp(e.target, kMob);
+      // wisp hover: post-lerp bob so it floats instead of walking
+      if (e.kind === "wisp") e.node.position.y += Math.sin(now / 300 + (e.id ?? 0)) * 0.25;
       e.barBg.position.copy(e.node.position);
       e.barBg.position.y += e.topY + 0.3;
       if (camera) e.barBg.quaternion.copy(camera.quaternion);

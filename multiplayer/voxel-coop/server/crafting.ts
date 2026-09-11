@@ -52,6 +52,10 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "wool_string", name: "Wool", needsTable: false, pat: [138, 138, 0, 138, 138, 0, 0, 0, 0], out: { id: W, n: 1 } },
   { id: "bone_sticks", name: "Sticks ×6", needsTable: false, pat: [137, 0, 0, 137, 0, 0, 0, 0, 0], out: { id: S, n: 6 } },
   { id: "bone_torch", name: "Torches ×4", needsTable: false, pat: [137, 0, 0, S, 0, 0, 0, 0, 0], out: { id: B.TORCH, n: 4 } },
+  { id: "fishing_rod", name: "Fishing Rod", needsTable: true, pat: [0, 0, S, 0, S, I.STRING, S, 0, I.STRING], out: { id: I.FISHING_ROD, n: 1 } },
+  { id: "compass", name: "Compass", needsTable: true, pat: [0, G, 0, G, K, G, 0, G, 0], out: { id: I.COMPASS, n: 1 } },
+  { id: "emerald_block", name: "Emerald Block", needsTable: true, pat: [I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD], out: { id: B.EMERALD_BLOCK, n: 1 } },
+  { id: "emerald_split", name: "Emerald ×9", needsTable: false, pat: [B.EMERALD_BLOCK, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: I.EMERALD, n: 9 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -104,7 +108,7 @@ export function matchGrid(cells: number[], smallOnly: boolean): ShapedRecipe | n
 
 // --- inventory helpers (slots array, id 0 = empty, max stack 64, tools don't stack) ---
 export const MAX_STACK = 64;
-const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL]);
+const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS]);
 
 export function isStackable(id: number): boolean {
   return !UNSTACKABLE.has(id);
@@ -283,6 +287,9 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.TNT: return { id: B.TNT, n: 1 };
     case B.OBSIDIAN: return { id: B.OBSIDIAN, n: 1 };
     case B.LAMP: return { id: B.LAMP, n: 1 };
+    case B.LAVA: return null; // unmineable (HARDNESS Infinity)
+    case B.EMERALD_ORE: return { id: I.EMERALD, n: 1 };
+    case B.EMERALD_BLOCK: return { id: B.EMERALD_BLOCK, n: 1 };
     case B.STONE_BRICK: return { id: B.STONE_BRICK, n: 1 };
     case B.LADDER: return { id: B.LADDER, n: 1 };
     case B.BED: return { id: B.BED, n: 1 };
@@ -314,6 +321,7 @@ export const SMELT_RECIPES: Record<number, SmeltRecipe> = {
   18: { in: { 18: 1, 102: 1 }, out: { id: 122, n: 1 } }, // gold ore + coal -> gold ingot
   132: { in: { 132: 1, 102: 1 }, out: { id: 133, n: 1 } }, // raw beef + coal -> steak
   134: { in: { 134: 1, 102: 1 }, out: { id: 135, n: 1 } }, // raw chicken + coal -> roast chicken
+  142: { in: { 142: 1, 102: 1 }, out: { id: 143, n: 1 } }, // fish + coal -> cooked fish
 };
 
 /** Look up the smelt recipe for an input item id (null = not smeltable). */
@@ -351,3 +359,12 @@ export function smeltTick(f: FurnaceState, dt: number): boolean {
 // recipe.in), then removeItems(slots, recipe.in) and store `input` on the state.
 // On smeltTick() === true: grant smeltOutput(f.input ?? 12) via giveItems.
 // See the exact snippet in the task summary. ---
+
+export const VILLAGER_TRADES: { give: { id: number; n: number }; get: { id: number; n: number } }[] = [
+  { give: { id: B.COBBLE, n: 8 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.COAL, n: 4 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.WOOL, n: 6 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.EMERALD, n: 2 }, get: { id: B.TORCH, n: 8 } },
+  { give: { id: I.EMERALD, n: 3 }, get: { id: I.COOKED_PORK, n: 4 } },
+  { give: { id: I.EMERALD, n: 5 }, get: { id: I.DIAMOND, n: 1 } },
+];

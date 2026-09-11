@@ -10,17 +10,18 @@
 <body>
 <div id="game"></div>
 <div id="crosshair">+</div>
-<canvas id="minimap" width="132" height="132" title="minimap (N toggles)"></canvas>
+<canvas id="minimap" width="132" height="132" title="minimap (N toggles) · green spawn · orange home · purple bed · red mob · cyan player · yellow you"></canvas>
 <button id="touch-toggle" title="touch controls">📱</button>
 <div id="status">not connected</div>
 <div id="hint"></div>
+<div id="toast"></div>
 <div id="vitals"></div>
 <div id="hotbar"></div>
 <div id="breakbar"><div></div></div>
 
 <div id="chat">
   <div id="chat-log"></div>
-  <input id="chat-input" placeholder="chat… (T) · /help /players /spawn /sethome /home /rain" maxlength="200" autocomplete="off">
+  <input id="chat-input" placeholder="chat… (T) · /help /players /spawn /sethome /home /rain /stats" maxlength="200" autocomplete="off">
 </div>
 
 <div id="inventory" style="display:none">
@@ -58,6 +59,13 @@
   </div>
 </div>
 
+<div id="trade-modal" style="display:none">
+  <div class="trade-panel">
+    <h2>🧑‍🌾 villager trades <button id="trade-close" title="close (ESC)">✕</button></h2>
+    <div id="trade-list"></div>
+  </div>
+</div>
+
 <div id="dead" style="display:none">
   <div class="dead-panel">
     <h1>☠ you died</h1>
@@ -87,7 +95,8 @@
       <li>Mine <b>stone → coal → iron → gold → diamond</b> (deeper = richer). <b>F</b> smelts: iron, gold, pork, beef, chicken, <b>sand → glass</b>. Caves wind below — stair-hole entrances drop in, ores show on the walls, bring torches.</li>
       <li><b>Bed</b> (RMB or F): sets your spawn. <b>Ladders</b>: Space climbs. Cows → beef, chickens → drumsticks.</li>
       <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack. <b>TNT</b>: place, aim, <b>F</b> to light — obsidian survives blasts.</li>
-      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap (green spawn · orange home · purple bed) · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li><b>R</b> cast fishing rod (needs rod: sticks + string, wait for a bite) · <b>F</b> on a 🐺 wolf to tame · <b>RMB</b> on a 🧑‍🌾 villager to trade · hold a 🧭 compass to find home/spawn · beware ☠️ lava lakes deep down</li>
       <li><b>/sethome /home</b> fast-travel · <b>/rain</b> summon storms (storms shield undead from sun!) · beware the 👹 <b>ogre</b></li>
       <li><b>wheel / 1-9</b> cycle hotbar · <b>double-click food</b> in inventory to eat · <b>ESC</b> closes inventory/panels</li>
       <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
@@ -105,9 +114,9 @@
     <button id="menu-join">join world</button>
     <div class="help">
       <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
-      <b>hold LMB</b> mine · <b>RMB</b> place · <b>click mob</b> attack<br>
+      <b>hold LMB</b> mine · <b>RMB</b> place · <b>RMB villager</b> trade · <b>click mob</b> attack<br>
       <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>G</b> eat pork<br>
-      <b>F</b> use furnace / light TNT (look at it) · <b>T</b> chat · <b>N</b> minimap · <b>shift</b> sprint<br>
+      <b>F</b> use furnace / light TNT / tame wolf (look at it) · <b>R</b> fish (rod needed) · <b>T</b> chat · <b>N</b> minimap · <b>shift</b> sprint<br>
       old iPad with no websocket? open this page with <b>?transport=poll</b>
     </div>
     <div class="menu-foot">wheel = hotbar · E inventory (ESC close) · double-click food = eat · shift sprint · H help</div>

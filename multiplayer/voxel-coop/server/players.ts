@@ -19,6 +19,8 @@ export interface Player {
   hurtCd: number;
   bedSpawn: Vec3 | null; // set by sleeping in a bed (setBed), used on respawn
   home: Vec3 | null; // set by /sethome, jumped to with /home
+  stats: { kills: number; deaths: number; fished: number };
+  achieved: Set<string>; // session-only achievement ids already toasted
   socket: WebSocket | null;
   isPoll: boolean; // legacy HTTP-poll transport (no websocket)
   outbox: ServerMsg[]; // queued messages for poll players
@@ -46,6 +48,8 @@ export const FOOD: Record<number, { hunger: number; hp: number }> = {
   134: { hunger: 2, hp: 0 }, // raw chicken (risky snack)
   135: { hunger: 6, hp: 4 }, // roast chicken
   136: { hunger: 10, hp: 20 }, // golden apple (full heal)
+  142: { hunger: 2, hp: 0 }, // fish
+  143: { hunger: 6, hp: 4 }, // cooked fish
 };
 
 export class Players {
@@ -60,6 +64,8 @@ export class Players {
       slots: emptyInv(), hungerT: 0, hurtCd: 0,
       grid: emptyGrid(), bedSpawn: null,
       home: null,
+      stats: { kills: 0, deaths: 0, fished: 0 },
+      achieved: new Set<string>(),
       socket: sock, isPoll: sock === null, outbox: [], lastPoll: Date.now(),
       lastMove: Date.now(),
     };

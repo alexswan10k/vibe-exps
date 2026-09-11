@@ -6,7 +6,7 @@ import { PORT } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
-import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState } from "./crafting.ts";
+import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState, VILLAGER_TRADES } from "./crafting.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
 const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
@@ -49,7 +49,7 @@ function checkChatRate(id: number): boolean {
 }
 
 // ---- player persistence (pos + inventory + bed/home spawns across restarts) ----
-interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3 }
+interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3; stats?: { kills: number; deaths: number; fished: number } }
 let savedPlayers: Record<string, SavedPlayer> = {};
 try {
   savedPlayers = JSON.parse(await Deno.readTextFile(SAVE_PLAYERS));
@@ -58,7 +58,7 @@ async function persistPlayers(): Promise<void> {
   try {
     const d: Record<string, SavedPlayer> = { ...savedPlayers };
     for (const pl of players.all.values()) {
-      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined };
+      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, stats: { ...pl.stats } };
     }
     await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
     await Deno.writeTextFile(SAVE_PLAYERS, JSON.stringify(d));
@@ -97,6 +97,34 @@ function sendGrid(pl: Player): void {
   sendTo(pl, { t: "grid", cells: pl.grid, result });
 }
 
+function toastAll(text: string): void {
+  broadcast({ t: "toast", text });
+}
+function toastPl(pl: Player, text: string): void {
+  sendTo(pl, { t: "toast", text });
+}
+/** Toast once per player (session-only). Returns true if newly unlocked. */
+function unlock(pl: Player, id: string, text: string): boolean {
+  if (pl.achieved.has(id)) return false;
+  pl.achieved.add(id);
+  toastAll(text);
+  return true;
+}
+function sendMarkers(pl: Player): void {
+  sendTo(pl, {
+    t: "markers",
+    spawn: [...spawn] as Vec3,
+    home: pl.home ?? undefined,
+    bed: pl.bedSpawn ?? undefined,
+  });
+}
+/** Death bookkeeping shared by the main death sites (mob/fall/blast). */
+function noteDeath(pl: Player, msg: string): void {
+  pl.stats.deaths++;
+  broadcast({ t: "chat", from: "server", msg });
+  if (pl.stats.deaths === 5) toastAll(`☠ ${pl.name} has died 5 times!`);
+}
+
 /** Shared join for websocket + legacy poll transports. */
 function joinGame(rawName: string, sock: WebSocket | null): Player {
   const name = uniqueName(rawName.slice(0, 16) || "player");
@@ -120,11 +148,15 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
     if (Array.isArray(saved.home) && saved.home.length === 3 && saved.home.every(Number.isFinite)) {
       pl.home = saved.home as Vec3;
     }
+    if (saved.stats && Number.isFinite(saved.stats.kills) && Number.isFinite(saved.stats.deaths) && Number.isFinite(saved.stats.fished)) {
+      pl.stats = { kills: saved.stats.kills, deaths: saved.stats.deaths, fished: saved.stats.fished };
+    }
   }
   console.log(`[join] ${name} (id=${pl.id}${sock ? "" : " poll"})`);
   sendInv(pl);
   sendGrid(pl);
   sendVitals(pl);
+  sendMarkers(pl);
   broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
   return pl;
 }
@@ -133,6 +165,7 @@ function leaveGame(pl: Player): void {
   console.log(`[leave] ${pl.name}`);
   players.remove(pl.id);
   chatTimes.delete(pl.id);
+  fishCd.delete(pl.id);
   pendingReset.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
   void persistPlayers();
@@ -166,6 +199,12 @@ function tickRain(dt: number): boolean {
 // ---- TNT: lit fuses + authoritative explosions ----
 interface Fuse { x: number; y: number; z: number; at: number; by: string }
 const fuses: Fuse[] = [];
+// ---- fishing: pending catches resolve in the tick loop ----
+interface PendingFish { plId: number; at: number }
+const pendingFish: PendingFish[] = [];
+const fishCd = new Map<number, number>();
+// Villager trade table lives in crafting.ts (single source of truth).
+const TRADES: { give: { id: number; n: number }; get: { id: number; n: number } }[] = VILLAGER_TRADES;
 const BLAST_R = 5;
 const BLAST_IMMUNE = new Set<number>([B.BEDROCK, B.OBSIDIAN, B.WATER]);
 
@@ -205,7 +244,7 @@ function explode(x: number, y: number, z: number, by: string): void {
       const before = pl.hp;
       players.hurt(pl, dmg);
       sendVitals(pl);
-      if (pl.dead && before > 0) broadcast({ t: "chat", from: "server", msg: `💥 ${pl.name} was blown up${by ? ` by ${by}` : ""}` });
+      if (pl.dead && before > 0) noteDeath(pl, `💥 ${pl.name} was blown up${by ? ` by ${by}` : ""}`);
     }
   }
   // shred mobs near the blast
@@ -278,9 +317,12 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
     }
     if (world.get(x, y, z) === B.FURNACE || cur === B.FURNACE) furnaces.delete(fkey(x, y, z));
     broadcast({ t: "block", x, y, z, block: B.AIR });
+    if (cur === B.DIAMOND_ORE && (tier >= requiredTier(cur) || TOOL_CLASS[cur] === "any")) {
+      unlock(pl, "diamond", `💎 ${pl.name} mined diamond!`);
+    }
   } else {
     // place
-    if (block === undefined || block === B.AIR || block === B.WATER || block === B.BEDROCK) return;
+    if (block === undefined || block === B.AIR || block === B.WATER || block === B.BEDROCK || block === B.LAVA) return;
     if (!(Object.values(B) as number[]).includes(block)) return;
     const cur = world.get(x, y, z);
     // walk-through flora doesn't block placement — it gets replaced
@@ -323,6 +365,8 @@ function doReset(requestedSeed: number | null, by: string): void {
   const seed = requestedSeed ?? Math.floor(Math.random() * 1e9);
   world.resetWorld(seed);
   furnaces.clear();
+  fuses.length = 0;
+  pendingFish.length = 0;
   mobs.mobs.clear();
   spawn = world.findSpawn();
   savedPlayers = {};
@@ -337,11 +381,14 @@ function doReset(requestedSeed: number | null, by: string): void {
     pl.dead = false;
     pl.bedSpawn = null;
     pl.home = null;
+    pl.stats = { kills: 0, deaths: 0, fished: 0 };
+    pl.achieved.clear();
     pl.lastMove = Date.now();
     sendTo(pl, { t: "reset", seed, spawn: [...spawn] as Vec3 });
     sendInv(pl);
     sendGrid(pl);
     sendVitals(pl);
+    sendMarkers(pl);
   }
   sendPlayersSnapshot();
   broadcast({ t: "time", time: world.time, rain });
@@ -360,7 +407,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /time <0..1|day|night|morning> /rain /reset [seed]" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed]" });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -371,11 +418,13 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       pl.p = [...spawn] as Vec3;
       pl.lastMove = Date.now();
       sendPlayersSnapshot();
+      sendMarkers(pl);
       sendTo(pl, { t: "chat", from: "server", msg: "teleported to spawn" });
       return true;
     case "sethome":
       pl.home = [pl.p[0], pl.p[1], pl.p[2]];
       void persistPlayers();
+      sendMarkers(pl);
       sendTo(pl, { t: "chat", from: "server", msg: "🏠 home set — /home to return" });
       return true;
     case "home": {
@@ -395,6 +444,9 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       broadcast({ t: "chat", from: "server", msg: `${pl.name} ${rainTarget > 0.5 ? "summoned a storm 🌧" : "cleared the skies ☀"}` });
       return true;
     }
+    case "stats":
+      sendTo(pl, { t: "chat", from: "server", msg: `kills ${pl.stats.kills} · deaths ${pl.stats.deaths} · fished ${pl.stats.fished}` });
+      return true;
     case "time": {
       let v: number | null = null;
       const a = arg.toLowerCase();
@@ -522,6 +574,7 @@ function onMessage(pl: Player, raw: string): void {
       }
       for (const c of pl.grid) { c.id = 0; c.n = 0; }
       giveItems(pl.slots, recipe.out.id, recipe.out.n);
+      if (recipe.out.id === B.TNT) unlock(pl, "demolitionist", `🧨 ${pl.name} is a Demolitionist!`);
       sendInv(pl);
       sendGrid(pl);
       break;
@@ -534,6 +587,7 @@ function onMessage(pl: Player, raw: string): void {
         sendTo(pl, { t: "denied", reason: res.reason ?? "can't craft that" });
         break;
       }
+      if (res.ok && String(m.id ?? "") === "tnt") unlock(pl, "demolitionist", `🧨 ${pl.name} is a Demolitionist!`);
       sendInv(pl);
       sendGrid(pl);
       break;
@@ -582,6 +636,13 @@ function onMessage(pl: Player, raw: string): void {
       const mob = mobs.mobs.get(m.id);
       if (!mob) break;
       if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 4.5) break;
+      // tamed wolves are off-limits to everyone but their owner (mobs agent
+      // reads (pl as {name?:string}).name; owner stored as player name string)
+      const mobOwner = (mob as { owner?: unknown }).owner;
+      if (typeof mobOwner === "string" && mobOwner && mobOwner !== pl.name) {
+        sendTo(pl, { t: "denied", reason: `that's ${mobOwner}'s wolf!` });
+        break;
+      }
       const swordMult = m.weapon !== undefined ? (SWORD_MULT[m.weapon] ?? 1) : 1;
       const isPick = m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110;
       const dmg = (m.weapon === undefined ? 2 : isPick ? 2 : 1) * swordMult;
@@ -596,6 +657,8 @@ function onMessage(pl: Player, raw: string): void {
       if (!alive) {
         for (const d of mobDrops(mob.kind)) giveItems(pl.slots, d.id, d.n);
         sendInv(pl);
+        pl.stats.kills++;
+        if (mob.kind === "ogre") unlock(pl, "ogre", `👹 ${pl.name} slew an OGRE!`);
       }
       break;
     }
@@ -614,6 +677,103 @@ function onMessage(pl: Player, raw: string): void {
       broadcast({ t: "block", x, y, z, block: B.AIR });
       fuses.push({ x, y, z, at: Date.now() + 2500, by: pl.name });
       broadcast({ t: "chat", from: "server", msg: `🧨 ${pl.name} lit TNT — RUN!` });
+      break;
+    }
+    case "fish": {
+      if (pl.dead) break;
+      const nowFish = Date.now();
+      if (nowFish - (fishCd.get(pl.id) ?? 0) < 3000) {
+        sendTo(pl, { t: "denied", reason: "fishing… wait a bit" });
+        break;
+      }
+      if (countOf(pl.slots, 141) < 1) {
+        sendTo(pl, { t: "denied", reason: "need a fishing rod" });
+        break;
+      }
+      if (!world.hasBlockNear(pl.p[0], pl.p[1], pl.p[2], B.WATER, 5)) {
+        sendTo(pl, { t: "denied", reason: "need water nearby" });
+        break;
+      }
+      fishCd.set(pl.id, nowFish);
+      pendingFish.push({ plId: pl.id, at: nowFish + 4000 + Math.random() * 4000 });
+      sendTo(pl, { t: "chat", from: "server", msg: "🎣 line cast… wait for a bite" });
+      break;
+    }
+    case "tame": {
+      if (pl.dead) break;
+      const mob = mobs.mobs.get(m.id);
+      if (!mob) {
+        sendTo(pl, { t: "denied", reason: "no such mob" });
+        break;
+      }
+      // defensive: wolf kind may not exist yet on the mobs side
+      if ((mob.kind as string) !== "wolf") {
+        sendTo(pl, { t: "denied", reason: "you can only tame wolves" });
+        break;
+      }
+      if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 4.5) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      if (countOf(pl.slots, 137) < 1) {
+        sendTo(pl, { t: "denied", reason: "need a bone" });
+        break;
+      }
+      removeItems(pl.slots, { 137: 1 });
+      (mob as { owner?: string }).owner = pl.name;
+      sendInv(pl);
+      broadcast({ t: "chat", from: "server", msg: `🐺 ${pl.name} tamed a wolf!` });
+      toastAll(`🐺 ${pl.name} tamed a wolf!`);
+      break;
+    }
+    case "askTrade": {
+      if (pl.dead) break;
+      const mob = mobs.mobs.get(m.id);
+      if (!mob) {
+        sendTo(pl, { t: "denied", reason: "no such mob" });
+        break;
+      }
+      if ((mob.kind as string) !== "villager") {
+        sendTo(pl, { t: "denied", reason: "they don't want to trade" });
+        break;
+      }
+      if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 5) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      sendTo(pl, {
+        t: "tradeOffers",
+        id: mob.id,
+        offers: TRADES.map((o) => ({
+          give: { id: o.give.id, n: o.give.n },
+          get: { id: o.get.id, n: o.get.n },
+        })),
+      });
+      break;
+    }
+    case "trade": {
+      if (pl.dead) break;
+      const mob = mobs.mobs.get(m.id);
+      if (!mob || (mob.kind as string) !== "villager") {
+        sendTo(pl, { t: "denied", reason: "they don't want to trade" });
+        break;
+      }
+      if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > 5) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      const offer = TRADES[m.slot];
+      if (!offer) {
+        sendTo(pl, { t: "denied", reason: "bad trade" });
+        break;
+      }
+      if (countOf(pl.slots, offer.give.id) < offer.give.n) {
+        sendTo(pl, { t: "denied", reason: "can't afford that" });
+        break;
+      }
+      removeItems(pl.slots, { [offer.give.id]: offer.give.n });
+      giveItems(pl.slots, offer.get.id, offer.get.n);
+      sendInv(pl);
       break;
     }
     case "chat": {
@@ -643,7 +803,7 @@ function onMessage(pl: Player, raw: string): void {
       if (pl.hp <= 0) {
         pl.hp = 0;
         pl.dead = true;
-        broadcast({ t: "chat", from: "server", msg: `☠ ${pl.name} fell` });
+        noteDeath(pl, `☠ ${pl.name} fell`);
       }
       sendVitals(pl);
       break;
@@ -686,6 +846,7 @@ function onMessage(pl: Player, raw: string): void {
       }
       pl.bedSpawn = [x + 0.5, y + 2.5, z + 0.5];
       void persistPlayers();
+      sendMarkers(pl);
       sendTo(pl, { t: "chat", from: "server", msg: "🛏 spawn set — you'll wake up here" });
       break;
     }
@@ -782,21 +943,60 @@ setInterval(() => {
   world.tick(dt);
   if (tickRain(dt)) mobs.rain = rain; else mobs.rain = rain;
   tickFuses();
-  // mob damage callback routes to vitals
+  // mob damage callback routes to vitals (name included so tamed wolves can
+  // follow owners — mobs side reads (pl as {name?:string}).name defensively)
   const wrappers = [...players.all.values()].map((pl) => ({
     p: pl.p,
+    name: pl.name,
     hurt: (dmg: number) => {
       const before = pl.hp;
       players.hurt(pl, dmg);
       if (pl.hp !== before) sendVitals(pl);
       if (pl.dead && before > 0) {
-        broadcast({ t: "chat", from: "server", msg: `☠ ${pl.name} died` });
+        noteDeath(pl, `☠ ${pl.name} died`);
       }
     },
   }));
   mobs.tick(dt, world, wrappers, world.isNight());
   if (players.tick(dt, mobs.peaceful)) {
     for (const pl of players.all.values()) sendVitals(pl);
+  }
+  // lava burns: feet block or head block is LAVA (hurt() 0.6s cd gates dps)
+  for (const pl of players.all.values()) {
+    if (pl.dead) continue;
+    const fx = Math.floor(pl.p[0]), fz = Math.floor(pl.p[2]);
+    const fy = Math.floor(pl.p[1] - 1.5); // pl.p is eye height; feet + head
+    if (world.get(fx, fy, fz) === B.LAVA || world.get(fx, fy + 1, fz) === B.LAVA) {
+      const before = pl.hp;
+      players.hurt(pl, 2);
+      if (pl.hp !== before) sendVitals(pl);
+      if (pl.dead && before > 0) noteDeath(pl, `🔥 ${pl.name} swam in lava`);
+    }
+  }
+  // fishing catches resolve here
+  if (pendingFish.length > 0) {
+    const nowF = Date.now();
+    for (let i = pendingFish.length - 1; i >= 0; i--) {
+      if (pendingFish[i].at > nowF) continue;
+      const pf = pendingFish.splice(i, 1)[0];
+      const pl = players.all.get(pf.plId);
+      if (!pl || pl.dead) continue;
+      const roll = Math.random() * 100;
+      let id = 142, n = 1;
+      if (roll < 62) { id = 142; n = 1 + Math.floor(Math.random() * 2); }
+      else if (roll < 70) { id = 138; n = 1; }
+      else if (roll < 76) { id = 137; n = 1; }
+      else if (roll < 81) { id = 144; n = 1; }
+      else if (roll < 85) { id = 123; n = 1; }
+      else if (roll < 92.5) { id = 101; n = 1; }
+      else { id = 106; n = 1; }
+      giveItems(pl.slots, id, n);
+      sendInv(pl);
+      pl.stats.fished++;
+      const label = BLOCK_NAME[id] ?? ({ 101: "stick", 106: "feather" } as Record<number, string>)[id] ?? `item ${id}`;
+      if (pl.stats.fished === 1) toastAll(`🎣 ${pl.name} caught their first fish!`);
+      toastPl(pl, `🎣 caught ${label}${n > 1 ? ` x${n}` : ""}`);
+    }
   }
   mobT += dt;
   if (mobT >= 0.5) {

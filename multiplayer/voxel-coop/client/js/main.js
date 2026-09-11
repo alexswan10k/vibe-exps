@@ -284,6 +284,20 @@ function clearBreak() {
   crack.hide();
 }
 let spawnPos = [0.5, 30, 0.5];
+let mapMarkers = null; // latest {t:"markers", spawn, home?, bed?} from the server
+let lastFish = 0; // client-side fishing cooldown timestamp (ms)
+
+// achievement / event banner: stacked gold-bordered toasts, max 3, fade 4s (CSS)
+function showToast(text) {
+  const box = $("toast");
+  if (!box) return;
+  const d = document.createElement("div");
+  d.className = "toast-msg";
+  d.textContent = text;
+  box.appendChild(d);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
+  setTimeout(() => d.remove(), 4100);
+}
 
 function decodeRLE(rle) {
   const out = new Uint8Array(CHUNK * WORLD_H * CHUNK);
@@ -365,7 +379,7 @@ function breakTime(block, heldId) {
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
   const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27].includes(block);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42].includes(block);
   if (isStone) {
     // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
     if (mult <= 1) return base * 3.3;
@@ -437,7 +451,15 @@ addEventListener("mouseup", (e) => {
 addEventListener("contextmenu", (e) => e.preventDefault());
 
 function doPlace() {
-  const hit = world.raycast(player.eye(), player.lookDir(), 6);
+  const eye = player.eye(), dir = player.lookDir();
+  // RMB on a villager opens trades instead of placing (MC behaviour)
+  const mobId = entities.pickMob(eye, dir, 5);
+  if (mobId !== null && mobId !== undefined && entities.mobs.get(mobId)?.kind === "villager") {
+    net.askTrade(mobId);
+    ui.hint("🧑‍🌾 trading…");
+    return;
+  }
+  const hit = world.raycast(eye, dir, 6);
   if (!hit) return;
   // interactables first (MC behaviour): table opens crafting, furnace smelts, bed sets spawn
   if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
@@ -515,10 +537,51 @@ addEventListener("keydown", (e) => {
   }
   if (e.code === "KeyP" && !ui.chatFocused()) { setShadows(!shadowsOn); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
+    if (!net?.connected) return;
+    // F on a wolf attempts to tame it (keeps furnace/bed/TNT behaviour below)
+    const mobId = entities.pickMob(player.eye(), player.lookDir(), 5);
+    if (mobId !== null && mobId !== undefined && entities.mobs.get(mobId)?.kind === "wolf") {
+      net.tame(mobId);
+      ui.hint("🐺 you offer your hand…");
+      hand.swing();
+      return;
+    }
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
     if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
     else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
+  }
+  if (e.code === "KeyR" && !ui.chatFocused()) {
+    if (!net?.connected || dead || ui.invOpen) return;
+    // cast the fishing rod (item 141) — 4s client-side cooldown
+    if (!(ui.slots ?? []).some((s) => s?.id === 141)) {
+      ui.hint("need a fishing rod (craft: sticks + string)");
+      return;
+    }
+    const nowF = performance.now();
+    if (nowF - lastFish < 4000) {
+      ui.hint(`🎣 recasting… ${Math.ceil((4000 - (nowF - lastFish)) / 1000)}s`);
+      return;
+    }
+    lastFish = nowF;
+    net.fish();
+    // local bobber FX: scan the look ray for water, else block hit, else mid-air
+    const eye = player.eye(), dir = player.lookDir();
+    let bx = null, by = null, bz = null;
+    for (let t = 0.5; t <= 6; t += 0.5) {
+      if (world.get(Math.floor(eye.x + dir.x * t), Math.floor(eye.y + dir.y * t), Math.floor(eye.z + dir.z * t)) === B.WATER) {
+        bx = eye.x + dir.x * t; by = eye.y + dir.y * t; bz = eye.z + dir.z * t;
+        break;
+      }
+    }
+    if (bx === null) {
+      const hitW = world.raycast(eye, dir, 6);
+      if (hitW) { bx = hitW.x + 0.5; by = hitW.y + 0.5; bz = hitW.z + 0.5; }
+      else { bx = eye.x + dir.x * 4; by = eye.y + dir.y * 4; bz = eye.z + dir.z * 4; }
+    }
+    particles.splashBurst(bx, by, bz);
+    audio.splash();
+    hand.swing();
   }
   if (e.code === "KeyT" && !ui.chatFocused()) {
     e.preventDefault();
@@ -646,6 +709,16 @@ net.on("smeltState", (m) => {
   ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
 });
 net.on("denied", (m) => ui.hint(m.reason));
+net.on("toast", (m) => {
+  showToast(m.text);
+  audio.pickup();
+  ui.chatMsg("server", m.text);
+});
+net.on("tradeOffers", (m) => ui.showTrades(m.id, m.offers));
+net.on("markers", (m) => {
+  mapMarkers = m;
+  window.voxMarkers = m; // read by minimap.draw()
+});
 } // attachHandlers
 
 // ---------- menu ----------
@@ -703,6 +776,7 @@ ui.onChat = (msg) => (net.sendChat ? net.sendChat(msg) : net.chat(msg));
 ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
+ui.onTrade = (id, slot) => net.trade(id, slot);
 $("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
@@ -773,12 +847,29 @@ function frame() {
         Math.round(player.pitch * 100) / 100,
       );
     }
-    // contextual hint for furnace / TNT
+    // contextual hint: lava warning > compass > furnace / TNT
     if (!dead) {
+      const feetB = world.get(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.3), Math.floor(player.pos.z));
+      const held = ui.heldItem();
       const hit = world.raycast(player.eye(), player.lookDir(), 6);
-      if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
+      if (feetB === B.LAVA) ui.hint("🔥 LAVA!");
+      else if (held?.id === 145) {
+        // compass: 8-way arrow + distance to home (if set) else spawn
+        const home = Array.isArray(mapMarkers?.home) ? mapMarkers.home : null;
+        const target = home ?? spawnPos;
+        const dx = target[0] - player.pos.x, dz = target[2] - player.pos.z;
+        const dist = Math.round(Math.hypot(dx, dz));
+        const bearing = Math.atan2(-dx, -dz);
+        const arrows = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"];
+        const idx = ((Math.round((player.yaw - bearing) / (Math.PI / 4)) % 8) + 8) % 8;
+        ui.hint(`🧭 ${home ? "home" : "spawn"} ${dist}m ${arrows[idx]}`);
+      }
+      else if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
       else if (hit?.block === B.TNT) ui.hint("🧨 F: light it — RUN!");
-      else if (hit && ui.el("hint").textContent.startsWith("F: smelt")) ui.hint("");
+      else if (hit) {
+        const t = ui.el("hint").textContent;
+        if (t.startsWith("F: smelt") || t.startsWith("🧭") || t.startsWith("🔥")) ui.hint("");
+      }
     }
   }
   entities.update(dt, camera);

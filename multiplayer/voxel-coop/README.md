@@ -119,6 +119,19 @@ data/             world.json + players.json (gitignored saves)
   mobs (red), co-op partners (cyan) and spawn (green)
 - `/sethome` + `/home` fast-travel (persists across restarts), `/rain` to
   summon/clear storms, `/time` and `/spawn` as before
+- 🎣 fishing: craft a rod (sticks + string), face water and press **R**
+  (4s cooldown, splash FX where the bobber lands) — cook the catch
+- 🐺 tame wolves: aim at a wolf and press **F** — tamed wolves fight for you
+- 🧑‍🌾 villagers + trading: **RMB** a villager to open its trade offers,
+  BUY with emeralds; mine **emerald ore** deep down (pick-speed like stone)
+- 🏆 achievements/toasts: server events pop a gold banner (top-center, also
+  logged to chat) with a pickup chime
+- 🧭 compass: hold it to get a live 8-way arrow + distance to home (if set)
+  else spawn — shown in the hint bar without hiding furnace/TNT hints
+- 🌋 lava lakes: non-solid (wade through, but it hurts) with a 🔥 LAVA!
+  warning when you're standing in it
+- 🗺 minimap markers: home (orange) + bed (purple) dots alongside spawn
+  (green), mobs (red) and partners (cyan) — see the canvas tooltip legend
 
 ## Protocol (WS JSON)
 

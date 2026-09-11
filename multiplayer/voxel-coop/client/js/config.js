@@ -12,6 +12,7 @@ export const B = {
   PINE_LOG: 29, PINE_LEAVES: 30, TALL_GRASS: 31, FLOWER_RED: 32,
   FLOWER_YELLOW: 33, MUSHROOM_RED: 34, MUSHROOM_BROWN: 35, REEDS: 36,
   TNT: 37, OBSIDIAN: 38, LAMP: 39,
+  LAVA: 40, EMERALD_ORE: 41, EMERALD_BLOCK: 42,
 };
 
 export const BLOCK_NAME = {
@@ -24,6 +25,10 @@ export const BLOCK_NAME = {
   29: "pine log", 30: "pine leaves", 31: "tall grass", 32: "poppy",
   33: "dandelion", 34: "red mushroom", 35: "brown mushroom", 36: "reeds",
   37: "tnt", 38: "obsidian", 39: "lamp",
+  40: "lava", 41: "emerald ore", 42: "emerald block",
+  137: "bone", 138: "string",
+  141: "fishing rod", 142: "fish", 143: "cooked fish", 144: "emerald",
+  145: "compass",
   101: "stick", 102: "coal", 103: "iron ingot", 104: "pork",
   105: "wool", 106: "feather", 107: "cooked pork", 108: "wood pick", 109: "stone pick",
   110: "iron pick", 111: "wood sword", 113: "stone sword", 114: "iron sword",
@@ -45,6 +50,7 @@ export const HARDNESS = {
   24: 3.5, 25: 0.4, 26: 0.6, 27: 4.0, 28: 0.6, 29: 1.8, 30: 0.3,
   31: 0.05, 32: 0.05, 33: 0.05, 34: 0.05, 35: 0.05, 36: 0.3,
   37: 0.5, 38: 14.0, 39: 0.4,
+  40: Infinity, 41: 5.5, 42: 4.0,
 };
 
 // Walk-through vegetation (mirrors server/protocol.ts).
@@ -57,7 +63,7 @@ const AXE_BLOCKS = new Set([5, 7, 13, 20, 22, 23, 29]);
 const SHOVEL_BLOCKS = new Set([1, 2, 4, 9, 26, 28]);
 export function toolMultFor(block, heldId) {
   if (heldId === undefined) return 1;
-  if (PICK_MULT[heldId] && [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 38].includes(block)) return PICK_MULT[heldId];
+  if (PICK_MULT[heldId] && [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 38, 41, 42].includes(block)) return PICK_MULT[heldId];
   if (AXE_MULT[heldId] && AXE_BLOCKS.has(block)) return AXE_MULT[heldId];
   if (SHOVEL_MULT[heldId] && SHOVEL_BLOCKS.has(block)) return SHOVEL_MULT[heldId];
   if (PICK_MULT[heldId] || AXE_MULT[heldId] || SHOVEL_MULT[heldId]) return 1.5;
@@ -65,7 +71,7 @@ export function toolMultFor(block, heldId) {
 }
 
 export function isPlaceable(id) {
-  return Number.isInteger(id) && id >= 1 && id <= 39 && id !== 8 && id !== 10;
+  return Number.isInteger(id) && id >= 1 && id <= 42 && id !== 8 && id !== 10 && id !== 40;
 }
 
 /** Resolve which server to connect to.

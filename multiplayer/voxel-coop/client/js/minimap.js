@@ -66,6 +66,11 @@ export class Minimap {
       g.fill();
     };
     if (spawnPos) dot(spawnPos[0], spawnPos[2], "#44dd44", 3);
+    // server markers pushed by main.js (window.voxMarkers = {spawn, home?, bed?})
+    const markers = (typeof window !== "undefined" && window.voxMarkers) || null;
+    if (Array.isArray(markers?.home)) dot(markers.home[0], markers.home[2], "#ffaa22", 3);
+    if (Array.isArray(markers?.bed)) dot(markers.bed[0], markers.bed[2], "#cc66ff", 3);
+    if (this.cv) this.cv.title = "minimap (N toggles) · green spawn · orange home · purple bed · red mob · cyan player · yellow you";
     if (entities) {
       for (const [, e] of entities.mobs ?? []) {
         if (e.node) dot(e.node.position.x, e.node.position.z, "#ff4444", 2);

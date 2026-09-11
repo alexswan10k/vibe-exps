@@ -482,6 +482,16 @@ export class World {
       const r2 = hash2(x * 5 - y * 3, z * 7 + y, this.seed ^ 0x60d);
       if (y < h - 3 && (halo ? (y <= 9 && r2 > 0.989) : (r2 > 0.9965 && y <= 9))) return B.DIAMOND_ORE;
       if (y < h - 2 && (halo ? (y <= 12 && r2 > 0.983) : (r2 > 0.9945 && y <= 12))) return B.GOLD_ORE;
+      // emerald ore: mountain-only (MOUNTAIN + TUNDRA snowcaps), y<=28 — own
+      // hash r3 so it never ties with gold/diamond on r2. Non-halo ~0.3%
+      // (scarcer than gold's 0.55%, diamond-adjacent), halo ~1.0%.
+      if (y < h - 2 && y <= 28 && (bio === BIOME.MOUNTAIN || bio === BIOME.TUNDRA)) {
+        const r3 = hash2(x * 7 - y * 5, z * 3 + y * 11, this.seed ^ 0xe9a1);
+        if (halo ? r3 > 0.99 : r3 > 0.997) return B.EMERALD_ORE;
+      }
+      // lava pools: deep stone only, y 2..8 (never the bedrock floor at y<=1).
+      // White-noise ~3% of deep cells; neighbours co-trigger into 2-4 block pools.
+      if (y >= 2 && y <= 8 && hash3(x, y, z, this.seed ^ 0x1a6a) > 0.97) return B.LAVA;
       // obsidian crust near the floor: blast-proof building prize for deep miners
       if (y <= 5 && hash3(x, y, z, this.seed ^ 0xb51) > 0.86) return B.OBSIDIAN;
       return B.STONE;
@@ -624,8 +634,11 @@ export class World {
 
   isSolid(x: number, y: number, z: number): boolean {
     const b = this.get(x, y, z);
-    // ladders are climb-through, small plants are walk-through
-    return b !== B.AIR && b !== B.WATER && b !== B.LADDER && !WALK_THROUGH.has(b);
+    // ladders are climb-through, small plants are walk-through, lava is
+    // waded through (damage is handled elsewhere) — never solid footing.
+    // groundHeight() builds on isSolid, so lava lakes are skipped there too
+    // and mobs won't path onto them as surfaces.
+    return b !== B.AIR && b !== B.WATER && b !== B.LAVA && b !== B.LADDER && !WALK_THROUGH.has(b);
   }
 
   /** True if `block` exists within `r` blocks (cube) of pos. */

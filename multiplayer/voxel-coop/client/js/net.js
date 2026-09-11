@@ -98,6 +98,10 @@ export class Net {
   eat(slot) { this.send({ t: "eat", slot }); }
   fall(dmg) { this.send({ t: "fall", dmg }); }
   moveItem(from, to) { this.send({ t: "moveItem", from, to }); }
+  fish() { this.send({ t: "fish" }); }
+  tame(id) { this.send({ t: "tame", id }); }
+  askTrade(id) { this.send({ t: "askTrade", id }); }
+  trade(id, slot) { this.send({ t: "trade", id, slot }); }
 }
 
 // Legacy HTTP-poll transport for devices without working websockets.
@@ -241,4 +245,8 @@ export class PollNet {
   eat(slot) { this.send({ t: "eat", slot }); }
   fall(dmg) { this.send({ t: "fall", dmg }); }
   moveItem(from, to) { this.send({ t: "moveItem", from, to }); }
+  fish() { this.send({ t: "fish" }); }
+  tame(id) { this.send({ t: "tame", id }); }
+  askTrade(id) { this.send({ t: "askTrade", id }); }
+  trade(id, slot) { this.send({ t: "trade", id, slot }); }
 }

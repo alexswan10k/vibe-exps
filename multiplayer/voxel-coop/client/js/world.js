@@ -2,7 +2,7 @@
 // Layout matches server: index = (y * CHUNK + z) * CHUNK + x.
 import { B, CHUNK, WORLD_H } from "./config.js";
 
-const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38, 39]);
+const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38, 39, 40, 41, 42]);
 // Walk-through vegetation (mirrors server WALK_THROUGH): cross-quad billboards.
 const PLANTS = new Set([31, 32, 33, 34, 35, 36]);
 
@@ -325,6 +325,25 @@ function paintLamp(g, r) {
   g.fillStyle = "#fff8dc";
   g.fillRect(4, 4, 4, 4);
 }
+function paintLava(g, r) {
+  noiseFill(g, r, [1.0, 0.32, 0.0], 0.18); // bright orange-yellow base
+  blobs(g, r, "#ffd23f", 7, 2); // hot yellow blobs
+  blobs(g, r, "#fff3b0", 4, 1); // white-hot flecks
+  blobs(g, r, "#b81e00", 5, 1); // cooling crust flecks
+}
+function paintEmeraldOre(g, r) { paintStone(g, r); blobs(g, r, "#17c964", 6, 2); }
+function paintEmeraldBlock(g, r) {
+  noiseFill(g, r, [0.09, 0.65, 0.32], 0.06); // solid green
+  g.fillStyle = "rgba(220,255,230,0.85)"; // pale mortar, green-tinted
+  for (let y = 0; y < 16; y += 4) g.fillRect(0, y, 16, 1);
+  for (let y = 0; y < 16; y += 4) {
+    const off = (y / 4) % 2 === 0 ? 0 : 4;
+    for (let x = off; x < 16; x += 8) g.fillRect(x, y, 1, 4);
+  }
+  g.fillStyle = "rgba(4,60,28,0.9)"; // dark edge bevel
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16); g.fillRect(15, 0, 1, 16);
+}
 
 // Representative face per block for inventory icons (data URLs, cached).
 const ICON_PAINT = {
@@ -342,6 +361,7 @@ const ICON_PAINT = {
   33: [paintFlowerYellow, 43],   34: [paintMushroomRed, 44], 35: [paintMushroomBrown, 45],
   36: [paintReeds, 46],
   37: [paintTNT, 47], 38: [paintObsidian, 48], 39: [paintLamp, 49],
+  40: [paintLava, 50], 41: [paintEmeraldOre, 51], 42: [paintEmeraldBlock, 52],
 };
 const iconCache = new Map();
 export function blockIconURL(block) {
@@ -420,6 +440,9 @@ export function makeMaterials() {
     [B.TNT]: M(makeCanvas(paintTNT, 47)),
     [B.OBSIDIAN]: M(makeCanvas(paintObsidian, 48)),
     [B.LAMP]: new THREE.MeshLambertMaterial({ map: makeCanvas(paintLamp, 49), emissive: 0xcf8a2a, emissiveIntensity: 1.2 }),
+    [B.LAVA]: new THREE.MeshBasicMaterial({ map: makeCanvas(paintLava, 50) }), // unlit = glows at night
+    [B.EMERALD_ORE]: M(makeCanvas(paintEmeraldOre, 51)),
+    [B.EMERALD_BLOCK]: M(makeCanvas(paintEmeraldBlock, 52)),
   };
 }
 
@@ -544,7 +567,10 @@ export class WorldClient {
           const b = getL(wx, ey, wz);
           const ei = eIdx(eex, ey, eez);
           if (!passable(b)) occ[ei] = 1;
-          if (b === B.TORCH || b === B.LAMP) {
+          if (b === B.LAVA) {
+            light[ei] = 15;
+            queue.push(ei);
+          } else if (b === B.TORCH || b === B.LAMP) {
             light[ei] = 14;
             queue.push(ei);
           }
@@ -648,6 +674,7 @@ export class WorldClient {
           byType.get(b).push([wx, y, wz]);
           if (b === B.TORCH) torchList.push([wx + 0.5, y + 0.6, wz + 0.5]);
           else if (b === B.LAMP) torchList.push([wx + 0.5, y + 0.5, wz + 0.5]);
+          else if (b === B.LAVA) torchList.push([wx + 0.5, y + 0.6, wz + 0.5]);
         }
       }
     }
@@ -673,7 +700,7 @@ export class WorldClient {
         // toward ~8% by y=4 so caves stay dark (values are linear; the
         // renderer re-encodes to sRGB). Baked torch flood-fill wins near
         // flames and tints warm orange.
-        if (b === B.TORCH || b === B.LAMP) {
+        if (b === B.TORCH || b === B.LAMP || b === B.LAVA) {
           mesh.setColorAt(i, this.shadeColor.setRGB(1, 1, 1));
         } else {
           let tl;
@@ -724,6 +751,9 @@ export class WorldClient {
     if (water) water.opacity = 0.62 + 0.08 * Math.sin(t * 1.6);
     const torch = this.materials[B.TORCH];
     if (torch) torch.emissiveIntensity = 1.6 + 0.35 * Math.sin(t * 7.3) + 0.12 * Math.sin(t * 13.7);
+    const lava = this.materials[B.LAVA];
+    // subtle pulse 0.9–1.1: setScalar resets each frame (no accumulation)
+    if (lava) lava.color.setScalar(1 + 0.1 * Math.sin(t * 3.2));
   }
 
   /** Nearest torch positions to p ( block coords ), up to `n` within `maxDist`. */
