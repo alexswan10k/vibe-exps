@@ -1,5 +1,5 @@
 // HUD + menus: hotbar, inventory, crafting grid, recipe book, chat, vitals.
-import { BLOCK_NAME } from "./config.js";
+import { BLOCK_NAME, httpBase, resolveServerUrl } from "./config.js";
 import { SHAPED_CLIENT, SMELT_CLIENT } from "./recipes.js";
 import { itemIconURL } from "./icons.js";
 
@@ -40,9 +40,15 @@ export class UI {
     this.onTrade = null; // (villagerId, slot) => void — wired in main.js to net.trade
     this.tradeId = null;
     this._hintToken = 0;
+    this._players = []; // latest [{id,name,p,yaw,hp,dead}] via setPlayers (merger: net.on("players"))
+    this._settings = this.loadSettings();
+    window.voxSettings = { ...this._settings };
+    window.voxGetPlayerName = () => (this.el("screen-name")?.value ?? "").trim().slice(0, 16)
+      || (this.el("menu-name")?.value ?? "").trim().slice(0, 16) || "player";
     this.buildSlots();
     this.bindKeys();
     this.bindWheel();
+    this.initMenus();
   }
 
   buildSlots() {
@@ -305,14 +311,24 @@ export class UI {
       if (e.code === "Escape" || e.key === "Escape") {
         if (this.invOpen) this.toggleInv(false);
         if (this.el("trade-modal")?.style.display !== "none") this.hideTrades(false);
+        if (this.el("screen-settings")?.style.display !== "none") this.toggleSettings(false);
       }
       if (e.code === "KeyH") this.toggleHelp();
+      if (e.code === "KeyO") this.toggleSettings();
+      if (e.code === "Tab") {
+        e.preventDefault();
+        if (!e.repeat) this.showPlayers(true);
+      }
       if (e.code === "KeyG") {
         const s = this.slots[this.hotbarSel];
         if (s?.id && UI.EDIBLE.has(s.id)) this.onEat?.(this.hotbarSel);
       }
     });
     this.el("chat-input").addEventListener("focus", () => this.releaseLock?.());
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Tab") this.showPlayers(false);
+    });
+    addEventListener("blur", () => this.showPlayers(false));
     this.el("chat-input").addEventListener("keydown", (e) => {
       e.stopPropagation();
       if (e.key === "Enter" && e.target.value.trim()) {
@@ -437,6 +453,7 @@ export class UI {
       `<span class="hunger" title="hunger ${huN}/20">${drum}</span>` +
       `<span class="vnum" title="hunger ${huN}/20">${huN}/20</span>`;
     this.el("dead").style.display = dead ? "flex" : "none";
+    if (dead) this.updateDeathStats();
   }
 
   chatMsg(from, msg) {
@@ -521,5 +538,184 @@ export class UI {
     if (fracOrNull === null) { b.style.display = "none"; return; }
     b.style.display = "block";
     b.firstElementChild.style.width = `${Math.min(100, fracOrNull * 100)}%`;
+  }
+
+  // ---------- menu/overlay screens (title, TAB list, settings, death stats) ----------
+
+  initMenus() {
+    // title screen: prefill name, Play only hides UI (join flow stays in main.js)
+    const nameInput = this.el("screen-name");
+    let saved = null;
+    try { saved = localStorage.getItem("vox-name") ?? localStorage.getItem("voxelcoop.name"); } catch { /* noop */ }
+    if (nameInput) {
+      nameInput.value = saved ?? this.el("menu-name")?.value ?? `player${Math.floor(Math.random() * 99)}`;
+      nameInput.addEventListener("input", () => {
+        const n = window.voxGetPlayerName();
+        try { localStorage.setItem("vox-name", n); } catch { /* noop */ }
+        const menuName = this.el("menu-name");
+        if (menuName) menuName.value = n;
+      });
+    }
+    this.el("screen-play")?.addEventListener("click", () => {
+      const n = window.voxGetPlayerName();
+      try {
+        localStorage.setItem("vox-name", n);
+        localStorage.setItem("voxelcoop.name", n); // compat with main.js join flow
+      } catch { /* noop */ }
+      const menuName = this.el("menu-name");
+      if (menuName) menuName.value = n;
+      this.el("screen-title").style.display = "none";
+      this.requestLock?.();
+    });
+    // MOTD: same-origin server status, static tip stays on failure
+    (async () => {
+      try {
+        const base = httpBase(resolveServerUrl());
+        if (!base.startsWith("http")) return;
+        const r = await fetch(`${base}/api/status`);
+        const s = await r.json();
+        const m = this.el("screen-motd");
+        if (m && s) m.textContent = `server: ${s.players} online · seed ${s.seed} · ${s.motd ?? "welcome!"}`;
+      } catch { /* keep static tip */ }
+    })();
+    // death screen fallback: main.js already wires #respawn-btn + onRespawn;
+    // this only fires when the merger hasn't (no double-respawn).
+    this.el("respawn-btn")?.addEventListener("click", () => {
+      if (this.onRespawn) return;
+      const n = window.voxNet;
+      if (n?.respawn) n.respawn();
+      else if (n?.send) n.send({ t: "respawn" });
+    });
+    // settings controls
+    const s = this._settings;
+    const vol = this.el("menu-volume"), ren = this.el("menu-render");
+    const mm = this.el("menu-minimapchk"), wx = this.el("menu-weatherchk");
+    if (vol) {
+      vol.value = String(s.volume);
+      vol.addEventListener("input", () => this.saveSettings({ volume: Number(vol.value) }));
+    }
+    if (ren) {
+      ren.value = String(s.renderDist);
+      ren.addEventListener("change", () => this.saveSettings({ renderDist: Number(ren.value) }));
+    }
+    if (mm) {
+      mm.checked = s.showMinimap;
+      mm.addEventListener("change", () => this.saveSettings({ showMinimap: mm.checked }));
+    }
+    if (wx) {
+      wx.checked = s.showWeather;
+      wx.addEventListener("change", () => this.saveSettings({ showWeather: wx.checked }));
+    }
+    this.applySettings();
+    this.el("menu-gear")?.addEventListener("click", () => this.toggleSettings());
+    this.el("menu-settings-close")?.addEventListener("click", () => this.toggleSettings(false));
+  }
+
+  loadSettings() {
+    const get = (k, fb) => {
+      try {
+        const v = localStorage.getItem(k);
+        return v === null ? fb : v;
+      } catch { return fb; }
+    };
+    const vol = Math.min(100, Math.max(0, Number(get("vox-volume", 80)) || 0));
+    const rd = [2, 4, 6, 8].includes(Number(get("vox-render-dist", 6))) ? Number(get("vox-render-dist", 6)) : 6;
+    return {
+      volume: vol,
+      renderDist: rd,
+      showMinimap: get("vox-minimap", "1") !== "0",
+      showWeather: get("vox-weather", "1") !== "0",
+    };
+  }
+
+  saveSettings(patch) {
+    Object.assign(this._settings, patch);
+    try {
+      localStorage.setItem("vox-volume", String(this._settings.volume));
+      localStorage.setItem("vox-render-dist", String(this._settings.renderDist));
+      localStorage.setItem("vox-minimap", this._settings.showMinimap ? "1" : "0");
+      localStorage.setItem("vox-weather", this._settings.showWeather ? "1" : "0");
+    } catch { /* noop */ }
+    this.applySettings();
+  }
+
+  applySettings() {
+    window.voxSettings = { ...this._settings };
+    // minimap visibility applies directly; volume/renderDist need main.js/audio hooks (see report)
+    const mmc = document.getElementById("minimap");
+    if (mmc) mmc.style.display = this._settings.showMinimap ? "" : "none";
+    try { window.voxAudio?.setVolume?.(this._settings.volume / 100); } catch { /* merger wires audio */ }
+  }
+
+  toggleSettings(force) {
+    const p = this.el("screen-settings");
+    if (!p) return;
+    const show = force ?? p.style.display === "none";
+    p.style.display = show ? "flex" : "none";
+    if (show) this.releaseLock?.();
+    else this.requestLock?.();
+  }
+
+  /** Merger hook: net.on("players", (m) => ui.setPlayers(m.list)). */
+  setPlayers(list) {
+    this._players = Array.isArray(list) ? list : [];
+    if (this.el("screen-players")?.style.display !== "none") this.renderPlayers();
+    if (this.el("dead")?.style.display !== "none") this.updateDeathStats();
+  }
+
+  showPlayers(show) {
+    const p = this.el("screen-players");
+    if (!p) return;
+    p.style.display = show ? "flex" : "none";
+    if (show) this.renderPlayers();
+  }
+
+  renderPlayers() {
+    const list = this.el("screen-players-list");
+    if (!list) return;
+    list.innerHTML = "";
+    const me = window.voxGetPlayerName?.() ?? "";
+    let eye = null;
+    try { eye = window.player?.pos ?? null; } catch { /* noop */ }
+    const rows = [...this._players].sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")));
+    if (!rows.length) list.textContent = "no players seen yet";
+    for (const pl of rows) {
+      const d = document.createElement("div");
+      d.className = "screen-prow" + (pl.dead ? " dead" : "") + (pl.name === me ? " me" : "");
+      const nm = document.createElement("span");
+      nm.className = "nm";
+      nm.textContent = pl.name ?? `#${pl.id ?? "?"}`;
+      const hp = document.createElement("span");
+      hp.className = "hp";
+      hp.textContent = pl.dead ? "☠" : `❤${Math.max(0, Math.ceil(pl.hp ?? 20))}`;
+      const st = document.createElement("span");
+      st.className = "st";
+      st.textContent = pl.dead ? "dead" : "alive";
+      d.append(nm, hp, st);
+      if (Array.isArray(pl.p) && eye) {
+        const dist = document.createElement("span");
+        dist.className = "dist";
+        dist.textContent = `${Math.round(Math.hypot(pl.p[0] - eye.x, pl.p[2] - eye.z))}m`;
+        d.appendChild(dist);
+      }
+      list.appendChild(d);
+    }
+  }
+
+  /** Death stats: players msg carries no kills, so show online/alive counts. */
+  updateDeathStats() {
+    const panel = this.el("dead")?.querySelector(".dead-panel");
+    if (!panel) return;
+    let stats = document.getElementById("screen-death-stats");
+    if (!stats) {
+      stats = document.createElement("div");
+      stats.id = "screen-death-stats";
+      panel.insertBefore(stats, panel.querySelector("button"));
+    }
+    const online = this._players.length;
+    const alive = this._players.filter((p) => !p.dead).length;
+    stats.textContent = online > 0
+      ? `${online} player${online === 1 ? "" : "s"} online · ${alive} alive — respawn to rejoin`
+      : "respawn to rejoin the world";
   }
 }

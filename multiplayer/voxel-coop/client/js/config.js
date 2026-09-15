@@ -28,7 +28,7 @@ export const BLOCK_NAME = {
   40: "lava", 41: "emerald ore", 42: "emerald block",
   137: "bone", 138: "string",
   141: "fishing rod", 142: "fish", 143: "cooked fish", 144: "emerald",
-  145: "compass",
+  145: "compass", 146: "slimeball", 147: "ender pearl",
   101: "stick", 102: "coal", 103: "iron ingot", 104: "pork",
   105: "wool", 106: "feather", 107: "cooked pork", 108: "wood pick", 109: "stone pick",
   110: "iron pick", 111: "wood sword", 113: "stone sword", 114: "iron sword",

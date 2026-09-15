@@ -238,3 +238,58 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
   border: none; border-radius: 6px; padding: 6px 14px; font-weight: 700;
   cursor: pointer; font-size: 13px; }
 .trade-row button:hover { background: #63bd40; }
+
+/* ---- menu/overlay screens (title, TAB list, settings) ---- */
+#screen-title, #screen-players, #screen-settings { position: fixed; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  font-family: "Courier New", ui-monospace, Menlo, Consolas, monospace; }
+#screen-title { background: rgba(4,6,12,.82); }
+#screen-settings { background: rgba(0,0,0,.6); z-index: 31; }
+#screen-players { background: transparent; z-index: 25; pointer-events: none;
+  align-items: flex-start; padding-top: 12vh; }
+.screen-panel { background: rgba(14,14,20,.92); border: 3px solid #3a3a44;
+  border-radius: 12px; padding: 24px 28px; width: min(430px, 94vw);
+  max-height: 88vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.7); }
+.screen-panel h1 { margin: 0; font-size: 30px; letter-spacing: 2px;
+  text-shadow: 2px 2px 0 #000; text-align: center; }
+.screen-panel h2 { margin: 0; font-size: 18px; letter-spacing: 1px;
+  display: flex; justify-content: space-between; align-items: center; }
+.screen-panel h2 button { background: #2a2a33; color: #fff; border: 1px solid #555;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-size: 14px; }
+.screen-sub { margin: 0; text-align: center; opacity: .7; font-size: 13px; }
+.screen-name { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.screen-name input, .screen-panel select { background: #0e0e12; color: #fff;
+  border: 2px solid #444; border-radius: 6px; padding: 9px; font-size: 15px;
+  font-family: inherit; }
+.screen-panel label.row { display: flex; flex-direction: row; align-items: center;
+  gap: 8px; font-size: 14px; }
+.screen-panel input[type="range"] { width: 100%; accent-color: #55aa35; }
+.screen-panel input[type="checkbox"] { width: 18px; height: 18px; accent-color: #55aa35; }
+#screen-play { font-size: 19px; padding: 12px; border-radius: 8px; cursor: pointer;
+  background: #55aa35; color: #fff; border: none; font-weight: 700;
+  font-family: inherit; letter-spacing: 1px; text-shadow: 1px 1px 0 #000; }
+#screen-play:hover { background: #63bd40; }
+#screen-motd { font-size: 12.5px; color: #ffd23d; text-align: center; opacity: .9; }
+.screen-controls { font-size: 12.5px; line-height: 1.8; opacity: .75;
+  border-top: 1px solid #333; padding-top: 8px; text-align: center; }
+.screen-tab { width: min(520px, 94vw); background: rgba(10,10,14,.78); }
+#screen-players-list { display: flex; flex-direction: column; gap: 3px; }
+.screen-prow { display: flex; gap: 10px; align-items: baseline; font-size: 14px;
+  padding: 3px 8px; border-radius: 4px; background: rgba(255,255,255,.04); }
+.screen-prow .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.screen-prow .hp { color: #ff8080; white-space: nowrap; }
+.screen-prow .st { opacity: .7; white-space: nowrap; }
+.screen-prow .dist { opacity: .55; white-space: nowrap; }
+.screen-prow.me { border: 1px solid #55aa35; }
+.screen-prow.dead { opacity: .55; }
+#screen-death-stats { font-size: 13px; opacity: .8; margin: 4px 0 8px; }
+#menu-gear { position: fixed; bottom: 64px; right: 56px; z-index: 29; font-size: 20px;
+  background: rgba(0,0,0,.55); color: #fff; border: 1px solid #666; border-radius: 8px;
+  padding: 6px 10px; cursor: pointer; opacity: .7; }
+#menu-gear:hover { opacity: 1; }
+@media (max-width: 560px) {
+  .screen-panel { padding: 16px; }
+  .screen-panel h1 { font-size: 23px; }
+  #menu-gear { right: 64px; }
+}

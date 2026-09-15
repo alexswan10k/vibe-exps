@@ -367,4 +367,5 @@ export const VILLAGER_TRADES: { give: { id: number; n: number }; get: { id: numb
   { give: { id: I.EMERALD, n: 2 }, get: { id: B.TORCH, n: 8 } },
   { give: { id: I.EMERALD, n: 3 }, get: { id: I.COOKED_PORK, n: 4 } },
   { give: { id: I.EMERALD, n: 5 }, get: { id: I.DIAMOND, n: 1 } },
+  { give: { id: I.SLIMEBALL, n: 4 }, get: { id: I.EMERALD, n: 1 } },
 ];

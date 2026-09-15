@@ -111,6 +111,20 @@ function paintEmerald(g) {
   R(g, 5, 9, 6, 5, "#1a9050");
   R(g, 6, 5, 2, 3, "#ffffff");
 }
+function paintSlimeball(g) {
+  R(g, 5, 6, 6, 7, "#3fd44f"); // green blob body
+  R(g, 5, 6, 6, 2, "#8df09a"); // top highlight
+  R(g, 5, 11, 6, 2, "#1f8a2e"); // bottom shade
+  R(g, 4, 8, 1, 3, "#3fd44f"); R(g, 11, 8, 1, 3, "#3fd44f"); // side bulge
+  R(g, 6, 7, 2, 3, "#d0ffd8"); // shine spot
+}
+function paintEnderPearl(g) {
+  R(g, 5, 4, 6, 9, "#0e4a4a"); // dark teal orb
+  R(g, 5, 4, 6, 2, "#2a8a8a"); // lit rim
+  R(g, 5, 11, 6, 2, "#062a2a"); // deep shade
+  R(g, 4, 6, 1, 5, "#0e4a4a"); R(g, 11, 6, 1, 5, "#0e4a4a"); // round sides
+  R(g, 6, 5, 2, 3, "#b8fff4"); // glint
+}
 function paintCompass(g) {
   R(g, 4, 2, 8, 12, "#888888"); // grey ring
   R(g, 5, 3, 6, 10, "#1a1a1a"); // face
@@ -163,6 +177,7 @@ const PAINTERS = {
   137: paintBone, 138: paintString,
   141: paintRod, 142: paintFish, 143: paintCookedFish, 144: paintEmerald,
   145: paintCompass,
+  146: paintSlimeball, 147: paintEnderPearl,
 };
 
 export function itemIconURL(id) {

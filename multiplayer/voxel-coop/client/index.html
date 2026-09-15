@@ -123,6 +123,42 @@
   </div>
 </div>
 
+<button id="menu-gear" title="settings (O)">⚙</button>
+<div id="screen-title">
+  <div class="screen-panel">
+    <h1>🧱 voxel-coop</h1>
+    <p class="screen-sub">LAN multiplayer voxel survival</p>
+    <label class="screen-name">player name <input id="screen-name" maxlength="16" autocomplete="off"></label>
+    <button id="screen-play">▶ play</button>
+    <div id="screen-motd">tip: hold LMB on a tree → logs. zombies come at night.</div>
+    <div class="screen-controls">
+      <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
+      <b>hold LMB</b> mine · <b>RMB</b> place · <b>E</b> inventory · <b>G</b> eat<br>
+      <b>TAB</b> players · <b>T</b> chat · <b>N</b> minimap · <b>O</b> settings · <b>H</b> help
+    </div>
+  </div>
+</div>
+<div id="screen-players" style="display:none">
+  <div class="screen-panel screen-tab">
+    <h2>players online</h2>
+    <div id="screen-players-list"></div>
+  </div>
+</div>
+<div id="screen-settings" style="display:none">
+  <div class="screen-panel">
+    <h2>⚙ settings <button id="menu-settings-close" title="close">✕</button></h2>
+    <label>volume <input id="menu-volume" type="range" min="0" max="100" step="1"></label>
+    <label>render distance <select id="menu-render">
+      <option value="2">2 (fast)</option>
+      <option value="4">4</option>
+      <option value="6">6 (default)</option>
+      <option value="8">8 (far)</option>
+    </select></label>
+    <label class="row"><input id="menu-minimapchk" type="checkbox"> minimap</label>
+    <label class="row"><input id="menu-weatherchk" type="checkbox"> weather FX</label>
+  </div>
+</div>
+
 <script src="libs/three.min.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>

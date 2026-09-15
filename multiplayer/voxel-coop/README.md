@@ -132,6 +132,21 @@ data/             world.json + players.json (gitignored saves)
   warning when you're standing in it
 - 🗺 minimap markers: home (orange) + bed (purple) dots alongside spawn
   (green), mobs (red) and partners (cyan) — see the canvas tooltip legend
+- 🏘 villages: 3–5 deterministic villages (houses with beds/torches, lamp-plaza,
+  well, farm) — villagers spawn around them, `/help` lists everything
+- 🏚 dungeons: cobble/stonebrick rooms deep down (y 9–21) with furnaces and a
+  skeleton guardian that respawns near players every ~10s — bring torches
+- 👻 new mobs: **slimes** (hop in groups near water/caves, drop slimeballs —
+  villagers buy 4 → 1 emerald), **wraiths** (night teleporters that burn at
+  dawn, 50% ender pearl), **golems** (120 HP neutral tanks, retaliate 3x,
+  drop iron)
+- 🌀 ender pearls: press **G** to throw along your aim (12 blocks, 1s cooldown)
+- ⛈ thunderstorms: heavy rain can turn severe — lightning strikes near players
+  (6–8 dmg, scorches grass), bolt + flash + distance-delayed thunder; `/storm`
+  cycles off/on/severe
+- 🖥 menus: title screen with name entry (Play to join), death screen with stats
+  + Respawn, TAB player list, settings (O or gear: volume, render distance,
+  minimap + weather-FX toggles, all persisted)
 
 ## Protocol (WS JSON)
 

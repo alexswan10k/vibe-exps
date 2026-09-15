@@ -74,7 +74,7 @@ export const BLOCK_NAME: Record<number, string> = {
   136: "golden apple",
   137: "bone", 138: "string",
   141: "fishing rod", 142: "fish", 143: "cooked fish", 144: "emerald",
-  145: "compass",
+  145: "compass", 146: "slimeball", 147: "ender pearl",
 };
 
 // Item ids: placeable blocks reuse block id; tools/materials use 100+.
@@ -122,6 +122,8 @@ export const I = {
   COOKED_FISH: 143,
   EMERALD: 144,
   COMPASS: 145,
+  SLIMEBALL: 146,
+  ENDER_PEARL: 147,
 } as const;
 
 // Seconds to break by hand (Infinity = unbreakable)
@@ -216,6 +218,7 @@ export type ClientMsg =
   | { t: "attackMob"; id: number; weapon?: number }
   | { t: "ignite"; x: number; y: number; z: number }
   | { t: "fish" }
+  | { t: "pearl"; dx: number; dy: number; dz: number }
   | { t: "tame"; id: number }
   | { t: "askTrade"; id: number }
   | { t: "trade"; id: number; slot: number }
@@ -237,8 +240,9 @@ export type ServerMsg =
   | { t: "inv"; slots: InvSlot[] }
   | { t: "grid"; cells: InvSlot[]; result: InvSlot }
   | { t: "vitals"; hp: number; maxHp: number; hunger: number; dead: boolean }
-  | { t: "time"; time: number; rain?: number }
+  | { t: "time"; time: number; rain?: number; storm?: number }
   | { t: "boom"; x: number; y: number; z: number; r: number }
+  | { t: "strike"; x: number; y: number; z: number }
   | { t: "toast"; text: string }
   | { t: "tradeOffers"; id: number; offers: TradeOffer[] }
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
