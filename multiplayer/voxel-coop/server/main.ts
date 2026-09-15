@@ -6,6 +6,7 @@ import { PORT } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
+import { dungeonSpawns } from "./structures.ts";
 import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState, VILLAGER_TRADES } from "./crafting.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
@@ -166,6 +167,7 @@ function leaveGame(pl: Player): void {
   players.remove(pl.id);
   chatTimes.delete(pl.id);
   fishCd.delete(pl.id);
+  pearlCd.delete(pl.id);
   pendingReset.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
   void persistPlayers();
@@ -194,6 +196,78 @@ function tickRain(dt: number): boolean {
   const before = rain;
   rain += Math.sign(rainTarget - rain) * Math.min(Math.abs(rainTarget - rain), dt / 8);
   return Math.abs(rain - before) > 0.001;
+}
+
+// ---- lightning storm: starts only under heavy rain, strikes near players ----
+let storm = 0; // 0 off, 1 on, 2 severe
+let stormT = 50 + Math.random() * 60; // seconds until next storm shift
+let strikeT = 8; // seconds until next strike while active
+function doStrike(): void {
+  const online = [...players.all.values()].filter((p) => !p.dead);
+  if (online.length === 0) return;
+  const target = online[Math.floor(Math.random() * online.length)];
+  const sx = Math.floor(target.p[0] + (Math.random() * 48 - 24));
+  const sz = Math.floor(target.p[2] + (Math.random() * 48 - 24));
+  const sy = world.groundHeight(sx, sz) + 1;
+  if (sy < 1 || sy >= 48) return;
+  const dmg = 6 + Math.floor(Math.random() * 3); // 6-8
+  for (const pl of players.all.values()) {
+    if (pl.dead) continue;
+    const d = Math.hypot(pl.p[0] - (sx + 0.5), pl.p[1] - (sy + 0.5), pl.p[2] - (sz + 0.5));
+    if (d < 3) {
+      const before = pl.hp;
+      players.hurt(pl, dmg);
+      sendVitals(pl);
+      if (pl.dead && before > 0) noteDeath(pl, `⚡ ${pl.name} was struck by lightning`);
+    }
+  }
+  for (const m of [...mobs.mobs.values()]) {
+    const d = Math.hypot(m.p[0] - (sx + 0.5), m.p[1] - (sy + 0.5), m.p[2] - (sz + 0.5));
+    if (d < 3) {
+      const alive = mobs.hurt(m.id, dmg);
+      if (!alive) broadcast({ t: "chat", from: "server", msg: `⚡ lightning slew a ${m.kind}` });
+      else broadcast({ t: "mobHit", id: m.id });
+    }
+  }
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -2; dz <= 2; dz++) {
+      if (dx * dx + dz * dz > 4) continue;
+      const gy = world.groundHeight(sx + dx, sz + dz);
+      if (world.get(sx + dx, gy, sz + dz) === B.GRASS) {
+        world.set(sx + dx, gy, sz + dz, B.DIRT);
+        broadcast({ t: "block", x: sx + dx, y: gy, z: sz + dz, block: B.DIRT });
+      }
+    }
+  }
+  broadcast({ t: "strike", x: sx, y: sy, z: sz });
+}
+function tickStorm(dt: number): boolean {
+  const before = storm;
+  stormT -= dt;
+  if (stormT <= 0) {
+    if (storm === 0) {
+      if (rain > 0.7 && Math.random() < 0.5) {
+        storm = Math.random() < 0.25 ? 2 : 1;
+        stormT = 45 + Math.random() * 45;
+        strikeT = 2 + Math.random() * 3;
+        toastAll(storm === 2 ? "⛈ a SEVERE lightning storm strikes!" : "⛈ a lightning storm rolls in — take cover!");
+      } else {
+        stormT = 20 + Math.random() * 30;
+      }
+    } else {
+      storm = 0;
+      stormT = 60 + Math.random() * 90;
+      toastAll("⛈ the lightning passes");
+    }
+  }
+  if (storm > 0) {
+    strikeT -= dt;
+    if (strikeT <= 0) {
+      strikeT = storm === 2 ? 6 + Math.random() * 4 : 9 + Math.random() * 5;
+      doStrike();
+    }
+  }
+  return storm !== before;
 }
 
 // ---- TNT: lit fuses + authoritative explosions ----
@@ -274,6 +348,7 @@ function tickFuses(): void {
 // ---- edit validation ----
 const lastEdit = new Map<number, number>();
 const lastAttack = new Map<number, number>();
+const pearlCd = new Map<number, number>();
 function checkRate(id: number): boolean {
   const now = Date.now();
   const prev = lastEdit.get(id) ?? 0;
@@ -391,7 +466,7 @@ function doReset(requestedSeed: number | null, by: string): void {
     sendMarkers(pl);
   }
   sendPlayersSnapshot();
-  broadcast({ t: "time", time: world.time, rain });
+  broadcast({ t: "time", time: world.time, rain, storm });
   broadcast({ t: "chat", from: "server", msg: `🌍 ${by} reset the world (seed ${seed})` });
   console.log(`[reset] by ${by}, seed=${seed}`);
 }
@@ -407,7 +482,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed]" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm" });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -444,6 +519,21 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       broadcast({ t: "chat", from: "server", msg: `${pl.name} ${rainTarget > 0.5 ? "summoned a storm 🌧" : "cleared the skies ☀"}` });
       return true;
     }
+    case "storm": {
+      storm = storm === 0 ? 1 : storm === 1 ? 2 : 0;
+      if (storm === 0) {
+        stormT = 60 + Math.random() * 90;
+        toastAll("⛈ the lightning passes");
+        broadcast({ t: "chat", from: "server", msg: `${pl.name} calmed the storm ☀` });
+      } else {
+        stormT = 45 + Math.random() * 45;
+        strikeT = 2 + Math.random() * 3;
+        toastAll(storm === 2 ? "⛈ a SEVERE lightning storm strikes!" : "⛈ a lightning storm rolls in — take cover!");
+        broadcast({ t: "chat", from: "server", msg: `${pl.name} summoned ${storm === 2 ? "a SEVERE storm ⛈" : "a storm ⛈"}` });
+      }
+      broadcast({ t: "time", time: world.time, rain, storm });
+      return true;
+    }
     case "stats":
       sendTo(pl, { t: "chat", from: "server", msg: `kills ${pl.stats.kills} · deaths ${pl.stats.deaths} · fished ${pl.stats.fished}` });
       return true;
@@ -462,7 +552,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
         return true;
       }
       world.time = v;
-      broadcast({ t: "time", time: world.time, rain });
+      broadcast({ t: "time", time: world.time, rain, storm });
       broadcast({ t: "chat", from: "server", msg: `${pl.name} set time to ${v}` });
       return true;
     }
@@ -697,6 +787,48 @@ function onMessage(pl: Player, raw: string): void {
       fishCd.set(pl.id, nowFish);
       pendingFish.push({ plId: pl.id, at: nowFish + 4000 + Math.random() * 4000 });
       sendTo(pl, { t: "chat", from: "server", msg: "🎣 line cast… wait for a bite" });
+      break;
+    }
+    case "pearl": {
+      if (pl.dead) break;
+      if (![m.dx, m.dy, m.dz].every(Number.isFinite)) break;
+      let dx = m.dx, dy = m.dy, dz = m.dz;
+      const len = Math.hypot(dx, dy, dz);
+      if (!Number.isFinite(len) || len < 1e-6) {
+        sendTo(pl, { t: "denied", reason: "bad direction" });
+        break;
+      }
+      dx /= len; dy /= len; dz /= len;
+      const nowPearl = Date.now();
+      if (nowPearl - (pearlCd.get(pl.id) ?? 0) < 1000) {
+        sendTo(pl, { t: "denied", reason: "pearl cooling down" });
+        break;
+      }
+      if (countOf(pl.slots, 147) < 1) {
+        sendTo(pl, { t: "denied", reason: "need an ender pearl" });
+        break;
+      }
+      const [ex, ey, ez] = pl.p;
+      let hitS = -1;
+      let lastFree: [number, number, number] | null = null;
+      for (let s = 0.5; s <= 12; s += 0.25) {
+        const bx = Math.floor(ex + dx * s), by = Math.floor(ey + dy * s), bz = Math.floor(ez + dz * s);
+        if (by < 1 || by + 1 >= 48) { hitS = s; break; }
+        if (world.isSolid(bx, by, bz)) { hitS = s; break; }
+        if (!world.isSolid(bx, by, bz) && !world.isSolid(bx, by + 1, bz)) {
+          lastFree = [bx, by, bz];
+        }
+      }
+      if (hitS < 0 || !lastFree) {
+        sendTo(pl, { t: "denied", reason: "no room to land" });
+        break;
+      }
+      pearlCd.set(pl.id, nowPearl);
+      removeItems(pl.slots, { 147: 1 });
+      pl.p = [lastFree[0] + 0.5, lastFree[1] + 1.5, lastFree[2] + 0.5];
+      pl.lastMove = Date.now();
+      sendInv(pl);
+      sendPlayersSnapshot();
       break;
     }
     case "tame": {
@@ -937,11 +1069,12 @@ setInterval(() => {
   broadcast({ t: "ping", now: Date.now() });
 }, 15000);
 
-let mobT = 0, slowT = 0;
+let mobT = 0, slowT = 0, guardT = 0;
 setInterval(() => {
   const dt = 0.1;
   world.tick(dt);
   if (tickRain(dt)) mobs.rain = rain; else mobs.rain = rain;
+  tickStorm(dt);
   tickFuses();
   // mob damage callback routes to vitals (name included so tamed wolves can
   // follow owners — mobs side reads (pl as {name?:string}).name defensively)
@@ -1004,6 +1137,29 @@ setInterval(() => {
     mobs.maintain(world, players.positions(), world.isNight());
     if (mobs.mobs.size > 0 || players.all.size > 0) broadcast({ t: "mobs", list: mobs.wire() });
   }
+  // dungeon guardians: every ~10s, dungeons near players get a skeleton
+  // (maintain() culls far strays, so top up instead of spawning once at boot)
+  guardT += dt;
+  if (guardT >= 10) {
+    guardT = 0;
+    if (players.all.size > 0) {
+      const pos = players.positions();
+      for (const s of dungeonSpawns(world.seed)) {
+        let nearPl = false;
+        for (const p of pos) {
+          const d = Math.hypot(p[0] - s.x, p[2] - s.z);
+          if (d < 64) { nearPl = true; break; }
+        }
+        if (!nearPl) continue;
+        let guards = 0;
+        for (const m of mobs.mobs.values()) {
+          if (m.kind !== "skeleton") continue;
+          if (Math.hypot(m.p[0] - s.x, m.p[2] - s.z) < 10) { guards++; break; }
+        }
+        if (guards === 0) mobs.spawn("skeleton", s.x + 0.5, s.y + 1.2, s.z + 0.5);
+      }
+    }
+  }
   // players broadcast at 10Hz
   for (const pl of players.all.values()) {
     sendTo(pl, { t: "players", list: players.wire(pl.id) });
@@ -1034,7 +1190,7 @@ setInterval(() => {
   if (slowT >= 2 || furnaceChanged) {
     if (slowT >= 2) {
       slowT = 0;
-      broadcast({ t: "time", time: world.time, rain });
+      broadcast({ t: "time", time: world.time, rain, storm });
       void persistPlayers();
       // evict legacy poll clients that stopped polling
       const now = Date.now();

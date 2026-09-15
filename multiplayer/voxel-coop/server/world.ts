@@ -2,6 +2,7 @@
 // Coordinates: x,z unbounded, y in [0, WORLD_H).
 
 import { B, CHUNK, WORLD_H, SEA_LEVEL, WALK_THROUGH, encodeRLE } from "./protocol.ts";
+import { villageBlockAt, dungeonBlockAt } from "./structures.ts";
 
 function hash2(x: number, z: number, seed: number): number {
   // 32-bit integer hash — must use Math.imul (plain * overflows doubles
@@ -449,6 +450,12 @@ export class World {
         }
       }
     }
+    // structures overlay (villages): at/above-surface builds only. Stair
+    // corridors + porch clearing above win, so cave entrances stay open.
+    if (y >= h) {
+      const v = villageBlockAt(x, y, z, this.seed, h);
+      if (v !== undefined) return v;
+    }
     // … then worms + shafts + chambers carve stone AND dirt bands (never
     // bedrock, never the top 2 roof layers)
     if (y >= 4 && y <= h - 2 && carvedAt(x, y, z, this.seed, h)) {
@@ -467,6 +474,13 @@ export class World {
       return B.AIR;
     }
     if (y <= h - 4) {
+      // structures overlay (dungeons): rooms/shells in the deep stone zone
+      // only (y 9..21 gate inside). Never bedrock/lava (y<=8), never water
+      // (needs dry land + 3+ solid above the ceiling — validated per region).
+      if (y >= 9 && y <= 21) {
+        const d = dungeonBlockAt(x, y, z, this.seed, h);
+        if (d !== undefined) return d;
+      }
       // ores sprinkled in stone — boosted ~3x on cave walls (halo) so
       // spelunking pays: tunnels sparkle instead of running bare.
       const halo = y >= 4 && y <= h - 2 && caveHalo(x, y, z, this.seed, h);

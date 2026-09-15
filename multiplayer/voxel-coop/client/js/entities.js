@@ -11,6 +11,9 @@ const MOB_STYLE = {
   villager: { color: 0x7a5a3a, body: [0.55, 1.0, 0.4], head: [0.45, 0.5, 0.4], headY: 1.2, eyes: false },
   wolf: { color: 0x8a8a8a, body: [0.8, 0.5, 0.45], head: [0.4, 0.4, 0.35], headY: 0.6, eyes: false },
   wisp: { color: 0xaef2ff, body: [0.4, 0.6, 0.4], head: [0.35, 0.35, 0.35], headY: 0.8, eyes: true },
+  slime: { color: 0x44cc55, body: [0.8, 0.7, 0.8], head: [0.5, 0.4, 0.5], headY: 0.75, eyes: false, opacity: 0.65 },
+  wraith: { color: 0x14141f, body: [0.5, 1.2, 0.4], head: [0.42, 0.42, 0.42], headY: 1.35, eyes: true, eyeColor: 0x66eeff },
+  golem: { color: 0x8d8d94, body: [1.2, 1.5, 0.9], head: [0.7, 0.6, 0.6], headY: 1.75, eyes: false },
 };
 
 function flashable(mat) {
@@ -40,7 +43,11 @@ export class Entities {
       if (!e) {
         const st = MOB_STYLE[m.kind] ?? MOB_STYLE.pig;
         const node = new THREE.Group();
-        const mat = flashable(new THREE.MeshLambertMaterial({ color: st.color }));
+        const mat = flashable(new THREE.MeshLambertMaterial({
+          color: st.color,
+          transparent: st.opacity !== undefined,
+          opacity: st.opacity ?? 1,
+        }));
         const body = new THREE.Mesh(new THREE.BoxGeometry(...st.body), mat);
         body.position.y = st.body[1] / 2;
         body.castShadow = true;
@@ -49,7 +56,7 @@ export class Entities {
         head.castShadow = true;
         node.add(body, head);
         if (st.eyes) {
-          const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+          const eyeMat = new THREE.MeshBasicMaterial({ color: st.eyeColor ?? 0xff2222 });
           for (const sx of [-0.11, 0.11]) {
             const eye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.02), eyeMat);
             eye.position.set(sx, body.position.y + st.body[1] / 2 + 0.35, st.body[2] / 2 + st.head[2] - 0.08);
@@ -68,7 +75,7 @@ export class Entities {
         bar.position.z = 0.001;
         barBg.add(bar);
         this.scene.add(barBg);
-        e = { id: m.id, node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0, kind: m.kind, eyeMat: st.eyes ? eyeMat : null };
+        e = { id: m.id, node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0, kind: m.kind, eyeMat: st.eyes ? eyeMat : null, eyeColorBase: st.eyeColor ?? null };
         this.mobs.set(m.id, e);
       }
       e.target = new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
@@ -178,10 +185,15 @@ export class Entities {
       e.mat.emissive.setHex(flashing ? 0xff2222 : e.mat.userData.baseEmissive);
       if (flashing) e.node.scale.set(1.15, 0.85, 1.15);
       else e.node.scale.set(1, 1, 1);
-      // zombie eyes glow pulse
+      // zombie eyes glow pulse (custom eye colors pulse brightness instead)
       if (e.eyeMat) {
-        const p = 0.5 + 0.5 * Math.sin(now / 240);
-        e.eyeMat.color.setRGB(1, 0.13 + p * 0.25, 0.13);
+        if (e.eyeColorBase) {
+          const p = 0.7 + 0.5 * Math.sin(now / 240);
+          e.eyeMat.color.setHex(e.eyeColorBase).multiplyScalar(p);
+        } else {
+          const p = 0.5 + 0.5 * Math.sin(now / 240);
+          e.eyeMat.color.setRGB(1, 0.13 + p * 0.25, 0.13);
+        }
       }
     }
     for (const [, e] of this.remotes) {

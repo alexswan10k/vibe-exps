@@ -99,6 +99,7 @@ export class Net {
   fall(dmg) { this.send({ t: "fall", dmg }); }
   moveItem(from, to) { this.send({ t: "moveItem", from, to }); }
   fish() { this.send({ t: "fish" }); }
+  pearl(dx, dy, dz) { this.send({ t: "pearl", dx, dy, dz }); }
   tame(id) { this.send({ t: "tame", id }); }
   askTrade(id) { this.send({ t: "askTrade", id }); }
   trade(id, slot) { this.send({ t: "trade", id, slot }); }
@@ -246,6 +247,7 @@ export class PollNet {
   fall(dmg) { this.send({ t: "fall", dmg }); }
   moveItem(from, to) { this.send({ t: "moveItem", from, to }); }
   fish() { this.send({ t: "fish" }); }
+  pearl(dx, dy, dz) { this.send({ t: "pearl", dx, dy, dz }); }
   tame(id) { this.send({ t: "tame", id }); }
   askTrade(id) { this.send({ t: "askTrade", id }); }
   trade(id, slot) { this.send({ t: "trade", id, slot }); }

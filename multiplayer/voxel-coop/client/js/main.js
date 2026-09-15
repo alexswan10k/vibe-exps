@@ -10,6 +10,7 @@ import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
 import { Minimap } from "./minimap.js";
+import { initWeather, onStrike as weatherOnStrike, onTime as weatherOnTime, updateWeather } from "./weather.js";
 
 const RENDER_DIST = 6;
 const UNLOAD_DIST = 8;
@@ -194,6 +195,7 @@ rainPts.frustumCulled = false;
 rainPts.visible = false;
 scene.add(rainPts);
 window.voxSky = { sunDisc, sunGlow, moonDisc, stars }; // handy for screenshots/tests
+initWeather(scene);
 const player = new Player(camera, renderer.domElement);
 player.onFallDamage = (dmg) => net.fall(dmg);
 const crack = new CrackOverlay(scene);
@@ -583,6 +585,17 @@ addEventListener("keydown", (e) => {
     audio.splash();
     hand.swing();
   }
+  if (e.code === "KeyG" && !ui.chatFocused()) {
+    if (!net?.connected || dead || ui.invOpen) return;
+    // throw an ender pearl (item 147) along the look dir
+    if (!(ui.slots ?? []).some((s) => s?.id === 147)) {
+      ui.hint("need an ender pearl (147) to throw");
+      return;
+    }
+    const d = player.lookDir();
+    net.pearl(d.x, d.y, d.z);
+    hand.swing();
+  }
   if (e.code === "KeyT" && !ui.chatFocused()) {
     e.preventDefault();
     ui.el("chat-input").focus();
@@ -614,7 +627,7 @@ net.on("chunk", (m) => {
 });
 
 net.on("block", (m) => world.setLocal(m.x, m.y, m.z, m.block));
-net.on("players", (m) => entities.setPlayers(m.list));
+net.on("players", (m) => { entities.setPlayers(m.list); if (ui.setPlayers) ui.setPlayers(m.list); });
 net.on("mobs", (m) => entities.setMobs(m.list));
 net.on("mobHit", (m) => {
   entities.flash(m.id);
@@ -673,7 +686,8 @@ net.on("vitals", (m) => {
   prevHunger = m.hunger;
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
-net.on("time", (m) => applyTime(m.time, m.rain ?? 0));
+net.on("time", (m) => { applyTime(m.time, m.rain ?? 0); weatherOnTime(m); });
+net.on("strike", (m) => weatherOnStrike(m, player.pos));
 net.on("boom", (m) => {
   // server-authoritative crater: shake, flash, debris, thunder
   const cx = m.x + 0.5, cy = m.y + 0.5, cz = m.z + 0.5;
@@ -750,8 +764,10 @@ function connectGame(serverUrl, name) {
   }
   attachHandlers();
   net.connect(serverUrl, name);
+  window.voxNet = net;
 }
 $("menu-join").addEventListener("click", () => {
+  try { $("menu-name").value = window.voxGetPlayerName?.() ?? $("menu-name").value; } catch {}
   audio.ensure();
   const name = $("menu-name").value.trim().slice(0, 16) || "player";
   try { localStorage.setItem("voxelcoop.name", name); } catch { /* noop */ }
@@ -897,6 +913,7 @@ function frame() {
     }
   }
   applyTime(serverTime, serverRain); // cheap enough; keeps sun glued to player
+  updateWeather(dt);
   renderer.render(scene, camera);
 }
 applyTime(0.25, 0);

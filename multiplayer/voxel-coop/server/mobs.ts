@@ -1,15 +1,17 @@
-// Server-side lifeforms: passive wanderers + night zombies that chase players.
+// Server-side lifeforms: passive wanderers + night zombies that chase players,
+// plus slimes (bouncy passive), wraiths (night teleporters) and golems (neutral tanks).
 
 import { B, MobWire, Vec3, WORLD_H } from "./protocol.ts";
-import { World } from "./world.ts";
+import { BIOME, World, biomeAt } from "./world.ts";
 
 export interface Mob {
   id: number;
-  kind: "pig" | "cow" | "chicken" | "sheep" | "zombie" | "skeleton" | "spider" | "ogre" | "villager" | "wolf" | "wisp";
+  kind: "pig" | "cow" | "chicken" | "sheep" | "zombie" | "skeleton" | "spider" | "ogre" | "villager" | "wolf" | "wisp" | "slime" | "wraith" | "golem";
   p: Vec3;
   hp: number;
   maxHp: number;
   owner?: string; // player name of tamer; undefined = wild (spawn leaves unset)
+  blink?: boolean; // wraith: pending teleport, consumed by tick (world-aware jump)
   dir: number; // yaw radians
   wanderT: number;
   atkCd: number;
@@ -28,6 +30,9 @@ const STATS: Record<string, { hp: number; speed: number; dmg: number }> = {
   villager: { hp: 20, speed: 1.2, dmg: 0 },
   wolf: { hp: 16, speed: 3.6, dmg: 4 },
   wisp: { hp: 8, speed: 4.2, dmg: 2 },
+  slime: { hp: 8, speed: 1.8, dmg: 0 },
+  wraith: { hp: 18, speed: 1.6, dmg: 3 },
+  golem: { hp: 120, speed: 1.1, dmg: 12 },
 };
 
 export function mobDrops(kind: string): { id: number; n: number }[] {
@@ -82,6 +87,9 @@ export function mobDrops(kind: string): { id: number; n: number }[] {
       if (Math.random() < 0.1) drops.push({ id: 144, n: 1 }); // emerald
       return drops;
     }
+    case "slime": return [{ id: 146, n: 1 + Math.floor(Math.random() * 2) }]; // slimeball 1-2
+    case "wraith": return Math.random() < 0.5 ? [{ id: 147, n: 1 }] : []; // ender pearl 0-1
+    case "golem": return [{ id: 103, n: 2 + Math.floor(Math.random() * 2) }]; // iron ingots 2-3
     default: return [];
   }
 }
@@ -115,6 +123,9 @@ export class MobSim {
       m.fleeT = 3; // sprint away for 3s when hurt
       m.dir = Math.random() * Math.PI * 2;
     }
+    if (m.kind === "wraith" && Math.random() < 0.3) {
+      m.blink = true; // teleport jump executed world-aware on next tick
+    }
     return m;
   }
 
@@ -123,7 +134,7 @@ export class MobSim {
     // peaceful: no hostiles, evict any leftovers (e.g. after flag flip / dawn)
     if (this.peaceful) {
       for (const m of [...this.mobs.values()]) {
-        if (m.kind === "zombie" || m.kind === "skeleton" || m.kind === "spider" || m.kind === "ogre" || m.kind === "wolf" || m.kind === "wisp" || m.kind === "villager") this.mobs.delete(m.id);
+        if (m.kind === "zombie" || m.kind === "skeleton" || m.kind === "spider" || m.kind === "ogre" || m.kind === "wolf" || m.kind === "wisp" || m.kind === "villager" || m.kind === "wraith" || m.kind === "golem") this.mobs.delete(m.id);
       }
     }
     const wantPassive = Math.min(12, players.length * 5);
@@ -133,8 +144,9 @@ export class MobSim {
     const wantVillager = this.peaceful ? 0 : Math.min(2, players.length);
     const wantWolf = this.peaceful ? 0 : Math.min(3, players.length);
     const wantWisp = !this.peaceful && night ? players.length * 2 : 0;
+    const wantWraith = !this.peaceful && night ? players.length * 1 : 0;
     let passive = 0, zombies = 0, skeletons = 0, spiders = 0, ogres = 0;
-    let villagers = 0, wolves = 0, wisps = 0;
+    let villagers = 0, wolves = 0, wisps = 0, wraiths = 0, golems = 0;
     for (const m of this.mobs.values()) {
       if (m.kind === "zombie") zombies++;
       else if (m.kind === "skeleton") skeletons++;
@@ -143,7 +155,9 @@ export class MobSim {
       else if (m.kind === "villager") villagers++;
       else if (m.kind === "wolf") wolves++;
       else if (m.kind === "wisp") wisps++;
-      else passive++;
+      else if (m.kind === "wraith") wraiths++;
+      else if (m.kind === "golem") golems++;
+      else passive++; // pigs/cows/sheep/chickens AND slimes share the passive cap
     }
     if (players.length === 0) return;
     const anchor = players[Math.floor(Math.random() * players.length)];
@@ -196,15 +210,54 @@ export class MobSim {
       }
       trySpawn("wisp");
     };
+    // slime: groups of 2-3 — underground pockets half the time, else surface
+    // only on swamp biome or near water. Shares the passive cap (no explosion).
+    const trySpawnSlime = () => {
+      const n = 2 + Math.floor(Math.random() * 2);
+      if (Math.random() < 0.5) {
+        const a = Math.random() * Math.PI * 2;
+        const r = 8 + Math.random() * 16;
+        const x = Math.round(anchor[0] + Math.cos(a) * r);
+        const z = Math.round(anchor[2] + Math.sin(a) * r);
+        const surf = world.groundHeight(x, z);
+        for (let y = Math.min(surf - 2, WORLD_H - 3); y >= 2; y--) {
+          if (world.get(x, y, z) === 10) continue; // no water pockets
+          if (!world.isSolid(x, y, z) && !world.isSolid(x, y + 1, z) && world.isSolid(x, y - 1, z)) {
+            for (let i = 0; i < n; i++) {
+              this.spawn("slime", x + 0.5 + (Math.random() - 0.5) * 3, y, z + 0.5 + (Math.random() - 0.5) * 3);
+            }
+            return;
+          }
+        }
+      }
+      const a = Math.random() * Math.PI * 2;
+      const r = 12 + Math.random() * 14;
+      const x = Math.round(anchor[0] + Math.cos(a) * r);
+      const z = Math.round(anchor[2] + Math.sin(a) * r);
+      const g = world.groundHeight(x, z);
+      if (g < 2 || world.get(x, g, z) === 10) return; // don't spawn in ocean
+      const swamp = biomeAt(x, z, world.seed, g) === BIOME.SWAMP;
+      if (!swamp && !world.hasBlockNear(x, g + 1, z, B.WATER, 6)) return;
+      for (let i = 0; i < n; i++) {
+        this.spawn("slime", x + 0.5 + (Math.random() - 0.5) * 3, g + 1.2, z + 0.5 + (Math.random() - 0.5) * 3);
+      }
+    };
     if (passive < wantPassive) {
-      trySpawn("any-passive");
+      if (Math.random() < 0.25) trySpawnSlime();
+      else trySpawn("any-passive");
     }
     if (zombies < wantZombie) trySpawn("zombie");
     if (skeletons < wantSkeleton) trySpawn("skeleton");
     if (spiders < wantSpider) trySpawn("spider");
+    if (wraiths < wantWraith) trySpawn("wraith"); // night-only via wantWraith
     if (villagers < wantVillager) trySpawnOn("villager", [B.GRASS, B.SAND]);
     if (wolves < wantWolf) trySpawnOn("wolf", [B.GRASS]);
     if (wisps < wantWisp) trySpawnWisp();
+    // 🗿 golem: max 1, rare surface wanderer. No village-center API exists in
+    // world.ts, so plain rare surface spawn on grass/sand.
+    if (!this.peaceful && golems < 1 && players.length > 0 && Math.random() < 0.04) {
+      trySpawnOn("golem", [B.GRASS, B.SAND]);
+    }
     // 👹 ogre boss: max 1, rare nightly visitor once players are around
     if (night && !this.peaceful && ogres < 1 && players.length > 0 && Math.random() < 0.06) {
       trySpawn("ogre");
@@ -235,21 +288,39 @@ export class MobSim {
     for (const m of [...this.mobs.values()]) {
       const st = STATS[m.kind];
       m.atkCd -= dt;
-      // undead + wisps burn in daylight — unless it's raining (overcast shields them)
-      if ((m.kind === "zombie" || m.kind === "skeleton" || m.kind === "wisp") && !night && !this.peaceful && !overcast && this.exposed(world, m)) {
+      // undead + wisps + wraiths burn in daylight — unless it's raining (overcast shields them)
+      if ((m.kind === "zombie" || m.kind === "skeleton" || m.kind === "wisp" || m.kind === "wraith") && !night && !this.peaceful && !overcast && this.exposed(world, m)) {
         m.hp -= 2.5 * dt;
         if (m.hp <= 0) this.mobs.delete(m.id);
         continue;
+      }
+      // wraith pending teleport (set by hurt): world-aware jump a few blocks,
+      // landing on the surface; clients pick up the new pos via mobs broadcast
+      if (m.kind === "wraith" && m.blink) {
+        m.blink = false;
+        const a = Math.random() * Math.PI * 2;
+        const r = 3 + Math.random() * 3;
+        const nx = Math.round(m.p[0] + Math.cos(a) * r);
+        const nz = Math.round(m.p[2] + Math.sin(a) * r);
+        const ng = world.groundHeight(nx, nz);
+        if (ng >= 2 && world.get(nx, ng, nz) !== 10) {
+          m.p[0] = nx + 0.5; m.p[2] = nz + 0.5; m.p[1] = ng + 1.1;
+        }
       }
       const hostileNow = HOSTILE.has(m.kind) && (night || m.kind === "ogre" || m.hp < m.maxHp);
       // wolf: neutral by day — hostile (chase like zombie, range 16) only at night or when provoked
       const wolfHostile = m.kind === "wolf" && (night || m.hp < m.maxHp);
       // wisp: hostile at night + in darkness (caves/under cover) — chase range 20; by day wanders
       const wispHostile = m.kind === "wisp" && (night || !this.exposed(world, m));
+      // wraith: same darkness test as the wisp — night or under cover/caves;
+      // slow drift toward players, chase range 24
+      const wraithHostile = m.kind === "wraith" && (night || !this.exposed(world, m));
+      // golem: neutral tank — only retaliates once hurt, chase range 16
+      const golemProvoked = m.kind === "golem" && m.hp < m.maxHp;
       // spiders are day-neutral wanderers until provoked or night falls
-      if ((HOSTILE.has(m.kind) && hostileNow) || wolfHostile || wispHostile) {
+      if ((HOSTILE.has(m.kind) && hostileNow) || wolfHostile || wispHostile || wraithHostile || golemProvoked) {
         // chase nearest player within 24 blocks (ogre smells you from 32)
-        const range = m.kind === "ogre" ? 32 : m.kind === "wisp" ? 20 : m.kind === "wolf" ? 16 : 24;
+        const range = m.kind === "ogre" ? 32 : m.kind === "wisp" ? 20 : m.kind === "golem" ? 16 : 24;
         let best: { p: Vec3; hurt: (dmg: number) => void } | null = null;
         let bestD = range * range;
         for (const pl of players) {
@@ -272,7 +343,15 @@ export class MobSim {
             this.step(m, (dx / len) * sp * dt, (dz / len) * sp * dt, world, m.kind === "spider" ? 3 : 2);
           }
           if (bestD < 2.6 && Math.abs(best.p[1] - m.p[1]) < 2.5 && m.atkCd <= 0) {
-            m.atkCd = m.kind === "ogre" ? 1.6 : 1.0;
+            if (m.kind === "golem") {
+              // golems only ever target players (this loop iterates players,
+              // never the mobs map) — villagers and owner-bearing tamed wolves
+              // are structurally excluded; defensive owner check like main.ts:
+              const kind = (best as { kind?: unknown }).kind;
+              const owner = (best as { owner?: unknown }).owner;
+              if (kind === "villager" || (typeof owner === "string" && owner)) continue;
+            }
+            m.atkCd = m.kind === "ogre" ? 1.6 : m.kind === "golem" ? 1.2 : 1.0;
             best.hurt(st.dmg);
           }
         } else {
@@ -306,10 +385,15 @@ export class MobSim {
           this.wander(m, dt, world, st.speed * 0.5);
         }
       }
-      // gravity: sit on ground
+      // gravity: sit on ground — slimes hop instead (sine bounce above ground)
       const g = world.groundHeight(Math.floor(m.p[0]), Math.floor(m.p[2]));
       const targetY = g + 1.1;
-      m.p[1] += (targetY - m.p[1]) * Math.min(1, dt * 8);
+      if (m.kind === "slime") {
+        const t = Date.now() / 1000 + m.id * 1.7;
+        m.p[1] = targetY + Math.max(0, Math.sin(t * 3.5)) * 0.6;
+      } else {
+        m.p[1] += (targetY - m.p[1]) * Math.min(1, dt * 8);
+      }
     }
   }
 
