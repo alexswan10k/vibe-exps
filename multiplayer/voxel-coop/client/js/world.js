@@ -2,7 +2,7 @@
 // Layout matches server: index = (y * CHUNK + z) * CHUNK + x.
 import { B, CHUNK, WORLD_H } from "./config.js";
 
-const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38, 39, 40, 41, 42]);
+const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]);
 // Walk-through vegetation (mirrors server WALK_THROUGH): cross-quad billboards.
 const PLANTS = new Set([31, 32, 33, 34, 35, 36]);
 
@@ -332,6 +332,57 @@ function paintLava(g, r) {
   blobs(g, r, "#b81e00", 5, 1); // cooling crust flecks
 }
 function paintEmeraldOre(g, r) { paintStone(g, r); blobs(g, r, "#17c964", 6, 2); }
+function paintChest(g, r) {
+  noiseFill(g, r, [0.55, 0.38, 0.18], 0.06);
+  g.fillStyle = "rgba(40,24,8,0.9)";
+  g.fillRect(0, 0, 16, 2); g.fillRect(0, 14, 16, 2);
+  g.fillRect(0, 0, 2, 16); g.fillRect(14, 0, 2, 16);
+  g.fillRect(0, 7, 16, 2); // lid seam
+  g.fillStyle = "#d8d8dc";
+  g.fillRect(7, 7, 2, 3); // latch
+  g.fillStyle = "#3a2c14";
+  for (let y = 3; y < 14; y += 4) g.fillRect(2, y, 12, 1); // planks
+}
+function paintPipe(g, r) {
+  noiseFill(g, r, [0.55, 0.55, 0.58], 0.06);
+  g.fillStyle = "#2e2e33";
+  g.fillRect(0, 0, 16, 3); g.fillRect(0, 13, 16, 3); // dark rims
+  g.fillStyle = "#9a9aa2";
+  g.fillRect(0, 3, 16, 2); g.fillRect(0, 11, 16, 2); // metal bands
+  g.fillStyle = "#c7c7cf";
+  g.fillRect(6, 3, 4, 10); // glass stripe
+  g.fillStyle = "rgba(255,255,255,0.7)";
+  g.fillRect(7, 4, 1, 8);
+}
+function paintEngine(g, r) {
+  noiseFill(g, r, [0.42, 0.42, 0.45], 0.08);
+  g.fillStyle = "#1a1a1e";
+  g.fillRect(4, 3, 8, 5); // firebox window
+  g.fillStyle = "#ff7a1a";
+  g.fillRect(5, 4, 6, 3); // fire glow
+  g.fillStyle = "#d8d8dc";
+  g.fillRect(2, 10, 12, 3); // piston band
+  g.fillStyle = "#88888f";
+  g.fillRect(7, 10, 2, 6); // rod
+}
+function paintQuarry(g, r) {
+  noiseFill(g, r, [0.6, 0.55, 0.3], 0.06);
+  g.fillStyle = "#3a3a3e";
+  g.fillRect(0, 0, 16, 2); g.fillRect(0, 14, 16, 2);
+  g.fillStyle = "#f4c20d";
+  for (let x = 0; x < 16; x += 4) { g.fillRect(x, 5, 2, 6); } // hazard stripes
+  g.fillStyle = "#1a1a1e";
+  g.fillRect(6, 2, 4, 12); // drill slot
+}
+function paintOilOre(g, r) { paintStone(g, r); blobs(g, r, "#1a1a1e", 6, 2); blobs(g, r, "#3a2a6e", 3, 1); }
+function paintCoalBlock(g, r) {
+  noiseFill(g, r, [0.08, 0.08, 0.09], 0.1);
+  g.fillStyle = "rgba(255,255,255,0.12)";
+  g.fillRect(2, 2, 4, 2); // glossy chunk
+  g.fillStyle = "rgba(0,0,0,0.6)";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16); g.fillRect(15, 0, 1, 16);
+}
 function paintEmeraldBlock(g, r) {
   noiseFill(g, r, [0.09, 0.65, 0.32], 0.06); // solid green
   g.fillStyle = "rgba(220,255,230,0.85)"; // pale mortar, green-tinted
@@ -362,6 +413,8 @@ const ICON_PAINT = {
   36: [paintReeds, 46],
   37: [paintTNT, 47], 38: [paintObsidian, 48], 39: [paintLamp, 49],
   40: [paintLava, 50], 41: [paintEmeraldOre, 51], 42: [paintEmeraldBlock, 52],
+  43: [paintChest, 53], 44: [paintPipe, 54], 45: [paintEngine, 55], 46: [paintQuarry, 56],
+  47: [paintOilOre, 57], 48: [paintCoalBlock, 58],
 };
 const iconCache = new Map();
 export function blockIconURL(block) {
@@ -443,6 +496,12 @@ export function makeMaterials() {
     [B.LAVA]: new THREE.MeshBasicMaterial({ map: makeCanvas(paintLava, 50) }), // unlit = glows at night
     [B.EMERALD_ORE]: M(makeCanvas(paintEmeraldOre, 51)),
     [B.EMERALD_BLOCK]: M(makeCanvas(paintEmeraldBlock, 52)),
+    [B.CHEST]: M(makeCanvas(paintChest, 53)),
+    [B.PIPE]: M(makeCanvas(paintPipe, 54)),
+    [B.ENGINE]: new THREE.MeshLambertMaterial({ map: makeCanvas(paintEngine, 55), emissive: 0x903000, emissiveIntensity: 0.5 }),
+    [B.QUARRY]: M(makeCanvas(paintQuarry, 56)),
+    [B.OIL_ORE]: M(makeCanvas(paintOilOre, 57)),
+    [B.COAL_BLOCK]: M(makeCanvas(paintCoalBlock, 58)),
   };
 }
 

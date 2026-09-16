@@ -51,6 +51,12 @@ export const B = {
   LAVA: 40,
   EMERALD_ORE: 41,
   EMERALD_BLOCK: 42,
+  CHEST: 43,
+  PIPE: 44,
+  ENGINE: 45,
+  QUARRY: 46,
+  OIL_ORE: 47,
+  COAL_BLOCK: 48,
 } as const;
 
 export const BLOCK_NAME: Record<number, string> = {
@@ -64,6 +70,8 @@ export const BLOCK_NAME: Record<number, string> = {
   33: "dandelion", 34: "red mushroom", 35: "brown mushroom", 36: "reeds",
   37: "tnt", 38: "obsidian", 39: "lamp",
   40: "lava", 41: "emerald ore", 42: "emerald block",
+  43: "chest", 44: "pipe", 45: "engine", 46: "quarry",
+  47: "oil ore", 48: "coal block",
   107: "cooked pork", 114: "iron sword", 115: "apple",
   116: "wood axe", 117: "stone axe", 118: "iron axe",
   119: "wood shovel", 120: "stone shovel", 121: "iron shovel",
@@ -75,6 +83,8 @@ export const BLOCK_NAME: Record<number, string> = {
   137: "bone", 138: "string",
   141: "fishing rod", 142: "fish", 143: "cooked fish", 144: "emerald",
   145: "compass", 146: "slimeball", 147: "ender pearl",
+  148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
+  152: "firebrand", 153: "oil", 154: "wrench",
 };
 
 // Item ids: placeable blocks reuse block id; tools/materials use 100+.
@@ -124,6 +134,13 @@ export const I = {
   COMPASS: 145,
   SLIMEBALL: 146,
   ENDER_PEARL: 147,
+  BOW: 148,
+  ARROW: 149,
+  WARHAMMER: 150,
+  DAGGER: 151,
+  FIREBRAND: 152,
+  OIL: 153,
+  WRENCH: 154,
 } as const;
 
 // Seconds to break by hand (Infinity = unbreakable)
@@ -136,6 +153,8 @@ export const HARDNESS: Record<number, number> = {
   31: 0.05, 32: 0.05, 33: 0.05, 34: 0.05, 35: 0.05, 36: 0.3,
   37: 0.5, 38: 14.0, 39: 0.4,
   40: Infinity, 41: 5.5, 42: 4.0,
+  43: 1.5, 44: 1.2, 45: 3.5, 46: 4.5,
+  47: 5.0, 48: 4.5,
 };
 
 // Walk-through vegetation: no collision, no selection box in the way of
@@ -152,6 +171,7 @@ export const TOOL_CLASS: Record<number, "pick" | "any"> = {
   30: "any", 31: "any", 32: "any", 33: "any", 34: "any", 35: "any", 36: "any",
   37: "any", 38: "pick", 39: "any",
   40: "any", 41: "pick", 42: "pick",
+  43: "any", 44: "pick", 45: "pick", 46: "pick", 47: "pick", 48: "pick",
 };
 
 export const PICK_MULT: Record<number, number> = {
@@ -168,7 +188,7 @@ export const AXE_BLOCKS = new Set([5, 7, 13, 20, 22, 23, 29]);
 export const SHOVEL_BLOCKS = new Set([1, 2, 4, 9, 26, 28]);
 export function toolMultFor(block: number, heldId: number | undefined): number {
   if (heldId === undefined) return 1;
-  if (PICK_MULT[heldId] && (block === 3 || block === 11 || block === 12 || block === 14 || block === 16 || block === 24 || block === 27 || block === 38 || block === 41 || block === 42)) return PICK_MULT[heldId];
+  if (PICK_MULT[heldId] && (block === 3 || block === 11 || block === 12 || block === 14 || block === 16 || block === 24 || block === 27 || block === 38 || block === 41 || block === 42 || block === 44 || block === 45 || block === 46 || block === 47 || block === 48)) return PICK_MULT[heldId];
   if (AXE_MULT[heldId] && AXE_BLOCKS.has(block)) return AXE_MULT[heldId];
   if (SHOVEL_MULT[heldId] && SHOVEL_BLOCKS.has(block)) return SHOVEL_MULT[heldId];
   if (PICK_MULT[heldId] || AXE_MULT[heldId] || SHOVEL_MULT[heldId]) return 1.5; // wrong tool: slight edge
@@ -180,6 +200,10 @@ export const SWORD_MULT: Record<number, number> = {
   119: 2, 120: 3, 121: 4, // shovels are weak weapons
   125: 5, 127: 10, // gold sword = wood tier, diamond sword = endgame
   128: 6, 129: 9, 130: 3, 131: 5,
+  148: 3, // bow is weak in melee (its power is ranged)
+  150: 12, // warhammer: slow crusher (rate-limit handles balance)
+  151: 4, // dagger: fast poker
+  152: 9, // firebrand: diamond-tier + burn
 };
 
 export function pickTier(itemId: number | undefined): number {
@@ -194,6 +218,10 @@ export function requiredTier(block: number): number {
   if (block === 38) return 4; // obsidian needs diamond pick
   if (block === 41) return 2; // emerald needs stone pick+
   if (block === 42) return 1; // emerald block needs wood pick+
+  if (block === 47) return 2; // oil ore needs stone pick+
+  if (block === 48) return 1; // coal block needs wood pick+
+  if (block === 46) return 2; // quarry needs stone pick+
+  if (block === 45) return 1; // engine needs wood pick+
   if (block === 3 || block === 16 || block === 21 || block === 24 || block === 27) return 1; // stone-likes need wood pick+
   if (block === 11) return 1; // coal
   if (block === 12) return 2; // iron needs stone pick+
@@ -228,10 +256,17 @@ export type ClientMsg =
   | { t: "eat"; slot: number }
   | { t: "fall"; dmg: number }
   | { t: "pong"; now: number }
+  | { t: "shoot"; dx: number; dy: number; dz: number }
+  | { t: "chestOpen"; x: number; y: number; z: number }
+  | { t: "chestPut"; x: number; y: number; z: number; slot: number; cs: number; all: boolean }
+  | { t: "chestTake"; x: number; y: number; z: number; cs: number }
+  | { t: "engineFuel" }
+  | { t: "gamemode"; mode: string }
+  | { t: "give"; id: number; n: number }
   | { t: "moveItem"; from: number; to: number };
 
 export type ServerMsg =
-  | { t: "welcome"; id: number; seed: number; spawn: Vec3; time: number; motd: string; rain?: number }
+  | { t: "welcome"; id: number; seed: number; spawn: Vec3; time: number; motd: string; rain?: number; creative?: boolean }
   | { t: "chunk"; cx: number; cz: number; rle: number[] }
   | { t: "block"; x: number; y: number; z: number; block: number }
   | { t: "players"; list: PublicPlayer[] }
@@ -243,8 +278,12 @@ export type ServerMsg =
   | { t: "time"; time: number; rain?: number; storm?: number }
   | { t: "boom"; x: number; y: number; z: number; r: number }
   | { t: "strike"; x: number; y: number; z: number }
+  | { t: "shot"; from: Vec3; dx: number; dy: number; dz: number }
   | { t: "toast"; text: string }
   | { t: "tradeOffers"; id: number; offers: TradeOffer[] }
+  | { t: "chest"; x: number; y: number; z: number; slots: InvSlot[] }
+  | { t: "machines"; engines: EngineWire[]; quarries: QuarryWire[] }
+  | { t: "gamemode"; creative: boolean }
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
   | { t: "reset"; seed: number; spawn: Vec3 }
   | { t: "chat"; from: string; msg: string }
@@ -268,6 +307,12 @@ export interface FurnaceWire {
 export interface TradeOffer {
   give: InvSlot; // what the player pays
   get: InvSlot; // what the villager gives
+}
+export interface EngineWire {
+  x: number; y: number; z: number; burning: boolean; progress: number;
+}
+export interface QuarryWire {
+  x: number; y: number; z: number; powered: boolean; done: boolean;
 }
 
 // RLE helpers: flat [id,count,...]

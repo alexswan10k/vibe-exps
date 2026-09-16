@@ -134,6 +134,48 @@ function paintCompass(g) {
   R(g, 7, 7, 2, 2, "#141414"); // pin
   R(g, 7, 7, 1, 1, "#ffffff");
 }
+function paintBow(g) {
+  R(g, 3, 1, 2, 14, "#8a5f30"); // limb
+  R(g, 3, 1, 1, 14, "#a97c46");
+  R(g, 11, 1, 1, 14, "#e8e8e8"); // string
+  R(g, 3, 7, 8, 2, "#a97c46"); // grip + arrow rest
+  R(g, 5, 7, 6, 1, "#d8d8dc"); // nocked arrow
+}
+function paintArrow(g) {
+  diag(g, 2, 12, 9, 1, "#8a5f30"); // shaft
+  R(g, 10, 2, 3, 3, "#888888"); // head
+  R(g, 2, 11, 3, 3, "#f4f4f4"); // fletching
+  R(g, 2, 12, 1, 1, "#d42a2a");
+}
+function paintHammer(g) {
+  diag(g, 3, 6, 8, 2, "#8a5f30"); // handle
+  R(g, 7, 1, 7, 6, "#d8d8dc"); // head
+  R(g, 7, 1, 7, 1, "#ffffff");
+  R(g, 7, 6, 7, 1, "#9a9aa0");
+  R(g, 12, 2, 2, 4, "#888888"); // peen
+}
+function paintDagger(g) {
+  R(g, 7, 1, 2, 8, "#d8d8dc"); R(g, 7, 1, 1, 8, "#ffffff");
+  R(g, 4, 9, 8, 2, "#f4c20d"); // guard
+  R(g, 7, 11, 2, 4, "#6b4423"); // grip
+}
+function paintFirebrand(g) {
+  R(g, 7, 1, 2, 9, "#ff7a1a"); R(g, 7, 1, 1, 9, "#ffe27a");
+  R(g, 6, 0, 4, 3, "#ffcf4d"); // flame tip
+  R(g, 4, 10, 8, 2, "#8a5f30"); R(g, 7, 12, 2, 4, "#6b4423");
+}
+function paintOil(g) {
+  R(g, 5, 3, 6, 10, "#1a1a22"); // droplet body
+  R(g, 6, 1, 4, 4, "#1a1a22"); // tip
+  R(g, 6, 5, 2, 5, "#3b2a6e"); // sheen
+  R(g, 6, 5, 1, 3, "#8a7ae0");
+}
+function paintWrench(g) {
+  diag(g, 3, 8, 7, 2, "#d8d8dc"); // handle
+  R(g, 8, 1, 6, 4, "#d8d8dc"); // jaw
+  R(g, 10, 1, 3, 2, "#1a1a1a"); // mouth
+  R(g, 8, 1, 6, 1, "#ffffff");
+}
 
 function paintHandle(g) { diag(g, 3, 12, 9, 2, "#8a5f30"); }
 function paintPick(g, head) {
@@ -178,11 +220,13 @@ const PAINTERS = {
   141: paintRod, 142: paintFish, 143: paintCookedFish, 144: paintEmerald,
   145: paintCompass,
   146: paintSlimeball, 147: paintEnderPearl,
+  148: paintBow, 149: paintArrow, 150: paintHammer, 151: paintDagger,
+  152: paintFirebrand, 153: paintOil, 154: paintWrench,
 };
 
 export function itemIconURL(id) {
   if (!id) return "";
-  if (id >= 1 && id <= 39) return blockIconURL(id);
+  if (id >= 1 && id <= 48) return blockIconURL(id);
   const hit = cache.get(id);
   if (hit) return hit;
   const paint = PAINTERS[id];

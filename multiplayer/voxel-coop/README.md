@@ -8,6 +8,7 @@ host plays, second player joins over the same Wi-Fi.
 ```sh
 deno task dev          # survival (default)
 deno task peaceful     # no zombies, hunger tops up (chill building)
+deno task creative     # everyone starts in creative (fly + infinite blocks)
 # local:  http://localhost:8000/
 # player 2: http://<your-lan-ip>:8000/   (printed on startup)
 ```
@@ -147,10 +148,26 @@ data/             world.json + players.json (gitignored saves)
 - 🖥 menus: title screen with name entry (Play to join), death screen with stats
   + Respawn, TAB player list, settings (O or gear: volume, render distance,
   minimap + weather-FX toggles, all persisted)
+- 🔧 BuildCraft-lite: **chests** (27 slots, F to open, click inv to store),
+  **stirling engines** (F to feed coal/oil/logs — coal 30s, oil 60s, coal block
+  270s, auto-sucks fuel from adjacent chests), **pipes** (chest→chest over pipe
+  blocks, needs an engine burning nearby), **quarries** (9×9 auto-miner below
+  the block, needs a fueled engine next door — loot goes to adjacent chest,
+  else pipe network, else your inventory). Oil ore spawns desert-biased, deep.
+- ⚔️ new weapons: **bow + arrows** (X to shoot, 7 dmg hitscan), **warhammer**
+  (12 dmg + launch, slow), **dagger** (cheap 4 dmg), **firebrand** (11 dmg),
+  **wrench** (style). Crafted at the table, bow in the recipe book.
+- ✨ creative mode: `/creative` (or `/gamemode creative`) → fly (double-Space
+  or F), instant mining, infinite blocks, no damage/hunger. `C` stocks
+  chest/pipe/engine/quarry + weapon kit, `/kit <starter|tools|buildcraft|
+  weapons|creative>`, `/give <id> [n]`, `/fuel` refuels the nearest engine,
+  `/survival` to go back. `deno task creative` starts the server creative-first.
 
 ## Protocol (WS JSON)
 
 `hello → welcome`, `reqChunk → chunk` (RLE), `edit → block`,
 `move → players` (10Hz), `mobs` (2Hz), `inv`, `vitals`, `time`, `chat`,
 `craft`, `craftDirect`, `smelt`, `attackMob`, `ignite → boom` (TNT),
+`shoot → shot` (bow), `chestOpen/chestPut/chestTake → chest`,
+`engineFuel`, `gamemode → gamemode`, `give`, `machines` (engines + quarries),
 `eat`, `moveItem`, `respawn`, `ping → pong`.

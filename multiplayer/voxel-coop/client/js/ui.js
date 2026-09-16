@@ -269,7 +269,7 @@ export class UI {
     }
   }
 
-  static EDIBLE = new Set([104, 107, 115, 132, 133, 134, 135, 136]);
+  static EDIBLE = new Set([104, 107, 115, 132, 133, 134, 135, 136, 142, 143]);
 
   eatInv(i) {
     const s = this.slots[i];

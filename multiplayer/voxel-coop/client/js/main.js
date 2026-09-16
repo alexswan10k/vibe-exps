@@ -9,6 +9,7 @@ import { CrackOverlay, Particles } from "./fx.js";
 import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
+import { itemIconURL } from "./icons.js";
 import { Minimap } from "./minimap.js";
 import { initWeather, onStrike as weatherOnStrike, onTime as weatherOnTime, updateWeather } from "./weather.js";
 
@@ -210,8 +211,13 @@ const BREAK_COLORS = {
   22: 0x8a5f30, 23: 0xc22f2f, 24: 0xd6c48c, 25: 0x3f8f38, 26: 0x9ea6b5,
   27: 0x9e4030, 28: 0x857c72, 29: 0x5a3a1a, 30: 0x1a5230, 31: 0x4da64a,
   32: 0xd42a2a, 33: 0xf2d024, 34: 0xc22f2f, 35: 0x7a5a38, 36: 0x6bad4d,
-  37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8,
+  37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8, 40: 0xff5a00, 41: 0x17c964,
+  42: 0x17c964, 43: 0x8a5f30, 44: 0x9a9aa2, 45: 0xff7a1a, 46: 0xf4c20d,
+  47: 0x2a2a33, 48: 0x141414,
 };
+window.voxCreative = false;
+window.voxChest = null; // {x,y,z,slots} while a chest window is open
+window.voxMachines = { engines: [], quarries: [] };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
 }
@@ -301,6 +307,51 @@ function showToast(text) {
   setTimeout(() => d.remove(), 4100);
 }
 
+// ---------- chest window (BuildCraft storage, 27 slots, server-authoritative) ----------
+function ensureChestModal() {
+  if (document.getElementById("chest-modal")) return;
+  const modal = document.createElement("div");
+  modal.id = "chest-modal";
+  modal.style.display = "none";
+  modal.innerHTML = `<div class="trade-panel"><h2>🧰 chest <button id="chest-close" title="close (ESC)">✕</button></h2>
+    <div id="chest-list"></div>
+    <div class="chest-hint">click a chest slot = take · click an inventory slot = store (shift = whole stack) · ESC closes</div></div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#chest-close").addEventListener("click", () => closeChest());
+}
+
+function renderChest() {
+  const modal = document.getElementById("chest-modal");
+  const list = document.getElementById("chest-list");
+  if (!modal || !list || !window.voxChest) return;
+  list.innerHTML = "";
+  window.voxChest.slots.forEach((s, cs) => {
+    const d = document.createElement("div");
+    d.className = "slot chest-slot";
+    if (s?.id) {
+      d.innerHTML = `<div class="icon" style="background-image:url(${itemIconURL(s.id)})"></div><span class="cnt">${s.n > 1 ? s.n : ""}</span>`;
+      d.title = `slot ${cs}`;
+    }
+    d.addEventListener("click", () => {
+      if (!window.voxChest) return;
+      net.chestTake(window.voxChest.x, window.voxChest.y, window.voxChest.z, cs);
+    });
+    list.appendChild(d);
+  });
+  modal.style.display = "flex";
+}
+
+function closeChest(relock = true) {
+  const modal = document.getElementById("chest-modal");
+  if (modal) modal.style.display = "none";
+  window.voxChest = null;
+  if (relock && net?.connected && !dead && !ui.invOpen) player.lock();
+}
+
+function chestOpen() {
+  return document.getElementById("chest-modal")?.style.display !== "none";
+}
+
 function decodeRLE(rle) {
   const out = new Uint8Array(CHUNK * WORLD_H * CHUNK);
   let o = 0;
@@ -378,10 +429,11 @@ function streamChunks() {
 
 // ---------- mining ----------
 function breakTime(block, heldId) {
+  if (window.voxCreative) return 0.05; // creative: instant-ish, still shows a flicker
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
   const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42].includes(block);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42, 44, 45, 46, 47, 48].includes(block);
   if (isStone) {
     // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
     if (mult <= 1) return base * 3.3;
@@ -550,8 +602,40 @@ addEventListener("keydown", (e) => {
     }
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
     if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
+    else if (hit && hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest… (click chest slot = take, click inv slot = store)"); }
+    else if (hit && hit.block === B.ENGINE) { net.engineFuel(); hand.swing(); }
     else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
+    else if (window.voxCreative) {
+      // creative F toggles flight without the double-Space dance
+      player.flying = !player.flying;
+      player.vel.set(0, 0, 0);
+      ui.hint(player.flying ? "✨ flying (F or double-Space to land)" : "walking");
+    }
+  }
+  if (e.code === "KeyX" && !ui.chatFocused()) {
+    // bow shot along the look dir (needs bow + arrows, 1s server cooldown)
+    if (!net?.connected || dead || ui.invOpen) return;
+    if (!(ui.slots ?? []).some((s) => s?.id === 148)) {
+      ui.hint("need a bow (craft: sticks + string) — X to shoot");
+      return;
+    }
+    const d = player.lookDir();
+    net.shoot(d.x, d.y, d.z);
+    hand.swing();
+    audio.hit();
+  }
+  if (e.code === "KeyC" && !ui.chatFocused()) {
+    // creative test blocks: one press stocks chest/pipe/engine/quarry + bow kit
+    if (!net?.connected || dead) return;
+    if (!window.voxCreative) {
+      ui.hint("creative only — /creative or /gamemode creative first");
+      return;
+    }
+    for (const [id, n] of [[43, 4], [44, 32], [45, 2], [46, 1], [102, 16], [148, 1], [149, 32], [150, 1], [152, 1]]) {
+      net.give(id, n);
+    }
+    ui.hint("✨ creative blocks stocked (chest/pipe/engine/quarry + weapons)");
   }
   if (e.code === "KeyR" && !ui.chatFocused()) {
     if (!net?.connected || dead || ui.invOpen) return;
@@ -614,6 +698,10 @@ net.on("welcome", (m) => {
   serverRain = m.rain ?? 0;
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
   spawnPos = m.spawn;
+  if (m.creative) {
+    window.voxCreative = true;
+    ui.hint("✨ CREATIVE: F fly · C blocks · X bow · infinite place");
+  }
   ui.status(`playing as ${$("menu-name").value || "player"}`);
   $("menu").style.display = "none";
   ui.maybeShowHelp();
@@ -729,6 +817,27 @@ net.on("toast", (m) => {
   ui.chatMsg("server", m.text);
 });
 net.on("tradeOffers", (m) => ui.showTrades(m.id, m.offers));
+net.on("chest", (m) => {
+  window.voxChest = { x: m.x, y: m.y, z: m.z, slots: m.slots };
+  ensureChestModal();
+  renderChest();
+  ui.releaseLock?.();
+});
+net.on("machines", (m) => {
+  window.voxMachines = { engines: m.engines ?? [], quarries: m.quarries ?? [] };
+});
+net.on("gamemode", (m) => {
+  window.voxCreative = !!m.creative;
+  if (!m.creative) player.flying = false;
+  ui.hint(m.creative ? "✨ CREATIVE: F fly · C blocks · X bow · infinite place" : "survival mode");
+});
+net.on("shot", (m) => {
+  // arrow tracer: quick cyan burst at the shooter's eye + twang
+  try {
+    particles.burst(m.from[0], m.from[1], m.from[2], 0x9adcff, 4);
+    audio.hit();
+  } catch { /* noop */ }
+});
 net.on("markers", (m) => {
   mapMarkers = m;
   window.voxMarkers = m; // read by minimap.draw()
@@ -793,6 +902,34 @@ ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
 ui.onTrade = (id, slot) => net.trade(id, slot);
+// chest open: inventory clicks store into the chest instead of swapping
+{
+  const baseClickInv = ui.clickInv.bind(ui);
+  ui.clickInv = (i) => {
+    if (chestOpen() && window.voxChest) {
+      const s = ui.slots[i];
+      if (!s?.id) return;
+      // find first compatible chest slot (same id or empty)
+      const slots = window.voxChest.slots;
+      let cs = slots.findIndex((c) => c.id === s.id && c.n < 64);
+      if (cs < 0) cs = slots.findIndex((c) => !c.id);
+      if (cs < 0) { ui.hint("chest is full"); return; }
+      // shift = whole stack, else single item (read shift from last click event)
+      const all = window.voxShiftDown === true;
+      net.chestPut(window.voxChest.x, window.voxChest.y, window.voxChest.z, i, cs, all);
+      return;
+    }
+    baseClickInv(i);
+  };
+  addEventListener("keydown", (e) => { if (e.key === "Shift") window.voxShiftDown = true; });
+  addEventListener("keyup", (e) => { if (e.key === "Shift") window.voxShiftDown = false; });
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && chestOpen()) { closeChest(); }
+  });
+  // open the inventory automatically behind the chest so storing is one click
+  const baseRenderChest = renderChest;
+  void baseRenderChest;
+}
 $("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
@@ -882,6 +1019,18 @@ function frame() {
       }
       else if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
       else if (hit?.block === B.TNT) ui.hint("🧨 F: light it — RUN!");
+      else if (hit?.block === B.CHEST) ui.hint("🧰 F: open chest (27 slots) · E inventory to store");
+      else if (hit?.block === B.ENGINE) {
+        const eng = (window.voxMachines.engines ?? []).find((e) => e.x === hit.x && e.y === hit.y && e.z === hit.z);
+        ui.hint(eng?.burning ? `🔥 engine burning ${Math.round((eng.progress ?? 0) * 100)}% — quarry/pipes powered` : "🔥 F: fuel engine (coal/oil/logs) — powers quarry + pipes");
+      }
+      else if (hit?.block === B.QUARRY) {
+        const q = (window.voxMachines.quarries ?? []).find((e) => e.x === hit.x && e.y === hit.y && e.z === hit.z);
+        ui.hint(q ? (q.done ? "⛏ quarry done — move it for a new shaft" : q.powered ? "⛏ quarry digging 9×9… (chest/pipe next door catches loot)" : "⛏ quarry idle — needs a fueled engine next door") : "⛏ quarry — needs a fueled engine next door");
+      }
+      else if (hit?.block === B.PIPE) ui.hint("🔧 pipe: connects chest → chest, needs an engine burning nearby");
+      else if (hit?.block === B.OIL_ORE) ui.hint("🛢 oil ore — 2× coal burn time in engines");
+      else if (window.voxCreative && !hit) ui.hint("✨ creative: F fly · C blocks · X bow");
       else if (hit) {
         const t = ui.el("hint").textContent;
         if (t.startsWith("F: smelt") || t.startsWith("🧭") || t.startsWith("🔥")) ui.hint("");

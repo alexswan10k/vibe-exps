@@ -26,12 +26,24 @@ export class Player {
     this.fallStart = null;
     this.onFallDamage = null; // (amount) => void — server owns hp, client predicts
     this.onLockChange = null; // (locked) => void
+    this.flying = false; // creative flight (double-Space toggles, server gamemode gates damage)
+    this._lastSpace = -10;
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
 
     document.addEventListener("keydown", (e) => {
       if (document.activeElement && document.activeElement.tagName === "INPUT") return;
       this.keys[e.code] = true;
-      if (e.code === "Space") this.jumpBufT = this._now;
+      if (e.code === "Space") {
+        // double-tap Space toggles creative flight (server still gates damage/loot)
+        if (this._now - this._lastSpace < 0.32 && window.voxCreative) {
+          this.flying = !this.flying;
+          this.vel.set(0, 0, 0);
+          this.fallStart = null;
+          try { window.voxUI?.hint?.(this.flying ? "✨ flying (double-Space to land)" : "walking"); } catch { /* noop */ }
+        }
+        this._lastSpace = this._now;
+        this.jumpBufT = this._now;
+      }
       if (["Space", "ArrowUp"].includes(e.code)) e.preventDefault();
     });
     document.addEventListener("keyup", (e) => { this.keys[e.code] = false; });
@@ -122,6 +134,31 @@ export class Player {
     const len = Math.hypot(dx, dz) || 1;
     dx /= len; dz /= len;
     const moving = f !== 0 || s !== 0;
+
+    if (this.flying && window.voxCreative) {
+      // creative flight: Space up, Shift down, fast + no collision damage
+      const up = (this.keys.Space ? 1 : 0) - ((this.keys.ShiftLeft || this.keys.ShiftRight) ? 1 : 0);
+      const spd = 11;
+      this.vel.x += (dx * spd - this.vel.x) * Math.min(1, 8 * dt);
+      this.vel.z += (dz * spd - this.vel.z) * Math.min(1, 8 * dt);
+      this.vel.y += (up * 9 - this.vel.y) * Math.min(1, 8 * dt);
+      this.pos.x += this.vel.x * dt;
+      this.pos.z += this.vel.z * dt;
+      this.pos.y += this.vel.y * dt;
+      // light collision: stop on walls but never stick
+      if (this.collides(world, this.pos.x, this.pos.y, this.pos.z)) {
+        this.pos.x -= this.vel.x * dt;
+        this.pos.z -= this.vel.z * dt;
+        this.pos.y -= this.vel.y * dt;
+        this.vel.multiplyScalar(0.3);
+      }
+      this.sprinting = false;
+      this.onGround = false;
+      this.fallStart = null;
+      if (this.pos.y < -40) { this.pos.y = 32; this.vel.set(0, 0, 0); }
+      return;
+    }
+    if (!window.voxCreative) this.flying = false;
 
     const water = this.inWater(world);
     const ladder = !water && this.onLadder(world);

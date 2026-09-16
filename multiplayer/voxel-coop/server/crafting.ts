@@ -56,6 +56,20 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "compass", name: "Compass", needsTable: true, pat: [0, G, 0, G, K, G, 0, G, 0], out: { id: I.COMPASS, n: 1 } },
   { id: "emerald_block", name: "Emerald Block", needsTable: true, pat: [I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD, I.EMERALD], out: { id: B.EMERALD_BLOCK, n: 1 } },
   { id: "emerald_split", name: "Emerald ×9", needsTable: false, pat: [B.EMERALD_BLOCK, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: I.EMERALD, n: 9 } },
+  // --- BuildCraft tier: storage + transport + automation ---
+  { id: "chest", name: "Chest", needsTable: true, pat: [P, P, P, P, 0, P, P, P, P], out: { id: B.CHEST, n: 1 } },
+  { id: "pipe", name: "Pipe ×8", needsTable: true, pat: [C, B.GLASS, C, C, B.GLASS, C, C, B.GLASS, C], out: { id: B.PIPE, n: 8 } },
+  { id: "engine", name: "Stirling Engine", needsTable: true, pat: [C, C, C, C, B.GLASS, C, G, G, G], out: { id: B.ENGINE, n: 1 } },
+  { id: "quarry", name: "Quarry", needsTable: true, pat: [G, G, G, G, B.ENGINE, G, D, D, D], out: { id: B.QUARRY, n: 1 } },
+  { id: "coal_block", name: "Coal Block", needsTable: false, pat: [K, K, K, K, K, K, K, K, K], out: { id: B.COAL_BLOCK, n: 1 } },
+  { id: "coal_split", name: "Coal ×9", needsTable: false, pat: [B.COAL_BLOCK, 0, 0, 0, 0, 0, 0, 0, 0], out: { id: K, n: 9 } },
+  // --- new weapons ---
+  { id: "bow", name: "Bow", needsTable: true, pat: [S, I.STRING, 0, S, 0, I.STRING, S, I.STRING, 0], out: { id: I.BOW, n: 1 } },
+  { id: "arrow", name: "Arrows ×4", needsTable: true, pat: [K, 0, 0, S, 0, 0, I.FEATHER, 0, 0], out: { id: I.ARROW, n: 4 } },
+  { id: "warhammer", name: "Warhammer", needsTable: true, pat: [G, G, G, G, S, G, 0, S, 0], out: { id: I.WARHAMMER, n: 1 } },
+  { id: "dagger", name: "Dagger", needsTable: false, pat: [0, 0, 0, 0, G, 0, 0, S, 0], out: { id: I.DAGGER, n: 1 } },
+  { id: "firebrand", name: "Firebrand", needsTable: true, pat: [K, K, K, K, I.DIAMOND_SWORD, K, K, K, K], out: { id: I.FIREBRAND, n: 1 } },
+  { id: "wrench", name: "Wrench", needsTable: true, pat: [G, 0, G, 0, G, 0, 0, S, 0], out: { id: I.WRENCH, n: 1 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -108,7 +122,7 @@ export function matchGrid(cells: number[], smallOnly: boolean): ShapedRecipe | n
 
 // --- inventory helpers (slots array, id 0 = empty, max stack 64, tools don't stack) ---
 export const MAX_STACK = 64;
-const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS]);
+const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS, I.BOW, I.WARHAMMER, I.DAGGER, I.FIREBRAND, I.WRENCH]);
 
 export function isStackable(id: number): boolean {
   return !UNSTACKABLE.has(id);
@@ -290,6 +304,12 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.LAVA: return null; // unmineable (HARDNESS Infinity)
     case B.EMERALD_ORE: return { id: I.EMERALD, n: 1 };
     case B.EMERALD_BLOCK: return { id: B.EMERALD_BLOCK, n: 1 };
+    case B.CHEST: return { id: B.CHEST, n: 1 };
+    case B.PIPE: return { id: B.PIPE, n: 1 };
+    case B.ENGINE: return { id: B.ENGINE, n: 1 };
+    case B.QUARRY: return { id: B.QUARRY, n: 1 };
+    case B.OIL_ORE: return { id: I.OIL, n: 1 };
+    case B.COAL_BLOCK: return { id: B.COAL_BLOCK, n: 1 };
     case B.STONE_BRICK: return { id: B.STONE_BRICK, n: 1 };
     case B.LADDER: return { id: B.LADDER, n: 1 };
     case B.BED: return { id: B.BED, n: 1 };
@@ -368,4 +388,20 @@ export const VILLAGER_TRADES: { give: { id: number; n: number }; get: { id: numb
   { give: { id: I.EMERALD, n: 3 }, get: { id: I.COOKED_PORK, n: 4 } },
   { give: { id: I.EMERALD, n: 5 }, get: { id: I.DIAMOND, n: 1 } },
   { give: { id: I.SLIMEBALL, n: 4 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.OIL, n: 2 }, get: { id: I.EMERALD, n: 1 } },
+  { give: { id: I.EMERALD, n: 4 }, get: { id: I.BOW, n: 1 } },
+  { give: { id: I.EMERALD, n: 6 }, get: { id: B.ENGINE, n: 1 } },
 ];
+
+// --- BuildCraft fuel: item id -> burn seconds inside a Stirling engine ---
+// Coal is the baseline (30s). Oil (from oil ore) burns twice as long,
+// coal blocks are 9x coal for long quarry runs. Sticks/logs are emergency fuel.
+export const ENGINE_FUEL: Record<number, number> = {
+  102: 30, // coal
+  48: 270, // coal block (9x coal)
+  153: 60, // oil
+  101: 5, // stick
+  5: 8, // oak log
+  29: 8, // pine log
+  7: 6, // planks
+};

@@ -50,6 +50,18 @@ export const SHAPED_CLIENT = [
   { id: "compass", name: "Compass", needsTable: true, cat: "tools", desc: "points home… (hold it)", out: { id: 145, n: 1 }, pat: [0, G, 0, G, K, G, 0, G, 0] },
   { id: "emerald_block", name: "Emerald Block", needsTable: true, cat: "blocks", desc: "3×3 emeralds, store wealth", out: { id: 42, n: 1 }, pat: [EM, EM, EM, EM, EM, EM, EM, EM, EM] },
   { id: "emerald_split", name: "Emerald ×9", needsTable: false, cat: "basics", desc: "block → 9 emeralds", out: { id: 144, n: 9 }, pat: [42, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "chest", name: "Chest", needsTable: true, cat: "blocks", desc: "27-slot storage, F to open", out: { id: 43, n: 1 }, pat: [P, P, P, P, 0, P, P, P, P] },
+  { id: "pipe", name: "Pipe ×8", needsTable: true, cat: "blocks", desc: "needs engine power to pump", out: { id: 44, n: 8 }, pat: [C, 17, C, C, 17, C, C, 17, C] },
+  { id: "engine", name: "Stirling Engine", needsTable: true, cat: "blocks", desc: "burns coal/oil — powers pipes + quarry", out: { id: 45, n: 1 }, pat: [C, C, C, C, 17, C, G, G, G] },
+  { id: "quarry", name: "Quarry", needsTable: true, cat: "blocks", desc: "9×9 auto-miner, needs engine next door", out: { id: 46, n: 1 }, pat: [G, G, G, G, 45, G, D, D, D] },
+  { id: "coal_block", name: "Coal Block", needsTable: false, cat: "blocks", desc: "9× coal, 270s engine fuel", out: { id: 48, n: 1 }, pat: [K, K, K, K, K, K, K, K, K] },
+  { id: "coal_split", name: "Coal ×9", needsTable: false, cat: "basics", desc: "block → 9 coal", out: { id: 102, n: 9 }, pat: [48, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { id: "bow", name: "Bow", needsTable: true, cat: "tools", desc: "ranged — X to shoot (needs arrows)", out: { id: 148, n: 1 }, pat: [S, 138, 0, S, 0, 138, S, 138, 0] },
+  { id: "arrow", name: "Arrows ×4", needsTable: true, cat: "tools", desc: "ammo for the bow", out: { id: 149, n: 4 }, pat: [K, 0, 0, S, 0, 0, 106, 0, 0] },
+  { id: "warhammer", name: "Warhammer", needsTable: true, cat: "tools", desc: "12 dmg + launch, slow swing", out: { id: 150, n: 1 }, pat: [G, G, G, G, S, G, 0, S, 0] },
+  { id: "dagger", name: "Dagger", needsTable: false, cat: "tools", desc: "4 dmg, cheap + fast", out: { id: 151, n: 1 }, pat: [0, 0, 0, 0, G, 0, 0, S, 0] },
+  { id: "firebrand", name: "Firebrand", needsTable: true, cat: "tools", desc: "11 dmg burn blade (diamond sword + coal)", out: { id: 152, n: 1 }, pat: [K, K, K, K, 127, K, K, K, K] },
+  { id: "wrench", name: "Wrench", needsTable: true, cat: "tools", desc: "machine-tinkerer style points", out: { id: 154, n: 1 }, pat: [G, 0, G, 0, G, 0, 0, S, 0] },
 ];
 
 /** Furnace cheat-sheet for the picker (mirrors server SMELT_RECIPES). */

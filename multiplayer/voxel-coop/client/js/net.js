@@ -103,6 +103,13 @@ export class Net {
   tame(id) { this.send({ t: "tame", id }); }
   askTrade(id) { this.send({ t: "askTrade", id }); }
   trade(id, slot) { this.send({ t: "trade", id, slot }); }
+  shoot(dx, dy, dz) { this.send({ t: "shoot", dx, dy, dz }); }
+  chestOpen(x, y, z) { this.send({ t: "chestOpen", x, y, z }); }
+  chestPut(x, y, z, slot, cs, all) { this.send({ t: "chestPut", x, y, z, slot, cs, all }); }
+  chestTake(x, y, z, cs) { this.send({ t: "chestTake", x, y, z, cs }); }
+  engineFuel() { this.send({ t: "engineFuel" }); }
+  gamemode(mode) { this.send({ t: "gamemode", mode }); }
+  give(id, n) { this.send({ t: "give", id, n }); }
 }
 
 // Legacy HTTP-poll transport for devices without working websockets.
@@ -251,4 +258,11 @@ export class PollNet {
   tame(id) { this.send({ t: "tame", id }); }
   askTrade(id) { this.send({ t: "askTrade", id }); }
   trade(id, slot) { this.send({ t: "trade", id, slot }); }
+  shoot(dx, dy, dz) { this.send({ t: "shoot", dx, dy, dz }); }
+  chestOpen(x, y, z) { this.send({ t: "chestOpen", x, y, z }); }
+  chestPut(x, y, z, slot, cs, all) { this.send({ t: "chestPut", x, y, z, slot, cs, all }); }
+  chestTake(x, y, z, cs) { this.send({ t: "chestTake", x, y, z, cs }); }
+  engineFuel() { this.send({ t: "engineFuel" }); }
+  gamemode(mode) { this.send({ t: "gamemode", mode }); }
+  give(id, n) { this.send({ t: "give", id, n }); }
 }
