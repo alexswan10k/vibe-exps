@@ -218,6 +218,7 @@ const BREAK_COLORS = {
 window.voxCreative = false;
 window.voxChest = null; // {x,y,z,slots} while a chest window is open
 window.voxEngine = null; // {x,y,z,at} while the engine panel is open
+window.voxVehicles = []; // latest server vehicle snapshot
 window.voxMachines = { engines: [], quarries: [], tanks: [] };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
@@ -514,7 +515,20 @@ function tryAttack() {
   const nowSwing = performance.now();
   if (nowSwing - lastSwing < 330) return false;
   const hitMob = entities.pickMob(player.eye(), player.lookDir());
-  if (hitMob === null) return false;
+  if (hitMob === null) {
+    // no mob: LMB on a free vehicle breaks it back into an item
+    if (!player.sailing && !player.ridingCart) {
+      const hitVeh = entities.pickVehicle(player.eye(), player.lookDir(), 5);
+      if (hitVeh !== null) {
+        lastSwing = nowSwing;
+        net.vehicleBreak(hitVeh);
+        hand.swing();
+        ui.pulse();
+        return true;
+      }
+    }
+    return false;
+  }
   lastSwing = nowSwing;
   const held = ui.heldItem();
   net.attackMob(hitMob, held?.id);
@@ -591,6 +605,19 @@ function doPlace() {
     ui.hint("🧑‍🌾 trading…");
     return;
   }
+  // boats launch from the held item straight onto aimed water (raycast skips it)
+  const heldEarly = ui.heldItem();
+  if (heldEarly?.id === 158) {
+    const f = findFluidAim();
+    if (f && f.block === B.WATER) {
+      net.vehiclePlace("boat", f.x, f.y, f.z);
+      hand.swing();
+      audio.place();
+    } else {
+      ui.hint("🚣 boats need water — aim at water");
+    }
+    return;
+  }
   const hit = world.raycast(eye, dir, 6);
   if (!hit) return;
   // interactables first (MC behaviour): table opens crafting, furnace smelts, bed sets spawn
@@ -608,6 +635,15 @@ function doPlace() {
   if (hit.block === B.LAVA && ui.heldItem()?.id === 155) {
     net.bucketFill(hit.x, hit.y, hit.z);
     hand.swing();
+    return;
+  }
+  if (ui.heldItem()?.id === 159) {
+    if (hit.block === B.RAIL) {
+      net.vehiclePlace("cart", hit.x, hit.y, hit.z);
+      hand.swing();
+    } else {
+      ui.hint("🛒 carts need rails — aim at rails");
+    }
     return;
   }
   const held = ui.heldItem();
@@ -683,6 +719,19 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyP" && !ui.chatFocused()) { setShadows(!shadowsOn); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
     if (!net?.connected) return;
+    // riding: F always hops out first
+    if (player.sailing || player.ridingCart) {
+      net.vehicleExit();
+      hand.swing();
+      return;
+    }
+    // F on a boat/cart hops in
+    const vehId = entities.pickVehicle(player.eye(), player.lookDir(), 5);
+    if (vehId !== null && vehId !== undefined) {
+      net.vehicleEnter(vehId);
+      hand.swing();
+      return;
+    }
     // F on a wolf attempts to tame it (keeps furnace/bed/TNT behaviour below)
     const mobId = entities.pickMob(player.eye(), player.lookDir(), 5);
     if (mobId !== null && mobId !== undefined && entities.mobs.get(mobId)?.kind === "wolf") {
@@ -737,10 +786,10 @@ addEventListener("keydown", (e) => {
       ui.hint("creative only — /creative or /gamemode creative first");
       return;
     }
-    for (const [id, n] of [[43, 4], [44, 32], [45, 2], [46, 1], [102, 16], [148, 1], [149, 32], [150, 1], [152, 1], [49, 16], [50, 2], [51, 1], [155, 4]]) {
+    for (const [id, n] of [[43, 4], [44, 32], [45, 2], [46, 1], [102, 16], [148, 1], [149, 32], [150, 1], [152, 1], [49, 16], [50, 2], [51, 1], [155, 4], [52, 32], [158, 1], [159, 1]]) {
       net.give(id, n);
     }
-    ui.hint("✨ creative blocks stocked (chest/pipe/engine/quarry + fluids + weapons)");
+    ui.hint("✨ creative blocks stocked (machines + fluids + boats/carts + weapons)");
   }
   if (e.code === "KeyR" && !ui.chatFocused()) {
     if (!net?.connected || dead || ui.invOpen) return;
@@ -931,6 +980,27 @@ net.on("chest", (m) => {
 net.on("machines", (m) => {
   window.voxMachines = { engines: m.engines ?? [], quarries: m.quarries ?? [], tanks: m.tanks ?? [] };
   if (engineOpen()) renderEngine();
+});
+net.on("vehicles", (m) => {
+  window.voxVehicles = m.list ?? [];
+  entities.setVehicles(window.voxVehicles);
+});
+net.on("ride", (m) => {
+  if (m.id) {
+    player.sailing = m.kind === "boat";
+    player.ridingCart = m.kind === "cart";
+    player.cartAxis = null;
+    player.cartDir = 1;
+    player.vel.set(0, 0, 0);
+    player.flying = false;
+    ui.hint(m.kind === "boat"
+      ? "🚣 sailing! WASD + shift for speed · F to hop out"
+      : "🛒 riding! face along the track, W/S throttle · F to hop out");
+    audio.splash();
+  } else {
+    player.sailing = false;
+    player.ridingCart = false;
+  }
 });
 net.on("gamemode", (m) => {
   window.voxCreative = !!m.creative;
@@ -1142,7 +1212,9 @@ function frame() {
         ui.hint(tk?.fluid ? `🧪 tank: ${tk.amount}/16000 mB ${tk.fluid} (F with bucket)` : "🧪 empty tank — scoop water/lava with a bucket (F), then F here");
       }
       else if (hit?.block === B.PUMP) ui.hint("⛽ pump: taps adjacent water/lava — needs a fueled engine next door");
+      else if (hit?.block === B.RAIL) ui.hint("🛤 rails — RMB with a minecart to launch it (F in/out, W/S throttle)");
       else if (hit?.block === B.OIL_ORE) ui.hint("🛢 oil ore — 2× coal burn time in engines");
+      else if (!player.sailing && !player.ridingCart && entities.pickVehicle(player.eye(), player.lookDir(), 5) !== null) ui.hint("F: hop in · LMB: break it down");
       else if (window.voxCreative && !hit) ui.hint("✨ creative: F fly · C blocks · X bow");
       else if (hit) {
         const t = ui.el("hint").textContent;

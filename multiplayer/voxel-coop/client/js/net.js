@@ -110,6 +110,10 @@ export class Net {
   engineFuel() { this.send({ t: "engineFuel" }); }
   bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
   tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
+  vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
+  vehicleExit() { this.send({ t: "vehicleExit" }); }
+  vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }
   gamemode(mode) { this.send({ t: "gamemode", mode }); }
   give(id, n) { this.send({ t: "give", id, n }); }
 }
@@ -267,6 +271,10 @@ export class PollNet {
   engineFuel() { this.send({ t: "engineFuel" }); }
   bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
   tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
+  vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
+  vehicleExit() { this.send({ t: "vehicleExit" }); }
+  vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }
   gamemode(mode) { this.send({ t: "gamemode", mode }); }
   give(id, n) { this.send({ t: "give", id, n }); }
 }

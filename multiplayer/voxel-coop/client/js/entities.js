@@ -33,6 +33,7 @@ export class Entities {
     this.scene = scene;
     this.mobs = new Map(); // id -> {mesh, target, hpBar}
     this.remotes = new Map(); // id -> {group, target, yaw}
+    this.vehicles = new Map(); // id -> {kind, group, target, yaw}
   }
 
   setMobs(list) {
@@ -153,9 +154,73 @@ export class Entities {
     }
   }
 
-  /** Hit-test click against mobs for attacking. Returns mob id or null. */
-  pickMob(origin, dir, maxDist = 4.5) {
+  /** Rideable vehicles from the server (boats + minecarts). */
+  setVehicles(list) {
+    const seen = new Set();
+    for (const v of list ?? []) {
+      seen.add(v.id);
+      let e = this.vehicles.get(v.id);
+      if (!e) {
+        const group = new THREE.Group();
+        const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
+        if (v.kind === "boat") {
+          const hull = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.35, 2.1), lam(0x8a5f30));
+          hull.position.y = 0.18;
+          hull.castShadow = true;
+          const inner = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.3, 1.8), lam(0x3a2410));
+          inner.position.y = 0.32;
+          const bench = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 0.3), lam(0x6b4423));
+          bench.position.set(0, 0.35, -0.3);
+          group.add(hull, inner, bench);
+        } else {
+          const tub = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.2), lam(0x3a3a3f));
+          tub.position.y = 0.5;
+          tub.castShadow = true;
+          const rim = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.1, 1.3), lam(0x6a6a72));
+          rim.position.y = 0.78;
+          group.add(tub, rim);
+          const wg = new THREE.BoxGeometry(0.12, 0.3, 0.3);
+          const wm = lam(0x1e1e22);
+          for (const [sx, sz] of [[-0.45, -0.4], [0.45, -0.4], [-0.45, 0.4], [0.45, 0.4]]) {
+            const w = new THREE.Mesh(wg, wm);
+            w.position.set(sx, 0.15, sz);
+            group.add(w);
+          }
+        }
+        this.scene.add(group);
+        e = { kind: v.kind, group, target: null, yaw: 0, rider: 0 };
+        this.vehicles.set(v.id, e);
+      }
+      e.kind = v.kind;
+      e.target = new THREE.Vector3(v.p[0], v.p[1], v.p[2]);
+      e.yaw = v.yaw;
+      e.rider = v.rider ?? 0;
+    }
+    for (const [id, e] of this.vehicles) {
+      if (!seen.has(id)) {
+        this.scene.remove(e.group);
+        this.vehicles.delete(id);
+      }
+    }
+  }
+
+  /** Hit-test click against vehicles (enter with F, break with LMB). */
+  pickVehicle(origin, dir, maxDist = 5) {
     let best = null, bestD = maxDist;
+    for (const [id, e] of this.vehicles) {
+      const center = new THREE.Vector3().copy(e.group.position);
+      center.y += 0.5;
+      const to = new THREE.Vector3().copy(center).sub(origin);
+      const along = to.dot(dir);
+      if (along < 0 || along > maxDist) continue;
+      const perp = new THREE.Vector3().copy(origin).addScaledVector(dir, along).distanceTo(center);
+      if (perp < 1.3 && along < bestD) { best = id; bestD = along; }
+    }
+    return best;
+  }
+
+  /** Hit-test click against mobs for attacking. Returns mob id or null. */
+  pickMob(origin, dir, maxDist = 4.5) {    let best = null, bestD = maxDist;
     for (const [id, e] of this.mobs) {
       const center = new THREE.Vector3().copy(e.node.position);
       center.y += e.topY / 2;
@@ -172,6 +237,11 @@ export class Entities {
     const kMob = Math.min(1, dt * 10);
     const kPlayer = Math.min(1, dt * 12);
     const now = performance.now();
+    for (const [, e] of this.vehicles) {
+      if (!e.target) continue;
+      e.group.position.lerp(e.target, Math.min(1, dt * 12));
+      e.group.rotation.y = e.yaw;
+    }
     for (const [, e] of this.mobs) {
       if (!e.target) continue;
       e.node.position.lerp(e.target, kMob);

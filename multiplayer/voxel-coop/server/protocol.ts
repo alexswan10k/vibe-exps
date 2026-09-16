@@ -60,6 +60,7 @@ export const B = {
   FLUID_PIPE: 49,
   TANK: 50,
   PUMP: 51,
+  RAIL: 52,
 } as const;
 
 export const BLOCK_NAME: Record<number, string> = {
@@ -75,7 +76,7 @@ export const BLOCK_NAME: Record<number, string> = {
   40: "lava", 41: "emerald ore", 42: "emerald block",
   43: "chest", 44: "pipe", 45: "engine", 46: "quarry",
   47: "oil ore", 48: "coal block",
-  49: "fluid pipe", 50: "tank", 51: "pump",
+  49: "fluid pipe", 50: "tank", 51: "pump", 52: "rail",
   107: "cooked pork", 114: "iron sword", 115: "apple",
   116: "wood axe", 117: "stone axe", 118: "iron axe",
   119: "wood shovel", 120: "stone shovel", 121: "iron shovel",
@@ -90,6 +91,7 @@ export const BLOCK_NAME: Record<number, string> = {
   148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
   152: "firebrand", 153: "oil", 154: "wrench",
   155: "bucket", 156: "water bucket", 157: "lava bucket",
+  158: "boat", 159: "minecart",
 };
 
 // Item ids: placeable blocks reuse block id; tools/materials use 100+.
@@ -149,6 +151,8 @@ export const I = {
   BUCKET: 155,
   WATER_BUCKET: 156,
   LAVA_BUCKET: 157,
+  BOAT: 158,
+  MINECART: 159,
 } as const;
 
 // Seconds to break by hand (Infinity = unbreakable)
@@ -163,12 +167,13 @@ export const HARDNESS: Record<number, number> = {
   40: Infinity, 41: 5.5, 42: 4.0,
   43: 1.5, 44: 1.2, 45: 3.5, 46: 4.5,
   47: 5.0, 48: 4.5,
-  49: 1.2, 50: 1.5, 51: 3.0,
+  49: 1.2, 50: 1.5, 51: 3.0, 52: 0.5,
 };
 
 // Walk-through vegetation: no collision, no selection box in the way of
 // placement (placing into them replaces them), still breakable for drops.
-export const WALK_THROUGH: Set<number> = new Set([31, 32, 33, 34, 35, 36]);
+// Rails ride along: no collision so carts/players stand on the track bed.
+export const WALK_THROUGH: Set<number> = new Set([31, 32, 33, 34, 35, 36, 52]);
 
 // Which tool class speeds up which blocks. "pick" for stone/ores, "any" otherwise.
 export const TOOL_CLASS: Record<number, "pick" | "any"> = {
@@ -275,6 +280,10 @@ export type ClientMsg =
   | { t: "engineFuel" }
   | { t: "bucketFill"; x: number; y: number; z: number }
   | { t: "tankUse"; x: number; y: number; z: number; held?: number }
+  | { t: "vehiclePlace"; kind: "boat" | "cart"; x: number; y: number; z: number }
+  | { t: "vehicleEnter"; id: number }
+  | { t: "vehicleExit" }
+  | { t: "vehicleBreak"; id: number }
   | { t: "gamemode"; mode: string }
   | { t: "give"; id: number; n: number }
   | { t: "moveItem"; from: number; to: number };
@@ -297,6 +306,8 @@ export type ServerMsg =
   | { t: "tradeOffers"; id: number; offers: TradeOffer[] }
   | { t: "chest"; x: number; y: number; z: number; slots: InvSlot[] }
   | { t: "machines"; engines: EngineWire[]; quarries: QuarryWire[]; tanks?: TankWire[] }
+  | { t: "vehicles"; list: VehicleWire[] }
+  | { t: "ride"; id: number; kind?: "boat" | "cart" }
   | { t: "gamemode"; creative: boolean }
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
   | { t: "reset"; seed: number; spawn: Vec3 }
@@ -331,6 +342,10 @@ export interface QuarryWire {
 export type FluidKind = "water" | "lava";
 export interface TankWire {
   x: number; y: number; z: number; fluid: FluidKind | null; amount: number;
+}
+export type VehicleKind = "boat" | "cart";
+export interface VehicleWire {
+  id: number; kind: VehicleKind; p: Vec3; yaw: number; rider: number;
 }
 
 // RLE helpers: flat [id,count,...]

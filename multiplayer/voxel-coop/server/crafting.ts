@@ -75,6 +75,10 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "tank", name: "Tank", needsTable: true, pat: [B.GLASS, B.GLASS, B.GLASS, B.GLASS, 0, B.GLASS, B.GLASS, B.GLASS, B.GLASS], out: { id: B.TANK, n: 1 } },
   { id: "pump", name: "Pump", needsTable: true, pat: [G, G, G, B.PIPE, B.ENGINE, B.PIPE, G, G, G], out: { id: B.PUMP, n: 1 } },
   { id: "bucket", name: "Bucket", needsTable: true, pat: [G, 0, G, 0, G, 0, 0, 0, 0], out: { id: I.BUCKET, n: 1 } },
+  // --- vehicles: rails go down as blocks, boats + carts are rideable items ---
+  { id: "rail", name: "Rails ×8", needsTable: true, pat: [G, S, G, G, S, G, G, S, G], out: { id: B.RAIL, n: 8 } },
+  { id: "boat", name: "Boat", needsTable: true, pat: [P, 0, P, P, P, P, 0, 0, 0], out: { id: I.BOAT, n: 1 } },
+  { id: "minecart", name: "Minecart", needsTable: true, pat: [G, 0, G, G, G, G, 0, 0, 0], out: { id: I.MINECART, n: 1 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -127,7 +131,7 @@ export function matchGrid(cells: number[], smallOnly: boolean): ShapedRecipe | n
 
 // --- inventory helpers (slots array, id 0 = empty, max stack 64, tools don't stack) ---
 export const MAX_STACK = 64;
-const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS, I.BOW, I.WARHAMMER, I.DAGGER, I.FIREBRAND, I.WRENCH]);
+const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS, I.BOW, I.WARHAMMER, I.DAGGER, I.FIREBRAND, I.WRENCH, I.BOAT, I.MINECART]);
 
 export function isStackable(id: number): boolean {
   return !UNSTACKABLE.has(id);
@@ -318,6 +322,7 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.FLUID_PIPE: return { id: B.FLUID_PIPE, n: 1 };
     case B.TANK: return { id: B.TANK, n: 1 };
     case B.PUMP: return { id: B.PUMP, n: 1 };
+    case B.RAIL: return { id: B.RAIL, n: 1 };
     case B.STONE_BRICK: return { id: B.STONE_BRICK, n: 1 };
     case B.LADDER: return { id: B.LADDER, n: 1 };
     case B.BED: return { id: B.BED, n: 1 };

@@ -176,8 +176,7 @@ function paintWrench(g) {
   R(g, 10, 1, 3, 2, "#1a1a1a"); // mouth
   R(g, 8, 1, 6, 1, "#ffffff");
 }
-function paintBucket(g, fill) {
-  R(g, 3, 5, 10, 9, "#c8c8ce"); // iron pail
+function paintBucket(g, fill) {  R(g, 3, 5, 10, 9, "#c8c8ce"); // iron pail
   R(g, 3, 5, 10, 1, "#ffffff");
   R(g, 3, 13, 10, 1, "#8a8a92");
   R(g, 3, 5, 1, 9, "#8a8a92"); R(g, 12, 5, 1, 9, "#8a8a92");
@@ -206,6 +205,22 @@ function paintShovel(g, head) {
   R(g, 8, 1, 4, 6, head); R(g, 8, 1, 1, 6, "#ffffff");
   R(g, 9, 6, 2, 2, head);
 }
+function paintBoat(g) {
+  R(g, 2, 6, 12, 7, "#8a5f30"); // hull side
+  R(g, 2, 6, 12, 1, "#a97c46"); // gunwale highlight
+  R(g, 2, 12, 12, 1, "#5a3a1a"); // keel shade
+  R(g, 4, 7, 8, 4, "#3a2410"); // hollow interior
+  R(g, 6, 10, 4, 2, "#6b4423"); // bench
+  R(g, 2, 6, 1, 7, "#a97c46"); R(g, 13, 6, 1, 7, "#5a3a1a"); // bow/stern posts
+}
+function paintCart(g) {
+  R(g, 3, 4, 10, 6, "#3a3a3f"); // tub body
+  R(g, 3, 4, 10, 1, "#6a6a72"); // rim highlight
+  R(g, 3, 9, 10, 1, "#1e1e22");
+  R(g, 5, 6, 6, 2, "#1e1e22"); // hollow
+  R(g, 3, 11, 3, 3, "#1e1e22"); R(g, 10, 11, 3, 3, "#1e1e22"); // wheels
+  R(g, 3, 11, 3, 1, "#8a8a92"); R(g, 10, 11, 3, 1, "#8a8a92"); // hubs
+}
 
 const PAINTERS = {
   101: paintStick, 102: paintCoal, 103: paintIngot, 104: paintPork,
@@ -233,11 +248,12 @@ const PAINTERS = {
   152: paintFirebrand, 153: paintOil, 154: paintWrench,
   155: (g) => paintBucket(g, null), 156: (g) => paintBucket(g, "#3f88d8"),
   157: (g) => paintBucket(g, "#ff7a1a"),
+  158: paintBoat, 159: paintCart,
 };
 
 export function itemIconURL(id) {
   if (!id) return "";
-  if (id >= 1 && id <= 51) return blockIconURL(id);
+  if (id >= 1 && id <= 52) return blockIconURL(id);
   const hit = cache.get(id);
   if (hit) return hit;
   const paint = PAINTERS[id];

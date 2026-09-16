@@ -27,6 +27,10 @@ export class Player {
     this.onFallDamage = null; // (amount) => void — server owns hp, client predicts
     this.onLockChange = null; // (locked) => void
     this.flying = false; // creative flight (double-Space toggles, server gamemode gates damage)
+    this.sailing = false; // riding a boat (server ride msg drives this)
+    this.ridingCart = false; // riding a minecart (glides along rails)
+    this.cartAxis = null; // 'x' | 'z' while on connected rails
+    this.cartDir = 1; // travel sign along the axis
     this._lastSpace = -10;
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
 
@@ -161,16 +165,74 @@ export class Player {
     if (!window.voxCreative) this.flying = false;
 
     const water = this.inWater(world);
-    const ladder = !water && this.onLadder(world);
+    const ladder = !water && !this.sailing && !this.ridingCart && this.onLadder(world);
     const sprintKey = this.keys.ShiftLeft || this.keys.ShiftRight;
-    this.sprinting = !!(sprintKey && moving && this.onGround && !ladder);
+    this.sprinting = !!(sprintKey && moving && this.onGround && !ladder && !this.sailing && !this.ridingCart);
     const base = sprintKey ? SPEED_SPRINT : SPEED;
     const maxSp = moving ? base * (water ? 0.5 : 1) : 0;
     const accel = this.onGround ? 14 : 4;
     this.vel.x += (dx * maxSp - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (dz * maxSp - this.vel.z) * Math.min(1, accel * dt);
 
-    if (ladder) {
+    if (this.sailing) {
+      // boat: fast on water, sluggish on land; floats at the surface, no gravity
+      const wx = Math.floor(this.pos.x), wz = Math.floor(this.pos.z);
+      let surf = null;
+      for (let dy = 1; dy >= -3; dy--) {
+        if (world.get(wx, Math.floor(this.pos.y) + dy, wz) === B.WATER) {
+          surf = Math.floor(this.pos.y) + dy + 1;
+          break;
+        }
+      }
+      const spd = (sprintKey ? 10.5 : 7.5) * (surf !== null ? 1 : 0.35);
+      const maxSp = moving ? spd : 0;
+      this.vel.x += (dx * maxSp - this.vel.x) * Math.min(1, 8 * dt);
+      this.vel.z += (dz * maxSp - this.vel.z) * Math.min(1, 8 * dt);
+      const targetY = surf !== null ? surf + 0.32 : this.pos.y;
+      this.vel.y += ((targetY - this.pos.y) * 10 - this.vel.y) * Math.min(1, 10 * dt);
+      this.sprinting = !!(sprintKey && moving);
+      this.onGround = false;
+      this.fallStart = null;
+    } else if (this.ridingCart) {
+      // minecart: throttle along the rail axis with momentum, brake/reverse on S
+      const xi = Math.floor(this.pos.x), zi = Math.floor(this.pos.z);
+      let railY = null;
+      for (let dy = 1; dy >= -2; dy--) {
+        if (world.get(xi, Math.floor(this.pos.y) + dy, zi) === B.RAIL) {
+          railY = Math.floor(this.pos.y) + dy;
+          break;
+        }
+      }
+      let ax = this.cartAxis;
+      if (railY !== null) {
+        const xConn = world.get(xi + 1, railY, zi) === B.RAIL || world.get(xi - 1, railY, zi) === B.RAIL;
+        const zConn = world.get(xi, railY, zi + 1) === B.RAIL || world.get(xi, railY, zi - 1) === B.RAIL;
+        if (xConn && !zConn) ax = "x";
+        else if (zConn && !xConn) ax = "z";
+        this.cartAxis = ax;
+      }
+      const fwx = -Math.sin(this.yaw), fwz = -Math.cos(this.yaw);
+      if (ax === "x" && Math.abs(fwx) > 0.3) this.cartDir = Math.sign(fwx);
+      else if (ax === "z" && Math.abs(fwz) > 0.3) this.cartDir = Math.sign(fwz);
+      const MAXV = 9;
+      let tvx = 0, tvz = 0;
+      if (f !== 0 && ax && railY !== null) {
+        if (ax === "x") tvx = this.cartDir * f * MAXV;
+        else tvz = this.cartDir * f * MAXV;
+      }
+      const k = Math.min(1, (f !== 0 ? 3.5 : 1.4) * dt);
+      this.vel.x += (tvx - this.vel.x) * k;
+      this.vel.z += (tvz - this.vel.z) * k;
+      if (!ax || railY === null) { // derailed: roll to a stop
+        this.vel.x *= Math.pow(0.05, dt);
+        this.vel.z *= Math.pow(0.05, dt);
+      }
+      const targetY = railY !== null ? railY + 0.55 : this.pos.y;
+      this.vel.y += ((targetY - this.pos.y) * 12 - this.vel.y) * Math.min(1, 12 * dt);
+      this.sprinting = false;
+      this.onGround = false;
+      this.fallStart = null;
+    } else if (ladder) {
       // climb: Space up, Shift sneak down, else grip (no fall)
       this.vel.y += (((this.keys.Space ? 3.2 : 0) + (sprintKey ? -2.5 : 0) - this.vel.y)) * Math.min(1, 10 * dt);
       this.fallStart = null;

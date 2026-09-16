@@ -160,6 +160,11 @@ data/             world.json + players.json (gitignored saves)
   **pumps** (iron + pipes + engine, tap adjacent water/lava while powered,
   lava preferred), **fluid pipes** (pipe + glass, balance tanks while an engine
   burns nearby). `/kit fluids` stocks the set.
+- 🚣 Vehicles: **boats** (planks, RMB on water — fast sailing, WASD + shift,
+  sluggish on land) and **rails** (iron + sticks, walk-through track blocks) +
+  **minecarts** (RMB on rails — momentum glide, face along the track and use
+  W/S to throttle/brake). F hops in/out, LMB breaks a free one back into an
+  item. Riders drive, the server follows — `/kit vehicles` stocks the set.
 - ⚔️ new weapons: **bow + arrows** (X to shoot, 7 dmg hitscan), **warhammer**
   (12 dmg + launch, slow), **dagger** (cheap 4 dmg), **firebrand** (11 dmg),
   **wrench** (style). Crafted at the table, bow in the recipe book.
@@ -176,5 +181,6 @@ data/             world.json + players.json (gitignored saves)
 `craft`, `craftDirect`, `smelt`, `attackMob`, `ignite → boom` (TNT),
 `shoot → shot` (bow), `chestOpen/chestPut/chestTake → chest`,
 `engineFuel`, `bucketFill`, `tankUse`, `gamemode → gamemode`, `give`,
+`vehiclePlace/vehicleEnter/vehicleExit/vehicleBreak → vehicles` + `ride`,
 `machines` (engines + quarries + tanks),
 `eat`, `moveItem`, `respawn`, `ping → pong`.

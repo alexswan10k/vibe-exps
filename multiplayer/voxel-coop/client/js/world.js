@@ -398,8 +398,18 @@ function paintTank(g, r) {
   g.fillStyle = "#8a5f30";
   g.fillRect(0, 7, 16, 1); // gauge line
 }
-function paintPump(g, r) {
-  noiseFill(g, r, [0.5, 0.5, 0.53], 0.07);
+function paintRail(g, r) {
+  noiseFill(g, r, [0.42, 0.3, 0.16], 0.07); // wooden track bed
+  g.fillStyle = "#2e2010";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1); // bed edges
+  g.fillStyle = "#6b4a22";
+  for (let y = 1; y < 15; y += 3) g.fillRect(0, y, 16, 1); // ties
+  g.fillStyle = "#c8c8ce";
+  g.fillRect(2, 0, 2, 16); g.fillRect(12, 0, 2, 16); // steel rails
+  g.fillStyle = "#ffffff";
+  g.fillRect(2, 0, 1, 16); g.fillRect(12, 0, 1, 16); // glint
+}
+function paintPump(g, r) {  noiseFill(g, r, [0.5, 0.5, 0.53], 0.07);
   g.fillStyle = "#1e2a33";
   g.fillRect(5, 0, 6, 16); // intake slot
   g.fillStyle = "#3f88b8";
@@ -450,6 +460,7 @@ const ICON_PAINT = {
   43: [paintChest, 53], 44: [paintPipe, 54], 45: [paintEngine, 55], 46: [paintQuarry, 56],
   47: [paintOilOre, 57], 48: [paintCoalBlock, 58],
   49: [paintFluidPipe, 59], 50: [paintTank, 60], 51: [paintPump, 61],
+  52: [paintRail, 62],
 };
 const iconCache = new Map();
 export function blockIconURL(block) {
@@ -540,6 +551,7 @@ export function makeMaterials() {
     [B.FLUID_PIPE]: M(makeCanvas(paintFluidPipe, 59)),
     [B.TANK]: M(makeCanvas(paintTank, 60), { transparent: true, opacity: 0.92 }),
     [B.PUMP]: M(makeCanvas(paintPump, 61)),
+    [B.RAIL]: M(makeCanvas(paintRail, 62)),
   };
 }
 

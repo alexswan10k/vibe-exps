@@ -66,6 +66,9 @@ export const SHAPED_CLIENT = [
   { id: "tank", name: "Tank", needsTable: true, cat: "blocks", desc: "16 buckets of water/lava (F with bucket)", out: { id: 50, n: 1 }, pat: [17, 17, 17, 17, 0, 17, 17, 17, 17] },
   { id: "pump", name: "Pump", needsTable: true, cat: "blocks", desc: "taps water/lava, needs engine next door", out: { id: 51, n: 1 }, pat: [G, G, G, 44, 45, 44, G, G, G] },
   { id: "bucket", name: "Bucket", needsTable: true, cat: "tools", desc: "scoop water/lava (F), fill tanks", out: { id: 155, n: 1 }, pat: [G, 0, G, 0, G, 0, 0, 0, 0] },
+  { id: "rail", name: "Rails ×8", needsTable: true, cat: "blocks", desc: "lay tracks for minecarts", out: { id: 52, n: 8 }, pat: [G, S, G, G, S, G, G, S, G] },
+  { id: "boat", name: "Boat", needsTable: true, cat: "blocks", desc: "fast water travel (RMB on water, F in/out)", out: { id: 158, n: 1 }, pat: [P, 0, P, P, P, P, 0, 0, 0] },
+  { id: "minecart", name: "Minecart", needsTable: true, cat: "blocks", desc: "rides rails, W/S throttle (F in/out)", out: { id: 159, n: 1 }, pat: [G, 0, G, G, G, G, 0, 0, 0] },
 ];
 
 /** Furnace cheat-sheet for the picker (mirrors server SMELT_RECIPES). */
