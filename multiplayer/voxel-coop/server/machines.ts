@@ -1,16 +1,24 @@
 // BuildCraft-lite: chests (27-slot storage), stirling engines (fuel -> power),
-// pipes (chest-to-chest item transport over PIPE blocks), quarries (9x9 auto-miner).
+// pipes (chest-to-chest item transport over PIPE blocks), quarries (9x9 auto-miner),
+// tanks (16000 mB fluid storage), fluid pipes (tank-to-tank flow) and pumps
+// (tap adjacent natural water/lava into tanks, engine-powered).
 // All state persists to data/machines.json. Tick is driven by server/main.ts.
 
-import { B, InvSlot } from "./protocol.ts";
+import { B, FluidKind, InvSlot } from "./protocol.ts";
 import { ENGINE_FUEL, MAX_STACK, dropFor, isStackable } from "./crafting.ts";
 import type { World } from "./world.ts";
 
 export const CHEST_SIZE = 27;
 export const QUARRY_R = 4; // 9x9 footprint
+export const TANK_CAP = 16000; // mB (16 buckets)
+export const BUCKET_MB = 1000;
+export const LAVA_BURN_S = 120; // seconds per 1000 mB lava in an engine
+export const PUMP_MB = 1000; // mB generated per pump cycle
+export const PUMP_PERIOD = 3; // seconds per pump cycle while powered
 
 export interface ChestState { x: number; y: number; z: number; slots: InvSlot[] }
 export interface EngineState { x: number; y: number; z: number; burnLeft: number; burnMax: number }
+export interface TankState { x: number; y: number; z: number; fluid: FluidKind | null; amount: number } // amount in mB
 export interface QuarryState {
   x: number; y: number; z: number; owner: number;
   step: number; // next cell index (0..81*layers)
@@ -29,9 +37,13 @@ export class Machines {
   chests = new Map<string, ChestState>();
   engines = new Map<string, EngineState>();
   quarries = new Map<string, QuarryState>();
+  tanks = new Map<string, TankState>();
+  pumps = new Set<string>(); // positions of PUMP blocks (stateless, validated vs world)
   savePath: string;
   private pipeT = 0;
   private quarryT = 0;
+  private fluidT = 0;
+  private pumpT = 0;
 
   constructor(savePath: string) {
     this.savePath = savePath;
@@ -63,7 +75,16 @@ export class Machines {
         const q = v as QuarryState;
         if (Number.isInteger(q.step)) m.quarries.set(k, { x: q.x, y: q.y, z: q.z, owner: q.owner ?? 0, step: q.step, cooldown: 0, done: !!q.done });
       }
-      console.log(`[machines] loaded ${m.chests.size} chests, ${m.engines.size} engines, ${m.quarries.size} quarries`);
+      for (const [k, v] of Object.entries(d.tanks ?? {})) {
+        const t = v as TankState;
+        if (Number.isInteger(t.amount) && (t.fluid === "water" || t.fluid === "lava" || t.fluid === null)) {
+          m.tanks.set(k, { x: t.x, y: t.y, z: t.z, fluid: t.amount > 0 ? t.fluid : null, amount: Math.max(0, Math.min(TANK_CAP, t.amount)) });
+        }
+      }
+      for (const k of (d.pumps ?? []) as string[]) {
+        if (typeof k === "string") m.pumps.add(k);
+      }
+      console.log(`[machines] loaded ${m.chests.size} chests, ${m.engines.size} engines, ${m.quarries.size} quarries, ${m.tanks.size} tanks, ${m.pumps.size} pumps`);
     } catch { /* first run */ }
     return m;
   }
@@ -75,6 +96,8 @@ export class Machines {
         chests: Object.fromEntries(this.chests),
         engines: Object.fromEntries(this.engines),
         quarries: Object.fromEntries(this.quarries),
+        tanks: Object.fromEntries(this.tanks),
+        pumps: [...this.pumps],
       };
       await Deno.writeTextFile(this.savePath, JSON.stringify(d));
     } catch (e) { console.error("[machines] save failed:", e); }
@@ -84,6 +107,8 @@ export class Machines {
     this.chests.clear();
     this.engines.clear();
     this.quarries.clear();
+    this.tanks.clear();
+    this.pumps.clear();
     void this.save();
   }
 
@@ -124,7 +149,41 @@ export class Machines {
     this.chests.delete(k);
     this.engines.delete(k);
     this.quarries.delete(k);
+    this.tanks.delete(k);
+    this.pumps.delete(k);
     return c;
+  }
+
+  ensureTank(x: number, y: number, z: number): TankState {
+    const k = mkey(x, y, z);
+    let t = this.tanks.get(k);
+    if (!t) {
+      t = { x, y, z, fluid: null, amount: 0 };
+      this.tanks.set(k, t);
+    }
+    return t;
+  }
+
+  ensurePump(x: number, y: number, z: number): void {
+    this.pumps.add(mkey(x, y, z));
+  }
+
+  /** Add fluid to a tank (same kind or empty). Returns leftover mB. */
+  static tankGive(t: TankState, fluid: FluidKind, mb: number): number {
+    if (t.fluid !== null && t.fluid !== fluid) return mb;
+    if (t.fluid === null && mb > 0) t.fluid = fluid;
+    const room = TANK_CAP - t.amount;
+    const add = Math.min(room, mb);
+    t.amount += add;
+    return mb - add;
+  }
+
+  /** Take up to mb from a tank. Returns mB actually taken. */
+  static tankTake(t: TankState, mb: number): number {
+    const take = Math.min(t.amount, mb);
+    t.amount -= take;
+    if (t.amount <= 0) { t.amount = 0; t.fluid = null; }
+    return take;
   }
 
   hasMachine(x: number, y: number, z: number): boolean {
@@ -175,7 +234,59 @@ export class Machines {
     return dests[0] ?? null;
   }
 
-  /** Move up to `n` of `id` into chest; returns leftover. */
+  /** BFS over FLUID_PIPE blocks: nearest tank accepting `fluid` with room. */
+  findFluidTarget(world: World, sx: number, sy: number, sz: number, fluid: FluidKind, mb: number): TankState | null {
+    const seen = new Set<string>([mkey(sx, sy, sz)]);
+    const queue: [number, number, number, number][] = [[sx, sy, sz, 0]];
+    while (queue.length > 0) {
+      const [x, y, z, d] = queue.shift()!;
+      if (d > 32) continue;
+      for (const [dx, dy, dz] of DIRS) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        const kk = mkey(nx, ny, nz);
+        if (seen.has(kk)) continue;
+        seen.add(kk);
+        const b = world.get(nx, ny, nz);
+        if (b === B.FLUID_PIPE) {
+          queue.push([nx, ny, nz, d + 1]);
+        } else if (b === B.TANK) {
+          const t = this.tanks.get(kk) ?? this.ensureTank(nx, ny, nz);
+          if ((t.fluid === null || t.fluid === fluid) && TANK_CAP - t.amount >= Math.min(mb, BUCKET_MB)) return t;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Suck one fuel item from adjacent chests (lava buckets excluded — handled
+   *  via tanks/buckets), or lava from adjacent tanks. Returns true if lit. */
+  private suckFuel(e: EngineState): boolean {
+    // lava first: adjacent tanks with >= 1 bucket of lava
+    for (const [dx, dy, dz] of DIRS) {
+      const t = this.tanks.get(mkey(e.x + dx, e.y + dy, e.z + dz));
+      if (t && t.fluid === "lava" && t.amount >= BUCKET_MB) {
+        Machines.tankTake(t, BUCKET_MB);
+        e.burnLeft = LAVA_BURN_S;
+        e.burnMax = Math.max(e.burnMax, LAVA_BURN_S);
+        return true;
+      }
+    }
+    for (const [dx, dy, dz] of DIRS) {
+      const c = this.chests.get(mkey(e.x + dx, e.y + dy, e.z + dz));
+      if (!c) continue;
+      for (const s of c.slots) {
+        const secs = this.fuelSeconds(s.id);
+        if (s.id && secs > 0) {
+          s.n -= 1;
+          if (s.n <= 0) { s.id = 0; s.n = 0; }
+          e.burnLeft = secs;
+          e.burnMax = Math.max(e.burnMax, secs);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
   static chestGive(c: ChestState, id: number, n: number): number {
     if (isStackable(id)) {
       for (const s of c.slots) {
@@ -207,30 +318,17 @@ export class Machines {
       onEngineUpdate: () => void;
     },
   ): void {
-    // engines burn down whenever lit (they power adjacent quarries/pipes)
+    // engines burn down whenever lit (they power adjacent quarries/pipes).
+    // Dry engines auto-suck lava from adjacent tanks, else fuel from chests.
     let enginesChanged = false;
     for (const e of this.engines.values()) {
       if (e.burnLeft > 0) {
         e.burnLeft -= dt;
         if (e.burnLeft <= 0) { e.burnLeft = 0; e.burnMax = 0; }
         enginesChanged = true;
-        // auto-suck fuel from an adjacent chest when running dry
-        if (e.burnLeft <= 0) {
-          for (const [dx, dy, dz] of DIRS) {
-            const c = this.chests.get(mkey(e.x + dx, e.y + dy, e.z + dz));
-            if (!c) continue;
-            for (const s of c.slots) {
-              const secs = this.fuelSeconds(s.id);
-              if (s.id && secs > 0) {
-                s.n -= 1;
-                if (s.n <= 0) { s.id = 0; s.n = 0; }
-                e.burnLeft = secs; e.burnMax = secs;
-                break;
-              }
-            }
-            if (e.burnLeft > 0) break;
-          }
-        }
+      }
+      if (e.burnLeft <= 0) {
+        if (this.suckFuel(e)) enginesChanged = true;
       }
     }
     if (enginesChanged) hooks.onEngineUpdate();
@@ -276,6 +374,62 @@ export class Machines {
         }
       }
     }
+
+    // pumps: every PUMP_PERIOD while powered, tap adjacent natural water/lava
+    // (lava preferred) into an adjacent tank or the fluid-pipe network.
+    // Source blocks are NOT consumed — pumps are infinite taps, rate-limited.
+    this.pumpT += dt;
+    if (this.pumpT >= PUMP_PERIOD) {
+      this.pumpT = 0;
+      for (const k of [...this.pumps]) {
+        const [px, py, pz] = k.split(",").map(Number);
+        if (world.get(px, py, pz) !== B.PUMP) { this.pumps.delete(k); continue; }
+        if (!this.poweredAt(px, py, pz)) continue;
+        let fluid: FluidKind | null = null;
+        for (const [dx, dy, dz] of DIRS) {
+          const b = world.get(px + dx, py + dy, pz + dz);
+          if (b === B.LAVA) { fluid = "lava"; break; }
+          if (b === B.WATER && fluid === null) fluid = "water";
+        }
+        if (!fluid) continue;
+        let mb = PUMP_MB;
+        for (const [dx, dy, dz] of DIRS) {
+          if (mb <= 0) break;
+          const t = this.tanks.get(mkey(px + dx, py + dy, pz + dz));
+          if (t && world.get(px + dx, py + dy, pz + dz) === B.TANK) {
+            mb = Machines.tankGive(t, fluid, mb);
+          }
+        }
+        if (mb > 0) {
+          const dest = this.findFluidTarget(world, px, py, pz, fluid, mb);
+          if (dest) mb = Machines.tankGive(dest, fluid, mb);
+        }
+      }
+    }
+
+    // fluid pipes: every 0.5s balance tanks over the network — fuller tanks
+    // push up to 500 mB into emptier compatible tanks. Needs engine power.
+    this.fluidT += dt;
+    if (this.fluidT >= 0.5) {
+      this.fluidT = 0;
+      for (const t of this.tanks.values()) {
+        if (world.get(t.x, t.y, t.z) !== B.TANK) continue;
+        if (!t.fluid || t.amount < 1500) continue;
+        let touchesPipe = false;
+        for (const [dx, dy, dz] of DIRS) {
+          if (world.get(t.x + dx, t.y + dy, t.z + dz) === B.FLUID_PIPE) { touchesPipe = true; break; }
+        }
+        if (!touchesPipe) continue;
+        if (!this.poweredAt(t.x, t.y, t.z) && !pipePoweredNearby(world, this, t.x, t.y, t.z, B.FLUID_PIPE)) continue;
+        const dest = this.findFluidTarget(world, t.x, t.y, t.z, t.fluid, 500);
+        if (!dest || dest === t || dest.amount >= t.amount - 250) continue;
+        const move = Math.min(500, Math.floor((t.amount - dest.amount) / 2));
+        if (move < 50) continue;
+        const taken = Machines.tankTake(t, move);
+        const left = Machines.tankGive(dest, t.fluid, taken);
+        if (left > 0) Machines.tankGive(t, dest.fluid ?? t.fluid, left);
+      }
+    }
   }
 
   private mineNext(
@@ -296,7 +450,7 @@ export class Machines {
       const cur = world.get(bx, by, bz);
       if (cur === B.AIR || cur === B.WATER || cur === B.LAVA || cur === B.BEDROCK) continue;
       // never eat machine blocks themselves
-      if (cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE) continue;
+      if (cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE || cur === B.TANK || cur === B.FLUID_PIPE || cur === B.PUMP) continue;
       const drop = quarryDropFor(cur);
       world.set(bx, by, bz, B.AIR);
       hooks.onBlock(bx, by, bz, B.AIR);
@@ -318,8 +472,8 @@ function chestRoom(c: ChestState, id: number, n: number): number {
 }
 
 /** Pipes only run when the network is powered: an engine burning within
- *  2 blocks of any pipe in the connected network. Cheap check from source. */
-function pipePoweredNearby(world: World, m: Machines, x: number, y: number, z: number): boolean {
+ *  reach of any pipe in the connected network. Cheap check from source. */
+function pipePoweredNearby(world: World, m: Machines, x: number, y: number, z: number, pipe: number = B.PIPE): boolean {
   const seen = new Set<string>();
   const queue: [number, number, number][] = [[x, y, z]];
   seen.add(mkey(x, y, z));
@@ -332,7 +486,7 @@ function pipePoweredNearby(world: World, m: Machines, x: number, y: number, z: n
       const kk = mkey(nx, ny, nz);
       if (seen.has(kk)) continue;
       seen.add(kk);
-      if (world.get(nx, ny, nz) === B.PIPE) queue.push([nx, ny, nz]);
+      if (world.get(nx, ny, nz) === pipe) queue.push([nx, ny, nz]);
     }
   }
   return false;

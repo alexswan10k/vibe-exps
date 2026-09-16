@@ -70,6 +70,11 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "dagger", name: "Dagger", needsTable: false, pat: [0, 0, 0, 0, G, 0, 0, S, 0], out: { id: I.DAGGER, n: 1 } },
   { id: "firebrand", name: "Firebrand", needsTable: true, pat: [K, K, K, K, I.DIAMOND_SWORD, K, K, K, K], out: { id: I.FIREBRAND, n: 1 } },
   { id: "wrench", name: "Wrench", needsTable: true, pat: [G, 0, G, 0, G, 0, 0, S, 0], out: { id: I.WRENCH, n: 1 } },
+  // --- fluids: waterproof pipes, storage, pumps, buckets ---
+  { id: "fluid_pipe", name: "Fluid Pipe ×2", needsTable: true, pat: [B.PIPE, 0, 0, B.GLASS, 0, 0, B.PIPE, 0, 0], out: { id: B.FLUID_PIPE, n: 2 } },
+  { id: "tank", name: "Tank", needsTable: true, pat: [B.GLASS, B.GLASS, B.GLASS, B.GLASS, 0, B.GLASS, B.GLASS, B.GLASS, B.GLASS], out: { id: B.TANK, n: 1 } },
+  { id: "pump", name: "Pump", needsTable: true, pat: [G, G, G, B.PIPE, B.ENGINE, B.PIPE, G, G, G], out: { id: B.PUMP, n: 1 } },
+  { id: "bucket", name: "Bucket", needsTable: true, pat: [G, 0, G, 0, G, 0, 0, 0, 0], out: { id: I.BUCKET, n: 1 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -310,6 +315,9 @@ export function dropFor(block: number): { id: number; n: number } | null {
     case B.QUARRY: return { id: B.QUARRY, n: 1 };
     case B.OIL_ORE: return { id: I.OIL, n: 1 };
     case B.COAL_BLOCK: return { id: B.COAL_BLOCK, n: 1 };
+    case B.FLUID_PIPE: return { id: B.FLUID_PIPE, n: 1 };
+    case B.TANK: return { id: B.TANK, n: 1 };
+    case B.PUMP: return { id: B.PUMP, n: 1 };
     case B.STONE_BRICK: return { id: B.STONE_BRICK, n: 1 };
     case B.LADDER: return { id: B.LADDER, n: 1 };
     case B.BED: return { id: B.BED, n: 1 };

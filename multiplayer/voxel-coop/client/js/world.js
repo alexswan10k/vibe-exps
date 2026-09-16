@@ -2,7 +2,7 @@
 // Layout matches server: index = (y * CHUNK + z) * CHUNK + x.
 import { B, CHUNK, WORLD_H } from "./config.js";
 
-const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48]);
+const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 23, 24, 25, 26, 27, 28, 29, 30, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51]);
 // Walk-through vegetation (mirrors server WALK_THROUGH): cross-quad billboards.
 const PLANTS = new Set([31, 32, 33, 34, 35, 36]);
 
@@ -375,6 +375,40 @@ function paintQuarry(g, r) {
   g.fillRect(6, 2, 4, 12); // drill slot
 }
 function paintOilOre(g, r) { paintStone(g, r); blobs(g, r, "#1a1a1e", 6, 2); blobs(g, r, "#3a2a6e", 3, 1); }
+function paintFluidPipe(g, r) {
+  noiseFill(g, r, [0.4, 0.55, 0.65], 0.06); // blue-tinted waterproof pipe
+  g.fillStyle = "#1e2a33";
+  g.fillRect(0, 0, 16, 3); g.fillRect(0, 13, 16, 3);
+  g.fillStyle = "#7ab8d8";
+  g.fillRect(0, 3, 16, 2); g.fillRect(0, 11, 16, 2);
+  g.fillStyle = "#3f88b8";
+  g.fillRect(6, 3, 4, 10); // water stripe
+  g.fillStyle = "rgba(255,255,255,0.7)";
+  g.fillRect(7, 4, 1, 8);
+}
+function paintTank(g, r) {
+  noiseFill(g, r, [0.7, 0.82, 0.88], 0.05); // glassy
+  g.fillStyle = "rgba(60,120,160,0.9)";
+  g.fillRect(2, 8, 12, 6); // fluid level (static texture; live % in hint/panel)
+  g.fillStyle = "rgba(220,240,255,0.8)";
+  g.fillRect(2, 8, 12, 1); // meniscus
+  g.fillStyle = "rgba(120,150,170,0.9)";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1);
+  g.fillRect(0, 0, 1, 16); g.fillRect(15, 0, 1, 16); // frame
+  g.fillStyle = "#8a5f30";
+  g.fillRect(0, 7, 16, 1); // gauge line
+}
+function paintPump(g, r) {
+  noiseFill(g, r, [0.5, 0.5, 0.53], 0.07);
+  g.fillStyle = "#1e2a33";
+  g.fillRect(5, 0, 6, 16); // intake slot
+  g.fillStyle = "#3f88b8";
+  g.fillRect(6, 1, 4, 14); // fluid channel
+  g.fillStyle = "#d8d8dc";
+  g.fillRect(0, 6, 16, 4); // collar band
+  g.fillStyle = "#f4c20d";
+  g.fillRect(0, 0, 16, 1); g.fillRect(0, 15, 16, 1); // hazard edges
+}
 function paintCoalBlock(g, r) {
   noiseFill(g, r, [0.08, 0.08, 0.09], 0.1);
   g.fillStyle = "rgba(255,255,255,0.12)";
@@ -415,6 +449,7 @@ const ICON_PAINT = {
   40: [paintLava, 50], 41: [paintEmeraldOre, 51], 42: [paintEmeraldBlock, 52],
   43: [paintChest, 53], 44: [paintPipe, 54], 45: [paintEngine, 55], 46: [paintQuarry, 56],
   47: [paintOilOre, 57], 48: [paintCoalBlock, 58],
+  49: [paintFluidPipe, 59], 50: [paintTank, 60], 51: [paintPump, 61],
 };
 const iconCache = new Map();
 export function blockIconURL(block) {
@@ -502,6 +537,9 @@ export function makeMaterials() {
     [B.QUARRY]: M(makeCanvas(paintQuarry, 56)),
     [B.OIL_ORE]: M(makeCanvas(paintOilOre, 57)),
     [B.COAL_BLOCK]: M(makeCanvas(paintCoalBlock, 58)),
+    [B.FLUID_PIPE]: M(makeCanvas(paintFluidPipe, 59)),
+    [B.TANK]: M(makeCanvas(paintTank, 60), { transparent: true, opacity: 0.92 }),
+    [B.PUMP]: M(makeCanvas(paintPump, 61)),
   };
 }
 

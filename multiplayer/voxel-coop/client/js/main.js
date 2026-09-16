@@ -213,11 +213,12 @@ const BREAK_COLORS = {
   32: 0xd42a2a, 33: 0xf2d024, 34: 0xc22f2f, 35: 0x7a5a38, 36: 0x6bad4d,
   37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8, 40: 0xff5a00, 41: 0x17c964,
   42: 0x17c964, 43: 0x8a5f30, 44: 0x9a9aa2, 45: 0xff7a1a, 46: 0xf4c20d,
-  47: 0x2a2a33, 48: 0x141414,
+  47: 0x2a2a33, 48: 0x141414, 49: 0x3f88b8, 50: 0x7ab8d8, 51: 0x9a9aa2,
 };
 window.voxCreative = false;
 window.voxChest = null; // {x,y,z,slots} while a chest window is open
-window.voxMachines = { engines: [], quarries: [] };
+window.voxEngine = null; // {x,y,z,at} while the engine panel is open
+window.voxMachines = { engines: [], quarries: [], tanks: [] };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
 }
@@ -260,7 +261,7 @@ ui.releaseLock = () => { if (document.pointerLockElement) document.exitPointerLo
 function menuVisible() { return $("menu").style.display !== "none"; }
 function relockIfClear() {
   if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
-      !menuVisible() && net?.connected) {
+      !menuVisible() && !chestOpen() && !engineOpen() && net?.connected) {
     player.lock();
   }
 }
@@ -271,7 +272,7 @@ player.onLockChange = (locked) => {
     mouseSafeRelease();
     // Esc with nothing open = pause menu (closing it re-locks via toggleHelp)
     if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
-        !menuVisible() && net?.connected) {
+        !menuVisible() && !chestOpen() && !engineOpen() && net?.connected) {
       ui.toggleHelp(true);
     }
   }
@@ -349,7 +350,71 @@ function closeChest(relock = true) {
 }
 
 function chestOpen() {
-  return document.getElementById("chest-modal")?.style.display !== "none";
+  return document.getElementById("chest-modal")?.style.display === "flex";
+}
+
+// ---------- engine panel (stirling engine status + refuel button) ----------
+function ensureEngineModal() {
+  if (document.getElementById("engine-modal")) return;
+  const modal = document.createElement("div");
+  modal.id = "engine-modal";
+  modal.style.display = "none";
+  modal.innerHTML = `<div class="trade-panel"><h2>🔥 engine <button id="engine-close" title="close (ESC)">✕</button></h2>
+    <div id="engine-status"></div>
+    <div id="engine-bar"><div></div></div>
+    <div class="engine-row"><button id="engine-fuel">add fuel (coal / oil / lava bucket)</button></div>
+    <div class="chest-hint">burns fuel to power adjacent quarries + pipe networks · auto-sucks lava/fuel from tanks + chests next door</div></div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#engine-close").addEventListener("click", () => closeEngine());
+  modal.querySelector("#engine-fuel").addEventListener("click", () => {
+    net.engineFuel();
+    hand.swing();
+    setTimeout(renderEngine, 400); // refresh after the server ticks
+  });
+}
+
+function openEnginePanel(x, y, z) {
+  window.voxEngine = { x, y, z, at: Date.now() };
+  ensureEngineModal();
+  renderEngine();
+  ui.releaseLock?.();
+  ui.hint("🔥 engine panel — add fuel to power your machines");
+}
+
+function renderEngine() {
+  const modal = document.getElementById("engine-modal");
+  const status = document.getElementById("engine-status");
+  const bar = document.getElementById("engine-bar");
+  if (!modal || !status || !bar || !window.voxEngine) return;
+  const { x, y, z, at } = window.voxEngine;
+  const e = (window.voxMachines.engines ?? []).find((v) => v.x === x && v.y === y && v.z === z);
+  if (!e) {
+    // no data: either the broadcast hasn't arrived yet, or the server is old
+    // (pre-machine builds never send "machines") — say so explicitly.
+    const waiting = Date.now() - at < 4000;
+    status.textContent = waiting
+      ? "⏳ waiting for engine data…"
+      : "⚠ no engine data from the server — restart it (deno task dev) to update";
+    bar.firstElementChild.style.width = "0%";
+  } else if (e.burning) {
+    status.textContent = `🔥 burning — ${Math.round((e.progress ?? 0) * 100)}% fuel left`;
+    bar.firstElementChild.style.width = `${Math.round((e.progress ?? 0) * 100)}%`;
+  } else {
+    status.textContent = "💤 idle — add fuel to power adjacent machines";
+    bar.firstElementChild.style.width = "0%";
+  }
+  modal.style.display = "flex";
+}
+
+function closeEngine(relock = true) {
+  const modal = document.getElementById("engine-modal");
+  if (modal) modal.style.display = "none";
+  window.voxEngine = null;
+  if (relock && net?.connected && !dead && !ui.invOpen) player.lock();
+}
+
+function engineOpen() {
+  return document.getElementById("engine-modal")?.style.display === "flex";
 }
 
 function decodeRLE(rle) {
@@ -433,7 +498,7 @@ function breakTime(block, heldId) {
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
   const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42, 44, 45, 46, 47, 48].includes(block);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51].includes(block);
   if (isStone) {
     // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
     if (mult <= 1) return base * 3.3;
@@ -461,6 +526,19 @@ function tryAttack() {
 function mouseSafeRelease() {
   mouse.left = false;
   clearBreak();
+}
+
+// Scan the look ray for a water/lava block (the voxel raycaster skips water).
+function findFluidAim() {
+  const eye = player.eye(), dir = player.lookDir();
+  for (let t = 0.5; t <= 6; t += 0.5) {
+    const bx = Math.floor(eye.x + dir.x * t);
+    const by = Math.floor(eye.y + dir.y * t);
+    const bz = Math.floor(eye.z + dir.z * t);
+    const b = world.get(bx, by, bz);
+    if (b === B.WATER || b === B.LAVA) return { x: bx, y: by, z: bz, block: b };
+  }
+  return null;
 }
 
 const touch = new Touch(player, {
@@ -519,6 +597,19 @@ function doPlace() {
   if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
   if (hit.block === B.FURNACE) { net.smelt("start", hit.x, hit.y, hit.z); return; }
   if (hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); return; }
+  if (hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest…"); return; }
+  if (hit.block === B.ENGINE) { openEnginePanel(hit.x, hit.y, hit.z); return; }
+  if (hit.block === B.TANK) {
+    const h = ui.heldItem();
+    net.tankUse(hit.x, hit.y, hit.z, h?.id);
+    hand.swing();
+    return;
+  }
+  if (hit.block === B.LAVA && ui.heldItem()?.id === 155) {
+    net.bucketFill(hit.x, hit.y, hit.z);
+    hand.swing();
+    return;
+  }
   const held = ui.heldItem();
   if (!held || !isPlaceable(held.id)) {
     ui.hint("select a block in hotbar (1-9) to place");
@@ -603,14 +694,28 @@ addEventListener("keydown", (e) => {
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
     if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
     else if (hit && hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest… (click chest slot = take, click inv slot = store)"); }
-    else if (hit && hit.block === B.ENGINE) { net.engineFuel(); hand.swing(); }
+    else if (hit && hit.block === B.ENGINE) { openEnginePanel(hit.x, hit.y, hit.z); }
     else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
-    else if (window.voxCreative) {
-      // creative F toggles flight without the double-Space dance
-      player.flying = !player.flying;
-      player.vel.set(0, 0, 0);
-      ui.hint(player.flying ? "✨ flying (F or double-Space to land)" : "walking");
+    else if (hit && hit.block === B.TANK) {
+      const held = ui.heldItem();
+      net.tankUse(hit.x, hit.y, hit.z, held?.id);
+      hand.swing();
+    }
+    else if (hit && hit.block === B.LAVA) {
+      if ((ui.slots ?? []).some((s) => s?.id === 155)) { net.bucketFill(hit.x, hit.y, hit.z); hand.swing(); }
+      else ui.hint("🪣 need an empty bucket (craft: 3 iron)");
+    }
+    else {
+      // water is skipped by the raycaster — scan the look ray for it
+      const f = findFluidAim();
+      if (f && (ui.slots ?? []).some((s) => s?.id === 155)) { net.bucketFill(f.x, f.y, f.z); hand.swing(); }
+      else if (window.voxCreative) {
+        // creative F toggles flight without the double-Space dance
+        player.flying = !player.flying;
+        player.vel.set(0, 0, 0);
+        ui.hint(player.flying ? "✨ flying (F or double-Space to land)" : "walking");
+      }
     }
   }
   if (e.code === "KeyX" && !ui.chatFocused()) {
@@ -632,10 +737,10 @@ addEventListener("keydown", (e) => {
       ui.hint("creative only — /creative or /gamemode creative first");
       return;
     }
-    for (const [id, n] of [[43, 4], [44, 32], [45, 2], [46, 1], [102, 16], [148, 1], [149, 32], [150, 1], [152, 1]]) {
+    for (const [id, n] of [[43, 4], [44, 32], [45, 2], [46, 1], [102, 16], [148, 1], [149, 32], [150, 1], [152, 1], [49, 16], [50, 2], [51, 1], [155, 4]]) {
       net.give(id, n);
     }
-    ui.hint("✨ creative blocks stocked (chest/pipe/engine/quarry + weapons)");
+    ui.hint("✨ creative blocks stocked (chest/pipe/engine/quarry + fluids + weapons)");
   }
   if (e.code === "KeyR" && !ui.chatFocused()) {
     if (!net?.connected || dead || ui.invOpen) return;
@@ -824,7 +929,8 @@ net.on("chest", (m) => {
   ui.releaseLock?.();
 });
 net.on("machines", (m) => {
-  window.voxMachines = { engines: m.engines ?? [], quarries: m.quarries ?? [] };
+  window.voxMachines = { engines: m.engines ?? [], quarries: m.quarries ?? [], tanks: m.tanks ?? [] };
+  if (engineOpen()) renderEngine();
 });
 net.on("gamemode", (m) => {
   window.voxCreative = !!m.creative;
@@ -925,6 +1031,7 @@ ui.onTrade = (id, slot) => net.trade(id, slot);
   addEventListener("keyup", (e) => { if (e.key === "Shift") window.voxShiftDown = false; });
   addEventListener("keydown", (e) => {
     if (e.key === "Escape" && chestOpen()) { closeChest(); }
+    if (e.key === "Escape" && engineOpen()) { closeEngine(); }
   });
   // open the inventory automatically behind the chest so storing is one click
   const baseRenderChest = renderChest;
@@ -1022,13 +1129,19 @@ function frame() {
       else if (hit?.block === B.CHEST) ui.hint("🧰 F: open chest (27 slots) · E inventory to store");
       else if (hit?.block === B.ENGINE) {
         const eng = (window.voxMachines.engines ?? []).find((e) => e.x === hit.x && e.y === hit.y && e.z === hit.z);
-        ui.hint(eng?.burning ? `🔥 engine burning ${Math.round((eng.progress ?? 0) * 100)}% — quarry/pipes powered` : "🔥 F: fuel engine (coal/oil/logs) — powers quarry + pipes");
+        ui.hint(eng?.burning ? `🔥 engine burning ${Math.round((eng.progress ?? 0) * 100)}% — quarry/pipes powered (F: panel)` : "🔥 F: engine panel — add coal/oil/lava to power quarry + pipes");
       }
       else if (hit?.block === B.QUARRY) {
         const q = (window.voxMachines.quarries ?? []).find((e) => e.x === hit.x && e.y === hit.y && e.z === hit.z);
         ui.hint(q ? (q.done ? "⛏ quarry done — move it for a new shaft" : q.powered ? "⛏ quarry digging 9×9… (chest/pipe next door catches loot)" : "⛏ quarry idle — needs a fueled engine next door") : "⛏ quarry — needs a fueled engine next door");
       }
       else if (hit?.block === B.PIPE) ui.hint("🔧 pipe: connects chest → chest, needs an engine burning nearby");
+      else if (hit?.block === B.FLUID_PIPE) ui.hint("🔧 fluid pipe: tank → tank, needs an engine burning nearby");
+      else if (hit?.block === B.TANK) {
+        const tk = (window.voxMachines.tanks ?? []).find((v) => v.x === hit.x && v.y === hit.y && v.z === hit.z);
+        ui.hint(tk?.fluid ? `🧪 tank: ${tk.amount}/16000 mB ${tk.fluid} (F with bucket)` : "🧪 empty tank — scoop water/lava with a bucket (F), then F here");
+      }
+      else if (hit?.block === B.PUMP) ui.hint("⛽ pump: taps adjacent water/lava — needs a fueled engine next door");
       else if (hit?.block === B.OIL_ORE) ui.hint("🛢 oil ore — 2× coal burn time in engines");
       else if (window.voxCreative && !hit) ui.hint("✨ creative: F fly · C blocks · X bow");
       else if (hit) {

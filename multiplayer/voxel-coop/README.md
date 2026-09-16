@@ -148,12 +148,18 @@ data/             world.json + players.json (gitignored saves)
 - 🖥 menus: title screen with name entry (Play to join), death screen with stats
   + Respawn, TAB player list, settings (O or gear: volume, render distance,
   minimap + weather-FX toggles, all persisted)
-- 🔧 BuildCraft-lite: **chests** (27 slots, F to open, click inv to store),
-  **stirling engines** (F to feed coal/oil/logs — coal 30s, oil 60s, coal block
-  270s, auto-sucks fuel from adjacent chests), **pipes** (chest→chest over pipe
-  blocks, needs an engine burning nearby), **quarries** (9×9 auto-miner below
-  the block, needs a fueled engine next door — loot goes to adjacent chest,
-  else pipe network, else your inventory). Oil ore spawns desert-biased, deep.
+- 🔧 BuildCraft-lite: **chests** (27 slots, F/RMB to open, click inv to store),
+  **stirling engines** (F/RMB panel → feed coal/oil/lava bucket — coal 30s, oil
+  60s, coal block 270s, lava 120s, auto-sucks fuel/lava from adjacent chests
+  and tanks), **pipes** (chest→chest over pipe blocks, needs an engine burning
+  nearby), **quarries** (9×9 auto-miner below the block, needs a fueled engine
+  next door — loot goes to adjacent chest, else pipe network, else your
+  inventory). Oil ore spawns desert-biased, deep.
+- 🧪 Fluids: **buckets** (3 iron) scoop water/lava with F (sources are infinite
+  taps), **tanks** (8 glass, 16 buckets — F with a bucket to fill/draw),
+  **pumps** (iron + pipes + engine, tap adjacent water/lava while powered,
+  lava preferred), **fluid pipes** (pipe + glass, balance tanks while an engine
+  burns nearby). `/kit fluids` stocks the set.
 - ⚔️ new weapons: **bow + arrows** (X to shoot, 7 dmg hitscan), **warhammer**
   (12 dmg + launch, slow), **dagger** (cheap 4 dmg), **firebrand** (11 dmg),
   **wrench** (style). Crafted at the table, bow in the recipe book.
@@ -169,5 +175,6 @@ data/             world.json + players.json (gitignored saves)
 `move → players` (10Hz), `mobs` (2Hz), `inv`, `vitals`, `time`, `chat`,
 `craft`, `craftDirect`, `smelt`, `attackMob`, `ignite → boom` (TNT),
 `shoot → shot` (bow), `chestOpen/chestPut/chestTake → chest`,
-`engineFuel`, `gamemode → gamemode`, `give`, `machines` (engines + quarries),
+`engineFuel`, `bucketFill`, `tankUse`, `gamemode → gamemode`, `give`,
+`machines` (engines + quarries + tanks),
 `eat`, `moveItem`, `respawn`, `ping → pong`.

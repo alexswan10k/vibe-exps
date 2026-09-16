@@ -15,6 +15,7 @@ export const B = {
   LAVA: 40, EMERALD_ORE: 41, EMERALD_BLOCK: 42,
   CHEST: 43, PIPE: 44, ENGINE: 45, QUARRY: 46,
   OIL_ORE: 47, COAL_BLOCK: 48,
+  FLUID_PIPE: 49, TANK: 50, PUMP: 51,
 };
 
 export const BLOCK_NAME = {
@@ -30,11 +31,13 @@ export const BLOCK_NAME = {
   40: "lava", 41: "emerald ore", 42: "emerald block",
   43: "chest", 44: "pipe", 45: "engine", 46: "quarry",
   47: "oil ore", 48: "coal block",
+  49: "fluid pipe", 50: "tank", 51: "pump",
   137: "bone", 138: "string",
   141: "fishing rod", 142: "fish", 143: "cooked fish", 144: "emerald",
   145: "compass", 146: "slimeball", 147: "ender pearl",
   148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
   152: "firebrand", 153: "oil", 154: "wrench",
+  155: "bucket", 156: "water bucket", 157: "lava bucket",
   101: "stick", 102: "coal", 103: "iron ingot", 104: "pork",
   105: "wool", 106: "feather", 107: "cooked pork", 108: "wood pick", 109: "stone pick",
   110: "iron pick", 111: "wood sword", 113: "stone sword", 114: "iron sword",
@@ -78,7 +81,7 @@ export function toolMultFor(block, heldId) {
 }
 
 export function isPlaceable(id) {
-  return Number.isInteger(id) && id >= 1 && id <= 48 && id !== 8 && id !== 10 && id !== 40;
+  return Number.isInteger(id) && id >= 1 && id <= 51 && id !== 8 && id !== 10 && id !== 40;
 }
 
 /** Resolve which server to connect to.

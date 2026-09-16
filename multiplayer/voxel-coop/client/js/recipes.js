@@ -62,6 +62,10 @@ export const SHAPED_CLIENT = [
   { id: "dagger", name: "Dagger", needsTable: false, cat: "tools", desc: "4 dmg, cheap + fast", out: { id: 151, n: 1 }, pat: [0, 0, 0, 0, G, 0, 0, S, 0] },
   { id: "firebrand", name: "Firebrand", needsTable: true, cat: "tools", desc: "11 dmg burn blade (diamond sword + coal)", out: { id: 152, n: 1 }, pat: [K, K, K, K, 127, K, K, K, K] },
   { id: "wrench", name: "Wrench", needsTable: true, cat: "tools", desc: "machine-tinkerer style points", out: { id: 154, n: 1 }, pat: [G, 0, G, 0, G, 0, 0, S, 0] },
+  { id: "fluid_pipe", name: "Fluid Pipe ×2", needsTable: true, cat: "blocks", desc: "waterproof: tanks + pumps, needs power", out: { id: 49, n: 2 }, pat: [44, 0, 0, 17, 0, 0, 44, 0, 0] },
+  { id: "tank", name: "Tank", needsTable: true, cat: "blocks", desc: "16 buckets of water/lava (F with bucket)", out: { id: 50, n: 1 }, pat: [17, 17, 17, 17, 0, 17, 17, 17, 17] },
+  { id: "pump", name: "Pump", needsTable: true, cat: "blocks", desc: "taps water/lava, needs engine next door", out: { id: 51, n: 1 }, pat: [G, G, G, 44, 45, 44, G, G, G] },
+  { id: "bucket", name: "Bucket", needsTable: true, cat: "tools", desc: "scoop water/lava (F), fill tanks", out: { id: 155, n: 1 }, pat: [G, 0, G, 0, G, 0, 0, 0, 0] },
 ];
 
 /** Furnace cheat-sheet for the picker (mirrors server SMELT_RECIPES). */

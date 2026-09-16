@@ -246,6 +246,18 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #chest-list .slot { width: 44px; height: 44px; }
 .chest-hint { margin-top: 10px; font-size: 12px; opacity: .7; text-align: center; }
 
+/* ---- engine panel (same overlay look, burn bar) ---- */
+#engine-modal { position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center; z-index: 8; }
+#engine-status { font-size: 14px; margin: 6px 0 8px; text-align: center; }
+#engine-bar { height: 12px; background: #101014; border: 1px solid #555;
+  border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+#engine-bar > div { height: 100%; width: 0%; background: linear-gradient(90deg, #ff7a1a, #ffcf4d); }
+.engine-row { display: flex; justify-content: center; }
+.engine-row button { background: #b35a1a; color: #fff; border: none; border-radius: 6px;
+  padding: 8px 16px; font-weight: 700; cursor: pointer; font-size: 13px; }
+.engine-row button:hover { background: #d06a20; }
+
 /* ---- menu/overlay screens (title, TAB list, settings) ---- */
 #screen-title, #screen-players, #screen-settings { position: fixed; inset: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center;

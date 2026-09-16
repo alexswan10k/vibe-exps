@@ -108,6 +108,8 @@ export class Net {
   chestPut(x, y, z, slot, cs, all) { this.send({ t: "chestPut", x, y, z, slot, cs, all }); }
   chestTake(x, y, z, cs) { this.send({ t: "chestTake", x, y, z, cs }); }
   engineFuel() { this.send({ t: "engineFuel" }); }
+  bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
+  tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
   gamemode(mode) { this.send({ t: "gamemode", mode }); }
   give(id, n) { this.send({ t: "give", id, n }); }
 }
@@ -263,6 +265,8 @@ export class PollNet {
   chestPut(x, y, z, slot, cs, all) { this.send({ t: "chestPut", x, y, z, slot, cs, all }); }
   chestTake(x, y, z, cs) { this.send({ t: "chestTake", x, y, z, cs }); }
   engineFuel() { this.send({ t: "engineFuel" }); }
+  bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
+  tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
   gamemode(mode) { this.send({ t: "gamemode", mode }); }
   give(id, n) { this.send({ t: "give", id, n }); }
 }

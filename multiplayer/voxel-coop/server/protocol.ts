@@ -57,6 +57,9 @@ export const B = {
   QUARRY: 46,
   OIL_ORE: 47,
   COAL_BLOCK: 48,
+  FLUID_PIPE: 49,
+  TANK: 50,
+  PUMP: 51,
 } as const;
 
 export const BLOCK_NAME: Record<number, string> = {
@@ -72,6 +75,7 @@ export const BLOCK_NAME: Record<number, string> = {
   40: "lava", 41: "emerald ore", 42: "emerald block",
   43: "chest", 44: "pipe", 45: "engine", 46: "quarry",
   47: "oil ore", 48: "coal block",
+  49: "fluid pipe", 50: "tank", 51: "pump",
   107: "cooked pork", 114: "iron sword", 115: "apple",
   116: "wood axe", 117: "stone axe", 118: "iron axe",
   119: "wood shovel", 120: "stone shovel", 121: "iron shovel",
@@ -85,6 +89,7 @@ export const BLOCK_NAME: Record<number, string> = {
   145: "compass", 146: "slimeball", 147: "ender pearl",
   148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
   152: "firebrand", 153: "oil", 154: "wrench",
+  155: "bucket", 156: "water bucket", 157: "lava bucket",
 };
 
 // Item ids: placeable blocks reuse block id; tools/materials use 100+.
@@ -141,6 +146,9 @@ export const I = {
   FIREBRAND: 152,
   OIL: 153,
   WRENCH: 154,
+  BUCKET: 155,
+  WATER_BUCKET: 156,
+  LAVA_BUCKET: 157,
 } as const;
 
 // Seconds to break by hand (Infinity = unbreakable)
@@ -155,6 +163,7 @@ export const HARDNESS: Record<number, number> = {
   40: Infinity, 41: 5.5, 42: 4.0,
   43: 1.5, 44: 1.2, 45: 3.5, 46: 4.5,
   47: 5.0, 48: 4.5,
+  49: 1.2, 50: 1.5, 51: 3.0,
 };
 
 // Walk-through vegetation: no collision, no selection box in the way of
@@ -172,6 +181,7 @@ export const TOOL_CLASS: Record<number, "pick" | "any"> = {
   37: "any", 38: "pick", 39: "any",
   40: "any", 41: "pick", 42: "pick",
   43: "any", 44: "pick", 45: "pick", 46: "pick", 47: "pick", 48: "pick",
+  49: "pick", 50: "pick", 51: "pick",
 };
 
 export const PICK_MULT: Record<number, number> = {
@@ -188,7 +198,7 @@ export const AXE_BLOCKS = new Set([5, 7, 13, 20, 22, 23, 29]);
 export const SHOVEL_BLOCKS = new Set([1, 2, 4, 9, 26, 28]);
 export function toolMultFor(block: number, heldId: number | undefined): number {
   if (heldId === undefined) return 1;
-  if (PICK_MULT[heldId] && (block === 3 || block === 11 || block === 12 || block === 14 || block === 16 || block === 24 || block === 27 || block === 38 || block === 41 || block === 42 || block === 44 || block === 45 || block === 46 || block === 47 || block === 48)) return PICK_MULT[heldId];
+  if (PICK_MULT[heldId] && (block === 3 || block === 11 || block === 12 || block === 14 || block === 16 || block === 24 || block === 27 || block === 38 || block === 41 || block === 42 || block === 44 || block === 45 || block === 46 || block === 47 || block === 48 || block === 49 || block === 50 || block === 51)) return PICK_MULT[heldId];
   if (AXE_MULT[heldId] && AXE_BLOCKS.has(block)) return AXE_MULT[heldId];
   if (SHOVEL_MULT[heldId] && SHOVEL_BLOCKS.has(block)) return SHOVEL_MULT[heldId];
   if (PICK_MULT[heldId] || AXE_MULT[heldId] || SHOVEL_MULT[heldId]) return 1.5; // wrong tool: slight edge
@@ -220,6 +230,8 @@ export function requiredTier(block: number): number {
   if (block === 42) return 1; // emerald block needs wood pick+
   if (block === 47) return 2; // oil ore needs stone pick+
   if (block === 48) return 1; // coal block needs wood pick+
+  if (block === 49) return 0; // fluid pipe mines by hand
+  if (block === 50 || block === 51) return 1; // tank/pump need wood pick+
   if (block === 46) return 2; // quarry needs stone pick+
   if (block === 45) return 1; // engine needs wood pick+
   if (block === 3 || block === 16 || block === 21 || block === 24 || block === 27) return 1; // stone-likes need wood pick+
@@ -261,6 +273,8 @@ export type ClientMsg =
   | { t: "chestPut"; x: number; y: number; z: number; slot: number; cs: number; all: boolean }
   | { t: "chestTake"; x: number; y: number; z: number; cs: number }
   | { t: "engineFuel" }
+  | { t: "bucketFill"; x: number; y: number; z: number }
+  | { t: "tankUse"; x: number; y: number; z: number; held?: number }
   | { t: "gamemode"; mode: string }
   | { t: "give"; id: number; n: number }
   | { t: "moveItem"; from: number; to: number };
@@ -282,7 +296,7 @@ export type ServerMsg =
   | { t: "toast"; text: string }
   | { t: "tradeOffers"; id: number; offers: TradeOffer[] }
   | { t: "chest"; x: number; y: number; z: number; slots: InvSlot[] }
-  | { t: "machines"; engines: EngineWire[]; quarries: QuarryWire[] }
+  | { t: "machines"; engines: EngineWire[]; quarries: QuarryWire[]; tanks?: TankWire[] }
   | { t: "gamemode"; creative: boolean }
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
   | { t: "reset"; seed: number; spawn: Vec3 }
@@ -313,6 +327,10 @@ export interface EngineWire {
 }
 export interface QuarryWire {
   x: number; y: number; z: number; powered: boolean; done: boolean;
+}
+export type FluidKind = "water" | "lava";
+export interface TankWire {
+  x: number; y: number; z: number; fluid: FluidKind | null; amount: number;
 }
 
 // RLE helpers: flat [id,count,...]

@@ -8,7 +8,7 @@ import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
 import { dungeonSpawns } from "./structures.ts";
 import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState, VILLAGER_TRADES, ENGINE_FUEL } from "./crafting.ts";
-import { Machines, mkey } from "./machines.ts";
+import { Machines, mkey, LAVA_BURN_S, BUCKET_MB, TANK_CAP } from "./machines.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
 const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
@@ -392,7 +392,7 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
     }
     if (HARDNESS[cur] === Infinity) return;
     // wrench: instant pickup of machines (chest keeps nothing — contents spill to you)
-    const isMachine = cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE;
+    const isMachine = cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE || cur === B.TANK || cur === B.FLUID_PIPE || cur === B.PUMP;
     world.set(x, y, z, B.AIR);
     if (cur === B.CHEST) {
       const chest = machines.removeAt(x, y, z);
@@ -406,6 +406,12 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
         sendInv(pl);
       }
     } else {
+      if (cur === B.TANK) {
+        const t = machines.tanks.get(mkey(x, y, z));
+        if (t && t.amount > 0) {
+          sendTo(pl, { t: "chat", from: "server", msg: `🧪 tank broken — lost ${t.amount} mB ${t.fluid}` });
+        }
+      }
       machines.removeAt(x, y, z);
     }
     // drop only with adequate tool (creative always drops to itself / keeps block)
@@ -464,11 +470,13 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
     world.set(x, y, z, block);
     if (block === B.CHEST) machines.ensureChest(x, y, z);
     if (block === B.ENGINE) machines.ensureEngine(x, y, z);
+    if (block === B.TANK) machines.ensureTank(x, y, z);
+    if (block === B.PUMP) machines.ensurePump(x, y, z);
     if (block === B.QUARRY) {
       machines.ensureQuarry(x, y, z, pl.id);
       toastAll(`⛏ ${pl.name} deployed a quarry — feed its engine fuel!`);
     }
-    if (block === B.QUARRY || block === B.ENGINE) void machines.save();
+    if (block === B.QUARRY || block === B.ENGINE || block === B.TANK || block === B.PUMP) void machines.save();
     sendInv(pl);
     broadcast({ t: "block", x, y, z, block });
   }
@@ -561,6 +569,20 @@ function nearestEngine(pl: Player, r: number): { x: number; y: number; z: number
 
 /** Burn one fuel item from pl inventory into engine at pos. Returns success. */
 function refuelEngine(pl: Player, pos: { x: number; y: number; z: number }): boolean {
+  // lava bucket first (hands the empty bucket back)
+  if (countOf(pl.slots, 157) >= 1) {
+    if (!pl.creative) {
+      removeItems(pl.slots, { 157: 1 });
+      giveItems(pl.slots, 155, 1);
+    }
+    const e = machines.ensureEngine(pos.x, pos.y, pos.z);
+    e.burnLeft += LAVA_BURN_S;
+    e.burnMax = Math.max(e.burnMax, e.burnLeft);
+    sendInv(pl);
+    sendTo(pl, { t: "chat", from: "server", msg: `🔥 engine fueled +${LAVA_BURN_S}s (lava bucket)` });
+    void machines.save();
+    return true;
+  }
   const FUEL_PRIORITY = [48, 153, 102, 5, 29, 7, 101];
   for (const id of FUEL_PRIORITY) {
     const secs = ENGINE_FUEL[id];
@@ -585,8 +607,8 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons> /fuel" });
-      sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (store) + engine (burn coal/oil) + pipe + quarry (9x9 auto-mine). Aim at engine, press F to refuel. Aim at chest, press F to open." });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids> /fuel" });
+      sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (F open) + engine (F panel/RMB, burns coal/oil/lava) + pipe + quarry (9x9). fluids: pump (taps water/lava) + fluid pipe + tank (16 buckets) + bucket (F scoop/deposit)." });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -681,11 +703,12 @@ function handleChatCommand(pl: Player, msg: string): boolean {
         tools: [[110, 1], [118, 1], [121, 1], [114, 1], [15, 16]],
         buildcraft: [[43, 2], [44, 16], [45, 2], [46, 1], [102, 16], [153, 8]],
         weapons: [[148, 1], [149, 32], [150, 1], [151, 1], [152, 1], [136, 2]],
+        fluids: [[49, 16], [50, 2], [51, 1], [155, 4], [102, 8]],
         creative: [[43, 4], [44, 64], [45, 4], [46, 2], [126, 1], [127, 1], [148, 1], [149, 64]],
       };
       const kit = kits[which];
       if (!kit) {
-        sendTo(pl, { t: "chat", from: "server", msg: "usage: /kit <starter|tools|buildcraft|weapons|creative>" });
+        sendTo(pl, { t: "chat", from: "server", msg: "usage: /kit <starter|tools|buildcraft|weapons|fluids|creative>" });
         return true;
       }
       for (const [id, cnt] of kit) giveItems(pl.slots, id, cnt);
@@ -1281,6 +1304,87 @@ function onMessage(pl: Player, raw: string): void {
       }
       break;
     }
+    case "bucketFill": {
+      // scoop water/lava into an empty bucket (source block is NOT consumed)
+      if (pl.dead) break;
+      const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
+      if (![x, y, z].every(Number.isFinite) || y < 0 || y >= 48) break;
+      const b = world.get(x, y, z);
+      if (b !== B.WATER && b !== B.LAVA) {
+        sendTo(pl, { t: "denied", reason: "need water or lava" });
+        break;
+      }
+      if (dist(pl.p, x, y, z) > (pl.creative ? 12 : 7.5)) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      if (!pl.creative && countOf(pl.slots, 155) < 1) {
+        sendTo(pl, { t: "denied", reason: "need an empty bucket (craft: 3 iron)" });
+        break;
+      }
+      const id = b === B.LAVA ? 157 : 156;
+      if (!pl.creative) removeItems(pl.slots, { 155: 1 });
+      giveItems(pl.slots, id, 1);
+      sendInv(pl);
+      sendTo(pl, { t: "chat", from: "server", msg: b === B.LAVA ? "🪣 scooped lava — engine fuel!" : "🪣 scooped water" });
+      break;
+    }
+    case "tankUse": {
+      // hold a bucket, aim at a tank: full bucket deposits, empty withdraws
+      if (pl.dead) break;
+      const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
+      if (![x, y, z].every(Number.isFinite) || y < 1 || y >= 48) break;
+      if (world.get(x, y, z) !== B.TANK) {
+        sendTo(pl, { t: "denied", reason: "no tank there" });
+        break;
+      }
+      if (dist(pl.p, x, y, z) > (pl.creative ? 12 : 7.5)) {
+        sendTo(pl, { t: "denied", reason: "too far" });
+        break;
+      }
+      const t = machines.ensureTank(x, y, z);
+      const held = m.held;
+      if (held === 156 || held === 157) {
+        const fluid = held === 157 ? "lava" : "water";
+        if (t.fluid !== null && t.fluid !== fluid) {
+          sendTo(pl, { t: "denied", reason: `tank holds ${t.fluid}` });
+          break;
+        }
+        if (t.amount + BUCKET_MB > TANK_CAP) {
+          sendTo(pl, { t: "denied", reason: "tank is full" });
+          break;
+        }
+        if (!pl.creative && countOf(pl.slots, held) < 1) {
+          sendTo(pl, { t: "denied", reason: "hold the bucket in your inventory" });
+          break;
+        }
+        if (!pl.creative) removeItems(pl.slots, { [held]: 1 });
+        giveItems(pl.slots, 155, 1);
+        Machines.tankGive(t, fluid, BUCKET_MB);
+        sendInv(pl);
+        sendTo(pl, { t: "chat", from: "server", msg: `🧪 tank: ${t.amount}/${TANK_CAP} mB ${t.fluid}` });
+        void machines.save();
+      } else {
+        // empty bucket (or nothing held but one in pocket): withdraw 1 bucket
+        if (!t.fluid || t.amount < BUCKET_MB) {
+          sendTo(pl, { t: "denied", reason: "tank is empty" });
+          break;
+        }
+        if (!pl.creative && countOf(pl.slots, 155) < 1) {
+          sendTo(pl, { t: "denied", reason: "need an empty bucket" });
+          break;
+        }
+        const fid = t.fluid === "lava" ? 157 : 156;
+        const fname = t.fluid;
+        if (!pl.creative) removeItems(pl.slots, { 155: 1 });
+        Machines.tankTake(t, BUCKET_MB);
+        giveItems(pl.slots, fid, 1);
+        sendInv(pl);
+        sendTo(pl, { t: "chat", from: "server", msg: `🪣 drew 1 bucket of ${fname} — tank: ${t.amount}/${TANK_CAP} mB` });
+        void machines.save();
+      }
+      break;
+    }
     case "gamemode": {
       const mode = String(m.mode ?? "").toLowerCase();
       setCreative(pl, mode.startsWith("c"));
@@ -1515,7 +1619,7 @@ setInterval(() => {
   machineT += dt;
   if (machineT >= 2) {
     machineT = 0;
-    if (machines.engines.size > 0 || machines.quarries.size > 0) {
+    if (machines.engines.size > 0 || machines.quarries.size > 0 || machines.tanks.size > 0 || machines.pumps.size > 0) {
       broadcast({
         t: "machines",
         engines: [...machines.engines.values()].map((e) => ({
@@ -1527,6 +1631,9 @@ setInterval(() => {
           x: q.x, y: q.y, z: q.z,
           powered: machines.poweredAt(q.x, q.y, q.z),
           done: q.done,
+        })),
+        tanks: [...machines.tanks.values()].map((t) => ({
+          x: t.x, y: t.y, z: t.z, fluid: t.fluid, amount: t.amount,
         })),
       });
     }

@@ -176,6 +176,15 @@ function paintWrench(g) {
   R(g, 10, 1, 3, 2, "#1a1a1a"); // mouth
   R(g, 8, 1, 6, 1, "#ffffff");
 }
+function paintBucket(g, fill) {
+  R(g, 3, 5, 10, 9, "#c8c8ce"); // iron pail
+  R(g, 3, 5, 10, 1, "#ffffff");
+  R(g, 3, 13, 10, 1, "#8a8a92");
+  R(g, 3, 5, 1, 9, "#8a8a92"); R(g, 12, 5, 1, 9, "#8a8a92");
+  R(g, 2, 2, 12, 2, "#8a8a92"); // rim
+  if (fill) { R(g, 4, 6, 8, 3, fill); } // fluid surface
+  else { R(g, 4, 6, 8, 1, "#5a5a62"); } // empty shadow
+}
 
 function paintHandle(g) { diag(g, 3, 12, 9, 2, "#8a5f30"); }
 function paintPick(g, head) {
@@ -222,11 +231,13 @@ const PAINTERS = {
   146: paintSlimeball, 147: paintEnderPearl,
   148: paintBow, 149: paintArrow, 150: paintHammer, 151: paintDagger,
   152: paintFirebrand, 153: paintOil, 154: paintWrench,
+  155: (g) => paintBucket(g, null), 156: (g) => paintBucket(g, "#3f88d8"),
+  157: (g) => paintBucket(g, "#ff7a1a"),
 };
 
 export function itemIconURL(id) {
   if (!id) return "";
-  if (id >= 1 && id <= 48) return blockIconURL(id);
+  if (id >= 1 && id <= 51) return blockIconURL(id);
   const hit = cache.get(id);
   if (hit) return hit;
   const paint = PAINTERS[id];
