@@ -23,6 +23,7 @@ export class Touch {
     this.bindBtn("tb-place", () => this.actions.place());
     this.bindBtn("tb-attack", () => this.actions.attack());
     this.bindBtn("tb-inv", () => this.actions.inv());
+    this.bindBtn("tb-ping", () => this.actions.ping());
     this.el("touch-toggle").addEventListener("click", () => this.setEnabled(!this.enabled));
     // auto-enable on touch devices (remembered choice wins)
     let saved = null;

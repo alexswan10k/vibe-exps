@@ -1,5 +1,14 @@
 // WebSocket client: connect, send helpers, message dispatch, auto-reconnect.
 import { httpBase } from "./config.js";
+const worldPingTimes = new WeakMap();
+
+function worldPing(x, y, z, now = performance.now()) {
+  if (!this.connected || now - (worldPingTimes.get(this) ?? -Infinity) < 1000) return false;
+  this.send({ t: "worldPing", x, y, z });
+  worldPingTimes.set(this, now);
+  return true;
+}
+
 export class Net {
   constructor() {
     this.ws = null;
@@ -80,6 +89,7 @@ export class Net {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
   }
 
+  worldPing(x, y, z) { return worldPing.call(this, x, y, z); }
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }
@@ -241,6 +251,7 @@ export class PollNet {
     }
   }
 
+  worldPing(x, y, z) { return worldPing.call(this, x, y, z); }
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }

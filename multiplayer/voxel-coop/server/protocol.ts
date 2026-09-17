@@ -268,6 +268,7 @@ export type ClientMsg =
   | { t: "askTrade"; id: number }
   | { t: "trade"; id: number; slot: number }
   | { t: "chat"; msg: string }
+  | { t: "worldPing"; x: number; y: number; z: number }
   | { t: "respawn" }
   | { t: "setBed"; x: number; y: number; z: number }
   | { t: "eat"; slot: number }
@@ -312,6 +313,7 @@ export type ServerMsg =
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
   | { t: "reset"; seed: number; spawn: Vec3 }
   | { t: "chat"; from: string; msg: string }
+  | { t: "worldPing"; id: number; name: string; x: number; y: number; z: number; ttl: 15000 }
   | { t: "smeltState"; states: FurnaceWire[] }
   | { t: "ping"; now: number }
   | { t: "denied"; reason: string };

@@ -65,6 +65,62 @@ export class CrackOverlay {
   }
 }
 
+export class TeamPings {
+  constructor(scene) {
+    this.scene = scene;
+    this.markers = new Map();
+    this.projected = new THREE.Vector3();
+  }
+
+  receive(m, now = performance.now()) {
+    this.remove(m.id);
+    if (this.markers.size >= 16) this.remove(this.markers.keys().next().value);
+    const mesh = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.3),
+      new THREE.MeshBasicMaterial({ color: 0x55eeff, transparent: true, depthTest: false, depthWrite: false, fog: false }),
+    );
+    mesh.position.set(m.x + 0.5, m.y + 1.7, m.z + 0.5);
+    mesh.renderOrder = 10;
+    this.scene.add(mesh);
+    const label = document.createElement("div");
+    label.className = "team-ping";
+    document.body.appendChild(label);
+    this.markers.set(m.id, { ...m, mesh, label, expires: now + Math.min(15000, m.ttl) });
+  }
+
+  remove(id) {
+    const p = this.markers.get(id);
+    if (!p) return;
+    this.scene.remove(p.mesh);
+    p.mesh.geometry.dispose();
+    p.mesh.material.dispose();
+    p.label.remove();
+    this.markers.delete(id);
+  }
+
+  clear() {
+    for (const id of this.markers.keys()) this.remove(id);
+  }
+
+  update(camera, now = performance.now()) {
+    camera.updateMatrixWorld();
+    for (const [id, p] of this.markers) {
+      if (now >= p.expires) { this.remove(id); continue; }
+      p.mesh.rotation.y = now / 600;
+      p.mesh.material.opacity = Math.min(1, (p.expires - now) / 2000);
+      this.projected.copy(p.mesh.position).project(camera);
+      const v = this.projected;
+      p.label.hidden = v.z < -1 || v.z > 1 || Math.abs(v.x) > 0.9 || Math.abs(v.y) > 0.85;
+      if (!p.label.hidden) {
+        p.label.style.left = `${(v.x + 1) * innerWidth / 2}px`;
+        p.label.style.top = `${(1 - v.y) * innerHeight / 2 + 18}px`;
+        p.label.style.opacity = p.mesh.material.opacity;
+        p.label.textContent = `${p.name} · ${Math.round(camera.position.distanceTo(p.mesh.position))}m`;
+      }
+    }
+  }
+}
+
 export class Particles {
   constructor(scene, max = 240) {
     this.max = max;

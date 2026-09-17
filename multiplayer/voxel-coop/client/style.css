@@ -5,6 +5,10 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #game canvas { display: block; }
 #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
   font-size: 22px; color: #fff; opacity: 0.8; pointer-events: none; mix-blend-mode: difference; }
+.team-ping { position: fixed; transform: translateX(-50%); pointer-events: none; z-index: 1;
+  padding: 4px 8px; border: 1px solid #55eeff; border-radius: 6px; background: #06121fe6;
+  color: #aaffff; font-size: 12px; white-space: nowrap; }
+#tb-ping { font-size: 15px; color: #aaffff; }
 #crosshair.hit { animation: hitpulse 0.18s ease-out; }
 @keyframes hitpulse { 0% { transform: translate(-50%,-50%) scale(2.2); color: #ff5555; } 100% { transform: translate(-50%,-50%) scale(1); } }
 #status { position: fixed; top: 8px; left: 8px; font-size: 12px; opacity: 0.8;

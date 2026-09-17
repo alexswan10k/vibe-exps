@@ -5,7 +5,7 @@ import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
 import { Entities } from "./entities.js";
 import { Touch } from "./touch.js";
-import { CrackOverlay, Particles } from "./fx.js";
+import { CrackOverlay, Particles, TeamPings } from "./fx.js";
 import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
@@ -226,6 +226,7 @@ function breakColor(block) {
 const entities = new Entities(scene);
 const ui = new UI();
 const minimap = new Minimap();
+const teamPings = new TeamPings(scene);
 scene.add(camera); // the held-item viewmodel rides on the camera
 const hand = new Hand(camera, world.materials);
 window.voxHand = hand; // handy for screenshots/tests
@@ -555,7 +556,18 @@ function findFluidAim() {
   return null;
 }
 
+function sendTeamPing() {
+  if (!net?.connected || myId < 0 || dead || ui.invOpen || ui.helpOpen() || ui.tradeOpen() ||
+      ui.chatFocused() || menuVisible() || chestOpen() || engineOpen() ||
+      $("screen-settings").style.display !== "none") return;
+  if (document.activeElement?.matches("input, textarea, select, [contenteditable='true']")) return;
+  const hit = world.raycast(player.eye(), player.lookDir(), 46);
+  if (!hit) { ui.hint("Aim at a block within 46m to ping your team (Q)"); return; }
+  net.worldPing(hit.x, hit.y, hit.z);
+}
+
 const touch = new Touch(player, {
+  ping: sendTeamPing,
   mine: (down) => {
     if (!net?.connected || ui.invOpen || dead) return;
     mouse.left = down;
@@ -710,6 +722,7 @@ function tickBreaking(dt) {
 
 // furnace / bed / TNT interact
 addEventListener("keydown", (e) => {
+  if (e.code === "KeyQ" && !e.repeat) { sendTeamPing(); return; }
   if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
   if (e.code === "KeyN" && !ui.chatFocused()) {
     const on = minimap.toggle();
@@ -843,9 +856,15 @@ addEventListener("keydown", (e) => {
 // ---------- net handlers (attach to whichever transport is active) ----------
 function attachHandlers() {
 net.on("open", () => ui.status("connected — loading world…"));
-net.on("close", () => ui.status("disconnected — retrying…"));
+net.on("close", () => { teamPings.clear(); ui.status("disconnected — retrying…"); });
+net.on("worldPing", (m) => {
+  teamPings.receive(m);
+  audio.pickup();
+  ui.chatMsg("team", `${m.name} marked ${m.x}, ${m.y}, ${m.z} (15s)`);
+});
 
 net.on("welcome", (m) => {
+  teamPings.clear();
   welcomed = true;
   myId = m.id;
   serverTime = m.time;
@@ -943,6 +962,7 @@ net.on("boom", (m) => {
   ui.hint("💥 BOOM!");
 });
 net.on("reset", (m) => {
+  teamPings.clear();
   // server wiped the world: drop every cached chunk (seed changed, old
   // terrain is stale), teleport to the new spawn, re-stream from scratch
   for (const k of [...world.chunks.keys()]) {
@@ -1162,7 +1182,7 @@ function frame() {
     if (now - lastTorch > 500) {
       lastTorch = now;
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
-      minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8);
+      minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8, teamPings.markers.values());
       // unstick: if embedded in a block (stale spawn, lag), pop upward
       if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {
         player.pos.y += 1;
@@ -1248,6 +1268,7 @@ function frame() {
   }
   applyTime(serverTime, serverRain); // cheap enough; keeps sun glued to player
   updateWeather(dt);
+  teamPings.update(camera, now);
   renderer.render(scene, camera);
 }
 applyTime(0.25, 0);

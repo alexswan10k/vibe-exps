@@ -2,7 +2,7 @@
 // Run: deno task dev   ->   http://<lan-ip>:8000/
 
 import { B, BLOCK_NAME, HARDNESS, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
-import { PORT } from "./protocol.ts";
+import { PORT, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
@@ -192,6 +192,7 @@ function leaveGame(pl: Player): void {
   chatTimes.delete(pl.id);
   fishCd.delete(pl.id);
   pearlCd.delete(pl.id);
+  worldPingCd.delete(pl.id);
   pendingReset.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
   void persistPlayers();
@@ -374,6 +375,7 @@ function tickFuses(): void {
 const lastEdit = new Map<number, number>();
 const lastAttack = new Map<number, number>();
 const pearlCd = new Map<number, number>();
+const worldPingCd = new Map<number, number>();
 function checkRate(id: number): boolean {
   const now = Date.now();
   const prev = lastEdit.get(id) ?? 0;
@@ -513,6 +515,7 @@ function doReset(requestedSeed: number | null, by: string): void {
   furnaces.clear();
   fuses.length = 0;
   pendingFish.length = 0;
+  worldPingCd.clear();
   mobs.mobs.clear();
   spawn = world.findSpawn();
   savedPlayers = {};
@@ -621,7 +624,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
       sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (F open) + engine (F panel/RMB, burns coal/oil/lava) + pipe + quarry (9x9). fluids: pump (taps water/lava) + fluid pipe + tank (16 buckets) + bucket (F scoop/deposit)." });
       sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water, sail fast) + rails + minecart (W/S throttle on rails). F hops in/out, LMB breaks a free one." });
       return true;
@@ -1123,6 +1126,18 @@ function onMessage(pl: Player, raw: string): void {
       removeItems(pl.slots, { [offer.give.id]: offer.give.n });
       giveItems(pl.slots, offer.get.id, offer.get.n);
       sendInv(pl);
+      break;
+    }
+    case "worldPing": {
+      if (players.all.get(pl.id) !== pl || pl.dead) break;
+      const { x, y, z } = m;
+      if (![x, y, z].every(Number.isInteger) || y < 0 || y >= WORLD_H) break;
+      if (!(dist(pl.p, x, y, z) <= 48)) break;
+      const nowPing = Date.now();
+      if (nowPing - (worldPingCd.get(pl.id) ?? -Infinity) < 1000) break;
+      if (world.get(x, y, z) === B.AIR) break;
+      worldPingCd.set(pl.id, nowPing);
+      broadcast({ t: "worldPing", id: pl.id, name: pl.name, x, y, z, ttl: 15000 });
       break;
     }
     case "chat": {

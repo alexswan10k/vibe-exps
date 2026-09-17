@@ -118,6 +118,8 @@ data/             world.json + players.json (gitignored saves)
   and overcast shields zombies/skeletons from burning, so storms are dangerous
 - 🗺 live minimap (N toggles): chunk-accurate top-down view with you (arrow),
   mobs (red), co-op partners (cyan) and spawn (green)
+- 📍 team pings: aim at a block and press **Q** (or the Ping touch button) —
+  your partner sees a cyan marker + name tag for 15s, also on the minimap
 - `/sethome` + `/home` fast-travel (persists across restarts), `/rain` to
   summon/clear storms, `/time` and `/spawn` as before
 - 🎣 fishing: craft a rod (sticks + string), face water and press **R**
