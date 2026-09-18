@@ -37,6 +37,8 @@
   <div id="chat-input-row" class="hidden"><span>&gt;</span><input id="chat-input" maxlength="120" placeholder="Message + Enter (T to open)"></div>
   <div id="toast-root"></div>
   <div id="damage-vignette"></div>
+  <div id="vignette"></div>
+  <div id="underwater"></div>
 </div>
 
 <!-- Start / Pause menu -->
@@ -59,7 +61,9 @@
     </div>
     <div class="menu-grid">
       <label>Mode <select id="opt-mode"><option value="survival">Survival</option><option value="creative">Creative</option></select></label>
+      <label>Difficulty <select id="opt-diff"><option value="peaceful">Peaceful</option><option value="easy">Easy</option><option value="normal" selected>Normal</option></select></label>
       <label>Render dist <select id="opt-render"><option>2</option><option>3</option><option selected>4</option><option>6</option></select></label>
+      <label>Quality <select id="opt-quality"><option value="auto" selected>Auto</option><option value="high">High</option><option value="med">Med</option><option value="low">Low</option></select></label>
       <label>Mouse <input id="opt-sens" type="range" min="0.5" max="4" step="0.1" value="1"></label>
       <label class="chk"><input id="opt-shadows" type="checkbox" checked> Shadows</label>
       <label class="chk"><input id="opt-clouds" type="checkbox" checked> Clouds</label>
@@ -71,7 +75,7 @@
       <b>T</b> chat · <b>C</b> co-op room · <b>Q</b> drop torch · <b>Esc</b> menu · Survive the night — zombies come at dark!<br>
       💡 Break grass for apples, kill pigs for pork, place <b>glowstone</b> to stay safe.
     </div>
-    <div class="menu-foot">v2.0 “PERFECT” update · autosaves locally · co-op via room code (P2P)</div>
+    <div class="menu-foot">v2.2 · autosaves locally · co-op via room code (P2P)</div>
   </div>
 </div>
 
@@ -105,6 +109,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="script.js"></script>
+  <script src="script.js?v=2.2"></script>
 </body>
 </html>
