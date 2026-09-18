@@ -81,10 +81,7 @@ data/             world.json + players.json (gitignored saves)
   pine logs → planks just like oak
 - food chain: pigs → pork, cows → beef → steak (best), chickens → drumsticks;
   apples, golden apples (8 gold + apple = full heal); beds set your spawn (RMB/F)
-- furnace: iron ore → ingot, gold ore → ingot, raw pork → cooked pork,
-  raw beef → steak, raw chicken → roast chicken, sand → glass (8s each)
-- furnace: iron ore → ingot, raw pork → cooked pork, sand → glass (8s each)
-- furnace: iron/gold ore → ingots, pork/beef/chicken → cooked, sand → glass, clay → brick ×4 (8s each)
+- furnace: iron/gold ore → ingots, pork/beef/chicken/fish → cooked, sand → glass, clay → brick ×4 (8s each, output waits at the furnace if you're offline or full)
 - glass, gold/diamond ores, fences, bricks, ladders, beds (all mine back to themselves)
 - food: raw pork / cooked pork / apple (leaves + zombies drop apples, G or double-click eats)
 - iron sword (8 dmg) + wood/stone swords, tool tiers wood → stone → iron

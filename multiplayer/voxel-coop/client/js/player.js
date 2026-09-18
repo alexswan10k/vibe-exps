@@ -32,6 +32,7 @@ export class Player {
     this.cartAxis = null; // 'x' | 'z' while on connected rails
     this.cartDir = 1; // travel sign along the axis
     this._lastSpace = -10;
+    this._prevSpace = false; // Space state last frame (edge-detect for swim jump)
     this.euler = new THREE.Euler(0, 0, 0, "YXZ");
 
     document.addEventListener("keydown", (e) => {
@@ -125,6 +126,12 @@ export class Player {
   update(dt, world) {
     // sync camera
     this._now += dt;
+    // Edge-detect Space here (not in the keydown handler): touch buttons and
+    // key-repeat never fire keydown, so the handler's jumpBufT can't be the
+    // swim-jump signal — keys.Space state is the only thing all inputs share.
+    const spaceDown = !!this.keys.Space;
+    const spacePressed = spaceDown && !this._prevSpace;
+    this._prevSpace = spaceDown;
     if (this.onGround) this.lastGroundT = this._now;
     this.euler.set(this.pitch, this.yaw, 0);
     this.cam.quaternion.setFromEuler(this.euler);
@@ -165,7 +172,13 @@ export class Player {
     if (!window.voxCreative) this.flying = false;
 
     const water = this.inWater(world);
-    const ladder = !water && !this.sailing && !this.ridingCart && this.onLadder(world);
+    // Waterline zone: feet out of the water but the surface within reach
+    // (water just below the feet). Swim physics + the shore assist stay live
+    // through the breach — otherwise upward velocity dies the instant
+    // inWater() goes false and a 1-high bank is unclimbable.
+    const swimUp = spaceDown && moving && !this.sailing && !this.ridingCart &&
+      world.get(Math.floor(this.pos.x), Math.floor(this.pos.y - 0.2), Math.floor(this.pos.z)) === B.WATER;
+    const ladder = !water && !swimUp && !this.sailing && !this.ridingCart && this.onLadder(world);
     const sprintKey = this.keys.ShiftLeft || this.keys.ShiftRight;
     this.sprinting = !!(sprintKey && moving && this.onGround && !ladder && !this.sailing && !this.ridingCart);
     const base = sprintKey ? SPEED_SPRINT : SPEED;
@@ -237,9 +250,33 @@ export class Player {
       this.vel.y += (((this.keys.Space ? 3.2 : 0) + (sprintKey ? -2.5 : 0) - this.vel.y)) * Math.min(1, 10 * dt);
       this.fallStart = null;
       this.onGround = false;
-    } else if (water) {
-      this.vel.y += ((-2 - this.vel.y)) * Math.min(1, 6 * dt);
-      if (this.keys.Space) this.vel.y = 3.5;
+    } else if (water || swimUp) {
+      if (spacePressed) {
+        // jump out of the water (Minecraft-like): the impulse coasts ~1 block
+        // past the surface, enough to clear a 1-high bank. Holding Space
+        // keeps you rising; letting go sinks.
+        this.vel.y = 8;
+        this.jumpBufT = -10;
+      } else if (spaceDown) {
+        this.vel.y += ((5 - this.vel.y)) * Math.min(1, 10 * dt);
+      } else {
+        this.vel.y += ((-2 - this.vel.y)) * Math.min(1, 6 * dt);
+      }
+      // shore assist: swimming into a bank with Space held pops you onto it.
+      // Without this the swim velocity bleeds off the instant inWater() goes
+      // false and a 1-block shore is unclimbable (bob against the wall).
+      if (spaceDown && moving) {
+        const px = this.pos.x + dx * 0.55, pz = this.pos.z + dz * 0.55;
+        const ahead = world.get(Math.floor(px), Math.floor(this.pos.y), Math.floor(pz));
+        if (ahead !== undefined && ahead !== B.AIR && ahead !== B.WATER && ahead !== B.LAVA && ahead !== B.LADDER && !WALK_THROUGH.has(ahead)) {
+          const top = Math.floor(this.pos.y) + 1 + 0.02;
+          const lift = top - this.pos.y;
+          if (lift > 0.02 && lift <= 1.25 && !this.collides(world, this.pos.x, top, this.pos.z)) {
+            this.pos.y = top;
+            this.vel.y = Math.max(this.vel.y, 2);
+          }
+        }
+      }
     } else {
       this.vel.y -= GRAVITY * dt;
       if (this.vel.y < -28) this.vel.y = -28;

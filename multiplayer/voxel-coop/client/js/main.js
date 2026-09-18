@@ -13,8 +13,30 @@ import { itemIconURL } from "./icons.js";
 import { Minimap } from "./minimap.js";
 import { initWeather, onStrike as weatherOnStrike, onTime as weatherOnTime, updateWeather } from "./weather.js";
 
-const RENDER_DIST = 6;
-const UNLOAD_DIST = 8;
+// Mutable via the settings menu (render distance select). Previously `const`
+// RENDER_DIST = 6 while the menu wrote vox-render-dist to localStorage — the
+// setting did nothing and slow machines couldn't shed load.
+let RENDER_DIST = 6;
+let UNLOAD_DIST = 8;
+try {
+  const saved = Number(localStorage.getItem("vox-render-dist"));
+  if ([2, 4, 6, 8].includes(saved)) {
+    RENDER_DIST = saved;
+    UNLOAD_DIST = saved + 2;
+  }
+} catch { /* noop */ }
+// Settings menu calls back here (wired below after UI boots).
+function applyRenderDist(n) {
+  if (![2, 4, 6, 8].includes(n)) return;
+  if (n === RENDER_DIST) return;
+  RENDER_DIST = n;
+  UNLOAD_DIST = n + 2;
+  // streamChunks() also unloads newly-out-of-range chunks; skip pre-join.
+  try {
+    if (typeof net !== "undefined" && net?.connected && myId >= 0) streamChunks();
+  } catch { /* net not booted yet — next streamChunks() picks up the range */ }
+}
+window.voxApplyRenderDist = applyRenderDist;
 const $ = (id) => document.getElementById(id);
 
 // ---------- three.js setup ----------
@@ -225,6 +247,16 @@ function breakColor(block) {
 }
 const entities = new Entities(scene);
 const ui = new UI();
+{
+  // Wire the settings-menu render-distance select to the live streamer.
+  const baseSave = ui.saveSettings.bind(ui);
+  ui.saveSettings = (patch) => {
+    baseSave(patch);
+    if (patch && typeof patch.renderDist === "number") applyRenderDist(patch.renderDist);
+  };
+  // Initial value already picked up from localStorage at the top of this
+  // module (before UI boot), so no apply call needed here.
+}
 const minimap = new Minimap();
 const teamPings = new TeamPings(scene);
 scene.add(camera); // the held-item viewmodel rides on the camera
@@ -430,6 +462,11 @@ function decodeRLE(rle) {
 }
 
 // ---------- day/night + weather ----------
+// Hoisted frame-loop temps: applyTime() runs every frame, so no `new` here.
+const SKY_DAY = new THREE.Color(0x3e9ed6);
+const SKY_NIGHT = new THREE.Color(0x060913);
+const SKY_GLOOM = new THREE.Color(0x4a5560);
+const _sd = new THREE.Vector3();
 function applyTime(t, rain = 0) {
   serverTime = t;
   serverRain = rain;
@@ -440,8 +477,9 @@ function applyTime(t, rain = 0) {
   const gloom = Math.min(1, rain * 0.85); // storms eat the sun
   const lit = day * (1 - gloom * 0.8);
   const night = 1 - day;
-  const sky = new THREE.Color(0x3e9ed6).lerp(new THREE.Color(0x060913), Math.max(night * 0.92, gloom * 0.55));
-  if (gloom > 0.05) sky.lerp(new THREE.Color(0x4a5560), gloom * 0.45);
+  const sky = scene.background instanceof THREE.Color ? scene.background : new THREE.Color();
+  sky.copy(SKY_DAY).lerp(SKY_NIGHT, Math.max(night * 0.92, gloom * 0.55));
+  if (gloom > 0.05) sky.lerp(SKY_GLOOM, gloom * 0.45);
   scene.background = sky;
   scene.fog.color.copy(sky);
   scene.fog.near = 40 - gloom * 12;
@@ -456,7 +494,7 @@ function applyTime(t, rain = 0) {
   sun.target.position.copy(player.pos);
   // sun/moon discs ride the same direction as the light; stars hang overhead
   const eye = player.eye();
-  const sd = new THREE.Vector3().copy(sun.position).sub(player.pos).normalize();
+  const sd = _sd.copy(sun.position).sub(player.pos).normalize();
   for (const [m, s] of [[sunDisc, 1], [sunGlow, 1], [moonDisc, -1]]) {
     m.position.copy(eye).addScaledVector(sd, 380 * s);
     m.lookAt(camera.position);
@@ -1161,14 +1199,18 @@ function frame() {
 
     if (now - lastStream > 400) { lastStream = now; streamChunks(); }
     updateTorchLights(now); // search 4Hz internally, flicker every frame
-    // rain falls around the camera; drops recycle to the top
+    // rain falls around the camera; drops recycle to the top.
+    // Active drop count scales with intensity (drizzle ~= 40% of the buffer)
+    // so light rain doesn't pay the full 700-point rewrite + upload.
     rainPts.visible = serverRain > 0.05;
     if (rainPts.visible) {
       const ex = player.pos.x, ey = player.pos.y, ez = player.pos.z;
       rainPts.position.set(ex, ey - 6, ez);
+      const active = Math.floor(RAIN_N * Math.min(1, 0.35 + serverRain * 0.65));
+      rainGeo.setDrawRange(0, active);
       const arr = rainGeo.attributes.position.array;
       const fall = dt * (18 + serverRain * 10);
-      for (let i = 0; i < RAIN_N; i++) {
+      for (let i = 0; i < active; i++) {
         arr[i * 3 + 1] -= fall;
         if (arr[i * 3 + 1] < 0) {
           arr[i * 3] = (Math.random() - 0.5) * 40;
@@ -1178,11 +1220,21 @@ function frame() {
       }
       rainGeo.attributes.position.needsUpdate = true;
       rainPts.material.opacity = 0.25 + serverRain * 0.5;
+    } else if (rainGeo.drawRange.count !== RAIN_N) {
+      rainGeo.setDrawRange(0, RAIN_N);
     }
     if (now - lastTorch > 500) {
       lastTorch = now;
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
-      minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8, teamPings.markers.values());
+      // Minimap is ~6.5k column scans: redraw at most 1Hz and skip when the
+      // player hasn't moved (static view = identical pixels).
+      const moved = !frame._mmPos ||
+        Math.hypot(player.pos.x - frame._mmPos.x, player.pos.z - frame._mmPos.z) > 2;
+      if (moved || now - (frame._mmAt ?? 0) > 1500) {
+        frame._mmAt = now;
+        frame._mmPos = { x: player.pos.x, z: player.pos.z };
+        minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8, teamPings.markers.values());
+      }
       // unstick: if embedded in a block (stale spawn, lag), pop upward
       if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {
         player.pos.y += 1;
@@ -1197,8 +1249,11 @@ function frame() {
         Math.round(player.pitch * 100) / 100,
       );
     }
-    // contextual hint: lava warning > compass > furnace / TNT
-    if (!dead) {
+    // contextual hint: lava warning > compass > furnace / TNT.
+    // Throttled to ~7Hz: the raycast + DOM write ran every frame (60Hz).
+    // ui.hint() itself now also dedupes identical text (no-op on repeat).
+    if (!dead && now - (frame._hintAt ?? 0) > 140) {
+      frame._hintAt = now;
       const feetB = world.get(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.3), Math.floor(player.pos.z));
       const held = ui.heldItem();
       const hit = world.raycast(player.eye(), player.lookDir(), 6);

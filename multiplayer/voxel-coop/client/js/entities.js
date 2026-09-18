@@ -1,4 +1,25 @@
 // Rendered entities: mobs (server-simulated) + remote players.
+const _v1 = typeof THREE !== "undefined" ? new THREE.Vector3() : null;
+const _v2 = typeof THREE !== "undefined" ? new THREE.Vector3() : null;
+const _v3 = typeof THREE !== "undefined" ? new THREE.Vector3() : null;
+
+/** Free GPU resources for a removed group (geometries, materials, textures). */
+function disposeGroup(group) {
+  if (!group) return;
+  group.traverse((o) => {
+    if (o.geometry && o.geometry.dispose) o.geometry.dispose();
+    const m = o.material;
+    if (Array.isArray(m)) {
+      for (const mm of m) {
+        if (mm?.map?.dispose) mm.map.dispose();
+        if (mm?.dispose) mm.dispose();
+      }
+    } else if (m) {
+      if (m.map?.dispose) m.map.dispose();
+      if (m.dispose) m.dispose();
+    }
+  });
+}
 const MOB_STYLE = {
   pig: { color: 0xf0a0b0, body: [0.9, 0.6, 0.6], head: [0.45, 0.45, 0.4], headY: 0.55, eyes: false },
   cow: { color: 0x6b4a2f, body: [1.0, 0.7, 0.7], head: [0.5, 0.5, 0.45], headY: 0.6, eyes: false },
@@ -90,6 +111,8 @@ export class Entities {
       if (!seen.has(id)) {
         this.scene.remove(e.node);
         this.scene.remove(e.barBg);
+        disposeGroup(e.node);
+        disposeGroup(e.barBg);
         this.mobs.delete(id);
       }
     }
@@ -149,6 +172,7 @@ export class Entities {
     for (const [id, e] of this.remotes) {
       if (!seen.has(id)) {
         this.scene.remove(e.group);
+        disposeGroup(e.group);
         this.remotes.delete(id);
       }
     }
@@ -199,6 +223,7 @@ export class Entities {
     for (const [id, e] of this.vehicles) {
       if (!seen.has(id)) {
         this.scene.remove(e.group);
+        disposeGroup(e.group);
         this.vehicles.delete(id);
       }
     }
@@ -208,12 +233,12 @@ export class Entities {
   pickVehicle(origin, dir, maxDist = 5) {
     let best = null, bestD = maxDist;
     for (const [id, e] of this.vehicles) {
-      const center = new THREE.Vector3().copy(e.group.position);
+      const center = _v1.copy(e.group.position);
       center.y += 0.5;
-      const to = new THREE.Vector3().copy(center).sub(origin);
+      const to = _v2.copy(center).sub(origin);
       const along = to.dot(dir);
       if (along < 0 || along > maxDist) continue;
-      const perp = new THREE.Vector3().copy(origin).addScaledVector(dir, along).distanceTo(center);
+      const perp = _v3.copy(origin).addScaledVector(dir, along).distanceTo(center);
       if (perp < 1.3 && along < bestD) { best = id; bestD = along; }
     }
     return best;
@@ -222,12 +247,12 @@ export class Entities {
   /** Hit-test click against mobs for attacking. Returns mob id or null. */
   pickMob(origin, dir, maxDist = 4.5) {    let best = null, bestD = maxDist;
     for (const [id, e] of this.mobs) {
-      const center = new THREE.Vector3().copy(e.node.position);
+      const center = _v1.copy(e.node.position);
       center.y += e.topY / 2;
-      const to = new THREE.Vector3().copy(center).sub(origin);
+      const to = _v2.copy(center).sub(origin);
       const along = to.dot(dir);
       if (along < 0 || along > maxDist) continue;
-      const perp = new THREE.Vector3().copy(origin).addScaledVector(dir, along).distanceTo(center);
+      const perp = _v3.copy(origin).addScaledVector(dir, along).distanceTo(center);
       if (perp < 1.1 && along < bestD) { best = id; bestD = along; }
     }
     return best;
@@ -268,7 +293,10 @@ export class Entities {
     }
     for (const [, e] of this.remotes) {
       if (!e.target) continue;
-      e.group.position.lerp(e.target.clone().add(new THREE.Vector3(0, -1.62, 0)), kPlayer);
+      // Pre-offset once instead of clone().add(new Vector3) every frame.
+      _v1.copy(e.target);
+      _v1.y -= 1.62;
+      e.group.position.lerp(_v1, kPlayer);
       e.group.rotation.y = e.yaw;
       // walk bob: swing y when moving
       const speed = e.lastPos ? e.group.position.distanceTo(e.lastPos) / Math.max(dt, 1e-4) : 0;
@@ -276,8 +304,8 @@ export class Entities {
         e.bobT += dt * 10;
         e.group.position.y += Math.sin(e.bobT) * 0.03;
       }
-      e.lastPos = e.lastPos ?? new THREE.Vector3();
-      e.lastPos.copy(e.group.position);
+      if (!e.lastPos && typeof THREE !== "undefined") e.lastPos = new THREE.Vector3();
+      if (e.lastPos) e.lastPos.copy(e.group.position);
     }
   }
 }

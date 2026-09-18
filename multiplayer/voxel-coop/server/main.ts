@@ -1,7 +1,7 @@
 // voxel-coop server: plain-HTTP LAN server (no TLS), static client + WS game loop.
 // Run: deno task dev   ->   http://<lan-ip>:8000/
 
-import { B, BLOCK_NAME, HARDNESS, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
+import { B, BLOCK_NAME, HARDNESS, PICK_MULT, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
 import { PORT, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
@@ -328,7 +328,7 @@ function explode(x: number, y: number, z: number, by: string): void {
           continue;
         }
         if (cur === B.FURNACE) furnaces.delete(fkey(bx, byy, bz));
-        if (cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE) machines.removeAt(bx, byy, bz);
+        if (cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE || cur === B.TANK || cur === B.FLUID_PIPE || cur === B.PUMP) machines.removeAt(bx, byy, bz);
         world.set(bx, byy, bz, B.AIR);
         broadcast({ t: "block", x: bx, y: byy, z: bz, block: B.AIR });
       }
@@ -373,6 +373,7 @@ function tickFuses(): void {
 
 // ---- edit validation ----
 const lastEdit = new Map<number, number>();
+const quarryLossWarn = new Map<string, number>();
 const lastAttack = new Map<number, number>();
 const pearlCd = new Map<number, number>();
 const worldPingCd = new Map<number, number>();
@@ -387,6 +388,23 @@ function checkRate(id: number): boolean {
 function dist(a: Vec3, x: number, y: number, z: number): number {
   const dx = a[0] - (x + 0.5), dy = a[1] - (y + 0.5), dz = a[2] - (z + 0.5);
   return Math.hypot(dx, dy, dz);
+}
+
+/**
+ * Server-side trust gate for client-claimed items. Honest clients always send
+ * an item that is actually in their inventory; spoofed ids (diamond pick on
+ * empty hands, warhammer without crafting it) fall back to bare hands.
+ * Creative bypasses: infinite blocks by design.
+ */
+function ownedTier(pl: Player, heldItem?: number): number {
+  if (pl.creative) return pickTier(heldItem);
+  if (heldItem === undefined) return 0;
+  return countOf(pl.slots, heldItem) > 0 ? pickTier(heldItem) : 0;
+}
+function ownedWeapon(pl: Player, weapon?: number): number | undefined {
+  if (weapon === undefined) return undefined;
+  if (pl.creative) return weapon;
+  return countOf(pl.slots, weapon) > 0 ? weapon : undefined;
 }
 
 function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: number, block?: number, heldItem?: number): void {
@@ -430,8 +448,10 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
       machines.removeAt(x, y, z);
     }
     // drop only with adequate tool (creative always drops to itself / keeps block)
+    // NOTE: tier resolves server-side from actual inventory — a spoofed
+    // heldItem id the player doesn't own counts as bare hands (tier 0).
     if (!pl.creative) {
-      const tier = pickTier(heldItem);
+      const tier = ownedTier(pl, heldItem);
       if (tier >= requiredTier(cur) || TOOL_CLASS[cur] === "any") {
         const drop = dropFor(cur);
         if (drop) {
@@ -449,7 +469,7 @@ function handleEdit(pl: Player, op: "break" | "place", x: number, y: number, z: 
     }
     if (world.get(x, y, z) === B.FURNACE || cur === B.FURNACE) furnaces.delete(fkey(x, y, z));
     broadcast({ t: "block", x, y, z, block: B.AIR });
-    if (cur === B.DIAMOND_ORE && (pl.creative || pickTier(heldItem) >= requiredTier(cur) || TOOL_CLASS[cur] === "any")) {
+    if (cur === B.DIAMOND_ORE && (pl.creative || ownedTier(pl, heldItem) >= requiredTier(cur) || TOOL_CLASS[cur] === "any")) {
       unlock(pl, "diamond", `💎 ${pl.name} mined diamond!`);
     }
   } else {
@@ -934,14 +954,16 @@ function onMessage(pl: Player, raw: string): void {
     }
     case "attackMob": {
       if (pl.dead) break;
+      // Spoofed weapon ids fall back to fists (see ownedWeapon above).
+      const weapon = ownedWeapon(pl, m.weapon);
       // swing rate-limit: 3 hits/sec max (warhammer is slower: 800ms)
       const nowAtk = Date.now();
-      const needGap = m.weapon === 150 ? 800 : m.weapon === 152 ? 500 : 330;
+      const needGap = weapon === 150 ? 800 : weapon === 152 ? 500 : 330;
       if (nowAtk - (lastAttack.get(pl.id) ?? 0) < needGap) break;
       lastAttack.set(pl.id, nowAtk);
       const mob = mobs.mobs.get(m.id);
       if (!mob) break;
-      if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > (m.weapon === 150 ? 5.5 : 4.5)) break;
+      if (dist(pl.p, mob.p[0], mob.p[1], mob.p[2]) > (weapon === 150 ? 5.5 : 4.5)) break;
       // tamed wolves are off-limits to everyone but their owner (mobs agent
       // reads (pl as {name?:string}).name; owner stored as player name string)
       const mobOwner = (mob as { owner?: unknown }).owner;
@@ -949,11 +971,11 @@ function onMessage(pl: Player, raw: string): void {
         sendTo(pl, { t: "denied", reason: `that's ${mobOwner}'s wolf!` });
         break;
       }
-      const swordMult = m.weapon !== undefined ? (SWORD_MULT[m.weapon] ?? 1) : 1;
-      const isPick = m.weapon !== undefined && m.weapon >= 108 && m.weapon <= 110;
-      let dmg = (m.weapon === undefined ? 2 : isPick ? 2 : 1) * swordMult;
-      const isFire = m.weapon === 152;
-      const isHammer = m.weapon === 150;
+      const swordMult = weapon !== undefined ? (SWORD_MULT[weapon] ?? 1) : 1;
+      const isPick = weapon !== undefined && PICK_MULT[weapon] !== undefined;
+      let dmg = (weapon === undefined ? 2 : isPick ? 2 : 1) * swordMult;
+      const isFire = weapon === 152;
+      const isHammer = weapon === 150;
       if (isFire) dmg += 2; // burn bonus
       // small knockback away from the player (big shoves knock mobs out of
       // reach and make melee miserable; warhammer launches)
@@ -1029,17 +1051,18 @@ function onMessage(pl: Player, raw: string): void {
         break;
       }
       const [ex, ey, ez] = pl.p;
-      let hitS = -1;
       let lastFree: [number, number, number] | null = null;
       for (let s = 0.5; s <= 12; s += 0.25) {
         const bx = Math.floor(ex + dx * s), by = Math.floor(ey + dy * s), bz = Math.floor(ez + dz * s);
-        if (by < 1 || by + 1 >= 48) { hitS = s; break; }
-        if (world.isSolid(bx, by, bz)) { hitS = s; break; }
+        // Stop at walls/ceilings (land just before them); open throws keep
+        // every free spot so flat-ground blinks work, not just wall shots.
+        if (by < 1 || by + 1 >= 48) break;
+        if (world.isSolid(bx, by, bz)) break;
         if (!world.isSolid(bx, by, bz) && !world.isSolid(bx, by + 1, bz)) {
           lastFree = [bx, by, bz];
         }
       }
-      if (hitS < 0 || !lastFree) {
+      if (!lastFree) {
         sendTo(pl, { t: "denied", reason: "no room to land" });
         break;
       }
@@ -1730,12 +1753,25 @@ setInterval(() => {
         if (left <= 0) return;
         n = left;
       }
-      // 3) owner inventory fallback
+      // 3) owner inventory fallback, then any online player (quarries are
+      // shared infrastructure — previously output vanished silently when the
+      // owner was offline or full, with no ground-drop system to catch it)
       const owner = players.all.get(q.owner);
-      if (owner) {
-        const left = giveItems(owner.slots, id, n);
-        sendInv(owner);
+      const recipients = owner
+        ? [owner, ...[...players.all.values()].filter((p) => p.id !== owner.id)]
+        : [...players.all.values()];
+      for (const r of recipients) {
+        const left = giveItems(r.slots, id, n);
+        sendInv(r);
         if (left <= 0) return;
+        n = left;
+      }
+      // Still no room anywhere: warn (throttled) instead of voiding silently.
+      const qk = `${q.x},${q.y},${q.z}`;
+      const lastWarn = quarryLossWarn.get(qk) ?? 0;
+      if (Date.now() - lastWarn > 15000) {
+        quarryLossWarn.set(qk, Date.now());
+        broadcast({ t: "chat", from: "server", msg: `⛏ quarry @ ${q.x},${q.y},${q.z} voided ${BLOCK_NAME[id] ?? id} x${n} — all storage full` });
       }
     },
     onEngineUpdate: () => {},
@@ -1771,18 +1807,30 @@ setInterval(() => {
       const done = smeltTick(f, dt);
       furnaceChanged = true;
       if (done) {
+        // smeltTick leaves active=false/progress=0; the output is granted
+        // below, or held as ready-for-pickup (done=true) when the owner is
+        // offline or full — the smelt/take handler collects it later.
+        // Previously the entry was always deleted: offline/full = item lost.
         const owner = players.all.get(f.owner);
+        const out = smeltOutput(f.input ?? B.IRON_ORE) ?? { id: 103, n: 1 };
         if (owner) {
-          const out = smeltOutput(f.input ?? B.IRON_ORE) ?? { id: 103, n: 1 };
           const left = giveItems(owner.slots, out.id, out.n);
           sendInv(owner);
-          if (owner.socket) {
-            send(owner.socket, left > 0
-              ? { t: "chat", from: "server", msg: "smelt done but inventory full — item lost" }
-              : { t: "chat", from: "server", msg: `⛏ smelt complete: +${out.n} ${BLOCK_NAME[out.id] ?? out.id}` });
+          if (left > 0) {
+            (f as { done?: boolean }).done = true;
+            if (owner.socket) {
+              send(owner.socket, { t: "chat", from: "server", msg: "smelt done — inventory full, collect at the furnace" });
+            }
+          } else {
+            if (owner.socket) {
+              send(owner.socket, { t: "chat", from: "server", msg: `⛏ smelt complete: +${out.n} ${BLOCK_NAME[out.id] ?? out.id}` });
+            }
+            furnaces.delete(k);
           }
+        } else {
+          // owner offline: hold the finished smelt for later pickup
+          (f as { done?: boolean }).done = true;
         }
-        furnaces.delete(k);
       }
     }
   }
@@ -1807,7 +1855,8 @@ setInterval(() => {
       }
     }
     const states: FurnaceWire[] = [...furnaces.values()].map((f) => ({
-      x: f.x, y: f.y, z: f.z, progress: f.progress / SMELT_TIME, ready: false,
+      x: f.x, y: f.y, z: f.z, progress: f.progress / SMELT_TIME,
+      ready: (f as { done?: boolean }).done === true,
     }));
     if (states.length > 0) broadcast({ t: "smeltState", states });
   }
