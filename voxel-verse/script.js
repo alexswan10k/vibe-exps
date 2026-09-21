@@ -84,6 +84,7 @@ const State = {
   yaw:0
 };
 const HOTBAR = [0,1,2,5,9,10,11,12,4]; // 9 slots -> block types
+State.hotbar=[...HOTBAR]; // reorderable via drag; persisted in save
 
 /* ---------- blocks ---------- */
 const BLOCK = { GRASS:0, DIRT:1, STONE:2, WATER:3, SAND:4, WOOD:5, LEAVES:6, SNOW:7, BEDROCK:8, PLANKS:9, GLASS:10, BRICK:11, GLOW:12, OBSIDIAN:13 };
@@ -168,7 +169,7 @@ function saveGame(){
   try{
     const ov={}; overrides.forEach((v,k)=>{ ov[k]=v; });
     localStorage.setItem(SAVE_KEY, JSON.stringify({ seed:Settings.seed, time:State.time, day:State.day,
-      pos:[camera.position.x,camera.position.y,camera.position.z], inv:State.inventory, overrides:ov, mode:Settings.mode, diff:Settings.difficulty }));
+      pos:[camera.position.x,camera.position.y,camera.position.z], inv:State.inventory, overrides:ov, mode:Settings.mode, diff:Settings.difficulty, hb:State.hotbar }));
   }catch(e){}
 }
 function loadGame(){
@@ -179,6 +180,7 @@ function loadGame(){
     State.time=s.time??0.32; State.day=s.day??1; State.inventory=s.inv||{};
     if(s.mode){ Settings.mode=s.mode; const om=$('opt-mode'); if(om) om.value=s.mode; }
     if(s.diff){ Settings.difficulty=s.diff; const od=$('opt-diff'); if(od) od.value=s.diff; }
+    if(Array.isArray(s.hb)&&s.hb.length===9&&s.hb.every(b=>BLOCK_DEF[b])) State.hotbar=[...s.hb];
     return s;
   }catch(e){ return null; }
 }
@@ -372,6 +374,7 @@ class Mob{
           if(hasLOS(this.pos.x,this.pos.y+0.9,this.pos.z, camera.position.x,camera.position.y-0.3,camera.position.z)){
             this.atkCd=0.9;
             const d=Math.max(1,Math.round(this.def.dmg*dmgScale()));
+            Dbg.log('MOB',`${this.key} melee -${d} @${dist.toFixed(1)}m LOS-ok`);
             damagePlayer(d, this.def.name); this.vel.y=3;
           }
         }
@@ -469,12 +472,46 @@ function collide(pos,r,h,legs){
 }
 
 /* ---------- player damage/heal ---------- */
+/* ---------- diagnostics: damage/death event log ----------
+   Every hit, death and respawn is recorded with full context so mystery
+   deaths can be traced. Shown on the death screen, mirrored to console. */
+const Dbg={ events:[], max:80,
+  log(type,msg){
+    this.events.push({t:performance.now()/1000, day:State.day, type, msg});
+    if(this.events.length>this.max) this.events.shift();
+    try{ console.log(`[VV:${type}]`,msg); }catch(e){}
+  },
+  ctx(){
+    let hn=0, hd=Infinity, hk='';
+    if(typeof mobs!=='undefined') for(const m of mobs){
+      if(!m.dead&&m.def.hostile){ const d=m.pos.distanceTo(camera.position); hn++; if(d<hd){ hd=d; hk=m.key; } }
+    }
+    const p=camera.position;
+    return `@(${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)}) HP${State.health}/${State.maxHealth} Hu${State.hunger} ${Settings.difficulty}${State.prot>0?' PROT'+State.prot.toFixed(1):''}${State.headInWater?' HEADWATER':State.inWater?' INWATER':''} vy${(typeof velocity!=='undefined'?velocity.y:0).toFixed(1)} hostiles:${hn}${hn?` near:${hk}@${hd.toFixed(1)}m`:''}`;
+  },
+  text(){ return this.events.map(e=>`D${e.day} T+${e.t.toFixed(1)}s [${e.type}] ${e.msg}`).join('\n')||'(empty)'; }
+};
+let lastHitTimer=0;
+function flashLastHit(src,n){
+  const el=$('last-hit'); if(!el) return;
+  el.textContent=`💔 -${n} ${src}`;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  clearTimeout(lastHitTimer); lastHitTimer=setTimeout(()=>el.classList.remove('show'),2600);
+}
+function renderDeathLog(){
+  const el=$('death-log'); if(!el) return;
+  const lines=Dbg.events.slice(-14).map(e=>`D${e.day} T+${e.t.toFixed(1)}s [${e.type}] ${e.msg}`);
+  el.textContent=lines.join('\n')||'No events logged.';
+  el.scrollTop=el.scrollHeight;
+}
 function damagePlayer(n,src){
   if(State.dead||State.creative||!State.started) return;
-  if(State.prot>0) return; // spawn protection
+  if(State.prot>0){ Dbg.log('BLOCK',`${src} ${n} blocked by spawn protection`); return; } // spawn protection
+  const hp0=State.health;
   State.health-=n; AudioSys.hurt();
   $('damage-vignette').classList.add('hit'); setTimeout(()=>$('damage-vignette').classList.remove('hit'),250);
-  renderVitals();
+  renderVitals(); flashLastHit(src,n);
+  Dbg.log('DMG',`-${n} ${src} · HP ${hp0}→${Math.max(0,State.health)} · ${Dbg.ctx()}`);
   if(State.health<=0){ State.health=0; die(src); }
 }
 function heal(n){ State.health=clamp(State.health+n,0,State.maxHealth); renderVitals(); }
@@ -491,13 +528,15 @@ function clearHostiles(range){
 }
 function die(src){
   State.dead=true; document.exitPointerLock&&document.exitPointerLock();
+  $('inventory-panel').classList.add('hidden'); if(dragOp) endItemDrag(true);
+  Dbg.log('DEATH',`${src} killed you · ${Dbg.ctx()}`);
   $('death-msg').textContent=`${src||'The void'} got you. Day ${State.day}. Respawning keeps your buildings!`;
-  $('death-screen').classList.remove('hidden'); AudioSys.blip(80,0.6,'sawtooth',0.2,-40);
+  $('death-screen').classList.remove('hidden'); renderDeathLog(); AudioSys.blip(80,0.6,'sawtooth',0.2,-40);
 }
 
 /* ---------- inventory ---------- */
-function addItem(block,n=1){ State.inventory[block]=(State.inventory[block]||0)+n; renderToolbar(); }
-function takeItem(block,n=1){ if(State.creative) return true; if((State.inventory[block]||0)>=n){ State.inventory[block]-=n; renderToolbar(); return true; } return false; }
+function addItem(block,n=1){ State.inventory[block]=(State.inventory[block]||0)+n; renderToolbar(); if(invOpen()&&!dragOp) renderInvPanel(); }
+function takeItem(block,n=1){ if(State.creative) return true; if((State.inventory[block]||0)>=n){ State.inventory[block]-=n; renderToolbar(); if(invOpen()&&!dragOp) renderInvPanel(); return true; } return false; }
 function countItem(b){ return State.creative?'∞':(State.inventory[b]||0); }
 
 /* ---------- sky / env ---------- */
@@ -561,7 +600,7 @@ function updateSky(dt){
   for(const m of waterMats){ if(m.map) m.map.offset.set((_waterT*0.03)%1,(_waterT*0.015)%1); m.opacity=0.62+Math.sin(_waterT*2)*0.06; m.emissiveIntensity=0.3+night*0.5; }
   // torch glow: warm light at night or when holding glowstone (with flame flicker)
   if(torchLight){
-    const holdingGlow=HOTBAR[State.activeBlock]===BLOCK.GLOW;
+    const holdingGlow=State.hotbar[State.activeBlock]===BLOCK.GLOW;
     const target=clamp(night*0.9+(holdingGlow?0.8:0)+(State.headInWater?0:0),0,1.4);
     const flick=0.9+0.1*Math.sin(_waterT*13)+0.05*Math.sin(_waterT*29+1.7);
     torchLight.intensity+=(target*flick-torchLight.intensity)*Math.min(1,dt*4);
@@ -799,14 +838,97 @@ function spawnBot(){
 /* ---------- UI renders ---------- */
 function renderToolbar(){
   const tb=$('toolbar'); tb.innerHTML='';
-  HOTBAR.forEach((b,i)=>{
+  State.hotbar.forEach((b,i)=>{
     const d=document.createElement('div'); d.className='block-slot'+(i===State.activeBlock?' active':'');
-    const texCanvas=blockIcon(b);
-    d.style.backgroundImage=`url(${texCanvas})`;
+    d.dataset.slot=i;
+    d.style.backgroundImage=`url(${blockIcon(b)})`;
     d.innerHTML=`<span class="k">${i+1}</span><span class="t">${BLOCK_DEF[b].name}</span><span class="n">${countItem(b)}</span>`;
-    d.title=BLOCK_DEF[b].name;
-    d.onclick=()=>{ State.activeBlock=i; renderToolbar(); AudioSys.blip(500+i*60,0.05,'square',0.08); };
+    d.title=BLOCK_DEF[b].name+' — click to select, drag to reorder';
+    d.onpointerdown=e=>beginItemDrag(e,{kind:'hotbar',idx:i,block:b});
     tb.appendChild(d);
+  });
+}
+/* ---------- GUI drag & drop (custom pointer engine: mouse + touch) ---------- */
+let dragOp=null;
+const invOpen=()=>!$('inventory-panel').classList.contains('hidden');
+function beginItemDrag(e,payload){
+  if(e.pointerType==='mouse'&&e.button!==0) return;
+  e.preventDefault(); e.stopPropagation();
+  const noDrag=payload.kind==='panel'&&!State.creative&&((State.inventory[payload.block]||0)<=0);
+  dragOp={...payload,sx:e.clientX,sy:e.clientY,active:false,ghost:null,over:null,noDrag};
+}
+function dropTargetAt(x,y){
+  const el=document.elementFromPoint(x,y); if(!el) return null;
+  const s=el.closest?el.closest('[data-slot]'):null;
+  if(s) return {kind:'hotbar',idx:+s.dataset.slot,el:s}; // hotbar slots live in the toolbar AND the inventory panel
+  return null;
+}
+function clearDragHL(){ document.querySelectorAll('.drop-target').forEach(el=>el.classList.remove('drop-target')); }
+function validDropTarget(op,t){
+  if(!t||t.kind!=='hotbar') return false;
+  if(op.kind==='hotbar') return true;
+  return State.creative||((State.inventory[op.block]||0)>0);
+}
+function applyDrop(op,t){
+  if(op.kind==='hotbar'&&t.kind==='hotbar'){
+    if(op.idx!==t.idx){ const h=State.hotbar; [h[op.idx],h[t.idx]]=[h[t.idx],h[op.idx]]; toast('🔀 Swapped slots'); }
+    State.activeBlock=t.idx;
+  } else if(op.kind==='panel'&&t.kind==='hotbar'){
+    State.hotbar[t.idx]=op.block; State.activeBlock=t.idx;
+    toast(`✅ ${BLOCK_DEF[op.block].name} → slot ${t.idx+1}`);
+  }
+  renderToolbar(); if(invOpen()) renderInvPanel(); saveGame(); AudioSys.blip(700,0.06,'square',0.08);
+}
+function clickSlot(op){
+  if(op.kind==='hotbar'){ State.activeBlock=op.idx; renderToolbar(); if(invOpen()) renderInvPanel(); AudioSys.blip(500+op.idx*60,0.05,'square',0.08); }
+  else if(State.creative||((State.inventory[op.block]||0)>0)){
+    State.hotbar[State.activeBlock]=op.block; renderToolbar(); renderInvPanel(); saveGame();
+    AudioSys.blip(700,0.06,'square',0.08); toast(`✅ ${BLOCK_DEF[op.block].name} → slot ${State.activeBlock+1}`);
+  } else { toast(`Need ${BLOCK_DEF[op.block].name}! Mine some first ⛏️`); AudioSys.blip(140,0.15,'square',0.12); }
+}
+function endItemDrag(cancelled){
+  if(!dragOp) return; const op=dragOp; dragOp=null;
+  if(op.ghost) op.ghost.remove(); clearDragHL();
+  if(cancelled||!State.started) return;
+  if(op.active){ if(op.over) applyDrop(op,op.over); }
+  else clickSlot(op);
+}
+function setInventoryOpen(open){
+  const will=open===undefined?!invOpen():open;
+  if(will===invOpen()) return;
+  if(will){
+    if(!State.started||State.dead) return;
+    renderInvPanel(); $('inventory-panel').classList.remove('hidden');
+    if(document.pointerLockElement&&document.exitPointerLock) document.exitPointerLock();
+    AudioSys.blip(600,0.06,'square',0.08);
+  } else {
+    $('inventory-panel').classList.add('hidden'); if(dragOp) endItemDrag(true);
+    if(State.started&&!State.dead&&!isTouch){ try{controls.lock();}catch(e){} }
+  }
+}
+function renderInvPanel(){
+  const g=$('inv-grid'); if(!g) return;
+  $('inv-sub').textContent=State.creative?'∞ everything':'counts update as you mine';
+  // hotbar row inside the panel: this is the reliable rearrange surface on desktop,
+  // where pointer-lock means the bottom toolbar has no cursor to drag with
+  const hr=$('inv-hotbar-row'); hr.innerHTML='';
+  State.hotbar.forEach((b,i)=>{
+    const d=document.createElement('div'); d.className='block-slot'+(i===State.activeBlock?' active':'');
+    d.dataset.slot=i; d.style.backgroundImage=`url(${blockIcon(b)})`;
+    d.innerHTML=`<span class="k">${i+1}</span><span class="t">${BLOCK_DEF[b].name}</span><span class="n">${countItem(b)}</span>`;
+    d.title=BLOCK_DEF[b].name+' — drag to move, click to select';
+    d.onpointerdown=e=>beginItemDrag(e,{kind:'hotbar',idx:i,block:b});
+    hr.appendChild(d);
+  });
+  g.innerHTML='';
+  BLOCK_DEF.forEach((def,b)=>{
+    const empty=!State.creative&&(State.inventory[b]||0)<=0;
+    const c=document.createElement('div'); c.className='inv-cell'+(empty?' empty':'');
+    c.dataset.inv=b; c.style.backgroundImage=`url(${blockIcon(b)})`;
+    c.innerHTML=`<span class="n">${countItem(b)}</span><span class="t">${def.name}</span>`;
+    c.title=def.name+(empty?' (none left)':' — drag to hotbar or click to assign');
+    c.onpointerdown=e=>beginItemDrag(e,{kind:'panel',block:b});
+    g.appendChild(c);
   });
 }
 const _iconCache={};
@@ -867,17 +989,19 @@ function updateOutline(force=false){
   } else { blockOutline.visible=false; $('block-highlight-label').style.display='none'; }
 }
 function tryBreak(){
-  // mobs first
+  // block raycast FIRST: a mob only wins the click if it's actually in front of the block
+  // (old order let mobs steal clicks — and hits — through walls)
+  const hit=raycastCenter();
+  const blockDist=hit?hit.distance:Infinity;
   raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
   const mh=raycaster.intersectObjects(mobGroup.children,true);
-  if(mh.length){
+  if(mh.length&&mh[0].distance<blockDist){
     let o=mh[0].object, root=o;
     while(root.parent&&root.parent!==scene&&root.parent!==mobGroup) root=root.parent;
     const mob=mobs.find(m=>m.mesh===root||m.mesh.children.includes(o)||root===m.mesh);
     const target=mob||mobs.sort((a,b)=>a.pos.distanceTo(camera.position)-b.pos.distanceTo(camera.position))[0];
     if(target&&target.pos.distanceTo(camera.position)<4.5){ target.hurt(State.creative?100:4, camera.position); if(bot) bot.hurt(0,camera.position); return; }
   }
-  const hit=raycastCenter();
   if(!hit) return;
   const mesh=hit.object; mesh.getMatrixAt(hit.instanceId,dummy.matrix);
   dummy.matrix.decompose(dummy.position,dummy.quaternion,dummy.scale);
@@ -899,7 +1023,7 @@ function tryPlace(){
   const tx=bx+Math.round(n.x),ty=by+Math.round(n.y),tz=bz+Math.round(n.z);
   const p=camera.position;
   if(Math.abs(tx-p.x)<0.9&&Math.abs(tz-p.z)<0.9&&ty<Math.ceil(p.y)&&ty>Math.ceil(p.y)-2.2) return; // don't suffocate
-  const block=HOTBAR[State.activeBlock];
+  const block=State.hotbar[State.activeBlock];
   if(getBlock(tx,ty,tz)!==null&&getBlock(tx,ty,tz)!==undefined) return;
   if(!takeItem(block,1)){ toast(`Need ${BLOCK_DEF[block].name}! Mine some first ⛏️`); AudioSys.blip(140,0.15,'square',0.12); return; }
   setBlock(tx,ty,tz,block);
@@ -1035,6 +1159,8 @@ function bindInputs(){
         e.preventDefault(); break;
       case 'KeyF': State.fly=!State.fly; toast(State.fly?'🕊️ Fly ON (Space up / C down... actually Space/Ctrl)':'🚶 Fly OFF'); break;
       case 'KeyE': eatFood(); break;
+      case 'KeyI': if(!State.started) break; setInventoryOpen(); break;
+      case 'Escape': if(dragOp){ endItemDrag(true); break; } if(invOpen()){ setInventoryOpen(false); break; } break;
       case 'KeyQ': setBlock(Math.round(camera.position.x),Math.round(camera.position.y-1),Math.round(camera.position.z),BLOCK.GLOW); break;
       case 'KeyT': openChat(); e.preventDefault(); break;
       case 'KeyC': $('coop-modal').classList.toggle('hidden'); break;
@@ -1063,18 +1189,40 @@ function bindInputs(){
   // menu buttons
   $('btn-play').onclick=startGame;
   $('btn-how').onclick=()=>$('howto').classList.toggle('hidden');
-  $('btn-new-world').onclick=()=>{ Settings.seed=randi(1,99999); $('world-seed').value=Settings.seed; perlin=new Perlin(Settings.seed); overrides.clear(); glowSet.clear(); chunks.forEach(c=>c.dispose()); chunks.clear(); mobs.forEach(m=>m.dispose()); mobs.length=0; updateChunks(); const h=heightAt(8,8); camera.position.set(8.5,h+3,8.5); toast('🌍 New world! Seed '+Settings.seed); };
+  $('btn-new-world').onclick=()=>{ Settings.seed=randi(1,99999); $('world-seed').value=Settings.seed; perlin=new Perlin(Settings.seed); overrides.clear(); glowSet.clear(); State.hotbar=[...HOTBAR]; renderToolbar(); chunks.forEach(c=>c.dispose()); chunks.clear(); mobs.forEach(m=>m.dispose()); mobs.length=0; updateChunks(); const h=heightAt(8,8); camera.position.set(8.5,h+3,8.5); toast('🌍 New world! Seed '+Settings.seed); };
   $('btn-host').onclick=()=>{ const code=($('room-code').value||randCode()).toUpperCase(); $('room-code').value=code; Net.host(code); };
   $('btn-join').onclick=()=>{ const code=($('room-code').value||'').toUpperCase(); if(!code){ toast('Enter a room code first'); return; } Net.join(code); };
   $('btn-copy-link').onclick=()=>{ const code=$('room-code').value||'????'; const txt=`Join my Voxel Verse room! Code: ${code} — open Voxel Verse, press C, enter code, JOIN.`; navigator.clipboard&&navigator.clipboard.writeText(txt); toast('📋 Invite copied!'); };
   $('btn-spawn-bot').onclick=()=>{ spawnBot(); $('coop-modal').classList.add('hidden'); };
   $('btn-coop-close').onclick=()=>$('coop-modal').classList.add('hidden');
-  $('btn-respawn').onclick=()=>{ State.dead=false; State.health=State.maxHealth; State.hunger=20; renderVitals(); $('death-screen').classList.add('hidden'); const h=heightAt(Math.round(camera.position.x),Math.round(camera.position.z)); camera.position.y=h+3; velocity.set(0,0,0); const cleared=clearHostiles(24); State.prot=3; toast(cleared?`✨ Respawned! 🛡️ 3s protection · cleared ${cleared} hostile${cleared>1?'s':''}`:'✨ Respawned! 🛡️ 3s protection'); };
+  $('btn-respawn').onclick=()=>{ State.dead=false; State.health=State.maxHealth; State.hunger=20; renderVitals(); $('death-screen').classList.add('hidden'); const h=heightAt(Math.round(camera.position.x),Math.round(camera.position.z)); camera.position.y=h+3; velocity.set(0,0,0); const cleared=clearHostiles(24); State.prot=3; Dbg.log('RESPAWN',`cleared ${cleared} hostiles · PROT 3s · ${Dbg.ctx()}`); toast(cleared?`✨ Respawned! 🛡️ 3s protection · cleared ${cleared} hostile${cleared>1?'s':''}`:'✨ Respawned! 🛡️ 3s protection'); };
+  $('btn-copy-log').onclick=()=>{ const txt=Dbg.text(); const done=()=>toast('📋 Log copied — paste it to Matt');
+    if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done,()=>fallbackCopy(txt,done));
+    else fallbackCopy(txt,done); };
   $('chat-input').addEventListener('keydown',e=>{ if(e.code==='Enter') submitChat(); e.stopPropagation(); });
   controls.addEventListener('lock',()=>{ $('menu').classList.add('hidden'); });
   controls.addEventListener('unlock',()=>{ if(State.started&&!State.dead&&!isTouch&&chatOpen===false){ /* keep playing, show menu only on Esc-hold? show small menu */ } });
-  document.addEventListener('pointerlockchange',()=>{ if(!document.pointerLockElement&&State.started&&!isTouch&&!State.dead&&!chatOpen){ $('menu').classList.remove('hidden'); } });
+  document.addEventListener('pointerlockchange',()=>{ if(!document.pointerLockElement&&State.started&&!isTouch&&!State.dead&&!chatOpen&&!invOpen()){ $('menu').classList.remove('hidden'); } });
   $('menu').addEventListener('click',e=>{ if(e.target===$('menu')&&State.started){ $('menu').classList.add('hidden'); controls.lock(); } });
+  $('btn-inv').onclick=e=>{ e.stopPropagation(); setInventoryOpen(); };
+  $('btn-inv-close').onclick=e=>{ e.stopPropagation(); setInventoryOpen(false); };
+  window.addEventListener('pointermove',e=>{
+    if(!dragOp||dragOp.noDrag) return;
+    if(!dragOp.active){
+      if(Math.hypot(e.clientX-dragOp.sx,e.clientY-dragOp.sy)<10) return;
+      dragOp.active=true;
+      const g=document.createElement('div'); g.className='drag-ghost';
+      g.style.backgroundImage=`url(${blockIcon(dragOp.block)})`;
+      g.style.left=dragOp.sx+'px'; g.style.top=dragOp.sy+'px';
+      document.body.appendChild(g); dragOp.ghost=g;
+    }
+    dragOp.ghost.style.left=e.clientX+'px'; dragOp.ghost.style.top=e.clientY+'px';
+    const t=dropTargetAt(e.clientX,e.clientY);
+    dragOp.over=(t&&validDropTarget(dragOp,t))?t:null;
+    clearDragHL(); if(dragOp.over&&dragOp.over.el) dragOp.over.el.classList.add('drop-target');
+  });
+  window.addEventListener('pointerup',()=>endItemDrag(false));
+  window.addEventListener('pointercancel',()=>endItemDrag(true));
   initTouch();
   // settings live
   $('opt-sens').oninput=e=>Settings.sens=+e.target.value;
@@ -1125,6 +1273,7 @@ function eatFood(){
     heal(5); State.hunger=clamp(State.hunger+4,0,20); AudioSys.eat(); renderToolbar(); renderVitals(); toast('😋 Yum! +5 HP');
   } else toast('No food! Break grass for apples 🍎');
 }
+function fallbackCopy(txt,done){ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); done(); }catch(e){ toast('Copy failed — screenshot the log instead'); } ta.remove(); }
 function openChat(){ chatOpen=true; $('chat-input-row').classList.remove('hidden'); $('chat-input').focus(); document.exitPointerLock&&document.exitPointerLock(); }
 function closeChat(){ chatOpen=false; $('chat-input-row').classList.add('hidden'); }
 function submitChat(){ const v=$('chat-input').value.trim(); $('chat-input').value=''; closeChat(); if(v) Net.sendChat(v); if(State.started) try{controls.lock();}catch(e){} }
@@ -1197,7 +1346,7 @@ function animate(){
           camera.position.y+=velocity.y*sd;
           if(collide(camera.position,RADIUS,HEIGHT,true)){
             // fall damage only for real falls — and never a 0-damage scare flash
-            if(velocity.y<-16&&!State.creative){ const fd=Math.floor((-velocity.y-16)/2); if(fd>0) damagePlayer(fd,'Fall'); }
+            if(velocity.y<-16&&!State.creative){ const fd=Math.floor((-velocity.y-16)/2); if(fd>0){ Dbg.log('FALL',`impact vy ${velocity.y.toFixed(1)} → -${fd}`); damagePlayer(fd,'Fall'); toast(`💥 Ouch! ${fd} fall damage — that was a big drop`); } }
             if(velocity.y<0){ camera.position.y-=velocity.y*sd; velocity.y=0; canJump=true; }
             else { camera.position.y-=velocity.y*sd; velocity.y=0; }
           }
