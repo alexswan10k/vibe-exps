@@ -6,6 +6,58 @@ const OPAQUE = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 16, 17, 18, 1
 // Walk-through vegetation (mirrors server WALK_THROUGH): cross-quad billboards.
 const PLANTS = new Set([31, 32, 33, 34, 35, 36]);
 
+// Static torchlight ranges: torches/lamps throw 14, lava 9.
+const TORCH_R = 14, LAVA_R = 9;
+// Face order matches BoxGeometry groups: +x, -x, +y, -y, +z, -z.
+const DIRS = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+// Directional sky shading: tops bright, sides dimmer, bottoms darkest.
+const DIRF = [0.78, 0.78, 1.0, 0.5, 0.78, 0.78];
+// Blocks that ARE light (flames, lamps, lava): glow at full on every face.
+const isSourceBlock = (b) => b === B.TORCH || b === B.LAMP || b === B.LAVA;
+
+// Per-face static lighting for Lambert block materials. Each instanced cube
+// carries 6 torch values + 6 sky values (one per face); the shader selects
+// by face normal, so every face is lit independently: smooth torch dropoff
+// via the emissive term (works at night, when ambient crushes diffuse) and
+// directional sky shading via diffuse. Non-instanced uses (held-block view
+// in hand.js shares these materials) fall back to plain sky shading.
+function patchFaceLight(mat) {
+  if (!mat.isMeshLambertMaterial || mat.userData.facePatched) return;
+  mat.userData.facePatched = true;
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = `attribute vec3 aTorchP;
+attribute vec3 aTorchN;
+attribute vec3 aSkyP;
+attribute vec3 aSkyN;
+varying float vTorchF;
+varying float vSkyF;
+` + sh.vertexShader.replace("#include <beginnormal_vertex>", `#include <beginnormal_vertex>
+#ifdef USE_INSTANCING
+  {
+    vec3 fn = objectNormal;
+    if (abs(fn.x) > 0.5) { vTorchF = fn.x > 0.0 ? aTorchP.x : aTorchN.x; vSkyF = fn.x > 0.0 ? aSkyP.x : aSkyN.x; }
+    else if (abs(fn.y) > 0.5) { vTorchF = fn.y > 0.0 ? aTorchP.y : aTorchN.y; vSkyF = fn.y > 0.0 ? aSkyP.y : aSkyN.y; }
+    else { vTorchF = fn.z > 0.0 ? aTorchP.z : aTorchN.z; vSkyF = fn.z > 0.0 ? aSkyP.z : aSkyN.z; }
+  }
+#else
+  vTorchF = 0.0; vSkyF = 1.0;
+#endif`);
+    sh.fragmentShader = `varying float vTorchF;
+varying float vSkyF;
+` + sh.fragmentShader
+      .replace("#include <color_fragment>", "#include <color_fragment>\n\tdiffuseColor.rgb *= vSkyF;")
+      .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+\t{
+\t\t// static torchlight: dim enough that the albedo texture stays
+\t\t// recognisable (emissive adds flat, so hot values wash to cream),
+\t\t// steep enough to read dropoff across a few blocks
+\t\tfloat te = pow(clamp(vTorchF, 0.0, 1.0), 1.5);
+\t\ttotalEmissiveRadiance += vec3(te * 0.62, te * 0.44, te * 0.26);
+\t}`);
+  };
+  mat.customProgramCacheKey = () => "facelit-v1";
+}
+
 // --- pixel-art texture painters (16x16) ---
 function rng(seed) {
   let s = seed >>> 0;
@@ -606,7 +658,7 @@ export class WorldClient {
     const old = this.meshes.get(key);
     if (old) {
       this.scene.remove(old);
-      old.children.forEach((m) => m.dispose?.());
+      old.children.forEach((m) => { m.dispose?.(); if (m.userData.ownGeo) m.geometry.dispose?.(); });
       this.meshes.delete(key);
     }
     this.chunks.delete(key);
@@ -633,11 +685,13 @@ export class WorldClient {
     c[WorldClient.idx(lx, y, lz)] = v;
     this.remesh(cx, cz);
     // edits near a chunk border change face-culling AND baked torchlight halo
-    // (HALO=4) in the neighbour's mesh too
-    if (lx < 5) this.remesh(cx - 1, cz);
-    if (lx >= CHUNK - 5) this.remesh(cx + 1, cz);
-    if (lz < 5) this.remesh(cx, cz - 1);
-    if (lz >= CHUNK - 5) this.remesh(cx, cz + 1);
+    // neighbour chunks whose bake volume contains the edit must remesh too:
+    // torchlight travels TORCH_R=14 cells, so an edit within 14 of a border
+    // counts (nearest neighbour-volume cell is lx+1 / 16-lx away)
+    if (lx <= 13) this.remesh(cx - 1, cz);
+    if (lx >= 2) this.remesh(cx + 1, cz);
+    if (lz <= 13) this.remesh(cx, cz - 1);
+    if (lz >= 2) this.remesh(cx, cz + 1);
   }
 
   remesh(cx, cz) {
@@ -647,7 +701,7 @@ export class WorldClient {
     const old = this.meshes.get(key);
     if (old) {
       this.scene.remove(old);
-      old.children.forEach((m) => m.dispose?.());
+      old.children.forEach((m) => { m.dispose?.(); if (m.userData.ownGeo) m.geometry.dispose?.(); });
     }
     const group = new THREE.Group();
     const byType = new Map();
@@ -660,102 +714,55 @@ export class WorldClient {
       const o = this.get(x, y, z);
       return o === undefined ? B.STONE : o; // treat unknown as opaque to avoid holes
     };
-    const passable = (b) => b === B.GLASS || !OPAQUE.has(b);
-    // ---- baked torchlight: flood-fill through air (Minecraft-style) ----
-    // expanded volume so light bleeds correctly across chunk borders
-    const HALO = 4, EW = CHUNK + HALO * 2;
-    const eIdx = (ex, y, ez) => (y * EW + ez) * EW + ex;
-    const light = new Uint8Array(EW * WORLD_H * EW);
-    const occ = new Uint8Array(EW * WORLD_H * EW); // 1 = blocks light
-    const queue = []; // growable: dense torch builds re-enqueue cells often
-    let qh = 0;
-    for (let ey = 0; ey < WORLD_H; ey++) {
-      for (let eez = 0; eez < EW; eez++) {
-        for (let eex = 0; eex < EW; eex++) {
-          const wx = cx * CHUNK + eex - HALO, wz = cz * CHUNK + eez - HALO;
-          const b = getL(wx, ey, wz);
-          const ei = eIdx(eex, ey, eez);
-          if (!passable(b)) occ[ei] = 1;
-          if (b === B.LAVA) {
-            light[ei] = 15;
-            queue.push(ei);
-          } else if (b === B.TORCH || b === B.LAMP) {
-            light[ei] = 14;
-            queue.push(ei);
-          }
+    // ---- per-face static torchlight: raycast at mesh time ----
+    // Light sources near this chunk: own torches (collected in the block
+    // scan below) plus already-meshed neighbour chunks, so light bleeds
+    // correctly across borders. Entries are [x, y, z, R].
+    const sources = [];
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oz = -1; oz <= 1; oz++) {
+        if (ox === 0 && oz === 0) continue;
+        const list = this.torches.get(`${cx + ox},${cz + oz}`);
+        if (!list) continue;
+        for (const t of list) {
+          if (t[0] < cx * CHUNK - TORCH_R || t[0] > cx * CHUNK + CHUNK + TORCH_R) continue;
+          if (t[2] < cz * CHUNK - TORCH_R || t[2] > cz * CHUNK + CHUNK + TORCH_R) continue;
+          sources.push(t);
+          if (sources.length >= 64) break;
         }
       }
     }
-    const exOf = (ei) => ei % EW;
-    const ezOf = (ei) => Math.floor(ei / EW) % EW;
-    const eyOf = (ei) => Math.floor(ei / (EW * EW));
-    while (qh < queue.length) {
-      const cur = queue[qh++];
-      const lv = light[cur];
-      if (lv <= 1) continue;
-      const nl = lv - 1;
-      const cex = exOf(cur), cey = eyOf(cur), cez = ezOf(cur);
-      // 6 neighbours
-      if (cex > 0) {
-        const n = cur - 1;
-        if (!occ[n] && light[n] < nl) {
-          // water dims light faster
-          const wx = cx * CHUNK + (cex - 1) - HALO, wz = cz * CHUNK + cez - HALO;
-          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
-          const fl = nl - extra;
-          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
+    // Torch light for one face sample point: strongest visible source with
+    // smooth (1-d/R)^1.4 dropoff. Walls occlude (marched in 0.4 steps, so a
+    // block between face and flame casts a shadow); water dims (+2 distance
+    // per cell); glass and other non-opaques pass through.
+    const faceTorch = (fx, fy, fz) => {
+      let best = 0;
+      for (let si = 0; si < sources.length; si++) {
+        const s = sources[si];
+        const dx = s[0] - fx, dy = s[1] - fy, dz = s[2] - fz;
+        const R = s[3];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > R * R) continue;
+        const d = Math.sqrt(d2);
+        const steps = Math.ceil(d / 0.4);
+        let blocked = false, water = 0;
+        for (let i = 1; i < steps; i++) {
+          const t = i / steps;
+          const b = getL(Math.floor(fx + dx * t), Math.floor(fy + dy * t), Math.floor(fz + dz * t));
+          if (b === B.WATER) { water++; continue; }
+          if (b === B.AIR || b === B.GLASS) continue;
+          if (OPAQUE.has(b)) { blocked = true; break; }
         }
+        if (blocked) continue;
+        const eff = d + water * 2;
+        if (eff >= R) continue;
+        // quadratic-ish dropoff: bright near the flame, clearly falling by
+        // mid-range, gone by R (a gentle exponent blows out to flat white)
+        const a = Math.pow(1 - eff / R, 2.0);
+        if (a > best) best = a;
       }
-      if (cex < EW - 1) {
-        const n = cur + 1;
-        if (!occ[n] && light[n] < nl) {
-          const wx = cx * CHUNK + (cex + 1) - HALO, wz = cz * CHUNK + cez - HALO;
-          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
-          const fl = nl - extra;
-          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
-        }
-      }
-      if (cez > 0) {
-        const n = cur - EW;
-        if (!occ[n] && light[n] < nl) {
-          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + (cez - 1) - HALO;
-          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
-          const fl = nl - extra;
-          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
-        }
-      }
-      if (cez < EW - 1) {
-        const n = cur + EW;
-        if (!occ[n] && light[n] < nl) {
-          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + (cez + 1) - HALO;
-          const extra = getL(wx, cey, wz) === B.WATER ? 1 : 0;
-          const fl = nl - extra;
-          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
-        }
-      }
-      if (cey > 0) {
-        const n = cur - EW * EW;
-        if (!occ[n] && light[n] < nl) {
-          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + cez - HALO;
-          const extra = getL(wx, cey - 1, wz) === B.WATER ? 1 : 0;
-          const fl = nl - extra;
-          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
-        }
-      }
-      if (cey < WORLD_H - 1) {
-        const n = cur + EW * EW;
-        if (!occ[n] && light[n] < nl) {
-          const wx = cx * CHUNK + cex - HALO, wz = cz * CHUNK + cez - HALO;
-          const extra = getL(wx, cey + 1, wz) === B.WATER ? 1 : 0;
-          const fl = nl - extra;
-          if (fl > 0 && light[n] < fl) { light[n] = fl; queue.push(n); }
-        }
-      }
-    }
-    const lightAt = (wx, y, wz) => {
-      const eex = wx - cx * CHUNK + HALO, eez = wz - cz * CHUNK + HALO;
-      if (eex < 0 || eex >= EW || eez < 0 || eez >= EW || y < 0 || y >= WORLD_H) return 0;
-      return light[eIdx(eex, y, eez)];
+      return best;
     };
     // NOTE: no per-column sky table — sky is decided per block below from
     // the cell directly above it (open air => full bright, roofed => depth
@@ -781,18 +788,31 @@ export class WorldClient {
           }
           if (!byType.has(b)) byType.set(b, []);
           byType.get(b).push([wx, y, wz]);
-          if (b === B.TORCH) torchList.push([wx + 0.5, y + 0.6, wz + 0.5]);
-          else if (b === B.LAMP) torchList.push([wx + 0.5, y + 0.5, wz + 0.5]);
-          else if (b === B.LAVA) torchList.push([wx + 0.5, y + 0.6, wz + 0.5]);
+          if (b === B.TORCH) torchList.push([wx + 0.5, y + 0.6, wz + 0.5, TORCH_R]);
+          else if (b === B.LAMP) torchList.push([wx + 0.5, y + 0.5, wz + 0.5, TORCH_R]);
+          else if (b === B.LAVA) torchList.push([wx + 0.5, y + 0.6, wz + 0.5, LAVA_R]);
         }
       }
     }
-    for (const [b, list] of byType) {
-      const mat = this.materials[b];
-      if (!mat) continue;
+    // own torches light their own chunk (neighbour sources gathered above)
+    for (const t of torchList) { sources.push(t); if (sources.length >= 64) break; }
+    // One InstancedMesh per block type. Each instance carries 6 torch + 6 sky
+    // values (one per face, DIRS order); the patched Lambert material
+    // selects by face normal. Torch reaches the fragment shader as emissive
+    // (independent of the ~0.04 night ambient that crushes diffuse pools),
+    // sky as a diffuse multiplier (so day/night still works through scene
+    // lights). No lit/unlit split: values are continuous, so dropoff is a
+    // gradient, not a light/dark cliff.
+    const buildMesh = (b, items, mat) => {
+      if (!items.length) return;
       const isPlant = PLANTS.has(b);
-      const mesh = new THREE.InstancedMesh(isPlant ? this.crossGeo : this.geo, mat, list.length);
-      list.forEach(([wx, y, wz], i) => {
+      const geo = isPlant ? this.crossGeo.clone() : this.geo.clone();
+      const mesh = new THREE.InstancedMesh(geo, mat, items.length);
+      mesh.userData.ownGeo = true;
+      const n = items.length;
+      const aTP = new Float32Array(n * 3), aTN = new Float32Array(n * 3);
+      const aSP = new Float32Array(n * 3), aSN = new Float32Array(n * 3);
+      items.forEach(([wx, y, wz, torch, sky], i) => {
         if (isPlant) {
           // cross quads stand on the block floor, full height
           this.dummy.position.set(wx + 0.5, y, wz + 0.5);
@@ -805,48 +825,51 @@ export class WorldClient {
         }
         this.dummy.updateMatrix();
         mesh.setMatrixAt(i, this.dummy.matrix);
-        // lighting: open sky above => full bright, roofed blocks fall off
-        // toward ~8% by y=4 so caves stay dark (values are linear; the
-        // renderer re-encodes to sRGB). Baked torch flood-fill wins near
-        // flames and tints warm orange.
-        if (b === B.TORCH || b === B.LAMP || b === B.LAVA) {
-          mesh.setColorAt(i, this.shadeColor.setRGB(1, 1, 1));
-        } else {
-          let tl;
-          if (!OPAQUE.has(b) || b === B.GLASS) {
-            tl = lightAt(wx, y, wz); // transparent: its own cell
-          } else {
-            tl = Math.max(
-              lightAt(wx + 1, y, wz), lightAt(wx - 1, y, wz),
-              lightAt(wx, y + 1, wz), lightAt(wx, y - 1, wz),
-              lightAt(wx, y, wz + 1), lightAt(wx, y, wz - 1),
-            );
-          }
-          const t = tl / 14;
-          const depthShade = Math.min(1, 0.08 + 0.92 * Math.max(0, (y - 4) / 20));
-          // sky above? the cell overhead decides: open air (and not water)
-          // => full bright surface; anything roofed falls to depth shade so
-          // caves, mine tunnels and canopy floors stay dark.
-          const above = getL(wx, y + 1, wz);
-          const sky = (!OPAQUE.has(above) && above !== B.WATER) ? 1 : depthShade;
-          const bright = Math.max(sky, Math.min(1, 0.08 + t * 0.9));
-          if (t > 0.01) {
-            mesh.setColorAt(i, this.shadeColor.setRGB(
-              Math.min(1, bright + t * 0.16),
-              Math.min(1, bright + t * 0.05),
-              Math.max(0, bright - t * 0.1),
-            ));
-          } else {
-            mesh.setColorAt(i, this.shadeColor.setRGB(bright, bright, bright));
-          }
-        }
+        // attribute layout P=(+x,+y,+z), N=(-x,-y,-z); cross quads face up
+        aTP[i * 3] = torch[0]; aTP[i * 3 + 1] = torch[2]; aTP[i * 3 + 2] = torch[4];
+        aTN[i * 3] = torch[1]; aTN[i * 3 + 1] = torch[3]; aTN[i * 3 + 2] = torch[5];
+        aSP[i * 3] = sky[0]; aSP[i * 3 + 1] = sky[2]; aSP[i * 3 + 2] = sky[4];
+        aSN[i * 3] = sky[1]; aSN[i * 3 + 1] = sky[3]; aSN[i * 3 + 2] = sky[5];
       });
+      geo.setAttribute("aTorchP", new THREE.InstancedBufferAttribute(aTP, 3));
+      geo.setAttribute("aTorchN", new THREE.InstancedBufferAttribute(aTN, 3));
+      geo.setAttribute("aSkyP", new THREE.InstancedBufferAttribute(aSP, 3));
+      geo.setAttribute("aSkyN", new THREE.InstancedBufferAttribute(aSN, 3));
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       mesh.castShadow = !isPlant; // alpha-tested quads would speckle the shadow map
       mesh.receiveShadow = true;
       this.dummy.scale.set(1, 1, 1);
       group.add(mesh);
+    };
+    for (const [b, list] of byType) {
+      const mat = this.materials[b];
+      if (!mat) continue;
+      if (Array.isArray(mat)) mat.forEach(patchFaceLight); else patchFaceLight(mat);
+      const items = [];
+      for (const [wx, y, wz] of list) {
+        // sky openness decided per block from the cell above (open air and
+        // not water => full bright, roofed => depth shade so caves, mine
+        // tunnels and canopy floors stay dark); each face then scales it by
+        // orientation. Torch is raycast per face, so a wall between flame
+        // and face leaves that face dark while its siblings stay lit.
+        const above = getL(wx, y + 1, wz);
+        const skyBase = (!OPAQUE.has(above) && above !== B.WATER)
+          ? 1 : Math.min(1, 0.08 + 0.92 * Math.max(0, (y - 4) / 20));
+        const torch = [0, 0, 0, 0, 0, 0], sky = [0, 0, 0, 0, 0, 0];
+        if (isSourceBlock(b)) {
+          // flames/lava glow at full on every face (raycast would agree:
+          // the source is centimetres away and unoccluded)
+          for (let f = 0; f < 6; f++) { torch[f] = 1; sky[f] = 1; }
+        } else {
+          for (let f = 0; f < 6; f++) {
+            const d = DIRS[f];
+            torch[f] = faceTorch(wx + 0.5 + d[0] * 0.51, y + 0.5 + d[1] * 0.51, wz + 0.5 + d[2] * 0.51);
+            sky[f] = skyBase * DIRF[f];
+          }
+        }
+        items.push([wx, y, wz, torch, sky]);
+      }
+      buildMesh(b, items, mat);
     }
     this.scene.add(group);
     this.meshes.set(key, group);

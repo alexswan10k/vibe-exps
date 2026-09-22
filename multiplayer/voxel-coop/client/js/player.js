@@ -278,15 +278,24 @@ export class Player {
         }
       }
     } else {
-      this.vel.y -= GRAVITY * dt;
-      if (this.vel.y < -28) this.vel.y = -28;
-      const coyote = this._now - this.lastGroundT < 0.12;
-      const buffered = this._now - this.jumpBufT < 0.12;
-      if (buffered && coyote) {
-        this.vel.y = JUMP;
-        this.onGround = false;
-        this.lastGroundT = -10;
-        this.jumpBufT = -10;
+      // streaming hover: the cell below is UNKNOWN (spawn chunk still
+      // loading on fresh join) — hold Y instead of falling through the
+      // void. Horizontal walking still works; gravity and jumping resume
+      // once the ground truth arrives.
+      const belowKnown = world.get(Math.floor(this.pos.x), Math.floor(this.pos.y) - 1, Math.floor(this.pos.z)) !== undefined;
+      if (!belowKnown) {
+        this.vel.y = 0;
+      } else {
+        this.vel.y -= GRAVITY * dt;
+        if (this.vel.y < -28) this.vel.y = -28;
+        const coyote = this._now - this.lastGroundT < 0.12;
+        const buffered = this._now - this.jumpBufT < 0.12;
+        if (buffered && coyote) {
+          this.vel.y = JUMP;
+          this.onGround = false;
+          this.lastGroundT = -10;
+          this.jumpBufT = -10;
+        }
       }
     }
 

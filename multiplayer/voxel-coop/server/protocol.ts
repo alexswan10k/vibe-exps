@@ -312,6 +312,7 @@ export type ServerMsg =
   | { t: "gamemode"; creative: boolean }
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
   | { t: "reset"; seed: number; spawn: Vec3 }
+  | { t: "tp"; p: Vec3 } // authoritative teleport: client must snap (respawn/spawn/home/correction)
   | { t: "chat"; from: string; msg: string }
   | { t: "worldPing"; id: number; name: string; x: number; y: number; z: number; ttl: 15000 }
   | { t: "smeltState"; states: FurnaceWire[] }

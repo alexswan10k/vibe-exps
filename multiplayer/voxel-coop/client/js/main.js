@@ -90,11 +90,13 @@ function setShadows(on) {
   ui.hint(on ? "shadows on" : "shadows off (faster)");
 }
 
-// pooled torch lights + flame glow sprites. Baked flood-fill in world.js
-// guarantees every torch tints its walls (no pop-in at the pool edge); the
-// pool adds live flicker + speculars where the eye actually is.
+// flame glow sprites at the nearest torches. Torch ILLUMINATION is fully
+// static: the per-face raycast bake in world.js recomputes on chunk
+// (re)mesh — i.e. only when blocks are placed or removed — and costs
+// nothing per frame. No realtime point lights: 12 of them in a forward
+// renderer taxes every fragment every frame, and the bake already carries
+// the pools (with occlusion, which unshadowed point lights can't do).
 const TORCH_LIGHTS = 12;
-const TORCH_DIST = 22;
 const torchPool = [];
 function makeFlameTexture() {
   const c = document.createElement("canvas");
@@ -112,25 +114,44 @@ function makeFlameTexture() {
 }
 const flameTex = makeFlameTexture();
 for (let i = 0; i < TORCH_LIGHTS; i++) {
-  // modest intensity + tight decay: a warm pool near the flame, not a
-  // nuclear glow — the baked flood-fill already carries torchlight further
-  const l = new THREE.PointLight(0xffa845, 0, TORCH_DIST, 2);
-  scene.add(l);
+  // unlit additive sprite: 12 billboards are noise next to a forward
+  // renderer evaluating 12 point lights on every fragment
   const s = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flameTex, transparent: true, opacity: 0,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  s.scale.set(1.1, 1.1, 1);
+  s.scale.set(1.7, 1.7, 1);
   scene.add(s);
-  torchPool.push({ light: l, sprite: s });
+  torchPool.push({ sprite: s });
 }
-// dedicated hand light: carrying a torch lights the way like a lantern
-const heldLight = new THREE.PointLight(0xffb45e, 0, 17, 2);
-scene.add(heldLight);
 let cachedNear = [];
 let lastTorchSearch = 0;
+// Diagnostic: force flame sprites to v (0 = hidden). Sprites are the only
+// per-frame torch visuals left; illumination itself is static.
+window.voxLightSet = (v) => torchPool.forEach((p) => { p.hold = v; });
+// Camera/probe diagnostic: nearest torch slots + camera state; voxCam sets
+// yaw/pitch and nudges position (<10m steps stay server-accepted).
+window.voxLightDbg = () => ({
+  sprites: torchPool.map((p) => p.sprite.visible),
+  near: cachedNear.length,
+  nearPos: cachedNear.slice(0, 4).map((t) => t.map((v) => +v.toFixed(1))),
+  cam: {
+    p: [player.pos.x, player.pos.y, player.pos.z].map((v) => +v.toFixed(1)),
+    yaw: +player.yaw.toFixed(2),
+    pitch: +player.pitch.toFixed(2),
+  },
+  time: +serverTime.toFixed(3),
+});
+window.voxCam = (yaw, pitch, dx, dz) => {
+  if (yaw !== undefined) player.yaw = yaw;
+  if (pitch !== undefined) player.pitch = pitch;
+  player.pos.x += dx || 0; player.pos.z += dz || 0;
+};
+// Read a client-side block id (ground truth for AIR placement).
+window.voxBlock = (x, y, z) => world.get(Math.floor(x), Math.floor(y), Math.floor(z));
 function updateTorchLights(now) {
-  // re-search nearest infrequently (sort over all torches), flicker every frame
+  // nearest-torch search at 4Hz; per frame only 12 sprite transforms.
+  // (Illumination is static — see the bake in world.js.)
   if (now - lastTorchSearch > 250) {
     lastTorchSearch = now;
     cachedNear = world.nearestTorches(player.pos, TORCH_LIGHTS, 34);
@@ -138,31 +159,16 @@ function updateTorchLights(now) {
   for (let i = 0; i < TORCH_LIGHTS; i++) {
     const p = torchPool[i];
     if (i < cachedNear.length) {
-      p.light.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
-      p.sprite.position.copy(p.light.position);
+      p.sprite.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
       const f = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
-      p.light.intensity = 1.1 + f;
-      p.sprite.material.opacity = 0.75 + f * 0.9;
-      const s = 1.0 + f * 0.35;
+      p.sprite.material.opacity = p.hold !== undefined ? p.hold : 0.75 + f * 0.9;
+      const s = 1.6 + f * 0.35;
       p.sprite.scale.set(s, s, 1);
-      p.sprite.visible = true;
+      p.sprite.visible = (p.hold ?? 1) > 0;
     } else {
-      p.light.intensity = 0;
       p.sprite.visible = false;
     }
   }
-  // held torch lantern
-  try {
-    const held = window.voxUI?.heldItem?.();
-    const eye = player.eye();
-    if (held?.id === B.TORCH && !dead) {
-      const d = player.lookDir();
-      heldLight.position.set(eye.x + d.x * 0.6, eye.y - 0.15, eye.z + d.z * 0.6);
-      heldLight.intensity = 1.0 + Math.sin(now / 120) * 0.1 + Math.sin(now / 43) * 0.05;
-    } else {
-      heldLight.intensity = 0;
-    }
-  } catch { /* UI not ready yet */ }
 }
 
 const world = new WorldClient(scene, makeMaterials());
@@ -908,6 +914,8 @@ net.on("welcome", (m) => {
   serverTime = m.time;
   serverRain = m.rain ?? 0;
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null;
   spawnPos = m.spawn;
   if (m.creative) {
     window.voxCreative = true;
@@ -1009,6 +1017,8 @@ net.on("reset", (m) => {
   }
   pendingChunks.clear();
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null; // teleport, not a fall — don't bill the next landing
   spawnPos = m.spawn;
   streamChunks();
   ui.status(`fresh world — seed ${m.seed}`);
@@ -1023,6 +1033,13 @@ net.on("smeltState", (m) => {
   ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
 });
 net.on("denied", (m) => ui.hint(m.reason));
+net.on("tp", (m) => {
+  // authoritative teleport (respawn/spawn/home/correction): snap + drop all
+  // fall state so the next landing can't bill a fall you didn't take
+  player.pos.set(m.p[0], m.p[1], m.p[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null;
+});
 net.on("toast", (m) => {
   showToast(m.text);
   audio.pickup();

@@ -373,6 +373,13 @@ function tickFuses(): void {
 
 // ---- edit validation ----
 const lastEdit = new Map<number, number>();
+const lastTpFix = new Map<number, number>(); // rubber-band cooldown per player
+/** Authoritative teleport: moves the player AND tells their client to snap.
+ *  respawn/spawn/home previously moved only the server copy — the client kept
+ *  playing from the old spot (every edit "too far", mobs hunting a ghost). */
+function sendTp(pl: Player): void {
+  sendTo(pl, { t: "tp", p: [...pl.p] as Vec3 });
+}
 const quarryLossWarn = new Map<string, number>();
 const lastAttack = new Map<number, number>();
 const pearlCd = new Map<number, number>();
@@ -656,6 +663,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
     case "spawn":
       pl.p = [...spawn] as Vec3;
       pl.lastMove = Date.now();
+      sendTp(pl);
       sendPlayersSnapshot();
       sendMarkers(pl);
       sendTo(pl, { t: "chat", from: "server", msg: "teleported to spawn" });
@@ -673,6 +681,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       }
       pl.p = [...pl.home] as Vec3;
       pl.lastMove = Date.now();
+      sendTp(pl);
       sendPlayersSnapshot();
       sendTo(pl, { t: "chat", from: "server", msg: "🏠 teleported home" });
       return true;
@@ -836,7 +845,30 @@ function onMessage(pl: Player, raw: string): void {
       const [nx, ny, nz] = m.p;
       if (![nx, ny, nz, m.yaw, m.pitch].every(Number.isFinite)) break;
       const dx = nx - pl.p[0], dy = ny - pl.p[1], dz = nz - pl.p[2];
-      if (Math.hypot(dx, dy, dz) > (pl.creative ? 25 : 10)) break; // creative fly is fast
+      if (Math.hypot(dx, dy, dz) > (pl.creative ? 25 : 10)) {
+        // desync (missed teleport, lag spike): the client is somewhere the
+        // server isn't — snap it back to the authoritative position instead of
+        // stranding it (every edit would fail "too far" forever). Cooled down.
+        const now = Date.now();
+        if (now - (lastTpFix.get(pl.id) ?? 0) > 2000) {
+          lastTpFix.set(pl.id, now);
+          sendTp(pl);
+        }
+        break; // creative fly is fast
+      }
+      if (ny < -10) {
+        // fell out of the world (fresh-join chunk race, severe lag): surface
+        // rescue. Bedrock at y=0 is unbreakable, so nothing legit is this low.
+        freeRide(pl);
+        if (pl.bedSpawn && world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 2, pl.bedSpawn[2]) !== B.BED &&
+            world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 1, pl.bedSpawn[2]) !== B.BED) {
+          pl.bedSpawn = null;
+        }
+        players.respawn(pl, spawn);
+        sendVitals(pl);
+        sendTp(pl); // client must wake up where the server put it (bed or spawn)
+        break;
+      }
       if (ny < -40 || ny > 120) break;
       pl.p = [nx, ny, nz];
       pl.yaw = m.yaw; pl.pitch = m.pitch;
@@ -1216,6 +1248,7 @@ function onMessage(pl: Player, raw: string): void {
         }
         players.respawn(pl, spawn);
         sendVitals(pl);
+        sendTp(pl); // client must wake up where the server put it (bed or spawn)
         sendTo(pl, { t: "chat", from: "server", msg: pl.bedSpawn ? "respawned at your bed" : "respawned" });
       }
       break;
@@ -1644,12 +1677,12 @@ setInterval(() => {
   const wrappers = [...players.all.values()].map((pl) => ({
     p: pl.p,
     name: pl.name,
-    hurt: (dmg: number) => {
+    hurt: (dmg: number, src?: string) => {
       const before = pl.hp;
       players.hurt(pl, dmg);
       if (pl.hp !== before) sendVitals(pl);
       if (pl.dead && before > 0) {
-        noteDeath(pl, `☠ ${pl.name} died`);
+        noteDeath(pl, src ? `☠ ${pl.name} was slain by ${src}` : `☠ ${pl.name} died`);
       }
     },
   }));
