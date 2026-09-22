@@ -33,7 +33,7 @@ export class Minimap {
   applyVis() {
     if (this.cv) this.cv.style.display = this.on ? "block" : "none";
   }
-  draw(world, player, entities, spawnPos, night) {
+  draw(world, player, entities, spawnPos, night, pings = []) {
     if (!this.on || !this.cv || !world) return;
     const g = this.cv.getContext("2d");
     const S = this.size, R = this.range;
@@ -70,7 +70,7 @@ export class Minimap {
     const markers = (typeof window !== "undefined" && window.voxMarkers) || null;
     if (Array.isArray(markers?.home)) dot(markers.home[0], markers.home[2], "#ffaa22", 3);
     if (Array.isArray(markers?.bed)) dot(markers.bed[0], markers.bed[2], "#cc66ff", 3);
-    if (this.cv) this.cv.title = "minimap (N toggles) · green spawn · orange home · purple bed · red mob · cyan player · yellow you";
+    if (this.cv) this.cv.title = "minimap (N toggles) · green spawn · orange home · purple bed · red mob · cyan player · cyan ring team ping · yellow you";
     if (entities) {
       for (const [, e] of entities.mobs ?? []) {
         if (e.node) dot(e.node.position.x, e.node.position.z, "#ff4444", 2);
@@ -78,6 +78,16 @@ export class Minimap {
       for (const [, e] of entities.remotes ?? []) {
         if (e.group) dot(e.group.position.x, e.group.position.z, "#44ddff", 3);
       }
+    }
+    for (const p of pings) {
+      if (performance.now() >= p.expires) continue;
+      const dx = Math.max(-R, Math.min(R, p.x + 0.5 - player.pos.x));
+      const dz = Math.max(-R, Math.min(R, p.z + 0.5 - player.pos.z));
+      const x = S / 2 + dx * cell, y = S / 2 + dz * cell;
+      g.strokeStyle = "#ffffff";
+      g.lineWidth = 2;
+      g.strokeRect(x - 4, y - 4, 8, 8);
+      dot(player.pos.x + dx, player.pos.z + dz, "#55eeff", 2);
     }
     // player arrow (yaw)
     g.save();

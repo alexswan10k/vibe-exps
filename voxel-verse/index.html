@@ -19,6 +19,7 @@
     <div id="objective">🌱 Build, survive the night, invite a friend!</div>
   </div>
   <div id="hud-top-right">
+    <button id="btn-inv" title="Inventory (I)">🎒</button>
     <canvas id="minimap" width="132" height="132"></canvas>
     <div id="coop-panel">
       <div id="coop-status">🟢 Solo — press <b>C</b> for Co-op</div>
@@ -30,13 +31,23 @@
       <div id="hearts"></div>
       <div id="hunger"></div>
     </div>
+    <div id="last-hit"></div>
     <div id="toolbar"></div>
-    <div id="hint">LMB break · RMB place · 1-9/wheel select · E eat · F fly · Shift sprint · C co-op · M map · H help</div>
+    <div id="hint">LMB break · RMB place · 1-9/wheel select · I inventory: drag to rearrange · E eat · F fly</div>
+  </div>
+  <div id="inventory-panel" class="hidden">
+    <div id="inv-head"><b>🎒 Inventory</b><span id="inv-sub"></span><button id="btn-inv-close" title="Close (I)">✕</button></div>
+    <div class="inv-hotbar-label">Hotbar — drag to rearrange, click to select</div>
+    <div id="inv-hotbar-row"></div>
+    <div class="inv-hotbar-label">All blocks — drag onto the hotbar, or click to assign to the selected slot</div>
+    <div id="inv-grid"></div>
   </div>
   <div id="chat-log"></div>
   <div id="chat-input-row" class="hidden"><span>&gt;</span><input id="chat-input" maxlength="120" placeholder="Message + Enter (T to open)"></div>
   <div id="toast-root"></div>
   <div id="damage-vignette"></div>
+  <div id="vignette"></div>
+  <div id="underwater"></div>
 </div>
 
 <!-- Start / Pause menu -->
@@ -59,7 +70,9 @@
     </div>
     <div class="menu-grid">
       <label>Mode <select id="opt-mode"><option value="survival">Survival</option><option value="creative">Creative</option></select></label>
+      <label>Difficulty <select id="opt-diff"><option value="peaceful">Peaceful</option><option value="easy">Easy</option><option value="normal" selected>Normal</option></select></label>
       <label>Render dist <select id="opt-render"><option>2</option><option>3</option><option selected>4</option><option>6</option></select></label>
+      <label>Quality <select id="opt-quality"><option value="auto" selected>Auto</option><option value="high">High</option><option value="med">Med</option><option value="low">Low</option></select></label>
       <label>Mouse <input id="opt-sens" type="range" min="0.5" max="4" step="0.1" value="1"></label>
       <label class="chk"><input id="opt-shadows" type="checkbox" checked> Shadows</label>
       <label class="chk"><input id="opt-clouds" type="checkbox" checked> Clouds</label>
@@ -67,11 +80,12 @@
     </div>
     <div id="howto" class="hidden">
       <b>WASD</b> move · <b>Space</b> jump / double-tap fly · <b>Shift</b> sprint · <b>F</b> fly toggle<br>
-      <b>Left click</b> mine / hit · <b>Right click</b> place · <b>1–9 / wheel</b> blocks · <b>E</b> eat dirt+apple<br>
+      <b>Left click</b> mine / hit · <b>Right click</b> place · <b>1–9 / wheel</b> blocks · <b>drag</b> hotbar slots to reorder<br>
+      <b>I</b> / 🎒 inventory — drag blocks onto the hotbar, or click one to assign it to the selected slot · <b>E</b> eat dirt+apple<br>
       <b>T</b> chat · <b>C</b> co-op room · <b>Q</b> drop torch · <b>Esc</b> menu · Survive the night — zombies come at dark!<br>
       💡 Break grass for apples, kill pigs for pork, place <b>glowstone</b> to stay safe.
     </div>
-    <div class="menu-foot">v2.0 “PERFECT” update · autosaves locally · co-op via room code (P2P)</div>
+    <div class="menu-foot">v2.5 · autosaves locally · co-op via room code (P2P)</div>
   </div>
 </div>
 
@@ -88,7 +102,7 @@
 
 <!-- Death screen -->
 <div id="death-screen" class="hidden">
-  <div class="menu-card small"><h2>💀 You died!</h2><p id="death-msg">The zombies got you.</p><button id="btn-respawn">Respawn</button></div>
+  <div class="menu-card small"><h2>💀 You died!</h2><p id="death-msg">The zombies got you.</p><div id="death-log">No events logged.</div><div class="menu-row two"><button id="btn-respawn">Respawn</button><button id="btn-copy-log" title="Copy the death log to send to Matt">📋 Copy log</button></div></div>
 </div>
 
 <button id="btn-toggle-touch">📱</button>
@@ -105,6 +119,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-<script src="script.js"></script>
+  <script src="script.js?v=2.5"></script>
 </body>
 </html>

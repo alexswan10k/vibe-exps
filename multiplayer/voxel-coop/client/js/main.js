@@ -5,15 +5,38 @@ import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
 import { Entities } from "./entities.js";
 import { Touch } from "./touch.js";
-import { CrackOverlay, Particles } from "./fx.js";
+import { CrackOverlay, Particles, TeamPings } from "./fx.js";
 import { Hand } from "./hand.js";
 import { UI } from "./ui.js";
 import { audio } from "./audio.js";
+import { itemIconURL } from "./icons.js";
 import { Minimap } from "./minimap.js";
 import { initWeather, onStrike as weatherOnStrike, onTime as weatherOnTime, updateWeather } from "./weather.js";
 
-const RENDER_DIST = 6;
-const UNLOAD_DIST = 8;
+// Mutable via the settings menu (render distance select). Previously `const`
+// RENDER_DIST = 6 while the menu wrote vox-render-dist to localStorage — the
+// setting did nothing and slow machines couldn't shed load.
+let RENDER_DIST = 6;
+let UNLOAD_DIST = 8;
+try {
+  const saved = Number(localStorage.getItem("vox-render-dist"));
+  if ([2, 4, 6, 8].includes(saved)) {
+    RENDER_DIST = saved;
+    UNLOAD_DIST = saved + 2;
+  }
+} catch { /* noop */ }
+// Settings menu calls back here (wired below after UI boots).
+function applyRenderDist(n) {
+  if (![2, 4, 6, 8].includes(n)) return;
+  if (n === RENDER_DIST) return;
+  RENDER_DIST = n;
+  UNLOAD_DIST = n + 2;
+  // streamChunks() also unloads newly-out-of-range chunks; skip pre-join.
+  try {
+    if (typeof net !== "undefined" && net?.connected && myId >= 0) streamChunks();
+  } catch { /* net not booted yet — next streamChunks() picks up the range */ }
+}
+window.voxApplyRenderDist = applyRenderDist;
 const $ = (id) => document.getElementById(id);
 
 // ---------- three.js setup ----------
@@ -67,11 +90,13 @@ function setShadows(on) {
   ui.hint(on ? "shadows on" : "shadows off (faster)");
 }
 
-// pooled torch lights + flame glow sprites. Baked flood-fill in world.js
-// guarantees every torch tints its walls (no pop-in at the pool edge); the
-// pool adds live flicker + speculars where the eye actually is.
+// flame glow sprites at the nearest torches. Torch ILLUMINATION is fully
+// static: the per-face raycast bake in world.js recomputes on chunk
+// (re)mesh — i.e. only when blocks are placed or removed — and costs
+// nothing per frame. No realtime point lights: 12 of them in a forward
+// renderer taxes every fragment every frame, and the bake already carries
+// the pools (with occlusion, which unshadowed point lights can't do).
 const TORCH_LIGHTS = 12;
-const TORCH_DIST = 22;
 const torchPool = [];
 function makeFlameTexture() {
   const c = document.createElement("canvas");
@@ -89,25 +114,44 @@ function makeFlameTexture() {
 }
 const flameTex = makeFlameTexture();
 for (let i = 0; i < TORCH_LIGHTS; i++) {
-  // modest intensity + tight decay: a warm pool near the flame, not a
-  // nuclear glow — the baked flood-fill already carries torchlight further
-  const l = new THREE.PointLight(0xffa845, 0, TORCH_DIST, 2);
-  scene.add(l);
+  // unlit additive sprite: 12 billboards are noise next to a forward
+  // renderer evaluating 12 point lights on every fragment
   const s = new THREE.Sprite(new THREE.SpriteMaterial({
     map: flameTex, transparent: true, opacity: 0,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  s.scale.set(1.1, 1.1, 1);
+  s.scale.set(1.7, 1.7, 1);
   scene.add(s);
-  torchPool.push({ light: l, sprite: s });
+  torchPool.push({ sprite: s });
 }
-// dedicated hand light: carrying a torch lights the way like a lantern
-const heldLight = new THREE.PointLight(0xffb45e, 0, 17, 2);
-scene.add(heldLight);
 let cachedNear = [];
 let lastTorchSearch = 0;
+// Diagnostic: force flame sprites to v (0 = hidden). Sprites are the only
+// per-frame torch visuals left; illumination itself is static.
+window.voxLightSet = (v) => torchPool.forEach((p) => { p.hold = v; });
+// Camera/probe diagnostic: nearest torch slots + camera state; voxCam sets
+// yaw/pitch and nudges position (<10m steps stay server-accepted).
+window.voxLightDbg = () => ({
+  sprites: torchPool.map((p) => p.sprite.visible),
+  near: cachedNear.length,
+  nearPos: cachedNear.slice(0, 4).map((t) => t.map((v) => +v.toFixed(1))),
+  cam: {
+    p: [player.pos.x, player.pos.y, player.pos.z].map((v) => +v.toFixed(1)),
+    yaw: +player.yaw.toFixed(2),
+    pitch: +player.pitch.toFixed(2),
+  },
+  time: +serverTime.toFixed(3),
+});
+window.voxCam = (yaw, pitch, dx, dz) => {
+  if (yaw !== undefined) player.yaw = yaw;
+  if (pitch !== undefined) player.pitch = pitch;
+  player.pos.x += dx || 0; player.pos.z += dz || 0;
+};
+// Read a client-side block id (ground truth for AIR placement).
+window.voxBlock = (x, y, z) => world.get(Math.floor(x), Math.floor(y), Math.floor(z));
 function updateTorchLights(now) {
-  // re-search nearest infrequently (sort over all torches), flicker every frame
+  // nearest-torch search at 4Hz; per frame only 12 sprite transforms.
+  // (Illumination is static — see the bake in world.js.)
   if (now - lastTorchSearch > 250) {
     lastTorchSearch = now;
     cachedNear = world.nearestTorches(player.pos, TORCH_LIGHTS, 34);
@@ -115,31 +159,16 @@ function updateTorchLights(now) {
   for (let i = 0; i < TORCH_LIGHTS; i++) {
     const p = torchPool[i];
     if (i < cachedNear.length) {
-      p.light.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
-      p.sprite.position.copy(p.light.position);
+      p.sprite.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
       const f = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
-      p.light.intensity = 1.1 + f;
-      p.sprite.material.opacity = 0.75 + f * 0.9;
-      const s = 1.0 + f * 0.35;
+      p.sprite.material.opacity = p.hold !== undefined ? p.hold : 0.75 + f * 0.9;
+      const s = 1.6 + f * 0.35;
       p.sprite.scale.set(s, s, 1);
-      p.sprite.visible = true;
+      p.sprite.visible = (p.hold ?? 1) > 0;
     } else {
-      p.light.intensity = 0;
       p.sprite.visible = false;
     }
   }
-  // held torch lantern
-  try {
-    const held = window.voxUI?.heldItem?.();
-    const eye = player.eye();
-    if (held?.id === B.TORCH && !dead) {
-      const d = player.lookDir();
-      heldLight.position.set(eye.x + d.x * 0.6, eye.y - 0.15, eye.z + d.z * 0.6);
-      heldLight.intensity = 1.0 + Math.sin(now / 120) * 0.1 + Math.sin(now / 43) * 0.05;
-    } else {
-      heldLight.intensity = 0;
-    }
-  } catch { /* UI not ready yet */ }
 }
 
 const world = new WorldClient(scene, makeMaterials());
@@ -210,14 +239,32 @@ const BREAK_COLORS = {
   22: 0x8a5f30, 23: 0xc22f2f, 24: 0xd6c48c, 25: 0x3f8f38, 26: 0x9ea6b5,
   27: 0x9e4030, 28: 0x857c72, 29: 0x5a3a1a, 30: 0x1a5230, 31: 0x4da64a,
   32: 0xd42a2a, 33: 0xf2d024, 34: 0xc22f2f, 35: 0x7a5a38, 36: 0x6bad4d,
-  37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8,
+  37: 0xc22f2f, 38: 0x2a1e4f, 39: 0xffe9a8, 40: 0xff5a00, 41: 0x17c964,
+  42: 0x17c964, 43: 0x8a5f30, 44: 0x9a9aa2, 45: 0xff7a1a, 46: 0xf4c20d,
+  47: 0x2a2a33, 48: 0x141414, 49: 0x3f88b8, 50: 0x7ab8d8, 51: 0x9a9aa2,
 };
+window.voxCreative = false;
+window.voxChest = null; // {x,y,z,slots} while a chest window is open
+window.voxEngine = null; // {x,y,z,at} while the engine panel is open
+window.voxVehicles = []; // latest server vehicle snapshot
+window.voxMachines = { engines: [], quarries: [], tanks: [] };
 function breakColor(block) {
   return BREAK_COLORS[block] ?? 0xffffff;
 }
 const entities = new Entities(scene);
 const ui = new UI();
+{
+  // Wire the settings-menu render-distance select to the live streamer.
+  const baseSave = ui.saveSettings.bind(ui);
+  ui.saveSettings = (patch) => {
+    baseSave(patch);
+    if (patch && typeof patch.renderDist === "number") applyRenderDist(patch.renderDist);
+  };
+  // Initial value already picked up from localStorage at the top of this
+  // module (before UI boot), so no apply call needed here.
+}
 const minimap = new Minimap();
+const teamPings = new TeamPings(scene);
 scene.add(camera); // the held-item viewmodel rides on the camera
 const hand = new Hand(camera, world.materials);
 window.voxHand = hand; // handy for screenshots/tests
@@ -254,7 +301,7 @@ ui.releaseLock = () => { if (document.pointerLockElement) document.exitPointerLo
 function menuVisible() { return $("menu").style.display !== "none"; }
 function relockIfClear() {
   if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
-      !menuVisible() && net?.connected) {
+      !menuVisible() && !chestOpen() && !engineOpen() && net?.connected) {
     player.lock();
   }
 }
@@ -265,7 +312,7 @@ player.onLockChange = (locked) => {
     mouseSafeRelease();
     // Esc with nothing open = pause menu (closing it re-locks via toggleHelp)
     if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
-        !menuVisible() && net?.connected) {
+        !menuVisible() && !chestOpen() && !engineOpen() && net?.connected) {
       ui.toggleHelp(true);
     }
   }
@@ -301,6 +348,115 @@ function showToast(text) {
   setTimeout(() => d.remove(), 4100);
 }
 
+// ---------- chest window (BuildCraft storage, 27 slots, server-authoritative) ----------
+function ensureChestModal() {
+  if (document.getElementById("chest-modal")) return;
+  const modal = document.createElement("div");
+  modal.id = "chest-modal";
+  modal.style.display = "none";
+  modal.innerHTML = `<div class="trade-panel"><h2>🧰 chest <button id="chest-close" title="close (ESC)">✕</button></h2>
+    <div id="chest-list"></div>
+    <div class="chest-hint">click a chest slot = take · click an inventory slot = store (shift = whole stack) · ESC closes</div></div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#chest-close").addEventListener("click", () => closeChest());
+}
+
+function renderChest() {
+  const modal = document.getElementById("chest-modal");
+  const list = document.getElementById("chest-list");
+  if (!modal || !list || !window.voxChest) return;
+  list.innerHTML = "";
+  window.voxChest.slots.forEach((s, cs) => {
+    const d = document.createElement("div");
+    d.className = "slot chest-slot";
+    if (s?.id) {
+      d.innerHTML = `<div class="icon" style="background-image:url(${itemIconURL(s.id)})"></div><span class="cnt">${s.n > 1 ? s.n : ""}</span>`;
+      d.title = `slot ${cs}`;
+    }
+    d.addEventListener("click", () => {
+      if (!window.voxChest) return;
+      net.chestTake(window.voxChest.x, window.voxChest.y, window.voxChest.z, cs);
+    });
+    list.appendChild(d);
+  });
+  modal.style.display = "flex";
+}
+
+function closeChest(relock = true) {
+  const modal = document.getElementById("chest-modal");
+  if (modal) modal.style.display = "none";
+  window.voxChest = null;
+  if (relock && net?.connected && !dead && !ui.invOpen) player.lock();
+}
+
+function chestOpen() {
+  return document.getElementById("chest-modal")?.style.display === "flex";
+}
+
+// ---------- engine panel (stirling engine status + refuel button) ----------
+function ensureEngineModal() {
+  if (document.getElementById("engine-modal")) return;
+  const modal = document.createElement("div");
+  modal.id = "engine-modal";
+  modal.style.display = "none";
+  modal.innerHTML = `<div class="trade-panel"><h2>🔥 engine <button id="engine-close" title="close (ESC)">✕</button></h2>
+    <div id="engine-status"></div>
+    <div id="engine-bar"><div></div></div>
+    <div class="engine-row"><button id="engine-fuel">add fuel (coal / oil / lava bucket)</button></div>
+    <div class="chest-hint">burns fuel to power adjacent quarries + pipe networks · auto-sucks lava/fuel from tanks + chests next door</div></div>`;
+  document.body.appendChild(modal);
+  modal.querySelector("#engine-close").addEventListener("click", () => closeEngine());
+  modal.querySelector("#engine-fuel").addEventListener("click", () => {
+    net.engineFuel();
+    hand.swing();
+    setTimeout(renderEngine, 400); // refresh after the server ticks
+  });
+}
+
+function openEnginePanel(x, y, z) {
+  window.voxEngine = { x, y, z, at: Date.now() };
+  ensureEngineModal();
+  renderEngine();
+  ui.releaseLock?.();
+  ui.hint("🔥 engine panel — add fuel to power your machines");
+}
+
+function renderEngine() {
+  const modal = document.getElementById("engine-modal");
+  const status = document.getElementById("engine-status");
+  const bar = document.getElementById("engine-bar");
+  if (!modal || !status || !bar || !window.voxEngine) return;
+  const { x, y, z, at } = window.voxEngine;
+  const e = (window.voxMachines.engines ?? []).find((v) => v.x === x && v.y === y && v.z === z);
+  if (!e) {
+    // no data: either the broadcast hasn't arrived yet, or the server is old
+    // (pre-machine builds never send "machines") — say so explicitly.
+    const waiting = Date.now() - at < 4000;
+    status.textContent = waiting
+      ? "⏳ waiting for engine data…"
+      : "⚠ no engine data from the server — restart it (deno task dev) to update";
+    bar.firstElementChild.style.width = "0%";
+  } else if (e.burning) {
+    status.textContent = `🔥 burning — ${Math.round((e.progress ?? 0) * 100)}% fuel left`;
+    bar.firstElementChild.style.width = `${Math.round((e.progress ?? 0) * 100)}%`;
+  } else {
+    status.textContent = "💤 idle — add fuel to power adjacent machines";
+    bar.firstElementChild.style.width = "0%";
+  }
+  modal.style.display = "flex";
+}
+
+function closeEngine(relock = true) {
+  const modal = document.getElementById("engine-modal");
+  if (modal) modal.style.display = "none";
+  window.voxEngine = null;
+  if (relock && net?.connected && !dead && !ui.invOpen) player.lock();
+}
+
+function engineOpen() {
+  return document.getElementById("engine-modal")?.style.display === "flex";
+}
+
 function decodeRLE(rle) {
   const out = new Uint8Array(CHUNK * WORLD_H * CHUNK);
   let o = 0;
@@ -312,6 +468,11 @@ function decodeRLE(rle) {
 }
 
 // ---------- day/night + weather ----------
+// Hoisted frame-loop temps: applyTime() runs every frame, so no `new` here.
+const SKY_DAY = new THREE.Color(0x3e9ed6);
+const SKY_NIGHT = new THREE.Color(0x060913);
+const SKY_GLOOM = new THREE.Color(0x4a5560);
+const _sd = new THREE.Vector3();
 function applyTime(t, rain = 0) {
   serverTime = t;
   serverRain = rain;
@@ -322,8 +483,9 @@ function applyTime(t, rain = 0) {
   const gloom = Math.min(1, rain * 0.85); // storms eat the sun
   const lit = day * (1 - gloom * 0.8);
   const night = 1 - day;
-  const sky = new THREE.Color(0x3e9ed6).lerp(new THREE.Color(0x060913), Math.max(night * 0.92, gloom * 0.55));
-  if (gloom > 0.05) sky.lerp(new THREE.Color(0x4a5560), gloom * 0.45);
+  const sky = scene.background instanceof THREE.Color ? scene.background : new THREE.Color();
+  sky.copy(SKY_DAY).lerp(SKY_NIGHT, Math.max(night * 0.92, gloom * 0.55));
+  if (gloom > 0.05) sky.lerp(SKY_GLOOM, gloom * 0.45);
   scene.background = sky;
   scene.fog.color.copy(sky);
   scene.fog.near = 40 - gloom * 12;
@@ -338,7 +500,7 @@ function applyTime(t, rain = 0) {
   sun.target.position.copy(player.pos);
   // sun/moon discs ride the same direction as the light; stars hang overhead
   const eye = player.eye();
-  const sd = new THREE.Vector3().copy(sun.position).sub(player.pos).normalize();
+  const sd = _sd.copy(sun.position).sub(player.pos).normalize();
   for (const [m, s] of [[sunDisc, 1], [sunGlow, 1], [moonDisc, -1]]) {
     m.position.copy(eye).addScaledVector(sd, 380 * s);
     m.lookAt(camera.position);
@@ -378,10 +540,11 @@ function streamChunks() {
 
 // ---------- mining ----------
 function breakTime(block, heldId) {
+  if (window.voxCreative) return 0.05; // creative: instant-ish, still shows a flicker
   const base = HARDNESS[block];
   if (base === undefined || base === Infinity) return Infinity;
   const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42].includes(block);
+  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51].includes(block);
   if (isStone) {
     // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
     if (mult <= 1) return base * 3.3;
@@ -397,7 +560,20 @@ function tryAttack() {
   const nowSwing = performance.now();
   if (nowSwing - lastSwing < 330) return false;
   const hitMob = entities.pickMob(player.eye(), player.lookDir());
-  if (hitMob === null) return false;
+  if (hitMob === null) {
+    // no mob: LMB on a free vehicle breaks it back into an item
+    if (!player.sailing && !player.ridingCart) {
+      const hitVeh = entities.pickVehicle(player.eye(), player.lookDir(), 5);
+      if (hitVeh !== null) {
+        lastSwing = nowSwing;
+        net.vehicleBreak(hitVeh);
+        hand.swing();
+        ui.pulse();
+        return true;
+      }
+    }
+    return false;
+  }
   lastSwing = nowSwing;
   const held = ui.heldItem();
   net.attackMob(hitMob, held?.id);
@@ -411,7 +587,31 @@ function mouseSafeRelease() {
   clearBreak();
 }
 
+// Scan the look ray for a water/lava block (the voxel raycaster skips water).
+function findFluidAim() {
+  const eye = player.eye(), dir = player.lookDir();
+  for (let t = 0.5; t <= 6; t += 0.5) {
+    const bx = Math.floor(eye.x + dir.x * t);
+    const by = Math.floor(eye.y + dir.y * t);
+    const bz = Math.floor(eye.z + dir.z * t);
+    const b = world.get(bx, by, bz);
+    if (b === B.WATER || b === B.LAVA) return { x: bx, y: by, z: bz, block: b };
+  }
+  return null;
+}
+
+function sendTeamPing() {
+  if (!net?.connected || myId < 0 || dead || ui.invOpen || ui.helpOpen() || ui.tradeOpen() ||
+      ui.chatFocused() || menuVisible() || chestOpen() || engineOpen() ||
+      $("screen-settings").style.display !== "none") return;
+  if (document.activeElement?.matches("input, textarea, select, [contenteditable='true']")) return;
+  const hit = world.raycast(player.eye(), player.lookDir(), 46);
+  if (!hit) { ui.hint("Aim at a block within 46m to ping your team (Q)"); return; }
+  net.worldPing(hit.x, hit.y, hit.z);
+}
+
 const touch = new Touch(player, {
+  ping: sendTeamPing,
   mine: (down) => {
     if (!net?.connected || ui.invOpen || dead) return;
     mouse.left = down;
@@ -461,12 +661,47 @@ function doPlace() {
     ui.hint("🧑‍🌾 trading…");
     return;
   }
+  // boats launch from the held item straight onto aimed water (raycast skips it)
+  const heldEarly = ui.heldItem();
+  if (heldEarly?.id === 158) {
+    const f = findFluidAim();
+    if (f && f.block === B.WATER) {
+      net.vehiclePlace("boat", f.x, f.y, f.z);
+      hand.swing();
+      audio.place();
+    } else {
+      ui.hint("🚣 boats need water — aim at water");
+    }
+    return;
+  }
   const hit = world.raycast(eye, dir, 6);
   if (!hit) return;
   // interactables first (MC behaviour): table opens crafting, furnace smelts, bed sets spawn
   if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
   if (hit.block === B.FURNACE) { net.smelt("start", hit.x, hit.y, hit.z); return; }
   if (hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); return; }
+  if (hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest…"); return; }
+  if (hit.block === B.ENGINE) { openEnginePanel(hit.x, hit.y, hit.z); return; }
+  if (hit.block === B.TANK) {
+    const h = ui.heldItem();
+    net.tankUse(hit.x, hit.y, hit.z, h?.id);
+    hand.swing();
+    return;
+  }
+  if (hit.block === B.LAVA && ui.heldItem()?.id === 155) {
+    net.bucketFill(hit.x, hit.y, hit.z);
+    hand.swing();
+    return;
+  }
+  if (ui.heldItem()?.id === 159) {
+    if (hit.block === B.RAIL) {
+      net.vehiclePlace("cart", hit.x, hit.y, hit.z);
+      hand.swing();
+    } else {
+      ui.hint("🛒 carts need rails — aim at rails");
+    }
+    return;
+  }
   const held = ui.heldItem();
   if (!held || !isPlaceable(held.id)) {
     ui.hint("select a block in hotbar (1-9) to place");
@@ -531,6 +766,7 @@ function tickBreaking(dt) {
 
 // furnace / bed / TNT interact
 addEventListener("keydown", (e) => {
+  if (e.code === "KeyQ" && !e.repeat) { sendTeamPing(); return; }
   if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
   if (e.code === "KeyN" && !ui.chatFocused()) {
     const on = minimap.toggle();
@@ -540,6 +776,19 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyP" && !ui.chatFocused()) { setShadows(!shadowsOn); return; }
   if (e.code === "KeyF" && !ui.chatFocused()) {
     if (!net?.connected) return;
+    // riding: F always hops out first
+    if (player.sailing || player.ridingCart) {
+      net.vehicleExit();
+      hand.swing();
+      return;
+    }
+    // F on a boat/cart hops in
+    const vehId = entities.pickVehicle(player.eye(), player.lookDir(), 5);
+    if (vehId !== null && vehId !== undefined) {
+      net.vehicleEnter(vehId);
+      hand.swing();
+      return;
+    }
     // F on a wolf attempts to tame it (keeps furnace/bed/TNT behaviour below)
     const mobId = entities.pickMob(player.eye(), player.lookDir(), 5);
     if (mobId !== null && mobId !== undefined && entities.mobs.get(mobId)?.kind === "wolf") {
@@ -550,8 +799,54 @@ addEventListener("keydown", (e) => {
     }
     const hit = world.raycast(player.eye(), player.lookDir(), 6);
     if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
+    else if (hit && hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest… (click chest slot = take, click inv slot = store)"); }
+    else if (hit && hit.block === B.ENGINE) { openEnginePanel(hit.x, hit.y, hit.z); }
     else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
+    else if (hit && hit.block === B.TANK) {
+      const held = ui.heldItem();
+      net.tankUse(hit.x, hit.y, hit.z, held?.id);
+      hand.swing();
+    }
+    else if (hit && hit.block === B.LAVA) {
+      if ((ui.slots ?? []).some((s) => s?.id === 155)) { net.bucketFill(hit.x, hit.y, hit.z); hand.swing(); }
+      else ui.hint("🪣 need an empty bucket (craft: 3 iron)");
+    }
+    else {
+      // water is skipped by the raycaster — scan the look ray for it
+      const f = findFluidAim();
+      if (f && (ui.slots ?? []).some((s) => s?.id === 155)) { net.bucketFill(f.x, f.y, f.z); hand.swing(); }
+      else if (window.voxCreative) {
+        // creative F toggles flight without the double-Space dance
+        player.flying = !player.flying;
+        player.vel.set(0, 0, 0);
+        ui.hint(player.flying ? "✨ flying (F or double-Space to land)" : "walking");
+      }
+    }
+  }
+  if (e.code === "KeyX" && !ui.chatFocused()) {
+    // bow shot along the look dir (needs bow + arrows, 1s server cooldown)
+    if (!net?.connected || dead || ui.invOpen) return;
+    if (!(ui.slots ?? []).some((s) => s?.id === 148)) {
+      ui.hint("need a bow (craft: sticks + string) — X to shoot");
+      return;
+    }
+    const d = player.lookDir();
+    net.shoot(d.x, d.y, d.z);
+    hand.swing();
+    audio.hit();
+  }
+  if (e.code === "KeyC" && !ui.chatFocused()) {
+    // creative test blocks: one press stocks chest/pipe/engine/quarry + bow kit
+    if (!net?.connected || dead) return;
+    if (!window.voxCreative) {
+      ui.hint("creative only — /creative or /gamemode creative first");
+      return;
+    }
+    for (const [id, n] of [[43, 4], [44, 32], [45, 2], [46, 1], [102, 16], [148, 1], [149, 32], [150, 1], [152, 1], [49, 16], [50, 2], [51, 1], [155, 4], [52, 32], [158, 1], [159, 1]]) {
+      net.give(id, n);
+    }
+    ui.hint("✨ creative blocks stocked (machines + fluids + boats/carts + weapons)");
   }
   if (e.code === "KeyR" && !ui.chatFocused()) {
     if (!net?.connected || dead || ui.invOpen) return;
@@ -605,15 +900,27 @@ addEventListener("keydown", (e) => {
 // ---------- net handlers (attach to whichever transport is active) ----------
 function attachHandlers() {
 net.on("open", () => ui.status("connected — loading world…"));
-net.on("close", () => ui.status("disconnected — retrying…"));
+net.on("close", () => { teamPings.clear(); ui.status("disconnected — retrying…"); });
+net.on("worldPing", (m) => {
+  teamPings.receive(m);
+  audio.pickup();
+  ui.chatMsg("team", `${m.name} marked ${m.x}, ${m.y}, ${m.z} (15s)`);
+});
 
 net.on("welcome", (m) => {
+  teamPings.clear();
   welcomed = true;
   myId = m.id;
   serverTime = m.time;
   serverRain = m.rain ?? 0;
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null;
   spawnPos = m.spawn;
+  if (m.creative) {
+    window.voxCreative = true;
+    ui.hint("✨ CREATIVE: F fly · C blocks · X bow · infinite place");
+  }
   ui.status(`playing as ${$("menu-name").value || "player"}`);
   $("menu").style.display = "none";
   ui.maybeShowHelp();
@@ -701,6 +1008,7 @@ net.on("boom", (m) => {
   ui.hint("💥 BOOM!");
 });
 net.on("reset", (m) => {
+  teamPings.clear();
   // server wiped the world: drop every cached chunk (seed changed, old
   // terrain is stale), teleport to the new spawn, re-stream from scratch
   for (const k of [...world.chunks.keys()]) {
@@ -709,6 +1017,8 @@ net.on("reset", (m) => {
   }
   pendingChunks.clear();
   player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null; // teleport, not a fall — don't bill the next landing
   spawnPos = m.spawn;
   streamChunks();
   ui.status(`fresh world — seed ${m.seed}`);
@@ -723,12 +1033,62 @@ net.on("smeltState", (m) => {
   ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
 });
 net.on("denied", (m) => ui.hint(m.reason));
+net.on("tp", (m) => {
+  // authoritative teleport (respawn/spawn/home/correction): snap + drop all
+  // fall state so the next landing can't bill a fall you didn't take
+  player.pos.set(m.p[0], m.p[1], m.p[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null;
+});
 net.on("toast", (m) => {
   showToast(m.text);
   audio.pickup();
   ui.chatMsg("server", m.text);
 });
 net.on("tradeOffers", (m) => ui.showTrades(m.id, m.offers));
+net.on("chest", (m) => {
+  window.voxChest = { x: m.x, y: m.y, z: m.z, slots: m.slots };
+  ensureChestModal();
+  renderChest();
+  ui.releaseLock?.();
+});
+net.on("machines", (m) => {
+  window.voxMachines = { engines: m.engines ?? [], quarries: m.quarries ?? [], tanks: m.tanks ?? [] };
+  if (engineOpen()) renderEngine();
+});
+net.on("vehicles", (m) => {
+  window.voxVehicles = m.list ?? [];
+  entities.setVehicles(window.voxVehicles);
+});
+net.on("ride", (m) => {
+  if (m.id) {
+    player.sailing = m.kind === "boat";
+    player.ridingCart = m.kind === "cart";
+    player.cartAxis = null;
+    player.cartDir = 1;
+    player.vel.set(0, 0, 0);
+    player.flying = false;
+    ui.hint(m.kind === "boat"
+      ? "🚣 sailing! WASD + shift for speed · F to hop out"
+      : "🛒 riding! face along the track, W/S throttle · F to hop out");
+    audio.splash();
+  } else {
+    player.sailing = false;
+    player.ridingCart = false;
+  }
+});
+net.on("gamemode", (m) => {
+  window.voxCreative = !!m.creative;
+  if (!m.creative) player.flying = false;
+  ui.hint(m.creative ? "✨ CREATIVE: F fly · C blocks · X bow · infinite place" : "survival mode");
+});
+net.on("shot", (m) => {
+  // arrow tracer: quick cyan burst at the shooter's eye + twang
+  try {
+    particles.burst(m.from[0], m.from[1], m.from[2], 0x9adcff, 4);
+    audio.hit();
+  } catch { /* noop */ }
+});
 net.on("markers", (m) => {
   mapMarkers = m;
   window.voxMarkers = m; // read by minimap.draw()
@@ -793,6 +1153,35 @@ ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
 ui.onTrade = (id, slot) => net.trade(id, slot);
+// chest open: inventory clicks store into the chest instead of swapping
+{
+  const baseClickInv = ui.clickInv.bind(ui);
+  ui.clickInv = (i) => {
+    if (chestOpen() && window.voxChest) {
+      const s = ui.slots[i];
+      if (!s?.id) return;
+      // find first compatible chest slot (same id or empty)
+      const slots = window.voxChest.slots;
+      let cs = slots.findIndex((c) => c.id === s.id && c.n < 64);
+      if (cs < 0) cs = slots.findIndex((c) => !c.id);
+      if (cs < 0) { ui.hint("chest is full"); return; }
+      // shift = whole stack, else single item (read shift from last click event)
+      const all = window.voxShiftDown === true;
+      net.chestPut(window.voxChest.x, window.voxChest.y, window.voxChest.z, i, cs, all);
+      return;
+    }
+    baseClickInv(i);
+  };
+  addEventListener("keydown", (e) => { if (e.key === "Shift") window.voxShiftDown = true; });
+  addEventListener("keyup", (e) => { if (e.key === "Shift") window.voxShiftDown = false; });
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && chestOpen()) { closeChest(); }
+    if (e.key === "Escape" && engineOpen()) { closeEngine(); }
+  });
+  // open the inventory automatically behind the chest so storing is one click
+  const baseRenderChest = renderChest;
+  void baseRenderChest;
+}
 $("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
@@ -827,14 +1216,18 @@ function frame() {
 
     if (now - lastStream > 400) { lastStream = now; streamChunks(); }
     updateTorchLights(now); // search 4Hz internally, flicker every frame
-    // rain falls around the camera; drops recycle to the top
+    // rain falls around the camera; drops recycle to the top.
+    // Active drop count scales with intensity (drizzle ~= 40% of the buffer)
+    // so light rain doesn't pay the full 700-point rewrite + upload.
     rainPts.visible = serverRain > 0.05;
     if (rainPts.visible) {
       const ex = player.pos.x, ey = player.pos.y, ez = player.pos.z;
       rainPts.position.set(ex, ey - 6, ez);
+      const active = Math.floor(RAIN_N * Math.min(1, 0.35 + serverRain * 0.65));
+      rainGeo.setDrawRange(0, active);
       const arr = rainGeo.attributes.position.array;
       const fall = dt * (18 + serverRain * 10);
-      for (let i = 0; i < RAIN_N; i++) {
+      for (let i = 0; i < active; i++) {
         arr[i * 3 + 1] -= fall;
         if (arr[i * 3 + 1] < 0) {
           arr[i * 3] = (Math.random() - 0.5) * 40;
@@ -844,11 +1237,21 @@ function frame() {
       }
       rainGeo.attributes.position.needsUpdate = true;
       rainPts.material.opacity = 0.25 + serverRain * 0.5;
+    } else if (rainGeo.drawRange.count !== RAIN_N) {
+      rainGeo.setDrawRange(0, RAIN_N);
     }
     if (now - lastTorch > 500) {
       lastTorch = now;
       ui.setNearTable(world.hasBlockNear(player.pos.x, player.pos.y, player.pos.z, B.CRAFT_TABLE, 4));
-      minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8);
+      // Minimap is ~6.5k column scans: redraw at most 1Hz and skip when the
+      // player hasn't moved (static view = identical pixels).
+      const moved = !frame._mmPos ||
+        Math.hypot(player.pos.x - frame._mmPos.x, player.pos.z - frame._mmPos.z) > 2;
+      if (moved || now - (frame._mmAt ?? 0) > 1500) {
+        frame._mmAt = now;
+        frame._mmPos = { x: player.pos.x, z: player.pos.z };
+        minimap.draw(world, player, entities, spawnPos, serverTime < 0.2 || serverTime > 0.8, teamPings.markers.values());
+      }
       // unstick: if embedded in a block (stale spawn, lag), pop upward
       if (player.collides(world, player.pos.x, player.pos.y, player.pos.z)) {
         player.pos.y += 1;
@@ -863,8 +1266,11 @@ function frame() {
         Math.round(player.pitch * 100) / 100,
       );
     }
-    // contextual hint: lava warning > compass > furnace / TNT
-    if (!dead) {
+    // contextual hint: lava warning > compass > furnace / TNT.
+    // Throttled to ~7Hz: the raycast + DOM write ran every frame (60Hz).
+    // ui.hint() itself now also dedupes identical text (no-op on repeat).
+    if (!dead && now - (frame._hintAt ?? 0) > 140) {
+      frame._hintAt = now;
       const feetB = world.get(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.3), Math.floor(player.pos.z));
       const held = ui.heldItem();
       const hit = world.raycast(player.eye(), player.lookDir(), 6);
@@ -882,6 +1288,26 @@ function frame() {
       }
       else if (hit?.block === B.FURNACE) ui.hint("F: smelt iron ore / raw pork + coal → ingot / cooked pork");
       else if (hit?.block === B.TNT) ui.hint("🧨 F: light it — RUN!");
+      else if (hit?.block === B.CHEST) ui.hint("🧰 F: open chest (27 slots) · E inventory to store");
+      else if (hit?.block === B.ENGINE) {
+        const eng = (window.voxMachines.engines ?? []).find((e) => e.x === hit.x && e.y === hit.y && e.z === hit.z);
+        ui.hint(eng?.burning ? `🔥 engine burning ${Math.round((eng.progress ?? 0) * 100)}% — quarry/pipes powered (F: panel)` : "🔥 F: engine panel — add coal/oil/lava to power quarry + pipes");
+      }
+      else if (hit?.block === B.QUARRY) {
+        const q = (window.voxMachines.quarries ?? []).find((e) => e.x === hit.x && e.y === hit.y && e.z === hit.z);
+        ui.hint(q ? (q.done ? "⛏ quarry done — move it for a new shaft" : q.powered ? "⛏ quarry digging 9×9… (chest/pipe next door catches loot)" : "⛏ quarry idle — needs a fueled engine next door") : "⛏ quarry — needs a fueled engine next door");
+      }
+      else if (hit?.block === B.PIPE) ui.hint("🔧 pipe: connects chest → chest, needs an engine burning nearby");
+      else if (hit?.block === B.FLUID_PIPE) ui.hint("🔧 fluid pipe: tank → tank, needs an engine burning nearby");
+      else if (hit?.block === B.TANK) {
+        const tk = (window.voxMachines.tanks ?? []).find((v) => v.x === hit.x && v.y === hit.y && v.z === hit.z);
+        ui.hint(tk?.fluid ? `🧪 tank: ${tk.amount}/16000 mB ${tk.fluid} (F with bucket)` : "🧪 empty tank — scoop water/lava with a bucket (F), then F here");
+      }
+      else if (hit?.block === B.PUMP) ui.hint("⛽ pump: taps adjacent water/lava — needs a fueled engine next door");
+      else if (hit?.block === B.RAIL) ui.hint("🛤 rails — RMB with a minecart to launch it (F in/out, W/S throttle)");
+      else if (hit?.block === B.OIL_ORE) ui.hint("🛢 oil ore — 2× coal burn time in engines");
+      else if (!player.sailing && !player.ridingCart && entities.pickVehicle(player.eye(), player.lookDir(), 5) !== null) ui.hint("F: hop in · LMB: break it down");
+      else if (window.voxCreative && !hit) ui.hint("✨ creative: F fly · C blocks · X bow");
       else if (hit) {
         const t = ui.el("hint").textContent;
         if (t.startsWith("F: smelt") || t.startsWith("🧭") || t.startsWith("🔥")) ui.hint("");
@@ -914,6 +1340,7 @@ function frame() {
   }
   applyTime(serverTime, serverRain); // cheap enough; keeps sun glued to player
   updateWeather(dt);
+  teamPings.update(camera, now);
   renderer.render(scene, camera);
 }
 applyTime(0.25, 0);

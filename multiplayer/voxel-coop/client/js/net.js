@@ -1,5 +1,14 @@
 // WebSocket client: connect, send helpers, message dispatch, auto-reconnect.
 import { httpBase } from "./config.js";
+const worldPingTimes = new WeakMap();
+
+function worldPing(x, y, z, now = performance.now()) {
+  if (!this.connected || now - (worldPingTimes.get(this) ?? -Infinity) < 1000) return false;
+  this.send({ t: "worldPing", x, y, z });
+  worldPingTimes.set(this, now);
+  return true;
+}
+
 export class Net {
   constructor() {
     this.ws = null;
@@ -80,6 +89,7 @@ export class Net {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(m));
   }
 
+  worldPing(x, y, z) { return worldPing.call(this, x, y, z); }
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }
@@ -103,6 +113,19 @@ export class Net {
   tame(id) { this.send({ t: "tame", id }); }
   askTrade(id) { this.send({ t: "askTrade", id }); }
   trade(id, slot) { this.send({ t: "trade", id, slot }); }
+  shoot(dx, dy, dz) { this.send({ t: "shoot", dx, dy, dz }); }
+  chestOpen(x, y, z) { this.send({ t: "chestOpen", x, y, z }); }
+  chestPut(x, y, z, slot, cs, all) { this.send({ t: "chestPut", x, y, z, slot, cs, all }); }
+  chestTake(x, y, z, cs) { this.send({ t: "chestTake", x, y, z, cs }); }
+  engineFuel() { this.send({ t: "engineFuel" }); }
+  bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
+  tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
+  vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
+  vehicleExit() { this.send({ t: "vehicleExit" }); }
+  vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }
+  gamemode(mode) { this.send({ t: "gamemode", mode }); }
+  give(id, n) { this.send({ t: "give", id, n }); }
 }
 
 // Legacy HTTP-poll transport for devices without working websockets.
@@ -228,6 +251,7 @@ export class PollNet {
     }
   }
 
+  worldPing(x, y, z) { return worldPing.call(this, x, y, z); }
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }
@@ -251,4 +275,17 @@ export class PollNet {
   tame(id) { this.send({ t: "tame", id }); }
   askTrade(id) { this.send({ t: "askTrade", id }); }
   trade(id, slot) { this.send({ t: "trade", id, slot }); }
+  shoot(dx, dy, dz) { this.send({ t: "shoot", dx, dy, dz }); }
+  chestOpen(x, y, z) { this.send({ t: "chestOpen", x, y, z }); }
+  chestPut(x, y, z, slot, cs, all) { this.send({ t: "chestPut", x, y, z, slot, cs, all }); }
+  chestTake(x, y, z, cs) { this.send({ t: "chestTake", x, y, z, cs }); }
+  engineFuel() { this.send({ t: "engineFuel" }); }
+  bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
+  tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
+  vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
+  vehicleExit() { this.send({ t: "vehicleExit" }); }
+  vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }
+  gamemode(mode) { this.send({ t: "gamemode", mode }); }
+  give(id, n) { this.send({ t: "give", id, n }); }
 }

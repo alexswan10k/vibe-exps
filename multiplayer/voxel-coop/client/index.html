@@ -10,7 +10,7 @@
 <body>
 <div id="game"></div>
 <div id="crosshair">+</div>
-<canvas id="minimap" width="132" height="132" title="minimap (N toggles) · green spawn · orange home · purple bed · red mob · cyan player · yellow you"></canvas>
+<canvas id="minimap" width="132" height="132" title="minimap (N toggles) · green spawn · orange home · purple bed · red mob · cyan player · cyan ring team ping · yellow you"></canvas>
 <button id="touch-toggle" title="touch controls">📱</button>
 <div id="status">not connected</div>
 <div id="hint"></div>
@@ -21,7 +21,7 @@
 
 <div id="chat">
   <div id="chat-log"></div>
-  <input id="chat-input" placeholder="chat… (T) · /help /players /spawn /sethome /home /rain /stats" maxlength="200" autocomplete="off">
+  <input id="chat-input" placeholder="chat… (T) · /help /creative /kit buildcraft /give" maxlength="200" autocomplete="off">
 </div>
 
 <div id="inventory" style="display:none">
@@ -77,6 +77,7 @@
   <div id="look-zone"></div>
   <div id="joy"><div id="joy-knob"></div></div>
   <div id="touch-btns">
+    <button class="tbtn" id="tb-ping" aria-label="Ping aimed block for teammates">Ping</button>
     <div class="tbtn" id="tb-attack">⚔️</div>
     <div class="tbtn" id="tb-mine">⛏️</div>
     <div class="tbtn" id="tb-place">🧱</div>
@@ -95,10 +96,15 @@
       <li>Mine <b>stone → coal → iron → gold → diamond</b> (deeper = richer). <b>F</b> smelts: iron, gold, pork, beef, chicken, <b>sand → glass</b>. Caves wind below — stair-hole entrances drop in, ores show on the walls, bring torches.</li>
       <li><b>Bed</b> (RMB or F): sets your spawn. <b>Ladders</b>: Space climbs. Cows → beef, chickens → drumsticks.</li>
       <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack. <b>TNT</b>: place, aim, <b>F</b> to light — obsidian survives blasts.</li>
-      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap (green spawn · orange home · purple bed) · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap (green spawn · orange home · purple bed) · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows · <b>Q</b> ping a block for your team (15s marker)</li>
       <li><b>R</b> cast fishing rod (needs rod: sticks + string, wait for a bite) · <b>F</b> on a 🐺 wolf to tame · <b>RMB</b> on a 🧑‍🌾 villager to trade · hold a 🧭 compass to find home/spawn · beware ☠️ lava lakes deep down</li>
       <li><b>/sethome /home</b> fast-travel · <b>/rain</b> summon storms (storms shield undead from sun!) · beware the 👹 <b>ogre</b></li>
+      <li>🔧 <b>BuildCraft</b>: craft a <b>chest</b> (F/RMB to open, 27 slots), <b>engine</b> (F/RMB panel → add coal/oil/lava, auto-sucks from tanks/chests), <b>pipes</b> (chest→chest, needs engine burning nearby), <b>quarry</b> (9×9 auto-mine next to a fueled engine). Oil ore glows in deserts.</li>
+      <li>🧪 <b>Fluids</b>: <b>bucket</b> (3 iron) scoops water/lava with <b>F</b>, <b>tank</b> holds 16 buckets (F with bucket to fill/draw), <b>pump</b> taps adjacent water/lava (needs engine), <b>fluid pipes</b> balance tanks. Lava buckets burn 120s in engines.</li>
+      <li>⚔️ <b>Weapons</b>: <b>bow + arrows</b> (X to shoot), <b>warhammer</b> (12 dmg launcher), <b>dagger</b>, <b>firebrand</b>. <b>C</b> stocks creative blocks.</li>
+      <li>✨ <b>Creative</b>: <b>/creative</b> (or /gamemode creative) → fly (double-Space or F), infinite blocks, no damage. <b>/kit buildcraft|fluids|weapons|creative</b>, <b>/give &lt;id&gt; [n]</b>, <b>/survival</b> to go back.</li>
       <li><b>wheel / 1-9</b> cycle hotbar · <b>double-click food</b> in inventory to eat · <b>ESC</b> closes inventory/panels</li>
+      <li>🚣 <b>Vehicles</b>: <b>boat</b> (planks, RMB on water) sails fast — WASD + shift, <b>F</b> hops in/out, LMB breaks a free one. <b>rails</b> (iron + sticks) + <b>minecart</b> (RMB on rails, face along the track, W/S throttle, F hops out).</li>
       <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
     </ol>
     <button id="help-close">play (H)</button>
@@ -116,7 +122,7 @@
       <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
       <b>hold LMB</b> mine · <b>RMB</b> place · <b>RMB villager</b> trade · <b>click mob</b> attack<br>
       <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>G</b> eat pork<br>
-      <b>F</b> use furnace / light TNT / tame wolf (look at it) · <b>R</b> fish (rod needed) · <b>T</b> chat · <b>N</b> minimap · <b>shift</b> sprint<br>
+      <b>F</b> use furnace / light TNT / tame wolf (look at it) · <b>R</b> fish (rod needed) · <b>T</b> chat · <b>N</b> minimap · <b>Q</b> team ping · <b>shift</b> sprint<br>
       old iPad with no websocket? open this page with <b>?transport=poll</b>
     </div>
     <div class="menu-foot">wheel = hotbar · E inventory (ESC close) · double-click food = eat · shift sprint · H help</div>

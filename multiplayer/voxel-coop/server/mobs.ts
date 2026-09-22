@@ -273,6 +273,18 @@ export class MobSim {
     }
   }
 
+  /** Sight check: stepped sample, solid blocks stop sight. Mobs can't hit through walls. */
+  losClear(world: World, ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const steps = Math.max(2, Math.ceil(dist / 0.5));
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (world.isSolid(Math.floor(ax + dx * t), Math.floor(ay + dy * t), Math.floor(az + dz * t))) return false;
+    }
+    return true;
+  }
+
   /** Exposed to open sky? (for zombie sunburn) */
   exposed(world: World, m: Mob): boolean {
     const x = Math.floor(m.p[0]), z = Math.floor(m.p[2]);
@@ -282,7 +294,7 @@ export class MobSim {
     return true;
   }
 
-  tick(dt: number, world: World, players: { p: Vec3; hurt: (dmg: number) => void; name?: string }[], night: boolean): void {
+  tick(dt: number, world: World, players: { p: Vec3; hurt: (dmg: number, src?: string) => void; name?: string }[], night: boolean): void {
     const overcast = this.rain > 0.5;
     const HOSTILE = new Set(["zombie", "skeleton", "spider", "ogre"]);
     for (const m of [...this.mobs.values()]) {
@@ -321,7 +333,7 @@ export class MobSim {
       if ((HOSTILE.has(m.kind) && hostileNow) || wolfHostile || wispHostile || wraithHostile || golemProvoked) {
         // chase nearest player within 24 blocks (ogre smells you from 32)
         const range = m.kind === "ogre" ? 32 : m.kind === "wisp" ? 20 : m.kind === "golem" ? 16 : 24;
-        let best: { p: Vec3; hurt: (dmg: number) => void } | null = null;
+        let best: { p: Vec3; hurt: (dmg: number, src?: string) => void } | null = null;
         let bestD = range * range;
         for (const pl of players) {
           if (pl.p[1] < -20) continue;
@@ -342,7 +354,8 @@ export class MobSim {
           } else {
             this.step(m, (dx / len) * sp * dt, (dz / len) * sp * dt, world, m.kind === "spider" ? 3 : 2);
           }
-          if (bestD < 2.6 && Math.abs(best.p[1] - m.p[1]) < 2.5 && m.atkCd <= 0) {
+          if (bestD < 2.6 && Math.abs(best.p[1] - m.p[1]) < 2.5 && m.atkCd <= 0 &&
+              this.losClear(world, m.p[0], m.p[1] + 0.9, m.p[2], best.p[0], best.p[1], best.p[2])) {
             if (m.kind === "golem") {
               // golems only ever target players (this loop iterates players,
               // never the mobs map) — villagers and owner-bearing tamed wolves
@@ -352,7 +365,7 @@ export class MobSim {
               if (kind === "villager" || (typeof owner === "string" && owner)) continue;
             }
             m.atkCd = m.kind === "ogre" ? 1.6 : m.kind === "golem" ? 1.2 : 1.0;
-            best.hurt(st.dmg);
+            best.hurt(st.dmg, m.kind);
           }
         } else {
           this.wander(m, dt, world, st.speed * 0.4);

@@ -2,7 +2,9 @@
   "tasks": {
     "dev": "deno run --allow-net --allow-read --allow-write --allow-env --allow-sys server/main.ts",
     "peaceful": "deno run --allow-net --allow-read --allow-write --allow-env --allow-sys server/main.ts -- --peaceful",
-    "reset": "rm -f data/world.json data/players.json && echo 'saves wiped — next start generates a fresh world'",
-    "check": "deno check server/main.ts"
+    "creative": "deno run --allow-net --allow-read --allow-write --allow-env --allow-sys server/main.ts -- --creative",
+    "reset": "rm -f data/world.json data/players.json data/machines.json && echo 'saves wiped — next start generates a fresh world'",
+    "check": "deno check server/main.ts",
+    "test": "deno check server/main.ts && node tests/pings.test.mjs"
   }
 }

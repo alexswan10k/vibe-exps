@@ -14,6 +14,8 @@ const TOOLS = {
   128: ["axe", "gold"], 129: ["axe", "diamond"],
   119: ["shovel", "wood"], 120: ["shovel", "stone"], 121: ["shovel", "iron"],
   130: ["shovel", "gold"], 131: ["shovel", "diamond"],
+  148: ["bow", "wood"], 150: ["hammer", "iron"], 151: ["sword", "iron"],
+  152: ["sword", "diamond"], 154: ["wrench", "iron"],
 };
 const HANDLE = 0x8a5f30;
 const SKIN = 0xf0c8a0;
@@ -81,7 +83,13 @@ export class Hand {
   }
 
   buildItem(id) {
-    if (TOOLS[id]) return this.buildTool(...TOOLS[id]);
+    if (TOOLS[id]) {
+      const [kind, tier] = TOOLS[id];
+      if (kind === "bow") return this.buildBow();
+      if (kind === "hammer") return this.buildHammer();
+      if (kind === "wrench") return this.buildWrench();
+      return this.buildTool(kind, tier);
+    }
     if (id === 15) return this.buildTorch(); // flat yellow cube reads badly — stick + glow head
     if (isPlaceable(id)) {
       const mat = this.materials[id];
@@ -147,6 +155,49 @@ export class Hand {
     head.position.y = 0.22;
     g.add(stick, head);
     g.rotation.z = -0.2;
+    return g;
+  }
+
+  buildBow() {
+    const g = new THREE.Group();
+    const limb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.62, 0.06), lam(HANDLE));
+    limb.position.y = 0.05;
+    const limb2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.06), lam(HANDLE));
+    limb2.position.set(0, 0.32, 0.06);
+    limb2.rotation.x = 0.5;
+    const limb3 = limb2.clone();
+    limb3.position.set(0, -0.22, 0.06);
+    limb3.rotation.x = -0.5;
+    const str = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.6, 0.015), lam(0xe8e8e8));
+    str.position.set(0, 0.05, 0.14);
+    g.add(limb, limb2, limb3, str);
+    g.rotation.z = -0.2;
+    return g;
+  }
+
+  buildHammer() {
+    const g = new THREE.Group();
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.08), lam(HANDLE));
+    handle.position.y = -0.1;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.16), lam(0xd8d8dc));
+    head.position.y = 0.25;
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.05, 0.17), lam(0x888888));
+    band.position.y = 0.25;
+    g.add(handle, head, band);
+    g.rotation.z = -0.25;
+    return g;
+  }
+
+  buildWrench() {
+    const g = new THREE.Group();
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.5, 0.09), lam(0xd8d8dc));
+    handle.position.y = -0.12;
+    const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.08), lam(0xd8d8dc));
+    jaw.position.y = 0.22;
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.09), lam(0x1a1a1a));
+    mouth.position.y = 0.26;
+    g.add(handle, jaw, mouth);
+    g.rotation.z = -0.25;
     return g;
   }
 

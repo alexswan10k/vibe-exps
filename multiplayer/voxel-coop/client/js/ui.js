@@ -269,7 +269,7 @@ export class UI {
     }
   }
 
-  static EDIBLE = new Set([104, 107, 115, 132, 133, 134, 135, 136]);
+  static EDIBLE = new Set([104, 107, 115, 132, 133, 134, 135, 136, 142, 143]);
 
   eatInv(i) {
     const s = this.slots[i];
@@ -472,11 +472,21 @@ export class UI {
 
   status(t) { this.el("status").textContent = t; }
   hint(t) {
+    // Cheap + timer-safe: skip redundant DOM writes (called per-frame by the
+    // contextual hint) and reuse a single expiry timer instead of arming a
+    // new 3.5s timeout on every call.
+    if (t === this._hintLast) return;
+    this._hintLast = t;
     const tok = ++this._hintToken;
     this.el("hint").textContent = t;
+    if (this._hintTimer) { clearTimeout(this._hintTimer); this._hintTimer = null; }
     if (!t) return;
-    setTimeout(() => {
-      if (tok === this._hintToken) this.el("hint").textContent = "";
+    this._hintTimer = setTimeout(() => {
+      this._hintTimer = null;
+      if (tok === this._hintToken) {
+        this._hintLast = "";
+        this.el("hint").textContent = "";
+      }
     }, 3500);
   }
 

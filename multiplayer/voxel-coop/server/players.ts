@@ -13,6 +13,7 @@ export interface Player {
   maxHp: number;
   hunger: number; // 0..20
   dead: boolean;
+  creative: boolean; // creative test mode: fly, infinite blocks, no damage
   slots: InvSlot[];
   grid: InvSlot[]; // 3x3 crafting grid (2x2 inventory view uses cells 0,1,3,4)
   hungerT: number;
@@ -61,6 +62,7 @@ export class Players {
       name: (name || "player").slice(0, 16),
       p: [...spawn] as Vec3, yaw: 0, pitch: 0,
       hp: 20, maxHp: 20, hunger: 20, dead: false,
+      creative: false,
       slots: emptyInv(), hungerT: 0, hurtCd: 0,
       grid: emptyGrid(), bedSpawn: null,
       home: null,
@@ -81,6 +83,7 @@ export class Players {
 
   hurt(pl: Player, dmg: number): void {
     if (pl.dead || dmg <= 0) return;
+    if (pl.creative) return; // creative test mode: invulnerable
     if (pl.hurtCd > 0) return;
     pl.hurtCd = 0.6;
     pl.hp -= dmg;
@@ -115,6 +118,11 @@ export class Players {
     for (const pl of this.all.values()) {
       if (pl.hurtCd > 0) pl.hurtCd -= dt;
       if (pl.dead) continue;
+      if (pl.creative) {
+        // creative: topped up, no drain
+        if (pl.hp < pl.maxHp || pl.hunger < 20) { pl.hp = pl.maxHp; pl.hunger = 20; changed = true; }
+        continue;
+      }
       if (peaceful) {
         // MC peaceful: hunger tops up, no starvation
         if (pl.hunger < 20) { pl.hunger = Math.min(20, pl.hunger + dt * 2); changed = true; }

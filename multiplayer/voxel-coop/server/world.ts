@@ -503,6 +503,13 @@ export class World {
         const r3 = hash2(x * 7 - y * 5, z * 3 + y * 11, this.seed ^ 0xe9a1);
         if (halo ? r3 > 0.99 : r3 > 0.997) return B.EMERALD_ORE;
       }
+      // oil ore: BuildCraft fuel — desert-biased (2x rate in DESERT/BEACH),
+      // y<=20, own hash r4. Powers stirling engines 2x longer than coal.
+      if (y < h - 2 && y <= 20) {
+        const r4 = hash2(x * 11 + y * 13, z * 17 - y * 7, this.seed ^ 0x011);
+        const desert = bio === BIOME.DESERT || bio === BIOME.BEACH;
+        if (halo ? (desert ? r4 > 0.982 : r4 > 0.991) : (desert ? r4 > 0.992 : r4 > 0.996)) return B.OIL_ORE;
+      }
       // lava pools: deep stone only, y 2..8 (never the bedrock floor at y<=1).
       // White-noise ~3% of deep cells; neighbours co-trigger into 2-4 block pools.
       if (y >= 2 && y <= 8 && hash3(x, y, z, this.seed ^ 0x1a6a) > 0.97) return B.LAVA;

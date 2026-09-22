@@ -8,6 +8,7 @@ host plays, second player joins over the same Wi-Fi.
 ```sh
 deno task dev          # survival (default)
 deno task peaceful     # no zombies, hunger tops up (chill building)
+deno task creative     # everyone starts in creative (fly + infinite blocks)
 # local:  http://localhost:8000/
 # player 2: http://<your-lan-ip>:8000/   (printed on startup)
 ```
@@ -80,10 +81,7 @@ data/             world.json + players.json (gitignored saves)
   pine logs → planks just like oak
 - food chain: pigs → pork, cows → beef → steak (best), chickens → drumsticks;
   apples, golden apples (8 gold + apple = full heal); beds set your spawn (RMB/F)
-- furnace: iron ore → ingot, gold ore → ingot, raw pork → cooked pork,
-  raw beef → steak, raw chicken → roast chicken, sand → glass (8s each)
-- furnace: iron ore → ingot, raw pork → cooked pork, sand → glass (8s each)
-- furnace: iron/gold ore → ingots, pork/beef/chicken → cooked, sand → glass, clay → brick ×4 (8s each)
+- furnace: iron/gold ore → ingots, pork/beef/chicken/fish → cooked, sand → glass, clay → brick ×4 (8s each, output waits at the furnace if you're offline or full)
 - glass, gold/diamond ores, fences, bricks, ladders, beds (all mine back to themselves)
 - food: raw pork / cooked pork / apple (leaves + zombies drop apples, G or double-click eats)
 - iron sword (8 dmg) + wood/stone swords, tool tiers wood → stone → iron
@@ -117,6 +115,8 @@ data/             world.json + players.json (gitignored saves)
   and overcast shields zombies/skeletons from burning, so storms are dangerous
 - 🗺 live minimap (N toggles): chunk-accurate top-down view with you (arrow),
   mobs (red), co-op partners (cyan) and spawn (green)
+- 📍 team pings: aim at a block and press **Q** (or the Ping touch button) —
+  your partner sees a cyan marker + name tag for 15s, also on the minimap
 - `/sethome` + `/home` fast-travel (persists across restarts), `/rain` to
   summon/clear storms, `/time` and `/spawn` as before
 - 🎣 fishing: craft a rod (sticks + string), face water and press **R**
@@ -147,10 +147,39 @@ data/             world.json + players.json (gitignored saves)
 - 🖥 menus: title screen with name entry (Play to join), death screen with stats
   + Respawn, TAB player list, settings (O or gear: volume, render distance,
   minimap + weather-FX toggles, all persisted)
+- 🔧 BuildCraft-lite: **chests** (27 slots, F/RMB to open, click inv to store),
+  **stirling engines** (F/RMB panel → feed coal/oil/lava bucket — coal 30s, oil
+  60s, coal block 270s, lava 120s, auto-sucks fuel/lava from adjacent chests
+  and tanks), **pipes** (chest→chest over pipe blocks, needs an engine burning
+  nearby), **quarries** (9×9 auto-miner below the block, needs a fueled engine
+  next door — loot goes to adjacent chest, else pipe network, else your
+  inventory). Oil ore spawns desert-biased, deep.
+- 🧪 Fluids: **buckets** (3 iron) scoop water/lava with F (sources are infinite
+  taps), **tanks** (8 glass, 16 buckets — F with a bucket to fill/draw),
+  **pumps** (iron + pipes + engine, tap adjacent water/lava while powered,
+  lava preferred), **fluid pipes** (pipe + glass, balance tanks while an engine
+  burns nearby). `/kit fluids` stocks the set.
+- 🚣 Vehicles: **boats** (planks, RMB on water — fast sailing, WASD + shift,
+  sluggish on land) and **rails** (iron + sticks, walk-through track blocks) +
+  **minecarts** (RMB on rails — momentum glide, face along the track and use
+  W/S to throttle/brake). F hops in/out, LMB breaks a free one back into an
+  item. Riders drive, the server follows — `/kit vehicles` stocks the set.
+- ⚔️ new weapons: **bow + arrows** (X to shoot, 7 dmg hitscan), **warhammer**
+  (12 dmg + launch, slow), **dagger** (cheap 4 dmg), **firebrand** (11 dmg),
+  **wrench** (style). Crafted at the table, bow in the recipe book.
+- ✨ creative mode: `/creative` (or `/gamemode creative`) → fly (double-Space
+  or F), instant mining, infinite blocks, no damage/hunger. `C` stocks
+  chest/pipe/engine/quarry + weapon kit, `/kit <starter|tools|buildcraft|
+  weapons|creative>`, `/give <id> [n]`, `/fuel` refuels the nearest engine,
+  `/survival` to go back. `deno task creative` starts the server creative-first.
 
 ## Protocol (WS JSON)
 
 `hello → welcome`, `reqChunk → chunk` (RLE), `edit → block`,
 `move → players` (10Hz), `mobs` (2Hz), `inv`, `vitals`, `time`, `chat`,
 `craft`, `craftDirect`, `smelt`, `attackMob`, `ignite → boom` (TNT),
+`shoot → shot` (bow), `chestOpen/chestPut/chestTake → chest`,
+`engineFuel`, `bucketFill`, `tankUse`, `gamemode → gamemode`, `give`,
+`vehiclePlace/vehicleEnter/vehicleExit/vehicleBreak → vehicles` + `ride`,
+`machines` (engines + quarries + tanks),
 `eat`, `moveItem`, `respawn`, `ping → pong`.
