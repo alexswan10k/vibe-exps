@@ -29,6 +29,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000;
 #hotbar .slot { width: 52px; height: 52px; aspect-ratio: auto; flex: none; }
 .slot.sel { border-color: #ffd23d; }
 .slot.swap { border-color: #4dd2ff; }
+.slot.drop-hi { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,.9); }
+/* drag-and-drop ghost: follows the cursor, never intercepts clicks */
+#drag-ghost { position: fixed; width: 48px; height: 48px; z-index: 9999;
+  pointer-events: none; display: none; opacity: .92;
+  background: rgba(0,0,0,.55); border: 2px solid #fff; border-radius: 6px; }
+#drag-ghost .icon { position: absolute; inset: 6px;
+  background-size: cover; image-rendering: pixelated; }
+#drag-ghost .cnt { position: absolute; right: 3px; bottom: 1px; font-size: 13px; font-weight: 700;
+  color: #fff; text-shadow: 1px 1px 0 #000; }
 .slot .icon { position: absolute; inset: 6px; border-radius: 3px;
   background-size: cover; image-rendering: pixelated; }
 .slot .cnt { position: absolute; right: 3px; bottom: 1px; font-size: 13px; font-weight: 700;

@@ -18,6 +18,9 @@ export class UI {
     this.gridResult = { id: 0, n: 0 };
     this.invOpen = false;
     this.swapIdx = null;
+    // pointer drag-and-drop state (see slotDragStart/dragMove/dragUp below)
+    this.drag = null; // {kind:'inv'|'grid'|'chest'|'result', idx, x0, y0, active, srcEl}
+    this._suppressClick = false; // a real drag just ended: swallow the trailing click
     this.nearTable = false;
     this.onGridPut = null;
     this.onGridTake = null;
@@ -37,6 +40,8 @@ export class UI {
     this.onRespawn = null;
     this.  onEat = null;
     this.onMoveItem = null;
+    this.onChestTake = null; // (cs) => void — drag chest cell -> inventory
+    this.onChestPut = null; // (slot, cs, all) => void — drag inventory -> chest cell
     this.onTrade = null; // (villagerId, slot) => void — wired in main.js to net.trade
     this.tradeId = null;
     this._hintToken = 0;
@@ -49,6 +54,10 @@ export class UI {
     this.bindKeys();
     this.bindWheel();
     this.initMenus();
+    // drag ghost + drop live at document level (slots come and go on re-render)
+    document.addEventListener("pointermove", (e) => this.dragMove(e));
+    document.addEventListener("pointerup", (e) => this.dragUp(e));
+    document.addEventListener("pointercancel", () => this.dragCancel());
   }
 
   buildSlots() {
@@ -58,7 +67,8 @@ export class UI {
       const d = document.createElement("div");
       d.className = "slot";
       d.dataset.i = i;
-      d.addEventListener("click", () => { this.hotbarSel = i; this.renderHotbar(); });
+      d.addEventListener("click", () => { if (this.consumeDragClick()) return; this.hotbarSel = i; this.renderHotbar(); });
+      d.addEventListener("pointerdown", (e) => this.slotDragStart(e, "inv", i));
       hb.appendChild(d);
     }
     const inv = this.el("inv-grid");
@@ -69,6 +79,7 @@ export class UI {
       d.dataset.i = i;
       d.addEventListener("click", () => this.clickInv(i));
       d.addEventListener("dblclick", () => this.eatInv(i));
+      d.addEventListener("pointerdown", (e) => this.slotDragStart(e, "inv", i));
       inv.appendChild(d);
     }
     const rb = this.el("craft-grid");
@@ -77,13 +88,16 @@ export class UI {
       const d = document.createElement("div");
       d.className = "slot";
       d.dataset.g = g;
-      d.addEventListener("click", (e) => this.clickGrid(g, e.shiftKey));
+      d.addEventListener("click", (e) => { if (this.consumeDragClick()) return; this.clickGrid(g, e.shiftKey); });
+      d.addEventListener("pointerdown", (e) => this.slotDragStart(e, "grid", g));
       rb.appendChild(d);
     }
     rb.classList.add("small");
     this.el("craft-result").addEventListener("click", () => {
+      if (this.consumeDragClick()) return;
       if (this.gridResult?.id) this.onCraftTake?.();
     });
+    this.el("craft-result").addEventListener("pointerdown", (e) => this.slotDragStart(e, "result", 0));
     this.el("trade-close")?.addEventListener("click", () => this.hideTrades());
     this.buildBook();
   }
@@ -255,7 +269,16 @@ export class UI {
     }
   }
 
+  // A real drag just ended (pointerup): swallow the trailing click so a drop
+  // doesn't also select/deposit/take. Returns true when it ate the click.
+  consumeDragClick() {
+    if (!this._suppressClick) return false;
+    this._suppressClick = false;
+    return true;
+  }
+
   clickInv(i) {
+    if (this.consumeDragClick()) return;
     if (this.swapIdx === null) {
       if (this.slots[i]?.id) { this.swapIdx = i; this.renderInv(); }
     } else if (this.swapIdx === i) {
@@ -274,6 +297,108 @@ export class UI {
   eatInv(i) {
     const s = this.slots[i];
     if (s?.id && UI.EDIBLE.has(s.id)) this.onEat?.(i);
+  }
+
+  // ---------- pointer drag-and-drop between slots ----------
+  // Click-click (swapIdx) still works: a press without movement never becomes
+  // a drag, and the trailing click after a real drag is swallowed (see
+  // consumeDragClick). Moves go through the same server-authoritative seams
+  // as clicks (onMoveItem/onGridPut/onGridTake/onCraftTake + chest hooks).
+  slotDragStart(e, kind, idx) {
+    if (this.drag) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const cell = e.target?.closest?.(".slot") ?? null;
+    this.drag = { kind, idx, x0: e.clientX, y0: e.clientY, active: false, srcEl: cell, hiEl: null };
+  }
+
+  dragSourceFilled() {
+    const d = this.drag;
+    if (!d) return false;
+    if (d.kind === "inv") return !!this.slots[d.idx]?.id;
+    if (d.kind === "grid") return !!this.gridCells[d.idx]?.id;
+    if (d.kind === "result") return !!this.gridResult?.id;
+    if (d.kind === "chest") return !!d.srcEl?.querySelector?.(".icon");
+    return false;
+  }
+
+  dragGhost(e) {
+    let g = document.getElementById("drag-ghost");
+    if (!g) {
+      g = document.createElement("div");
+      g.id = "drag-ghost";
+      document.body.appendChild(g);
+    }
+    if (!g.firstChild && this.drag?.srcEl) {
+      // clone the source visuals (icon + count), not the data
+      for (const sel of [".icon", ".cnt"]) {
+        const n = this.drag.srcEl.querySelector(sel);
+        if (n) g.appendChild(n.cloneNode(true));
+      }
+    }
+    g.style.display = "block";
+    g.style.left = `${e.clientX - 24}px`;
+    g.style.top = `${e.clientY - 24}px`;
+  }
+
+  dragHighlight(e) {
+    const d = this.drag;
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".slot") ?? null;
+    if (el !== d.hiEl) {
+      d.hiEl?.classList.remove("drop-hi");
+      d.hiEl = el;
+      el?.classList.add("drop-hi");
+    }
+  }
+
+  dragMove(e) {
+    const d = this.drag;
+    if (!d) return;
+    if (!d.active) {
+      if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 8) return;
+      if (!this.dragSourceFilled()) { this.drag = null; return; } // empty cell: plain click
+      d.active = true;
+      this._suppressClick = true; // swallow the click landing after this drag
+      this.swapIdx = null; // drag replaces click-click selection
+      this.renderInv();
+    }
+    this.dragGhost(e);
+    this.dragHighlight(e);
+  }
+
+  dragTargetAt(e) {
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".slot, #craft-result") ?? null;
+    if (!el) return null;
+    if (el.dataset.cs !== undefined && el.dataset.cs !== "") return { kind: "chest", idx: Number(el.dataset.cs) };
+    if (el.dataset.g !== undefined && el.dataset.g !== "") return { kind: "grid", idx: Number(el.dataset.g) };
+    if (el.dataset.i !== undefined && el.dataset.i !== "") return { kind: "inv", idx: Number(el.dataset.i) };
+    if (el.id === "craft-result") return { kind: "result", idx: 0 };
+    return null;
+  }
+
+  dragUp(e) {
+    const d = this.drag;
+    if (!d) return;
+    this.drag = null;
+    document.getElementById("drag-ghost")?.remove();
+    d.hiEl?.classList.remove("drop-hi");
+    if (!d.active) return; // plain click: existing click handlers run
+    const t = this.dragTargetAt(e);
+    if (!t) return;
+    const shift = window.voxShiftDown === true;
+    if (d.kind === "inv" && t.kind === "inv" && d.idx !== t.idx) this.onMoveItem?.(d.idx, t.idx);
+    else if (d.kind === "inv" && t.kind === "grid") this.onGridPut?.(d.idx, t.idx, shift);
+    else if (d.kind === "inv" && t.kind === "chest") this.onChestPut?.(d.idx, t.idx, shift);
+    else if (d.kind === "grid" && (t.kind === "inv")) this.onGridTake?.(d.idx);
+    else if (d.kind === "chest" && (t.kind === "inv")) this.onChestTake?.(d.idx);
+    else if (d.kind === "result" && (t.kind === "inv")) this.onCraftTake?.();
+    this.swapIdx = null;
+    this.renderInv();
+  }
+
+  dragCancel() {
+    this.drag = null;
+    document.getElementById("drag-ghost")?.remove();
+    document.querySelectorAll(".slot.drop-hi").forEach((el) => el.classList.remove("drop-hi"));
   }
 
   bindWheel() {
