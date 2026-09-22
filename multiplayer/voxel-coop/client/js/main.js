@@ -295,27 +295,34 @@ let net = null;
 let welcomed = false;
 let connectEpoch = 0;
 
-// ---- pointer focus rules (minecraft-style) ----
-ui.requestLock = () => player.lock();
-ui.releaseLock = () => { if (document.pointerLockElement) document.exitPointerLock(); };
+// ---- pointer focus rules: lock follows the GUI, single source of truth ----
+// Any open GUI (or death, or chat focus, or the title screen) => cursor free.
+// Nothing open => mouse look. Every GUI toggle funnels through syncLock, so
+// there's no Esc-dance: Esc just closes the top GUI (browser exits lock
+// itself) and closing the last GUI re-locks.
+ui.requestLock = () => syncLock();
+ui.releaseLock = () => syncLock();
 function menuVisible() { return $("menu").style.display !== "none"; }
-function relockIfClear() {
-  if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
-      !menuVisible() && !chestOpen() && !engineOpen() && net?.connected) {
+function screenTitleVisible() { const el = $("screen-title"); return !!el && el.style.display !== "none"; }
+function settingsOpen() { const el = $("screen-settings"); return !!el && el.style.display !== "none"; }
+function anyGuiOpen() {
+  return dead || ui.invOpen || ui.helpOpen() || ui.tradeOpen() ||
+    ui.chatFocused() || menuVisible() || screenTitleVisible() ||
+    chestOpen() || engineOpen() || settingsOpen();
+}
+function syncLock() {
+  if (!net?.connected || myId < 0) return;
+  if (anyGuiOpen()) {
+    if (document.pointerLockElement) document.exitPointerLock();
+  } else if (!player.locked) {
     player.lock();
   }
 }
-ui.onChatClosed = () => relockIfClear();
+ui.onChatClosed = () => syncLock();
 player.onLockChange = (locked) => {
-  if (!locked) {
-    // stop mining the moment look disengages
-    mouseSafeRelease();
-    // Esc with nothing open = pause menu (closing it re-locks via toggleHelp)
-    if (myId >= 0 && !dead && !ui.invOpen && !ui.helpOpen() && !ui.chatFocused() &&
-        !menuVisible() && !chestOpen() && !engineOpen() && net?.connected) {
-      ui.toggleHelp(true);
-    }
-  }
+  if (!locked) mouseSafeRelease(); // stop mining the moment look disengages
+  // NOTE: no auto-popup here. Esc with nothing open simply leaves the cursor
+  // free (click the canvas to re-lock); help opens with H.
 };
 
 let myId = -1;
@@ -369,24 +376,28 @@ function renderChest() {
   window.voxChest.slots.forEach((s, cs) => {
     const d = document.createElement("div");
     d.className = "slot chest-slot";
+    d.dataset.cs = cs;
     if (s?.id) {
       d.innerHTML = `<div class="icon" style="background-image:url(${itemIconURL(s.id)})"></div><span class="cnt">${s.n > 1 ? s.n : ""}</span>`;
       d.title = `slot ${cs}`;
     }
+    d.addEventListener("pointerdown", (e) => ui.slotDragStart(e, "chest", cs));
     d.addEventListener("click", () => {
+      if (ui.consumeDragClick()) return;
       if (!window.voxChest) return;
       net.chestTake(window.voxChest.x, window.voxChest.y, window.voxChest.z, cs);
     });
     list.appendChild(d);
   });
   modal.style.display = "flex";
+  syncLock(); // cursor free while the chest window is up (idempotent on refresh)
 }
 
 function closeChest(relock = true) {
   const modal = document.getElementById("chest-modal");
   if (modal) modal.style.display = "none";
   window.voxChest = null;
-  if (relock && net?.connected && !dead && !ui.invOpen) player.lock();
+  if (relock) syncLock();
 }
 
 function chestOpen() {
@@ -450,7 +461,7 @@ function closeEngine(relock = true) {
   const modal = document.getElementById("engine-modal");
   if (modal) modal.style.display = "none";
   window.voxEngine = null;
-  if (relock && net?.connected && !dead && !ui.invOpen) player.lock();
+  if (relock) syncLock();
 }
 
 function engineOpen() {
@@ -1152,6 +1163,8 @@ ui.onChat = (msg) => (net.sendChat ? net.sendChat(msg) : net.chat(msg));
 ui.onRespawn = () => net.respawn();
 ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
+ui.onChestTake = (cs) => { if (window.voxChest) net.chestTake(window.voxChest.x, window.voxChest.y, window.voxChest.z, cs); };
+ui.onChestPut = (slot, cs, all) => { if (window.voxChest) net.chestPut(window.voxChest.x, window.voxChest.y, window.voxChest.z, slot, cs, all); };
 ui.onTrade = (id, slot) => net.trade(id, slot);
 // chest open: inventory clicks store into the chest instead of swapping
 {
@@ -1185,7 +1198,7 @@ ui.onTrade = (id, slot) => net.trade(id, slot);
 $("respawn-btn").addEventListener("click", () => { net.respawn(); player.lock(); });
 $("help-close").addEventListener("click", () => ui.toggleHelp(false));
 $("menu").addEventListener("click", (e) => {
-  if (e.target.id === "menu" && net?.connected) { $("menu").style.display = "none"; player.lock(); }
+  if (e.target.id === "menu" && net?.connected) { $("menu").style.display = "none"; syncLock(); }
 });
 renderer.domElement.addEventListener("click", () => {
   if (net?.connected && !ui.invOpen && !player.locked && myId >= 0) player.lock();
