@@ -77,8 +77,9 @@ export class Entities {
         head.position.set(0, st.body[1] + st.head[1] / 2 - 0.08, st.body[2] / 2 + st.head[2] / 2 - 0.1);
         head.castShadow = true;
         node.add(body, head);
+        let eyeMat = null;
         if (st.eyes) {
-          const eyeMat = new THREE.MeshBasicMaterial({ color: st.eyeColor ?? 0xff2222 });
+          eyeMat = new THREE.MeshBasicMaterial({ color: st.eyeColor ?? 0xff2222 });
           for (const sx of [-0.11, 0.11]) {
             const eye = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.02), eyeMat);
             eye.position.set(sx, body.position.y + st.body[1] / 2 + 0.35, st.body[2] / 2 + st.head[2] - 0.08);
@@ -293,9 +294,7 @@ export class Entities {
     }
     for (const [, e] of this.remotes) {
       if (!e.target) continue;
-      // Pre-offset once instead of clone().add(new Vector3) every frame.
       _v1.copy(e.target);
-      _v1.y -= 1.62;
       e.group.position.lerp(_v1, kPlayer);
       e.group.rotation.y = e.yaw;
       // walk bob: swing y when moving

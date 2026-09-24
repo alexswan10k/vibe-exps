@@ -5,6 +5,7 @@
 export const CHUNK = 16;
 export const WORLD_H = 48;
 export const SEA_LEVEL = 15;
+export const PLAYER_EYE = 1.62;
 export const PORT = 8000;
 
 export const B = {
@@ -253,6 +254,7 @@ export type Vec3 = [number, number, number];
 export type ClientMsg =
   | { t: "hello"; name: string }
   | { t: "reqChunk"; cx: number; cz: number }
+  | { t: "mineStart"; x: number; y: number; z: number; heldItem?: number }
   | { t: "edit"; op: "break" | "place"; x: number; y: number; z: number; block?: number; heldItem?: number }
   | { t: "move"; p: Vec3; yaw: number; pitch: number }
   | { t: "gridPut"; slot: number; g: number; all: boolean }

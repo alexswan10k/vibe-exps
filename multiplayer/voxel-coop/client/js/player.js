@@ -1,11 +1,11 @@
 // First-person controller: pointer lock, WASD, AABB collision vs WorldClient.
-import { B, WALK_THROUGH } from "./config.js";
+import { B, PLAYER_EYE, WALK_THROUGH } from "./config.js";
 
 export const GRAVITY = 28;
 export const JUMP = 9.5;
 export const SPEED = 4.6;
 export const SPEED_SPRINT = 6.9;
-export const EYE = 1.62;
+export const EYE = PLAYER_EYE;
 const RADIUS = 0.32;
 
 export class Player {

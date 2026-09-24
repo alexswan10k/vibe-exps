@@ -38,7 +38,8 @@ export class UI {
     this.releaseLock = null;
     this.onChat = null;
     this.onRespawn = null;
-    this.  onEat = null;
+    this.onPlay = null;
+    this.onEat = null;
     this.onMoveItem = null;
     this.onChestTake = null; // (cs) => void — drag chest cell -> inventory
     this.onChestPut = null; // (slot, cs, all) => void — drag inventory -> chest cell
@@ -700,6 +701,7 @@ export class UI {
       const menuName = this.el("menu-name");
       if (menuName) menuName.value = n;
       this.el("screen-title").style.display = "none";
+      this.onPlay?.(n);
       this.requestLock?.();
     });
     // MOTD: same-origin server status, static tip stays on failure
@@ -774,11 +776,18 @@ export class UI {
     this.applySettings();
   }
 
+  setMinimapVisible(on) {
+    this._settings.showMinimap = !!on;
+    window.voxSettings = { ...this._settings };
+    const checkbox = this.el("menu-minimapchk");
+    if (checkbox) checkbox.checked = this._settings.showMinimap;
+  }
+
   applySettings() {
     window.voxSettings = { ...this._settings };
-    // minimap visibility applies directly; volume/renderDist need main.js/audio hooks (see report)
     const mmc = document.getElementById("minimap");
     if (mmc) mmc.style.display = this._settings.showMinimap ? "" : "none";
+    window.voxMinimap?.setVisible?.(this._settings.showMinimap);
     try { window.voxAudio?.setVolume?.(this._settings.volume / 100); } catch { /* merger wires audio */ }
   }
 

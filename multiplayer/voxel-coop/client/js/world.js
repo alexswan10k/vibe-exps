@@ -635,6 +635,7 @@ export class WorldClient {
     this.chunks = new Map(); // "cx,cz" -> Uint8Array
     this.meshes = new Map(); // "cx,cz" -> THREE.Group
     this.torches = new Map(); // "cx,cz" -> [[x,y,z],...] for light pooling
+    this.dirtyChunks = new Set();
     this.geo = new THREE.BoxGeometry(1, 1, 1);
     this.crossGeo = makeCrossGeometry();
     this.dummy = new THREE.Object3D();
@@ -645,10 +646,10 @@ export class WorldClient {
 
   setChunk(cx, cz, data) {
     this.chunks.set(`${cx},${cz}`, data);
-    this.remesh(cx, cz);
-    // remesh neighbours so border faces update
+    this.dirtyChunks.add(`${cx},${cz}`);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      if (this.chunks.has(`${cx + dx},${cz + dz}`)) this.remesh(cx + dx, cz + dz);
+      const key = `${cx + dx},${cz + dz}`;
+      if (this.chunks.has(key)) this.dirtyChunks.add(key);
     }
   }
 
@@ -663,8 +664,10 @@ export class WorldClient {
     }
     this.chunks.delete(key);
     this.torches.delete(key);
+    this.dirtyChunks.delete(key);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      if (this.chunks.has(`${cx + dx},${cz + dz}`)) this.remesh(cx + dx, cz + dz);
+      const neighbor = `${cx + dx},${cz + dz}`;
+      if (this.chunks.has(neighbor)) this.dirtyChunks.add(neighbor);
     }
   }
 
@@ -678,20 +681,41 @@ export class WorldClient {
   }
 
   setLocal(x, y, z, v) {
+    if (![x, y, z, v].every(Number.isInteger) || y < 0 || y >= WORLD_H) return;
     const cx = Math.floor(x / CHUNK), cz = Math.floor(z / CHUNK);
-    const c = this.chunks.get(`${cx},${cz}`);
+    const key = `${cx},${cz}`;
+    const c = this.chunks.get(key);
     if (!c) return;
     const lx = x - cx * CHUNK, lz = z - cz * CHUNK;
     c[WorldClient.idx(lx, y, lz)] = v;
-    this.remesh(cx, cz);
-    // edits near a chunk border change face-culling AND baked torchlight halo
-    // neighbour chunks whose bake volume contains the edit must remesh too:
-    // torchlight travels TORCH_R=14 cells, so an edit within 14 of a border
-    // counts (nearest neighbour-volume cell is lx+1 / 16-lx away)
-    if (lx <= 13) this.remesh(cx - 1, cz);
-    if (lx >= 2) this.remesh(cx + 1, cz);
-    if (lz <= 13) this.remesh(cx, cz - 1);
-    if (lz >= 2) this.remesh(cx, cz + 1);
+    this.dirtyChunks.add(key);
+    if (lx <= 13) {
+      const neighbor = `${cx - 1},${cz}`;
+      if (this.chunks.has(neighbor)) this.dirtyChunks.add(neighbor);
+    }
+    if (lx >= 2) {
+      const neighbor = `${cx + 1},${cz}`;
+      if (this.chunks.has(neighbor)) this.dirtyChunks.add(neighbor);
+    }
+    if (lz <= 13) {
+      const neighbor = `${cx},${cz - 1}`;
+      if (this.chunks.has(neighbor)) this.dirtyChunks.add(neighbor);
+    }
+    if (lz >= 2) {
+      const neighbor = `${cx},${cz + 1}`;
+      if (this.chunks.has(neighbor)) this.dirtyChunks.add(neighbor);
+    }
+  }
+
+  flushRemeshes() {
+    if (this.dirtyChunks.size === 0) return;
+    const keys = [...this.dirtyChunks];
+    this.dirtyChunks.clear();
+    for (const key of keys.slice(0, 32)) {
+      const [cx, cz] = key.split(",").map(Number);
+      if (this.chunks.has(key)) this.remesh(cx, cz);
+    }
+    for (const key of keys.slice(32)) this.dirtyChunks.add(key);
   }
 
   remesh(cx, cz) {

@@ -1,7 +1,7 @@
 // voxel-coop server: plain-HTTP LAN server (no TLS), static client + WS game loop.
 // Run: deno task dev   ->   http://<lan-ip>:8000/
 
-import { B, BLOCK_NAME, HARDNESS, PICK_MULT, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
+import { B, BLOCK_NAME, HARDNESS, PICK_MULT, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, PLAYER_EYE, pickTier, requiredTier, toolMultFor } from "./protocol.ts";
 import { PORT, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
@@ -86,7 +86,7 @@ function checkChatRate(id: number): boolean {
 }
 
 // ---- player persistence (pos + inventory + bed/home spawns across restarts) ----
-interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3; stats?: { kills: number; deaths: number; fished: number } }
+interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3; positionVersion?: number; stats?: { kills: number; deaths: number; fished: number } }
 let savedPlayers: Record<string, SavedPlayer> = {};
 try {
   savedPlayers = JSON.parse(await Deno.readTextFile(SAVE_PLAYERS));
@@ -95,7 +95,7 @@ async function persistPlayers(): Promise<void> {
   try {
     const d: Record<string, SavedPlayer> = { ...savedPlayers };
     for (const pl of players.all.values()) {
-      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, stats: { ...pl.stats } };
+      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, positionVersion: 2, stats: { ...pl.stats } };
     }
     await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
     await Deno.writeTextFile(SAVE_PLAYERS, JSON.stringify(d));
@@ -157,6 +157,7 @@ function sendMarkers(pl: Player): void {
 }
 /** Death bookkeeping shared by the main death sites (mob/fall/blast). */
 function noteDeath(pl: Player, msg: string): void {
+  miningSessions.delete(pl.id);
   pl.stats.deaths++;
   broadcast({ t: "chat", from: "server", msg });
   if (pl.stats.deaths === 5) toastAll(`☠ ${pl.name} has died 5 times!`);
@@ -184,23 +185,31 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
   }
   const saved = savedPlayers[name];
   if (saved) {
+    const legacyPosition = saved.positionVersion !== 2;
+    const savedPosition = Array.isArray(saved.p) && saved.p.length === 3 && saved.p.every(Number.isFinite)
+      ? [...saved.p] as Vec3
+      : null;
+    const savedHome = Array.isArray(saved.home) && saved.home.length === 3 && saved.home.every(Number.isFinite)
+      ? [...saved.home] as Vec3
+      : null;
+    if (legacyPosition) {
+      if (savedPosition) savedPosition[1] += PLAYER_EYE;
+      if (savedHome) savedHome[1] += PLAYER_EYE;
+    }
     // stale underground logout (cave, or a world that moved on without you)
     // wakes up on the surface — unless it's your own dug-out base nearby.
     // inventory and bed are still restored.
-    if (Array.isArray(saved.p) && saved.p.length === 3 && saved.p.every(Number.isFinite) &&
-        world.shouldRescueToSurface(saved.p[0], saved.p[1], saved.p[2])) {
+    if (savedPosition && world.shouldRescueToSurface(savedPosition[0], savedPosition[1], savedPosition[2])) {
       console.log(`[join] ${name} saved spot was underground — fresh spawn`);
       sendTo(pl, { t: "chat", from: "server", msg: "☀ your last spot was underground — woke up on the surface" });
-    } else {
-      pl.p = saved.p;
+    } else if (savedPosition) {
+      pl.p = savedPosition;
     }
-    pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
+    pl.slots = Array.isArray(saved.slots) && saved.slots.length === 36 ? saved.slots : pl.slots;
     if (Array.isArray(saved.bed) && saved.bed.length === 3 && saved.bed.every(Number.isFinite)) {
       pl.bedSpawn = saved.bed as Vec3;
     }
-    if (Array.isArray(saved.home) && saved.home.length === 3 && saved.home.every(Number.isFinite)) {
-      pl.home = saved.home as Vec3;
-    }
+    if (savedHome) pl.home = savedHome;
     if (saved.stats && Number.isFinite(saved.stats.kills) && Number.isFinite(saved.stats.deaths) && Number.isFinite(saved.stats.fished)) {
       pl.stats = { kills: saved.stats.kills, deaths: saved.stats.deaths, fished: saved.stats.fished };
     }
@@ -214,7 +223,21 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
   return pl;
 }
 
+function welcomeFor(pl: Player, motd: string): ServerMsg {
+  return {
+    t: "welcome",
+    id: pl.id,
+    seed: world.seed,
+    spawn: [...pl.p] as Vec3,
+    time: world.time,
+    rain,
+    motd,
+    creative: pl.creative,
+  };
+}
+
 function leaveGame(pl: Player): void {
+  if (!players.all.has(pl.id)) return;
   console.log(`[leave] ${pl.name}`);
   freeRide(pl);
   players.remove(pl.id);
@@ -223,6 +246,7 @@ function leaveGame(pl: Player): void {
   pearlCd.delete(pl.id);
   worldPingCd.delete(pl.id);
   pendingReset.delete(pl.id);
+  miningSessions.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
   void persistPlayers();
 }
@@ -421,6 +445,57 @@ function checkRate(id: number): boolean {
   return true;
 }
 
+interface MiningSession {
+  x: number;
+  y: number;
+  z: number;
+  block: number;
+  heldItem?: number;
+  startedAt: number;
+}
+const miningSessions = new Map<number, MiningSession>();
+
+function miningSeconds(block: number, heldItem: number | undefined, creative: boolean): number {
+  if (creative) return 0;
+  const base = HARDNESS[block];
+  if (base === undefined || base === Infinity) return Infinity;
+  const mult = toolMultFor(block, heldItem);
+  return TOOL_CLASS[block] === "pick" && mult <= 1 ? base * 3.3 : base / mult;
+}
+
+function beginMining(pl: Player, x: number, y: number, z: number, heldItem: number | undefined): boolean {
+  if (pl.dead) return false;
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  if (![x, y, z].every(Number.isFinite) || y < 1 || y >= WORLD_H || dist(pl.p, x, y, z) > (pl.creative ? 12 : 7.5)) return false;
+  const block = world.get(x, y, z);
+  if (block === B.AIR || block === B.WATER || HARDNESS[block] === undefined || HARDNESS[block] === Infinity) return false;
+  const ownedHeld = !pl.creative && heldItem !== undefined && countOf(pl.slots, heldItem) <= 0 ? undefined : heldItem;
+  miningSessions.set(pl.id, { x, y, z, block, heldItem: ownedHeld, startedAt: Date.now() });
+  return true;
+}
+
+function finishMining(pl: Player, x: number, y: number, z: number): boolean {
+  const session = miningSessions.get(pl.id);
+  if (!session || session.x !== Math.round(x) || session.y !== Math.round(y) || session.z !== Math.round(z)) {
+    miningSessions.delete(pl.id);
+    sendTo(pl, { t: "denied", reason: "start mining first" });
+    return false;
+  }
+  if (world.get(session.x, session.y, session.z) !== session.block) {
+    miningSessions.delete(pl.id);
+    sendTo(pl, { t: "denied", reason: "block changed" });
+    return false;
+  }
+  const required = miningSeconds(session.block, session.heldItem, pl.creative);
+  const tolerance = pl.isPoll ? 0.75 : 0.2;
+  if ((Date.now() - session.startedAt) / 1000 + tolerance < required) {
+    sendTo(pl, { t: "denied", reason: "keep mining" });
+    return false;
+  }
+  miningSessions.delete(pl.id);
+  return true;
+}
+
 function dist(a: Vec3, x: number, y: number, z: number): number {
   const dx = a[0] - (x + 0.5), dy = a[1] - (y + 0.5), dz = a[2] - (z + 0.5);
   return Math.hypot(dx, dy, dz);
@@ -573,6 +648,7 @@ function doReset(requestedSeed: number | null, by: string): void {
   fuses.length = 0;
   pendingFish.length = 0;
   worldPingCd.clear();
+  miningSessions.clear();
   mobs.mobs.clear();
   spawn = world.findSpawn();
   savedPlayers = {};
@@ -610,6 +686,7 @@ function idName(id: number): string {
 }
 
 function setCreative(pl: Player, creative: boolean): void {
+  miningSessions.delete(pl.id);
   pl.creative = creative;
   if (creative) {
     pl.hp = pl.maxHp;
@@ -884,23 +961,41 @@ function handleChatCommand(pl: Player, msg: string): boolean {
 // ---- websocket message handling ----
 function onMessage(pl: Player, raw: string): void {
   let m: ClientMsg;
-  try { m = JSON.parse(raw); } catch { return; }
-  switch (m.t) {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || typeof (parsed as { t?: unknown }).t !== "string") return;
+    m = parsed as ClientMsg;
+  } catch { return; }
+  try {
+    switch (m.t) {
     case "reqChunk": {
       const { cx, cz } = m;
       if (!Number.isInteger(cx) || !Number.isInteger(cz) || Math.abs(cx) > 64 || Math.abs(cz) > 64) return;
       sendTo(pl, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
       break;
     }
+    case "mineStart":
+      if (![m.x, m.y, m.z].every(Number.isFinite) ||
+          (m.heldItem !== undefined && !Number.isInteger(m.heldItem))) break;
+      if (!beginMining(pl, m.x, m.y, m.z, m.heldItem)) sendTo(pl, { t: "denied", reason: "can't mine that" });
+      break;
     case "edit":
+      if ((m.op !== "break" && m.op !== "place") ||
+          ![m.x, m.y, m.z].every(Number.isFinite) ||
+          (m.block !== undefined && !Number.isInteger(m.block)) ||
+          (m.heldItem !== undefined && !Number.isInteger(m.heldItem))) break;
+      if (m.op === "break" && !pl.creative && !finishMining(pl, m.x, m.y, m.z)) break;
+      if (m.op === "place") miningSessions.delete(pl.id);
       handleEdit(pl, m.op, m.x, m.y, m.z, m.block, m.heldItem);
       break;
     case "move": {
-      if (pl.dead) break;
+      if (pl.dead || !Array.isArray(m.p) || m.p.length !== 3) break;
       const [nx, ny, nz] = m.p;
       if (![nx, ny, nz, m.yaw, m.pitch].every(Number.isFinite)) break;
       const dx = nx - pl.p[0], dy = ny - pl.p[1], dz = nz - pl.p[2];
-      if (Math.hypot(dx, dy, dz) > (pl.creative ? 25 : 10)) {
+      const elapsed = Math.max(0.08, (Date.now() - pl.lastMove) / 1000);
+      const maxStep = Math.min(pl.creative ? 25 : 10, (pl.creative ? 28 : 14) * elapsed + 1.5);
+      if (Math.hypot(dx, dy, dz) > maxStep) {
         // desync (missed teleport, lag spike): the client is somewhere the
         // server isn't — snap it back to the authoritative position instead of
         // stranding it (every edit would fail "too far" forever). Cooled down.
@@ -919,6 +1014,7 @@ function onMessage(pl: Player, raw: string): void {
             world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 1, pl.bedSpawn[2]) !== B.BED) {
           pl.bedSpawn = null;
         }
+        miningSessions.delete(pl.id);
         players.respawn(pl, spawn);
         sendVitals(pl);
         sendTp(pl); // client must wake up where the server put it (bed or spawn)
@@ -931,7 +1027,7 @@ function onMessage(pl: Player, raw: string): void {
       // rider-driven vehicles follow their rider
       const rv = vehicles.byRider(pl.id);
       if (rv) {
-        rv.p = [nx, ny, nz];
+        rv.p = [nx, ny - PLAYER_EYE, nz];
         rv.yaw = m.yaw;
       }
       break;
@@ -1251,6 +1347,7 @@ function onMessage(pl: Player, raw: string): void {
       break;
     }
     case "chat": {
+      if (typeof m.msg !== "string") break;
       if (!checkChatRate(pl.id)) {
         sendTo(pl, { t: "denied", reason: "chat too fast" });
         break;
@@ -1265,12 +1362,13 @@ function onMessage(pl: Player, raw: string): void {
       pl.lastMove = Date.now();
       break;
     case "eat": {
+      if (!Number.isInteger(m.slot) || m.slot < 0 || m.slot >= 36) break;
       if (players.eat(pl, m.slot)) { sendInv(pl); sendVitals(pl); }
       break;
     }
     case "fall": {
       // client-predicted landing; clamped, bypasses mob-hit cooldown
-      if (pl.dead || pl.creative) break;
+      if (pl.dead || pl.creative || !Number.isFinite(m.dmg)) break;
       const dmg = Math.max(0, Math.min(20, Math.floor(m.dmg)));
       if (dmg <= 0) break;
       pl.hp -= dmg;
@@ -1301,6 +1399,7 @@ function onMessage(pl: Player, raw: string): void {
             world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 1, pl.bedSpawn[2]) !== B.BED) {
           pl.bedSpawn = null;
         }
+        miningSessions.delete(pl.id);
         players.respawn(pl, spawn);
         sendVitals(pl);
         sendTp(pl); // client must wake up where the server put it (bed or spawn)
@@ -1636,6 +1735,9 @@ function onMessage(pl: Player, raw: string): void {
       sendInv(pl);
       break;
     }
+    }
+  } catch {
+    sendTo(pl, { t: "denied", reason: "invalid action" });
   }
 }
 
@@ -1659,7 +1761,7 @@ async function handler(req: Request): Promise<Response> {
           const m = JSON.parse(data);
           if (m.t !== "hello") { socket.close(1008, "hello first"); return; }
           pl = joinGame(String(m.name || "player"), socket);
-          send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, rain, motd: "voxel-coop 🧱", creative: pl.creative });
+          send(socket, welcomeFor(pl, "voxel-coop 🧱"));
         } catch { socket.close(1008, "bad hello"); }
         return;
       }
@@ -1690,10 +1792,7 @@ async function handler(req: Request): Promise<Response> {
     let body: { name?: unknown };
     try { body = await req.json(); } catch { return withCors(new Response("bad json", { status: 400 })); }
     const pl = joinGame(String(body.name || "player"), null);
-    return withCors(Response.json({
-      t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p,
-      time: world.time, rain, motd: "voxel-coop 🧱 (poll mode)",
-    }));
+    return withCors(Response.json(welcomeFor(pl, "voxel-coop 🧱 (poll mode)")));
   }
   if (url.pathname === "/api/poll" && req.method === "POST") {
     let body: { id?: unknown; msgs?: unknown };
@@ -1937,11 +2036,13 @@ setInterval(() => {
       for (const pl of [...players.all.values()]) {
         if (pl.isPoll && now - pl.lastPoll > 15000) leaveGame(pl);
       }
-      // stale WS watch: log sockets with no move/pong for 60s (no close —
-      // close/evict stays with the poll path + socket onclose above).
       for (const pl of [...players.all.values()]) {
         if (!pl.isPoll && now - pl.lastMove > 60000) {
-          console.log(`[stale] ${pl.name} (id=${pl.id}) idle ${Math.round((now - pl.lastMove) / 1000)}s — no move/pong`);
+          console.log(`[stale] ${pl.name} (id=${pl.id}) idle ${Math.round((now - pl.lastMove) / 1000)}s — closing`);
+          const socket = pl.socket;
+          pl.socket = null;
+          try { socket?.close(1001, "idle"); } catch {}
+          leaveGame(pl);
         }
       }
     }

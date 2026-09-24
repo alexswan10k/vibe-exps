@@ -1,5 +1,5 @@
 // voxel-coop client entry: scene, networking, chunk streaming, mining, day/night.
-import { B, CHUNK, WORLD_H, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, WALK_THROUGH, resolveServerUrl, httpBase } from "./config.js";
+import { B, CHUNK, WORLD_H, PLAYER_EYE, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, WALK_THROUGH, resolveServerUrl, httpBase } from "./config.js";
 import { Net, PollNet } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
@@ -226,6 +226,14 @@ scene.add(rainPts);
 window.voxSky = { sunDisc, sunGlow, moonDisc, stars }; // handy for screenshots/tests
 initWeather(scene);
 const player = new Player(camera, renderer.domElement);
+window.voxAudio = audio;
+function applyServerPosition(p) {
+  const feet = [p[0], p[1] - PLAYER_EYE, p[2]];
+  player.pos.set(feet[0], feet[1], feet[2]);
+  player.vel.set(0, 0, 0);
+  player.fallStart = null;
+  return feet;
+}
 player.onFallDamage = (dmg) => net.fall(dmg);
 const crack = new CrackOverlay(scene);
 const particles = new Particles(scene);
@@ -264,6 +272,8 @@ const ui = new UI();
   // module (before UI boot), so no apply call needed here.
 }
 const minimap = new Minimap();
+window.voxMinimap = minimap;
+minimap.setVisible(window.voxSettings?.showMinimap ?? true);
 const teamPings = new TeamPings(scene);
 scene.add(camera); // the held-item viewmodel rides on the camera
 const hand = new Hand(camera, world.materials);
@@ -330,7 +340,7 @@ let serverTime = 0.25;
 let serverRain = 0;
 let shake = 0; // explosion screenshake, decays in frame()
 let dead = false;
-let pendingChunks = new Set();
+let pendingChunks = new Map();
 let lastStream = 0;
 let lastMoveSend = 0;
 let breaking = null; // {x,y,z,block,prog,need}
@@ -528,18 +538,26 @@ function applyTime(t, rain = 0) {
 function streamChunks() {
   const pcx = Math.floor(player.pos.x / CHUNK);
   const pcz = Math.floor(player.pos.z / CHUNK);
+  const now = performance.now();
+  const wanted = [];
   for (let dx = -RENDER_DIST; dx <= RENDER_DIST; dx++) {
     for (let dz = -RENDER_DIST; dz <= RENDER_DIST; dz++) {
       if (dx * dx + dz * dz > (RENDER_DIST + 0.5) ** 2) continue;
       const cx = pcx + dx, cz = pcz + dz;
       const k = `${cx},${cz}`;
+      const requestedAt = pendingChunks.get(k);
+      if (requestedAt !== undefined && now - requestedAt > 6000) pendingChunks.delete(k);
       if (!world.chunks.has(k) && !pendingChunks.has(k)) {
-        pendingChunks.add(k);
-        net.reqChunk(cx, cz);
+        wanted.push({ cx, cz, distance: dx * dx + dz * dz });
       }
     }
   }
-  // unload far chunks so long walks don't leak meshes (nearest torch lights unaffected)
+  wanted.sort((a, b) => a.distance - b.distance);
+  for (const { cx, cz } of wanted.slice(0, 16)) {
+    const k = `${cx},${cz}`;
+    pendingChunks.set(k, now);
+    net.reqChunk(cx, cz);
+  }
   for (const k of [...world.chunks.keys()]) {
     const [cx, cz] = k.split(",").map(Number);
     if (Math.hypot(cx - pcx, cz - pcz) > UNLOAD_DIST) {
@@ -647,7 +665,7 @@ try {
 } catch { /* noop */ }
 
 renderer.domElement.addEventListener("mousedown", (e) => {
-  if (!net?.connected || ui.invOpen || dead) return;
+  if (!net?.connected || anyGuiOpen() || dead) return;
   if (!player.locked) { player.lock(); return; }
   if (e.button === 0) {
     // holding LMB on a mob auto-swings (see tickBreaking); single click hits now
@@ -751,6 +769,7 @@ function tickBreaking(dt) {
       return;
     }
     breaking = { key, x: hit.x, y: hit.y, z: hit.z, block: hit.block, prog: 0, need };
+    net.mineStart(breaking.x, breaking.y, breaking.z, held?.id);
   }
   breaking.prog += dt;
   ui.breakProgress(breaking.prog / breaking.need);
@@ -777,10 +796,12 @@ function tickBreaking(dt) {
 
 // furnace / bed / TNT interact
 addEventListener("keydown", (e) => {
+  if (anyGuiOpen() && ["KeyQ", "KeyM", "KeyN", "KeyP", "KeyF", "KeyX", "KeyC", "KeyR", "KeyG", "KeyT"].includes(e.code)) return;
   if (e.code === "KeyQ" && !e.repeat) { sendTeamPing(); return; }
   if (e.code === "KeyM" && !ui.chatFocused()) { audio.toggleMute(); return; }
   if (e.code === "KeyN" && !ui.chatFocused()) {
     const on = minimap.toggle();
+    ui.setMinimapVisible(on);
     ui.hint(on ? "🗺 minimap on (N)" : "🗺 minimap off (N)");
     return;
   }
@@ -924,13 +945,17 @@ net.on("welcome", (m) => {
   myId = m.id;
   serverTime = m.time;
   serverRain = m.rain ?? 0;
-  player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
-  player.vel.set(0, 0, 0);
-  player.fallStart = null;
-  spawnPos = m.spawn;
-  if (m.creative) {
-    window.voxCreative = true;
+  const feet = applyServerPosition(m.spawn);
+  spawnPos = feet;
+  window.voxCreative = !!m.creative;
+  player.flying = false;
+  player.sailing = false;
+  player.ridingCart = false;
+  player.cartAxis = null;
+  if (window.voxCreative) {
     ui.hint("✨ CREATIVE: F fly · C blocks · X bow · infinite place");
+  } else {
+    ui.hint("survival mode");
   }
   ui.status(`playing as ${$("menu-name").value || "player"}`);
   $("menu").style.display = "none";
@@ -944,7 +969,9 @@ net.on("chunk", (m) => {
   world.setChunk(m.cx, m.cz, decodeRLE(m.rle));
 });
 
-net.on("block", (m) => world.setLocal(m.x, m.y, m.z, m.block));
+net.on("block", (m) => {
+  if ([m.x, m.y, m.z, m.block].every(Number.isInteger)) world.setLocal(m.x, m.y, m.z, m.block);
+});
 net.on("players", (m) => { entities.setPlayers(m.list); if (ui.setPlayers) ui.setPlayers(m.list); });
 net.on("mobs", (m) => entities.setMobs(m.list));
 net.on("mobHit", (m) => {
@@ -1005,7 +1032,7 @@ net.on("vitals", (m) => {
   ui.setVitals(m.hp, m.maxHp, m.hunger, m.dead);
 });
 net.on("time", (m) => { applyTime(m.time, m.rain ?? 0); weatherOnTime(m); });
-net.on("strike", (m) => weatherOnStrike(m, player.pos));
+net.on("strike", (m) => weatherOnStrike(m, player.eye()));
 net.on("boom", (m) => {
   // server-authoritative crater: shake, flash, debris, thunder
   const cx = m.x + 0.5, cy = m.y + 0.5, cz = m.z + 0.5;
@@ -1014,7 +1041,8 @@ net.on("boom", (m) => {
   particles.burst(cx, cy + 2, cz, 0xffe9a8, 20);
   audio.boom();
   flashDamage();
-  const d = Math.hypot(player.pos.x - cx, player.pos.y - cy, player.pos.z - cz);
+  const eye = player.eye();
+  const d = Math.hypot(eye.x - cx, eye.y - cy, eye.z - cz);
   shake = Math.min(1.2, 1.4 - d / 18);
   ui.hint("💥 BOOM!");
 });
@@ -1027,10 +1055,8 @@ net.on("reset", (m) => {
     world.dropChunk(cx, cz);
   }
   pendingChunks.clear();
-  player.pos.set(m.spawn[0], m.spawn[1], m.spawn[2]);
-  player.vel.set(0, 0, 0);
-  player.fallStart = null; // teleport, not a fall — don't bill the next landing
-  spawnPos = m.spawn;
+  const feet = applyServerPosition(m.spawn);
+  spawnPos = feet;
   streamChunks();
   ui.status(`fresh world — seed ${m.seed}`);
 });
@@ -1045,11 +1071,7 @@ net.on("smeltState", (m) => {
 });
 net.on("denied", (m) => ui.hint(m.reason));
 net.on("tp", (m) => {
-  // authoritative teleport (respawn/spawn/home/correction): snap + drop all
-  // fall state so the next landing can't bill a fall you didn't take
-  player.pos.set(m.p[0], m.p[1], m.p[2]);
-  player.vel.set(0, 0, 0);
-  player.fallStart = null;
+  applyServerPosition(m.p);
 });
 net.on("toast", (m) => {
   showToast(m.text);
@@ -1137,6 +1159,12 @@ function connectGame(serverUrl, name) {
   net.connect(serverUrl, name);
   window.voxNet = net;
 }
+ui.onPlay = (name) => {
+  const server = $("menu-server").value.trim();
+  $("menu").style.display = "none";
+  audio.ensure();
+  connectGame(server, name || "player");
+};
 $("menu-join").addEventListener("click", () => {
   try { $("menu-name").value = window.voxGetPlayerName?.() ?? $("menu-name").value; } catch {}
   audio.ensure();
@@ -1212,6 +1240,7 @@ function frame() {
   const now = performance.now();
   const dt = Math.min(0.05, (now - prev) / 1000);
   prev = now;
+  world.flushRemeshes();
 
   if (myId >= 0 && net?.connected) {
     if (!ui.invOpen && !dead) player.update(dt, world);
@@ -1273,8 +1302,9 @@ function frame() {
     }
     if (now - lastMoveSend > 66) {
       lastMoveSend = now;
+      const eye = player.eye();
       net.move(
-        [Math.round(player.pos.x * 100) / 100, Math.round(player.pos.y * 100) / 100, Math.round(player.pos.z * 100) / 100],
+        [Math.round(eye.x * 100) / 100, Math.round(eye.y * 100) / 100, Math.round(eye.z * 100) / 100],
         Math.round(player.yaw * 100) / 100,
         Math.round(player.pitch * 100) / 100,
       );

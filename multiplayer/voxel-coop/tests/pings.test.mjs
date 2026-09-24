@@ -44,9 +44,10 @@ Object.defineProperty(globalThis, "performance", { configurable: true, value: { 
 try {
   for (const Transport of [Net, PollNet]) {
     now = 0;
-    const net = new Transport();
-    const sent = [];
-    net.send = (m) => sent.push(m);
+     const net = new Transport();
+     const sent = [];
+     net.send = (m) => sent.push(m);
+     assert.equal(typeof net.mineStart, "function");
     assert.equal(net.worldPing(0, 20, 1), false);
     net.connected = true;
     assert.equal(net.worldPing(0, 20, 1), true);
@@ -62,4 +63,25 @@ try {
 }
 const { TeamPings } = await load("client/js/fx.js");
 assert.equal(typeof TeamPings, "function");
-console.log("PASS: server dispatch, both client cooldown boundaries, TeamPings export");
+const config = await load("client/js/config.js");
+assert.equal(config.PLAYER_EYE, 1.62);
+assert.equal(config.HARDNESS[49], 1.2);
+assert.equal(config.HARDNESS[50], 1.5);
+assert.equal(config.HARDNESS[51], 3);
+assert.equal(config.HARDNESS[52], 0.5);
+assert.equal(config.isPlaceable(52), true);
+const { AudioSys } = await load("client/js/audio.js");
+const audio = new AudioSys();
+assert.equal(audio.setVolume(0.35), 0.35);
+assert.equal(audio.setVolume(2), 1);
+assert.equal(audio.setVolume(-1), 0);
+assert.match(source, /function welcomeFor\(/);
+assert.match(source, /invalid action/);
+const mainSource = readFileSync(new URL("client/js/main.js", root), "utf8");
+const uiSource = readFileSync(new URL("client/js/ui.js", root), "utf8");
+const entitiesSource = readFileSync(new URL("client/js/entities.js", root), "utf8");
+assert.match(mainSource, /ui\.onPlay = \(name\)/);
+assert.match(mainSource, /connectGame\(server, name/);
+assert.match(uiSource, /this\.onPlay\?\.\(n\)/);
+assert.match(entitiesSource, /let eyeMat = null/);
+console.log("PASS: server dispatch, both client cooldown boundaries, TeamPings export, shared coordinate/settings parity, startup wiring");
