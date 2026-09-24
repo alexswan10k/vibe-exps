@@ -2,7 +2,7 @@
 // Coordinates: x,z unbounded, y in [0, WORLD_H).
 
 import { B, CHUNK, WORLD_H, SEA_LEVEL, WALK_THROUGH, encodeRLE } from "./protocol.ts";
-import { villageBlockAt, dungeonBlockAt } from "./structures.ts";
+import { villageBlockAt, dungeonBlockAt, scatterBlockAt, landmarkBlockAt, blocksTrees } from "./structures.ts";
 
 function hash2(x: number, z: number, seed: number): number {
   // 32-bit integer hash — must use Math.imul (plain * overflows doubles
@@ -366,6 +366,7 @@ export class World {
     for (let dx = -2; dx <= 2; dx++) {
       for (let dz = -2; dz <= 2; dz++) {
         const tx = x - dx, tz = z - dz;
+        if (blocksTrees(tx, tz, this.seed)) continue; // no trunks through roofs
         const kind = treeTypeAt(tx, tz, this.seed);
         if (kind === 0) continue;
         const th = terrainHeight(tx, tz, this.seed);
@@ -450,11 +451,16 @@ export class World {
         }
       }
     }
-    // structures overlay (villages): at/above-surface builds only. Stair
-    // corridors + porch clearing above win, so cave entrances stay open.
+    // structures overlay (villages, then landmarks, then scatter builds):
+    // at/above-surface builds only. Stair corridors + porch clearing above
+    // win, so cave entrances stay open. rarer builds win ties.
     if (y >= h) {
       const v = villageBlockAt(x, y, z, this.seed, h);
       if (v !== undefined) return v;
+      const lm = landmarkBlockAt(x, y, z, this.seed, h);
+      if (lm !== undefined) return lm;
+      const sc = scatterBlockAt(x, y, z, this.seed, h);
+      if (sc !== undefined) return sc;
     }
     // … then worms + shafts + chambers carve stone AND dirt bands (never
     // bedrock, never the top 2 roof layers)

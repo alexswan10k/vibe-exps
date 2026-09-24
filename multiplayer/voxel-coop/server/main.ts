@@ -6,7 +6,7 @@ import { PORT, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
-import { dungeonSpawns } from "./structures.ts";
+import { dungeonSpawns, structureChests, lootFor, structureCenters, villageCenters } from "./structures.ts";
 import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState, VILLAGER_TRADES, ENGINE_FUEL } from "./crafting.ts";
 import { Machines, mkey, LAVA_BURN_S, BUCKET_MB, TANK_CAP } from "./machines.ts";
 import { VehicleSim } from "./vehicles.ts";
@@ -27,6 +27,35 @@ const mobs = new MobSim();
 mobs.peaceful = Deno.args.includes("--peaceful") || Deno.args.includes("--peace");
 const furnaces = new Map<string, FurnaceState & { owner: number }>();
 let spawn = world.findSpawn();
+
+/**
+ * Worldgen loot: structureChests() positions for this seed, kind by pos.
+ * Seeded at boot / on reset; chests opened far from the settled area (or
+ * before a seed pass) fill lazily on open. claimLoot makes every deal
+ * one-time: looted stays looted, player rebuilds never refill.
+ */
+let lootKindByPos = new Map<string, string>();
+function lootSalt(x: number, y: number, z: number): number {
+  return ((x * 374761393 + z * 2246822519) ^ Math.imul(y, 668265263)) | 0;
+}
+function fillLootChest(x: number, y: number, z: number, kind: string): void {
+  const c = machines.ensureChest(x, y, z);
+  for (const s of lootFor(kind, lootSalt(x, y, z))) {
+    Machines.chestGive(c, s.id, s.n);
+  }
+}
+function seedStructureLoot(): void {
+  lootKindByPos = new Map();
+  for (const s of structureChests(world.seed)) {
+    const k = mkey(s.x, s.y, s.z);
+    lootKindByPos.set(k, s.kind);
+    if (world.get(s.x, s.y, s.z) === B.CHEST && machines.claimLoot(s.x, s.y, s.z)) {
+      fillLootChest(s.x, s.y, s.z, s.kind);
+    }
+  }
+  console.log(`[loot] ${lootKindByPos.size} worldgen chests for seed ${world.seed}`);
+}
+seedStructureLoot();
 
 /** Unique display names: if base is taken by a live player, append _2/_3… (fits 16 chars). */
 function uniqueName(raw: string): string {
@@ -538,6 +567,7 @@ function doReset(requestedSeed: number | null, by: string): void {
   const seed = requestedSeed ?? Math.floor(Math.random() * 1e9);
   world.resetWorld(seed);
   machines.resetAll();
+  seedStructureLoot();
   vehicles.resetAll();
   furnaces.clear();
   fuses.length = 0;
@@ -651,7 +681,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /locate <tower|ruin|cabin|hut|temple|shrine|village|dungeon> /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
       sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (F open) + engine (F panel/RMB, burns coal/oil/lava) + pipe + quarry (9x9). fluids: pump (taps water/lava) + fluid pipe + tank (16 buckets) + bucket (F scoop/deposit)." });
       sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water, sail fast) + rails + minecart (W/S throttle on rails). F hops in/out, LMB breaks a free one." });
       return true;
@@ -684,6 +714,31 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       sendTp(pl);
       sendPlayersSnapshot();
       sendTo(pl, { t: "chat", from: "server", msg: "🏠 teleported home" });
+      return true;
+    }
+    case "locate": {
+      const want = (parts[1] ?? "").toLowerCase();
+      const spots: { x: number; z: number; kind: string }[] = [
+        ...structureCenters(world.seed),
+        ...villageCenters(world.seed).map((v) => ({ x: v.x, z: v.z, kind: "village" })),
+        ...dungeonSpawns(world.seed).map((s) => ({ x: s.x, z: s.z, kind: "dungeon" })),
+      ];
+      const kinds = [...new Set(spots.map((s) => s.kind))].sort();
+      const pool = want ? spots.filter((s) => s.kind === want) : spots;
+      if (pool.length === 0) {
+        sendTo(pl, { t: "chat", from: "server", msg: `unknown type "${want}" — try: ${kinds.join(", ")}` });
+        return true;
+      }
+      let best = pool[0], bd = Infinity;
+      for (const s of pool) {
+        const d = Math.hypot(s.x - pl.p[0], s.z - pl.p[2]);
+        if (d < bd) { bd = d; best = s; }
+      }
+      const dx = best.x - pl.p[0], dz = best.z - pl.p[2];
+      const dir = Math.abs(dx) > Math.abs(dz) * 2 ? (dx > 0 ? "east" : "west")
+        : Math.abs(dz) > Math.abs(dx) * 2 ? (dz > 0 ? "south" : "north")
+        : (dz > 0 ? "south-" : "north-") + (dx > 0 ? "east" : "west");
+      sendTo(pl, { t: "chat", from: "server", msg: `📍 nearest ${best.kind}: ${Math.round(bd)}m ${dir} (${Math.round(best.x)}, ${Math.round(best.z)})` });
       return true;
     }
     case "rain": {
@@ -1331,6 +1386,9 @@ function onMessage(pl: Player, raw: string): void {
         break;
       }
       const c = machines.ensureChest(x, y, z);
+      // lazy worldgen loot: first open deals the deterministic contents
+      const kind = lootKindByPos.get(mkey(x, y, z));
+      if (kind && machines.claimLoot(x, y, z)) fillLootChest(x, y, z, kind);
       sendTo(pl, { t: "chest", x, y, z, slots: c.slots.map((s) => ({ ...s })) });
       break;
     }
