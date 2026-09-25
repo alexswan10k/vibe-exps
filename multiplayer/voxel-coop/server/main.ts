@@ -1,15 +1,15 @@
 // voxel-coop server: plain-HTTP LAN server (no TLS), static client + WS game loop.
 // Run: deno task dev   ->   http://<lan-ip>:8000/
 
-import { B, BLOCK_NAME, HARDNESS, PICK_MULT, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, pickTier, requiredTier } from "./protocol.ts";
+import { B, BLOCK_NAME, HARDNESS, PICK_MULT, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, PLAYER_EYE, pickTier, requiredTier, toolMultFor } from "./protocol.ts";
 import { PORT, WORLD_H } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
-import { dungeonSpawns } from "./structures.ts";
+import { dungeonSpawns, structureChests, lootFor, structureCenters, villageCenters } from "./structures.ts";
 import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState, VILLAGER_TRADES, ENGINE_FUEL } from "./crafting.ts";
 import { Machines, mkey, LAVA_BURN_S, BUCKET_MB, TANK_CAP } from "./machines.ts";
-import { VehicleSim } from "./vehicles.ts";
+import { VehicleSim, LOCOMOTIVE_FUEL } from "./vehicles.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
 const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
@@ -27,6 +27,35 @@ const mobs = new MobSim();
 mobs.peaceful = Deno.args.includes("--peaceful") || Deno.args.includes("--peace");
 const furnaces = new Map<string, FurnaceState & { owner: number }>();
 let spawn = world.findSpawn();
+
+/**
+ * Worldgen loot: structureChests() positions for this seed, kind by pos.
+ * Seeded at boot / on reset; chests opened far from the settled area (or
+ * before a seed pass) fill lazily on open. claimLoot makes every deal
+ * one-time: looted stays looted, player rebuilds never refill.
+ */
+let lootKindByPos = new Map<string, string>();
+function lootSalt(x: number, y: number, z: number): number {
+  return ((x * 374761393 + z * 2246822519) ^ Math.imul(y, 668265263)) | 0;
+}
+function fillLootChest(x: number, y: number, z: number, kind: string): void {
+  const c = machines.ensureChest(x, y, z);
+  for (const s of lootFor(kind, lootSalt(x, y, z))) {
+    Machines.chestGive(c, s.id, s.n);
+  }
+}
+function seedStructureLoot(): void {
+  lootKindByPos = new Map();
+  for (const s of structureChests(world.seed)) {
+    const k = mkey(s.x, s.y, s.z);
+    lootKindByPos.set(k, s.kind);
+    if (world.get(s.x, s.y, s.z) === B.CHEST && machines.claimLoot(s.x, s.y, s.z)) {
+      fillLootChest(s.x, s.y, s.z, s.kind);
+    }
+  }
+  console.log(`[loot] ${lootKindByPos.size} worldgen chests for seed ${world.seed}`);
+}
+seedStructureLoot();
 
 /** Unique display names: if base is taken by a live player, append _2/_3… (fits 16 chars). */
 function uniqueName(raw: string): string {
@@ -57,7 +86,7 @@ function checkChatRate(id: number): boolean {
 }
 
 // ---- player persistence (pos + inventory + bed/home spawns across restarts) ----
-interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3; stats?: { kills: number; deaths: number; fished: number } }
+interface SavedPlayer { name: string; p: Vec3; slots: InvSlot[]; bed?: Vec3; home?: Vec3; positionVersion?: number; stats?: { kills: number; deaths: number; fished: number } }
 let savedPlayers: Record<string, SavedPlayer> = {};
 try {
   savedPlayers = JSON.parse(await Deno.readTextFile(SAVE_PLAYERS));
@@ -66,7 +95,7 @@ async function persistPlayers(): Promise<void> {
   try {
     const d: Record<string, SavedPlayer> = { ...savedPlayers };
     for (const pl of players.all.values()) {
-      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, stats: { ...pl.stats } };
+      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, positionVersion: 2, stats: { ...pl.stats } };
     }
     await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
     await Deno.writeTextFile(SAVE_PLAYERS, JSON.stringify(d));
@@ -128,6 +157,7 @@ function sendMarkers(pl: Player): void {
 }
 /** Death bookkeeping shared by the main death sites (mob/fall/blast). */
 function noteDeath(pl: Player, msg: string): void {
+  miningSessions.delete(pl.id);
   pl.stats.deaths++;
   broadcast({ t: "chat", from: "server", msg });
   if (pl.stats.deaths === 5) toastAll(`☠ ${pl.name} has died 5 times!`);
@@ -138,6 +168,7 @@ function freeRide(pl: Player): void {
   const v = vehicles.byRider(pl.id);
   if (v) {
     v.rider = 0;
+    v.control = 0;
     sendTo(pl, { t: "ride", id: 0 });
   }
 }
@@ -155,23 +186,31 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
   }
   const saved = savedPlayers[name];
   if (saved) {
+    const legacyPosition = saved.positionVersion !== 2;
+    const savedPosition = Array.isArray(saved.p) && saved.p.length === 3 && saved.p.every(Number.isFinite)
+      ? [...saved.p] as Vec3
+      : null;
+    const savedHome = Array.isArray(saved.home) && saved.home.length === 3 && saved.home.every(Number.isFinite)
+      ? [...saved.home] as Vec3
+      : null;
+    if (legacyPosition) {
+      if (savedPosition) savedPosition[1] += PLAYER_EYE;
+      if (savedHome) savedHome[1] += PLAYER_EYE;
+    }
     // stale underground logout (cave, or a world that moved on without you)
     // wakes up on the surface — unless it's your own dug-out base nearby.
     // inventory and bed are still restored.
-    if (Array.isArray(saved.p) && saved.p.length === 3 && saved.p.every(Number.isFinite) &&
-        world.shouldRescueToSurface(saved.p[0], saved.p[1], saved.p[2])) {
+    if (savedPosition && world.shouldRescueToSurface(savedPosition[0], savedPosition[1], savedPosition[2])) {
       console.log(`[join] ${name} saved spot was underground — fresh spawn`);
       sendTo(pl, { t: "chat", from: "server", msg: "☀ your last spot was underground — woke up on the surface" });
-    } else {
-      pl.p = saved.p;
+    } else if (savedPosition) {
+      pl.p = savedPosition;
     }
-    pl.slots = saved.slots.length === 36 ? saved.slots : pl.slots;
+    pl.slots = Array.isArray(saved.slots) && saved.slots.length === 36 ? saved.slots : pl.slots;
     if (Array.isArray(saved.bed) && saved.bed.length === 3 && saved.bed.every(Number.isFinite)) {
       pl.bedSpawn = saved.bed as Vec3;
     }
-    if (Array.isArray(saved.home) && saved.home.length === 3 && saved.home.every(Number.isFinite)) {
-      pl.home = saved.home as Vec3;
-    }
+    if (savedHome) pl.home = savedHome;
     if (saved.stats && Number.isFinite(saved.stats.kills) && Number.isFinite(saved.stats.deaths) && Number.isFinite(saved.stats.fished)) {
       pl.stats = { kills: saved.stats.kills, deaths: saved.stats.deaths, fished: saved.stats.fished };
     }
@@ -185,7 +224,21 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
   return pl;
 }
 
+function welcomeFor(pl: Player, motd: string): ServerMsg {
+  return {
+    t: "welcome",
+    id: pl.id,
+    seed: world.seed,
+    spawn: [...pl.p] as Vec3,
+    time: world.time,
+    rain,
+    motd,
+    creative: pl.creative,
+  };
+}
+
 function leaveGame(pl: Player): void {
+  if (!players.all.has(pl.id)) return;
   console.log(`[leave] ${pl.name}`);
   freeRide(pl);
   players.remove(pl.id);
@@ -194,6 +247,7 @@ function leaveGame(pl: Player): void {
   pearlCd.delete(pl.id);
   worldPingCd.delete(pl.id);
   pendingReset.delete(pl.id);
+  miningSessions.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
   void persistPlayers();
 }
@@ -392,6 +446,57 @@ function checkRate(id: number): boolean {
   return true;
 }
 
+interface MiningSession {
+  x: number;
+  y: number;
+  z: number;
+  block: number;
+  heldItem?: number;
+  startedAt: number;
+}
+const miningSessions = new Map<number, MiningSession>();
+
+function miningSeconds(block: number, heldItem: number | undefined, creative: boolean): number {
+  if (creative) return 0;
+  const base = HARDNESS[block];
+  if (base === undefined || base === Infinity) return Infinity;
+  const mult = toolMultFor(block, heldItem);
+  return TOOL_CLASS[block] === "pick" && mult <= 1 ? base * 3.3 : base / mult;
+}
+
+function beginMining(pl: Player, x: number, y: number, z: number, heldItem: number | undefined): boolean {
+  if (pl.dead) return false;
+  x = Math.round(x); y = Math.round(y); z = Math.round(z);
+  if (![x, y, z].every(Number.isFinite) || y < 1 || y >= WORLD_H || dist(pl.p, x, y, z) > (pl.creative ? 12 : 7.5)) return false;
+  const block = world.get(x, y, z);
+  if (block === B.AIR || block === B.WATER || HARDNESS[block] === undefined || HARDNESS[block] === Infinity) return false;
+  const ownedHeld = !pl.creative && heldItem !== undefined && countOf(pl.slots, heldItem) <= 0 ? undefined : heldItem;
+  miningSessions.set(pl.id, { x, y, z, block, heldItem: ownedHeld, startedAt: Date.now() });
+  return true;
+}
+
+function finishMining(pl: Player, x: number, y: number, z: number): boolean {
+  const session = miningSessions.get(pl.id);
+  if (!session || session.x !== Math.round(x) || session.y !== Math.round(y) || session.z !== Math.round(z)) {
+    miningSessions.delete(pl.id);
+    sendTo(pl, { t: "denied", reason: "start mining first" });
+    return false;
+  }
+  if (world.get(session.x, session.y, session.z) !== session.block) {
+    miningSessions.delete(pl.id);
+    sendTo(pl, { t: "denied", reason: "block changed" });
+    return false;
+  }
+  const required = miningSeconds(session.block, session.heldItem, pl.creative);
+  const tolerance = pl.isPoll ? 0.75 : 0.2;
+  if ((Date.now() - session.startedAt) / 1000 + tolerance < required) {
+    sendTo(pl, { t: "denied", reason: "keep mining" });
+    return false;
+  }
+  miningSessions.delete(pl.id);
+  return true;
+}
+
 function dist(a: Vec3, x: number, y: number, z: number): number {
   const dx = a[0] - (x + 0.5), dy = a[1] - (y + 0.5), dz = a[2] - (z + 0.5);
   return Math.hypot(dx, dy, dz);
@@ -538,11 +643,13 @@ function doReset(requestedSeed: number | null, by: string): void {
   const seed = requestedSeed ?? Math.floor(Math.random() * 1e9);
   world.resetWorld(seed);
   machines.resetAll();
+  seedStructureLoot();
   vehicles.resetAll();
   furnaces.clear();
   fuses.length = 0;
   pendingFish.length = 0;
   worldPingCd.clear();
+  miningSessions.clear();
   mobs.mobs.clear();
   spawn = world.findSpawn();
   savedPlayers = {};
@@ -580,6 +687,7 @@ function idName(id: number): string {
 }
 
 function setCreative(pl: Player, creative: boolean): void {
+  miningSessions.delete(pl.id);
   pl.creative = creative;
   if (creative) {
     pl.hp = pl.maxHp;
@@ -643,6 +751,21 @@ function refuelEngine(pl: Player, pos: { x: number; y: number; z: number }): boo
   return false;
 }
 
+function refuelLocomotive(pl: Player, v: { id: number; fuel: number }): boolean {
+  if (v.fuel >= LOCOMOTIVE_FUEL) return false;
+  const priority = [48, 153, 102, 5, 29, 7, 101];
+  for (const id of priority) {
+    const seconds = ENGINE_FUEL[id];
+    if (!seconds || countOf(pl.slots, id) < 1) continue;
+    if (!pl.creative) removeItems(pl.slots, { [id]: 1 });
+    const fuel = vehicles.refuel(v.id, seconds);
+    sendInv(pl);
+    sendTo(pl, { t: "chat", from: "server", msg: `🚂 locomotive fueled +${seconds}s (${idName(id)}) · ${Math.ceil(fuel)}s left` });
+    return true;
+  }
+  return false;
+}
+
 /** Returns true if msg was a slash command (handled, not broadcast). */
 function handleChatCommand(pl: Player, msg: string): boolean {
   if (!msg.startsWith("/")) return false;
@@ -651,9 +774,9 @@ function handleChatCommand(pl: Player, msg: string): boolean {
   const arg = parts.slice(1).join(" ").trim();
   switch (cmd) {
     case "help":
-      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
+      sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /locate <tower|ruin|cabin|hut|temple|shrine|village|dungeon> /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
       sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (F open) + engine (F panel/RMB, burns coal/oil/lava) + pipe + quarry (9x9). fluids: pump (taps water/lava) + fluid pipe + tank (16 buckets) + bucket (F scoop/deposit)." });
-      sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water, sail fast) + rails + minecart (W/S throttle on rails). F hops in/out, LMB breaks a free one." });
+      sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water) + rails + minecart + steam locomotive. Locomotive uses W/S throttle, /fuel nearby, and pulls connected carts." });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -684,6 +807,31 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       sendTp(pl);
       sendPlayersSnapshot();
       sendTo(pl, { t: "chat", from: "server", msg: "🏠 teleported home" });
+      return true;
+    }
+    case "locate": {
+      const want = (parts[1] ?? "").toLowerCase();
+      const spots: { x: number; z: number; kind: string }[] = [
+        ...structureCenters(world.seed),
+        ...villageCenters(world.seed).map((v) => ({ x: v.x, z: v.z, kind: "village" })),
+        ...dungeonSpawns(world.seed).map((s) => ({ x: s.x, z: s.z, kind: "dungeon" })),
+      ];
+      const kinds = [...new Set(spots.map((s) => s.kind))].sort();
+      const pool = want ? spots.filter((s) => s.kind === want) : spots;
+      if (pool.length === 0) {
+        sendTo(pl, { t: "chat", from: "server", msg: `unknown type "${want}" — try: ${kinds.join(", ")}` });
+        return true;
+      }
+      let best = pool[0], bd = Infinity;
+      for (const s of pool) {
+        const d = Math.hypot(s.x - pl.p[0], s.z - pl.p[2]);
+        if (d < bd) { bd = d; best = s; }
+      }
+      const dx = best.x - pl.p[0], dz = best.z - pl.p[2];
+      const dir = Math.abs(dx) > Math.abs(dz) * 2 ? (dx > 0 ? "east" : "west")
+        : Math.abs(dz) > Math.abs(dx) * 2 ? (dz > 0 ? "south" : "north")
+        : (dz > 0 ? "south-" : "north-") + (dx > 0 ? "east" : "west");
+      sendTo(pl, { t: "chat", from: "server", msg: `📍 nearest ${best.kind}: ${Math.round(bd)}m ${dir} (${Math.round(best.x)}, ${Math.round(best.z)})` });
       return true;
     }
     case "rain": {
@@ -751,7 +899,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
         buildcraft: [[43, 2], [44, 16], [45, 2], [46, 1], [102, 16], [153, 8]],
         weapons: [[148, 1], [149, 32], [150, 1], [151, 1], [152, 1], [136, 2]],
         fluids: [[49, 16], [50, 2], [51, 1], [155, 4], [102, 8]],
-        vehicles: [[158, 1], [159, 1], [52, 32]],
+        vehicles: [[158, 1], [159, 1], [160, 1], [52, 32]],
         creative: [[43, 4], [44, 64], [45, 4], [46, 2], [126, 1], [127, 1], [148, 1], [149, 64]],
       };
       const kit = kits[which];
@@ -765,10 +913,16 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       return true;
     }
     case "fuel": {
-      // refuel nearest burning-capable engine within 6 blocks from inventory
+      const locomotive = vehicles.nearestLocomotive(pl.p, 6);
+      if (locomotive) {
+        if (!refuelLocomotive(pl, locomotive)) {
+          sendTo(pl, { t: "chat", from: "server", msg: locomotive.fuel >= LOCOMOTIVE_FUEL ? "locomotive tank is full" : "need coal/oil/coal block/logs in inventory" });
+        }
+        return true;
+      }
       const e = nearestEngine(pl, 6);
       if (!e) {
-        sendTo(pl, { t: "chat", from: "server", msg: "no engine nearby — place one next to your quarry/pipes" });
+        sendTo(pl, { t: "chat", from: "server", msg: "no engine or locomotive nearby" });
         return true;
       }
       if (refuelEngine(pl, e)) return true;
@@ -829,23 +983,41 @@ function handleChatCommand(pl: Player, msg: string): boolean {
 // ---- websocket message handling ----
 function onMessage(pl: Player, raw: string): void {
   let m: ClientMsg;
-  try { m = JSON.parse(raw); } catch { return; }
-  switch (m.t) {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || typeof (parsed as { t?: unknown }).t !== "string") return;
+    m = parsed as ClientMsg;
+  } catch { return; }
+  try {
+    switch (m.t) {
     case "reqChunk": {
       const { cx, cz } = m;
       if (!Number.isInteger(cx) || !Number.isInteger(cz) || Math.abs(cx) > 64 || Math.abs(cz) > 64) return;
       sendTo(pl, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
       break;
     }
+    case "mineStart":
+      if (![m.x, m.y, m.z].every(Number.isFinite) ||
+          (m.heldItem !== undefined && !Number.isInteger(m.heldItem))) break;
+      if (!beginMining(pl, m.x, m.y, m.z, m.heldItem)) sendTo(pl, { t: "denied", reason: "can't mine that" });
+      break;
     case "edit":
+      if ((m.op !== "break" && m.op !== "place") ||
+          ![m.x, m.y, m.z].every(Number.isFinite) ||
+          (m.block !== undefined && !Number.isInteger(m.block)) ||
+          (m.heldItem !== undefined && !Number.isInteger(m.heldItem))) break;
+      if (m.op === "break" && !pl.creative && !finishMining(pl, m.x, m.y, m.z)) break;
+      if (m.op === "place") miningSessions.delete(pl.id);
       handleEdit(pl, m.op, m.x, m.y, m.z, m.block, m.heldItem);
       break;
     case "move": {
-      if (pl.dead) break;
+      if (pl.dead || !Array.isArray(m.p) || m.p.length !== 3) break;
       const [nx, ny, nz] = m.p;
       if (![nx, ny, nz, m.yaw, m.pitch].every(Number.isFinite)) break;
       const dx = nx - pl.p[0], dy = ny - pl.p[1], dz = nz - pl.p[2];
-      if (Math.hypot(dx, dy, dz) > (pl.creative ? 25 : 10)) {
+      const elapsed = Math.max(0.08, (Date.now() - pl.lastMove) / 1000);
+      const maxStep = Math.min(pl.creative ? 25 : 10, (pl.creative ? 28 : 14) * elapsed + 1.5);
+      if (Math.hypot(dx, dy, dz) > maxStep) {
         // desync (missed teleport, lag spike): the client is somewhere the
         // server isn't — snap it back to the authoritative position instead of
         // stranding it (every edit would fail "too far" forever). Cooled down.
@@ -864,6 +1036,7 @@ function onMessage(pl: Player, raw: string): void {
             world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 1, pl.bedSpawn[2]) !== B.BED) {
           pl.bedSpawn = null;
         }
+        miningSessions.delete(pl.id);
         players.respawn(pl, spawn);
         sendVitals(pl);
         sendTp(pl); // client must wake up where the server put it (bed or spawn)
@@ -875,8 +1048,8 @@ function onMessage(pl: Player, raw: string): void {
       pl.lastMove = Date.now();
       // rider-driven vehicles follow their rider
       const rv = vehicles.byRider(pl.id);
-      if (rv) {
-        rv.p = [nx, ny, nz];
+      if (rv && rv.kind !== "locomotive" && rv.attachedTo === 0) {
+        rv.p = [nx, ny - PLAYER_EYE, nz];
         rv.yaw = m.yaw;
       }
       break;
@@ -1196,6 +1369,7 @@ function onMessage(pl: Player, raw: string): void {
       break;
     }
     case "chat": {
+      if (typeof m.msg !== "string") break;
       if (!checkChatRate(pl.id)) {
         sendTo(pl, { t: "denied", reason: "chat too fast" });
         break;
@@ -1210,12 +1384,13 @@ function onMessage(pl: Player, raw: string): void {
       pl.lastMove = Date.now();
       break;
     case "eat": {
+      if (!Number.isInteger(m.slot) || m.slot < 0 || m.slot >= 36) break;
       if (players.eat(pl, m.slot)) { sendInv(pl); sendVitals(pl); }
       break;
     }
     case "fall": {
       // client-predicted landing; clamped, bypasses mob-hit cooldown
-      if (pl.dead || pl.creative) break;
+      if (pl.dead || pl.creative || !Number.isFinite(m.dmg)) break;
       const dmg = Math.max(0, Math.min(20, Math.floor(m.dmg)));
       if (dmg <= 0) break;
       pl.hp -= dmg;
@@ -1246,6 +1421,7 @@ function onMessage(pl: Player, raw: string): void {
             world.get(pl.bedSpawn[0], pl.bedSpawn[1] - 1, pl.bedSpawn[2]) !== B.BED) {
           pl.bedSpawn = null;
         }
+        miningSessions.delete(pl.id);
         players.respawn(pl, spawn);
         sendVitals(pl);
         sendTp(pl); // client must wake up where the server put it (bed or spawn)
@@ -1331,6 +1507,9 @@ function onMessage(pl: Player, raw: string): void {
         break;
       }
       const c = machines.ensureChest(x, y, z);
+      // lazy worldgen loot: first open deals the deterministic contents
+      const kind = lootKindByPos.get(mkey(x, y, z));
+      if (kind && machines.claimLoot(x, y, z)) fillLootChest(x, y, z, kind);
       sendTo(pl, { t: "chest", x, y, z, slots: c.slots.map((s) => ({ ...s })) });
       break;
     }
@@ -1486,7 +1665,7 @@ function onMessage(pl: Player, raw: string): void {
     }
     case "vehiclePlace": {
       if (pl.dead) break;
-      const kind = m.kind === "cart" ? "cart" : m.kind === "boat" ? "boat" : null;
+      const kind = m.kind === "locomotive" ? "locomotive" : m.kind === "cart" ? "cart" : m.kind === "boat" ? "boat" : null;
       if (!kind) break;
       const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
       if (![x, y, z].every(Number.isFinite) || y < 0 || y >= 48) break;
@@ -1494,9 +1673,9 @@ function onMessage(pl: Player, raw: string): void {
         sendTo(pl, { t: "denied", reason: "too far" });
         break;
       }
-      const needId = kind === "boat" ? 158 : 159;
+      const needId = kind === "boat" ? 158 : kind === "locomotive" ? 160 : 159;
       if (!pl.creative && countOf(pl.slots, needId) < 1) {
-        sendTo(pl, { t: "denied", reason: kind === "boat" ? "need a boat" : "need a minecart" });
+        sendTo(pl, { t: "denied", reason: kind === "boat" ? "need a boat" : kind === "locomotive" ? "need a steam locomotive" : "need a minecart" });
         break;
       }
       if (kind === "boat") {
@@ -1521,11 +1700,20 @@ function onMessage(pl: Player, raw: string): void {
       broadcast({ t: "vehicles", list: vehicles.wire() });
       break;
     }
+    case "vehicleControl": {
+      if (pl.dead || ![-1, 0, 1].includes(m.throttle)) break;
+      if (!vehicles.setControl(pl.id, m.throttle)) sendTo(pl, { t: "denied", reason: "only a locomotive has a throttle" });
+      break;
+    }
     case "vehicleEnter": {
       if (pl.dead) break;
       const v = vehicles.vehicles.get(m.id);
       if (!v) {
         sendTo(pl, { t: "denied", reason: "no such vehicle" });
+        break;
+      }
+      if (v.attachedTo !== 0) {
+        sendTo(pl, { t: "denied", reason: "that cart is coupled to a locomotive" });
         break;
       }
       if (v.rider !== 0) {
@@ -1538,7 +1726,7 @@ function onMessage(pl: Player, raw: string): void {
       }
       freeRide(pl);
       v.rider = pl.id;
-      sendTo(pl, { t: "ride", id: v.id, kind: v.kind });
+      sendTo(pl, { t: "ride", id: v.id, kind: v.kind, p: [...v.p] as Vec3, yaw: v.yaw, fuel: v.fuel, speed: v.speed });
       broadcast({ t: "vehicles", list: vehicles.wire() });
       break;
     }
@@ -1552,6 +1740,10 @@ function onMessage(pl: Player, raw: string): void {
       if (pl.dead) break;
       const v = vehicles.vehicles.get(m.id);
       if (!v) break;
+      if (v.attachedTo !== 0) {
+        sendTo(pl, { t: "denied", reason: "that cart is coupled to a locomotive" });
+        break;
+      }
       if (v.rider !== 0) {
         sendTo(pl, { t: "denied", reason: v.rider === pl.id ? "hop out first (F)" : "occupied" });
         break;
@@ -1561,7 +1753,7 @@ function onMessage(pl: Player, raw: string): void {
         break;
       }
       vehicles.remove(m.id);
-      giveItems(pl.slots, v.kind === "boat" ? 158 : 159, 1);
+      giveItems(pl.slots, v.kind === "boat" ? 158 : v.kind === "locomotive" ? 160 : 159, 1);
       sendInv(pl);
       broadcast({ t: "vehicles", list: vehicles.wire() });
       break;
@@ -1578,6 +1770,9 @@ function onMessage(pl: Player, raw: string): void {
       sendInv(pl);
       break;
     }
+    }
+  } catch {
+    sendTo(pl, { t: "denied", reason: "invalid action" });
   }
 }
 
@@ -1601,7 +1796,7 @@ async function handler(req: Request): Promise<Response> {
           const m = JSON.parse(data);
           if (m.t !== "hello") { socket.close(1008, "hello first"); return; }
           pl = joinGame(String(m.name || "player"), socket);
-          send(socket, { t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p, time: world.time, rain, motd: "voxel-coop 🧱", creative: pl.creative });
+          send(socket, welcomeFor(pl, "voxel-coop 🧱"));
         } catch { socket.close(1008, "bad hello"); }
         return;
       }
@@ -1632,10 +1827,7 @@ async function handler(req: Request): Promise<Response> {
     let body: { name?: unknown };
     try { body = await req.json(); } catch { return withCors(new Response("bad json", { status: 400 })); }
     const pl = joinGame(String(body.name || "player"), null);
-    return withCors(Response.json({
-      t: "welcome", id: pl.id, seed: world.seed, spawn: pl.p,
-      time: world.time, rain, motd: "voxel-coop 🧱 (poll mode)",
-    }));
+    return withCors(Response.json(welcomeFor(pl, "voxel-coop 🧱 (poll mode)")));
   }
   if (url.pathname === "/api/poll" && req.method === "POST") {
     let body: { id?: unknown; msgs?: unknown };
@@ -1672,6 +1864,14 @@ setInterval(() => {
   if (tickRain(dt)) mobs.rain = rain; else mobs.rain = rain;
   tickStorm(dt);
   tickFuses();
+  vehicles.tick(dt, world, (v) => {
+    const rider = players.all.get(v.rider);
+    if (rider) {
+      rider.p = [v.p[0], v.p[1] + PLAYER_EYE, v.p[2]];
+      rider.lastMove = Date.now();
+      sendTo(rider, { t: "ride", id: v.id, kind: v.kind, p: [...v.p] as Vec3, yaw: v.yaw, fuel: v.fuel, speed: v.speed });
+    }
+  });
   // mob damage callback routes to vitals (name included so tamed wolves can
   // follow owners — mobs side reads (pl as {name?:string}).name defensively)
   const wrappers = [...players.all.values()].map((pl) => ({
@@ -1874,16 +2074,19 @@ setInterval(() => {
       broadcast({ t: "time", time: world.time, rain, storm });
       void persistPlayers();
       void machines.save(); // chests/engines/quarries persist alongside players
+      void vehicles.save();
       // evict legacy poll clients that stopped polling
       const now = Date.now();
       for (const pl of [...players.all.values()]) {
         if (pl.isPoll && now - pl.lastPoll > 15000) leaveGame(pl);
       }
-      // stale WS watch: log sockets with no move/pong for 60s (no close —
-      // close/evict stays with the poll path + socket onclose above).
       for (const pl of [...players.all.values()]) {
         if (!pl.isPoll && now - pl.lastMove > 60000) {
-          console.log(`[stale] ${pl.name} (id=${pl.id}) idle ${Math.round((now - pl.lastMove) / 1000)}s — no move/pong`);
+          console.log(`[stale] ${pl.name} (id=${pl.id}) idle ${Math.round((now - pl.lastMove) / 1000)}s — closing`);
+          const socket = pl.socket;
+          pl.socket = null;
+          try { socket?.close(1001, "idle"); } catch {}
+          leaveGame(pl);
         }
       }
     }

@@ -19,16 +19,20 @@ export class Minimap {
     this.cv = document.getElementById("minimap");
     this.on = true;
     try {
-      const saved = localStorage.getItem("voxelcoop.minimap");
+      const saved = localStorage.getItem("vox-minimap") ?? localStorage.getItem("voxelcoop.minimap");
       if (saved === "0") this.on = false;
     } catch { /* noop */ }
     this.applyVis();
   }
   toggle() {
     this.on = !this.on;
-    try { localStorage.setItem("voxelcoop.minimap", this.on ? "1" : "0"); } catch { /* noop */ }
+    try { localStorage.setItem("vox-minimap", this.on ? "1" : "0"); } catch { /* noop */ }
     this.applyVis();
     return this.on;
+  }
+  setVisible(on) {
+    this.on = !!on;
+    this.applyVis();
   }
   applyVis() {
     if (this.cv) this.cv.style.display = this.on ? "block" : "none";

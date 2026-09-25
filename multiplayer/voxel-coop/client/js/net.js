@@ -91,6 +91,7 @@ export class Net {
 
   worldPing(x, y, z) { return worldPing.call(this, x, y, z); }
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
+  mineStart(x, y, z, heldItem) { this.send({ t: "mineStart", x, y, z, heldItem }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }
   gridPut(slot, g, all) { this.send({ t: "gridPut", slot, g, all }); }
@@ -121,6 +122,7 @@ export class Net {
   bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
   tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
   vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleControl(throttle) { this.send({ t: "vehicleControl", throttle }); }
   vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
   vehicleExit() { this.send({ t: "vehicleExit" }); }
   vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }
@@ -160,6 +162,9 @@ export class PollNet {
 
   async connect(url, name) {
     this.wantClose = false;
+    this.connected = false;
+    this.id = -1;
+    this.queue = [];
     this.url = url;
     this.base = httpBase(url);
     this.name = name;
@@ -208,6 +213,8 @@ export class PollNet {
     this.timer = null;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     this.connected = false;
+    this.id = -1;
+    this.queue = [];
   }
 
   send(m) {
@@ -253,6 +260,7 @@ export class PollNet {
 
   worldPing(x, y, z) { return worldPing.call(this, x, y, z); }
   reqChunk(cx, cz) { this.send({ t: "reqChunk", cx, cz }); }
+  mineStart(x, y, z, heldItem) { this.send({ t: "mineStart", x, y, z, heldItem }); }
   edit(op, x, y, z, block, heldItem) { this.send({ t: "edit", op, x, y, z, block, heldItem }); }
   move(p, yaw, pitch) { this.send({ t: "move", p, yaw, pitch }); }
   gridPut(slot, g, all) { this.send({ t: "gridPut", slot, g, all }); }
@@ -283,6 +291,7 @@ export class PollNet {
   bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
   tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
   vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleControl(throttle) { this.send({ t: "vehicleControl", throttle }); }
   vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
   vehicleExit() { this.send({ t: "vehicleExit" }); }
   vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }

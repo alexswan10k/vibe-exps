@@ -5,6 +5,7 @@
 export const CHUNK = 16;
 export const WORLD_H = 48;
 export const SEA_LEVEL = 15;
+export const PLAYER_EYE = 1.62;
 export const PORT = 8000;
 
 export const B = {
@@ -91,7 +92,7 @@ export const BLOCK_NAME: Record<number, string> = {
   148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
   152: "firebrand", 153: "oil", 154: "wrench",
   155: "bucket", 156: "water bucket", 157: "lava bucket",
-  158: "boat", 159: "minecart",
+  158: "boat", 159: "minecart", 160: "steam locomotive",
 };
 
 // Item ids: placeable blocks reuse block id; tools/materials use 100+.
@@ -153,6 +154,7 @@ export const I = {
   LAVA_BUCKET: 157,
   BOAT: 158,
   MINECART: 159,
+  LOCOMOTIVE: 160,
 } as const;
 
 // Seconds to break by hand (Infinity = unbreakable)
@@ -253,6 +255,7 @@ export type Vec3 = [number, number, number];
 export type ClientMsg =
   | { t: "hello"; name: string }
   | { t: "reqChunk"; cx: number; cz: number }
+  | { t: "mineStart"; x: number; y: number; z: number; heldItem?: number }
   | { t: "edit"; op: "break" | "place"; x: number; y: number; z: number; block?: number; heldItem?: number }
   | { t: "move"; p: Vec3; yaw: number; pitch: number }
   | { t: "gridPut"; slot: number; g: number; all: boolean }
@@ -281,7 +284,8 @@ export type ClientMsg =
   | { t: "engineFuel" }
   | { t: "bucketFill"; x: number; y: number; z: number }
   | { t: "tankUse"; x: number; y: number; z: number; held?: number }
-  | { t: "vehiclePlace"; kind: "boat" | "cart"; x: number; y: number; z: number }
+  | { t: "vehiclePlace"; kind: "boat" | "cart" | "locomotive"; x: number; y: number; z: number }
+  | { t: "vehicleControl"; throttle: -1 | 0 | 1 }
   | { t: "vehicleEnter"; id: number }
   | { t: "vehicleExit" }
   | { t: "vehicleBreak"; id: number }
@@ -308,7 +312,7 @@ export type ServerMsg =
   | { t: "chest"; x: number; y: number; z: number; slots: InvSlot[] }
   | { t: "machines"; engines: EngineWire[]; quarries: QuarryWire[]; tanks?: TankWire[] }
   | { t: "vehicles"; list: VehicleWire[] }
-  | { t: "ride"; id: number; kind?: "boat" | "cart" }
+  | { t: "ride"; id: number; kind?: "boat" | "cart" | "locomotive"; p?: Vec3; yaw?: number; fuel?: number; speed?: number }
   | { t: "gamemode"; creative: boolean }
   | { t: "markers"; spawn: Vec3; home?: Vec3; bed?: Vec3 }
   | { t: "reset"; seed: number; spawn: Vec3 }
@@ -346,11 +350,11 @@ export type FluidKind = "water" | "lava";
 export interface TankWire {
   x: number; y: number; z: number; fluid: FluidKind | null; amount: number;
 }
-export type VehicleKind = "boat" | "cart";
-export interface VehicleWire {
-  id: number; kind: VehicleKind; p: Vec3; yaw: number; rider: number;
-}
+export type VehicleKind = "boat" | "cart" | "locomotive";
 
+export interface VehicleWire {
+  id: number; kind: VehicleKind; p: Vec3; yaw: number; rider: number; fuel?: number; speed?: number;
+}
 // RLE helpers: flat [id,count,...]
 export function encodeRLE(data: Uint8Array): number[] {
   const out: number[] = [];

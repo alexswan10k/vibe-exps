@@ -3,18 +3,18 @@
 // PURE + deterministic: every layout derives from integer hashes of (seed,x,z).
 // No Math.random anywhere; same seed -> same structures.
 //
-// BLOCK-ID NOTES (protocol.ts, read-only): there is NO chest block (B spans
-// 0..42, no CHEST) and NO crop block, so dungeons get a furnace instead of a
-// loot chest (loot is skipped — see DUNGEON LOOT below) and farm "crops" are
-// tall-grass / flower decor. Symbolic B.* names are used throughout because
-// the numeric ids differ from older docs (e.g. LOG=5, PLANKS=7, WATER=10).
+// BLOCK-ID NOTES (protocol.ts): B.CHEST (43) exists with machine inventories,
+// so dungeons and the new scatter/landmark structures get REAL loot chests
+// (filled deterministically by main.ts via structureChests/lootFor). There is
+// still NO crop block, so farm "crops" stay tall-grass / flower decor.
+// Symbolic B.* / I.* names are used throughout.
 //
 // TERRAIN MIRROR: hash2/smooth/vnoise/terrainHeight/biomeAt below are verbatim
 // copies of the world.ts formulas. They are duplicated (not imported) to avoid
 // a world<->structures module cycle: world.ts imports the overlay fns from
 // here. If world.ts terrain ever changes, update the mirror to match.
 
-import { B, SEA_LEVEL, WORLD_H } from "./protocol.ts";
+import { B, I, SEA_LEVEL, WORLD_H } from "./protocol.ts";
 import type { World } from "./world.ts";
 
 // ---------- terrain mirror (must match world.ts) ----------
@@ -488,8 +488,9 @@ export function dungeonBlockAt(
   if (y < fy - 1 || y > fy + 3) return undefined;
   const interior = ox >= 0 && ox <= 4 && oz >= 0 && oz <= 4;
   if (interior && y >= fy && y <= fy + 2) {
-    // DUNGEON LOOT: B has no CHEST id — furnaces mark the loot spots instead.
-    if (y === fy && ((ox === 0 && oz === 0) || (ox === 4 && oz === 4))) return B.FURNACE;
+    // LOOT CHEST: real B.CHEST, filled by main.ts (structureChests/lootFor).
+    if (y === fy && ox === 0 && oz === 0) return B.CHEST;
+    if (y === fy && ox === 4 && oz === 4) return B.FURNACE;
     return B.AIR;
   }
   if (y === fy - 1) return B.COBBLE; // floor
@@ -514,4 +515,490 @@ export function buildDungeon(world: World, seed: number, rx: number, rz: number)
       }
     }
   }
+}
+
+// ---------- surface scatter structures (variety pack) ----------
+//
+// One small structure per ~112-block lattice cell (45% of cells), jittered.
+// Kinds: watchtower (open biomes), ruin (any dry land, also the fallback when
+// the hashed kind's biome misses), lonely cabin (taiga/forest/plains),
+// witch hut (swamp). Pure + deterministic like everything above.
+
+export type ScatKind = "tower" | "ruin" | "cabin" | "hut";
+
+export interface Scatter {
+  kind: ScatKind;
+  sx: number; sz: number; gy: number;
+  r: number; // bbox radius (cells within sx±r, sz±r may hold blocks)
+}
+
+export const SCAT_CELL = 112;
+const S_SCAT_GATE = 0x5ca0;
+const S_SCAT_POS = 0x5ca1;
+const S_SCAT_KIND = 0x5ca2;
+const S_RUIN_F = 0x5ca3;
+const S_RUIN_W = 0x5ca4;
+const S_HUT_DECO = 0x5ca5;
+
+/** Anchor position for a lattice cell (no terrain calls — cheap bbox pretest). */
+function scatterAnchor(gx: number, gz: number, seed: number): { sx: number; sz: number } {
+  const sx = gx * SCAT_CELL +
+    Math.floor((hash2(gx, gz, seed ^ S_SCAT_POS) - 0.5) * 64);
+  const sz = gz * SCAT_CELL +
+    Math.floor((hash2(gz, gx, seed ^ (S_SCAT_POS + 1)) - 0.5) * 64);
+  return { sx, sz };
+}
+
+function scatterForCell(gx: number, gz: number, seed: number): Scatter | null {
+  if (hash2(gx, gz, seed ^ S_SCAT_GATE) >= 0.45) return null;
+  const { sx, sz } = scatterAnchor(gx, gz, seed);
+  const gy = terrainHeight(sx, sz, seed);
+  if (gy <= SEA_LEVEL + 1 || gy >= 27) return null; // dry lowland only
+  const bio = biomeAt(sx, sz, seed, gy);
+  const want = hash2(sx, sz, seed ^ S_SCAT_KIND);
+  let kind: ScatKind = "ruin";
+  if (want < 0.30) {
+    if (bio === BIOME.PLAINS || bio === BIOME.FOREST || bio === BIOME.SAVANNA) kind = "tower";
+  } else if (want < 0.55) {
+    kind = "ruin";
+  } else if (want < 0.80) {
+    if (bio === BIOME.TAIGA || bio === BIOME.FOREST || bio === BIOME.PLAINS) kind = "cabin";
+  } else {
+    if (bio === BIOME.SWAMP) kind = "hut";
+  }
+  // keep clear of villages (their bbox is ±20, checked cheaply)
+  for (const v of getVillages(seed)) {
+    if (Math.abs(sx - v.cx) < 28 && Math.abs(sz - v.cz) < 28) return null;
+  }
+  return { kind, sx, sz, gy, r: 4 };
+}
+
+function towerBlock(lx: number, dy: number, lz: number): number | undefined {
+  const ax = Math.abs(lx), az = Math.abs(lz);
+  const rim = Math.max(ax, az) === 2;
+  // corner legs, ground to platform
+  if (ax === 2 && az === 2 && dy >= 0 && dy <= 7) return B.COBBLE;
+  // ladder strip up the south face to the platform hole
+  if (lx === 2 && lz === 0 && dy >= 1 && dy <= 8) return B.LADDER;
+  if (dy === 8 && Math.max(ax, az) <= 2) {
+    if (lx === 2 && lz === 0) return B.AIR; // climb-out hole
+    return B.PLANKS; // platform
+  }
+  // railing, with a gap at the ladder hole
+  if (dy === 9 && rim) {
+    if (lx === 2 && lz === 0) return B.AIR;
+    return B.FENCE;
+  }
+  if (dy === 9) {
+    if (lx === -1 && lz === -1) return B.CHEST; // lookout cache
+    if (lx === 1 && lz === 1) return B.TORCH;
+    return undefined;
+  }
+  return undefined;
+}
+
+function ruinBlock(
+  x: number, lx: number, dy: number, lz: number, seed: number,
+): number | undefined {
+  const m = Math.max(Math.abs(lx), Math.abs(lz));
+  if (m > 3) return undefined;
+  // cache pad: forced cobble footing with the chest on top (slopes can't bury it)
+  if (lx === 2 && lz === 2) {
+    if (dy === 0) return B.COBBLE;
+    if (dy === 1) return B.CHEST; // half-buried cache
+    return undefined;
+  }
+  // patchy cobble floor
+  if (dy === 0 && m <= 2) {
+    return hash2(x, x * 3 + lz, seed ^ S_RUIN_F) > 0.45 ? B.COBBLE : undefined;
+  }
+  // tall corners, broken curtain walls with a south door gap
+  if (Math.abs(lx) === 3 && Math.abs(lz) === 3 && dy >= 1 && dy <= 4) return B.COBBLE;
+  if (m === 3 && dy >= 1 && dy <= 3) {
+    if (lz === 3 && (lx === -1 || lx === 0)) return B.AIR; // door
+    const wh = 1 + Math.floor(hash2(x, dy * 9 + lz, seed ^ S_RUIN_W) * 3); // 1..3
+    if (dy > wh) return undefined;
+    return hash2(x * 5 + dy, lz * 7, seed ^ (S_RUIN_W + 1)) < 0.3 ? B.STONE_BRICK : B.COBBLE;
+  }
+  if (dy === 1) {
+    if (lx === -2 && lz === -2) return B.FURNACE;
+  }
+  if (lx === 0 && lz === 0 && dy === 2) return B.TORCH; // eerie marker
+  return undefined;
+}
+
+function cabinBlock(lx: number, dy: number, lz: number): number | undefined {
+  const ax = Math.abs(lx), az = Math.abs(lz);
+  if (Math.max(ax, az) > 2) return undefined;
+  if (dy === 0) return B.PLANKS; // floor
+  if (dy === 3) return B.PLANKS; // flat roof
+  if (dy !== 1 && dy !== 2) return undefined;
+  const rim = Math.max(ax, az) === 2;
+  if (!rim) {
+    // interior
+    if (dy === 1) {
+      if (lx === -1 && lz === 0) return B.BED;
+      if (lx === 1 && lz === 1) return B.FURNACE;
+    }
+    if (lx === 0 && lz === 0 && dy === 2) return B.TORCH;
+    return B.AIR;
+  }
+  if (lz === 2 && lx === 0) return B.AIR; // south door gap
+  if (dy === 2 && ((ax === 2 && lz === 0) || (az === 2 && lx === 0))) return B.GLASS;
+  if (ax === 2 && az === 2) return B.LOG;
+  return B.PLANKS;
+}
+
+function hutBlock(
+  x: number, z: number, lx: number, dy: number, lz: number, seed: number,
+): number | undefined {
+  const ax = Math.abs(lx), az = Math.abs(lz);
+  if (Math.max(ax, az) > 2) return undefined;
+  // stilts down into the mire
+  if (ax === 2 && az === 2 && dy >= 0 && dy <= 2) return B.LOG;
+  // ladder up the south face
+  if (lx === 0 && lz === 2 && dy >= 0 && dy <= 3) return B.LADDER;
+  if (dy === 3) {
+    if (lx === 0 && lz === 2) return B.AIR; // climb-out hole
+    return B.PLANKS; // floor
+  }
+  if (dy === 6) return B.PLANKS; // roof
+  if (dy !== 4 && dy !== 5) return undefined;
+  const rim = Math.max(ax, az) === 2;
+  if (!rim) {
+    if (dy === 4) {
+      if (lx === -1 && lz === -1) return B.FURNACE;
+      if (lx === 1 && lz === 1) return B.CHEST;
+      const r = hash2(x, z, seed ^ S_HUT_DECO);
+      if ((lx === -1 && lz === 1) || (lx === 1 && lz === -1)) {
+        return r < 0.5 ? B.MUSHROOM_RED : B.MUSHROOM_BROWN;
+      }
+    }
+    return B.AIR;
+  }
+  if (lz === 2 && lx === 0) return B.AIR; // door gap
+  if (dy === 5 && ax === 2 && az === 2) return B.LOG;
+  return B.PLANKS;
+}
+
+/**
+ * Scatter-structure overlay block, or undefined when no structure covers it.
+ * Surface-only (y >= surfaceH), same contract as villageBlockAt.
+ * NOTE: anchors jitter ±32 across cell borders, so lookup scans the 3x3
+ * cells around (x,z) — generation (scatterForCell) stays per-cell.
+ */
+export function scatterBlockAt(
+  x: number, y: number, z: number, seed: number, surfaceH: number,
+): number | undefined {
+  if (y >= WORLD_H || surfaceH <= SEA_LEVEL + 1) return undefined;
+  const cgx = Math.floor(x / SCAT_CELL), cgz = Math.floor(z / SCAT_CELL);
+  for (let gx = cgx - 1; gx <= cgx + 1; gx++) {
+    for (let gz = cgz - 1; gz <= cgz + 1; gz++) {
+      // cheap gate: anchor-in-cell means only nearby anchors can cover (x,z)
+      const { sx, sz } = scatterAnchor(gx, gz, seed);
+      if (Math.abs(x - sx) > 4 || Math.abs(z - sz) > 4) continue;
+      const s = scatterForCell(gx, gz, seed);
+      if (!s) continue;
+      const lx = x - s.sx, lz = z - s.sz;
+      if (Math.abs(lx) > s.r || Math.abs(lz) > s.r) continue;
+      const hc = terrainHeight(x, z, seed);
+      if (y < hc || hc <= SEA_LEVEL + 1) return undefined;
+      const dy = y - s.gy;
+      if (dy < 0) return undefined;
+      switch (s.kind) {
+        case "tower": return towerBlock(lx, dy, lz);
+        case "ruin": return ruinBlock(x, lx, dy, lz, seed);
+        case "cabin": return cabinBlock(lx, dy, lz);
+        case "hut": return hutBlock(x, z, lx, dy, lz, seed);
+      }
+    }
+  }
+  return undefined;
+}
+
+// ---------- biome landmarks (rare, big) ----------
+//
+// One candidate per ~320-block cell: desert temples (DESERT) and mountain
+// shrines (MOUNTAIN/TUNDRA). Tried at up to 4 jittered spots per cell so a
+// missing biome doesn't nuke the whole cell deterministically.
+
+export type LandmarkKind = "temple" | "shrine";
+
+export interface Landmark {
+  kind: LandmarkKind;
+  sx: number; sz: number; gy: number;
+  r: number;
+}
+
+export const LM_CELL = 320;
+const S_LM = 0x1a94;
+const S_LM_POS = 0x1a95;
+
+function landmarkCandidates(gx: number, gz: number, seed: number): { sx: number; sz: number }[] {
+  const out: { sx: number; sz: number }[] = [];
+  for (let i = 0; i < 4; i++) {
+    out.push({
+      sx: gx * LM_CELL + Math.floor((hash2(gx * 4 + i, gz, seed ^ S_LM_POS) - 0.5) * 240),
+      sz: gz * LM_CELL + Math.floor((hash2(gz, gx * 4 + i, seed ^ (S_LM_POS + 1)) - 0.5) * 240),
+    });
+  }
+  return out;
+}
+
+function landmarkForCell(gx: number, gz: number, seed: number): Landmark | null {
+  if (hash2(gx, gz, seed ^ S_LM) >= 0.8) return null; // 1 in 5 cells
+  // kind first: otherwise common mountain/tundra always beats rare desert
+  const wantTemple = hash2(gx, gz, seed ^ (S_LM + 7)) < 0.5;
+  for (const c of landmarkCandidates(gx, gz, seed)) {
+    const gy = terrainHeight(c.sx, c.sz, seed);
+    if (gy <= SEA_LEVEL + 1 || gy >= 30) continue;
+    const bio = biomeAt(c.sx, c.sz, seed, gy);
+    let kind: LandmarkKind | null = null;
+    if (wantTemple) {
+      if (bio === BIOME.DESERT) kind = "temple";
+    } else if (bio === BIOME.MOUNTAIN || bio === BIOME.TUNDRA) kind = "shrine";
+    if (!kind) continue;
+    // keep clear of villages
+    let clash = false;
+    for (const v of getVillages(seed)) {
+      if (Math.abs(c.sx - v.cx) < 32 && Math.abs(c.sz - v.cz) < 32) { clash = true; break; }
+    }
+    if (clash) continue;
+    return { kind, sx: c.sx, sz: c.sz, gy, r: kind === "temple" ? 5 : 4 };
+  }
+  return null;
+}
+
+function templeBlock(lx: number, dy: number, lz: number): number | undefined {
+  const m = Math.max(Math.abs(lx), Math.abs(lz));
+  if (m > 4) return undefined;
+  const chamber = Math.abs(lx) <= 1 && Math.abs(lz) <= 1;
+  const corridor = lx === 0 && lz >= 0 && lz <= 4;
+  if (dy === 1 || dy === 2) {
+    if (chamber || corridor) {
+      if (dy === 1) {
+        if ((lx === -1 || lx === 1) && lz === -1) return B.CHEST; // burial goods
+      }
+      return B.AIR;
+    }
+  }
+  if (dy === 0) {
+    if (lx === 0 && lz === 0) return B.TNT; // trapped floor…
+    return B.SANDSTONE;
+  }
+  if (dy === 1 && m <= 3) return B.SANDSTONE;
+  if (dy === 2 && m <= 2) return B.SANDSTONE;
+  if (dy === 3 && m <= 1) return B.SANDSTONE;
+  if (dy === 4 && (lx === 0 || lz === 0) && m <= 1) return B.SANDSTONE; // cap
+  // door pillars + beacon
+  if ((lx === -1 || lx === 1) && lz === 4 && (dy === 2 || dy === 3)) return B.SANDSTONE;
+  if (lx === 0 && lz === 0 && dy === 5) return B.LAMP;
+  return undefined;
+}
+
+function shrineBlock(lx: number, dy: number, lz: number): number | undefined {
+  if (Math.max(Math.abs(lx), Math.abs(lz)) > 3) return undefined;
+  if (dy === 0) return lx * lx + lz * lz <= 9 ? B.COBBLE : undefined;
+  if (dy < 1 || dy > 5) return undefined;
+  const px = Math.abs(lx) === 2, pz = Math.abs(lz) === 2;
+  if (px && pz) {
+    if (dy <= 4) return B.STONE_BRICK; // pillars
+    return B.LAMP;
+  }
+  if (lx === 0 && lz === 0) {
+    if (dy === 1) return B.COBBLE; // pedestal
+    if (dy === 2) return B.EMERALD_BLOCK; // relic
+    return undefined;
+  }
+  if (lx === 1 && lz === 0 && dy === 1) return B.CHEST; // offering cache
+  return undefined;
+}
+
+/** Landmark overlay block (surface-only, same contract as villageBlockAt).
+ *  Candidates jitter ±120 across cell borders, so lookup scans 3x3 cells. */
+export function landmarkBlockAt(
+  x: number, y: number, z: number, seed: number, surfaceH: number,
+): number | undefined {
+  if (y >= WORLD_H || surfaceH <= SEA_LEVEL + 1) return undefined;
+  const cgx = Math.floor(x / LM_CELL), cgz = Math.floor(z / LM_CELL);
+  for (let gx = cgx - 1; gx <= cgx + 1; gx++) {
+    for (let gz = cgz - 1; gz <= cgz + 1; gz++) {
+      // bbox pretest without terrain: candidates are deterministic positions
+      let near = false;
+      for (const c of landmarkCandidates(gx, gz, seed)) {
+        if (Math.abs(x - c.sx) <= 5 && Math.abs(z - c.sz) <= 5) { near = true; break; }
+      }
+      if (!near) continue;
+      const lm = landmarkForCell(gx, gz, seed);
+      if (!lm) continue;
+      const lx = x - lm.sx, lz = z - lm.sz;
+      if (Math.abs(lx) > lm.r || Math.abs(lz) > lm.r) continue;
+      const hc = terrainHeight(x, z, seed);
+      if (y < hc || hc <= SEA_LEVEL + 1) return undefined;
+      const dy = y - lm.gy;
+      if (dy < 0) return undefined;
+      return lm.kind === "temple" ? templeBlock(lx, dy, lz) : shrineBlock(lx, dy, lz);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * True when (x,z) is inside a surface-structure footprint (village, scatter
+ * or landmark bbox): world.ts suppresses tree roots there so trunks don't
+ * grow through roofs. Bbox-only, no terrain calls except the village cache
+ * (already built) — cheap enough for the colInfo tree loop.
+ */
+export function blocksTrees(x: number, z: number, seed: number): boolean {
+  for (const v of getVillages(seed)) {
+    if (x >= v.minX && x <= v.maxX && z >= v.minZ && z <= v.maxZ) return true;
+  }
+  {
+    const cgx = Math.floor(x / SCAT_CELL), cgz = Math.floor(z / SCAT_CELL);
+    for (let gx = cgx - 1; gx <= cgx + 1; gx++) {
+      for (let gz = cgz - 1; gz <= cgz + 1; gz++) {
+        const { sx, sz } = scatterAnchor(gx, gz, seed);
+        if (Math.abs(x - sx) <= 4 && Math.abs(z - sz) <= 4) return true;
+      }
+    }
+  }
+  {
+    const cgx = Math.floor(x / LM_CELL), cgz = Math.floor(z / LM_CELL);
+    for (let gx = cgx - 1; gx <= cgx + 1; gx++) {
+      for (let gz = cgz - 1; gz <= cgz + 1; gz++) {
+        for (const c of landmarkCandidates(gx, gz, seed)) {
+          if (Math.abs(x - c.sx) <= 5 && Math.abs(z - c.sz) <= 5) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+// ---------- structure census (locate + loot) ----------
+
+export interface StructureCenter { x: number; z: number; kind: string }
+
+/** Scatter + landmark centers in the settled area (bounded scan like dungeonSpawns). */
+export function structureCenters(seed: number): StructureCenter[] {
+  const out: StructureCenter[] = [];
+  for (let gx = -7; gx <= 7; gx++) {
+    for (let gz = -7; gz <= 7; gz++) {
+      const s = scatterForCell(gx, gz, seed);
+      if (s) out.push({ x: s.sx, z: s.sz, kind: s.kind });
+    }
+  }
+  for (let gx = -3; gx <= 3; gx++) {
+    for (let gz = -3; gz <= 3; gz++) {
+      const lm = landmarkForCell(gx, gz, seed);
+      if (lm) out.push({ x: lm.sx, z: lm.sz, kind: lm.kind });
+    }
+  }
+  return out;
+}
+
+export interface StructureChest { x: number; y: number; z: number; kind: string }
+
+/**
+ * Every worldgen loot-chest position in the settled area: dungeon rooms plus
+ * all scatter/landmark chests. main.ts fills these deterministically (see
+ * lootFor + Machines.claimLoot) at boot and lazily on open.
+ */
+export function structureChests(seed: number): StructureChest[] {
+  const out: StructureChest[] = [];
+  for (let rx = -6; rx <= 6; rx++) {
+    for (let rz = -6; rz <= 6; rz++) {
+      const d = dungeonForRegion(rx, rz, seed);
+      if (d) out.push({ x: d.dx, y: d.floorY, z: d.dz, kind: "dungeon" });
+    }
+  }
+  for (let gx = -7; gx <= 7; gx++) {
+    for (let gz = -7; gz <= 7; gz++) {
+      const s = scatterForCell(gx, gz, seed);
+      if (!s) continue;
+      if (s.kind === "tower") out.push({ x: s.sx - 1, y: s.gy + 9, z: s.sz - 1, kind: "tower" });
+      else if (s.kind === "ruin") out.push({ x: s.sx + 2, y: s.gy + 1, z: s.sz + 2, kind: "ruin" });
+      else if (s.kind === "hut") out.push({ x: s.sx + 1, y: s.gy + 4, z: s.sz + 1, kind: "hut" });
+    }
+  }
+  for (let gx = -3; gx <= 3; gx++) {
+    for (let gz = -3; gz <= 3; gz++) {
+      const lm = landmarkForCell(gx, gz, seed);
+      if (!lm) continue;
+      if (lm.kind === "temple") {
+        out.push({ x: lm.sx - 1, y: lm.gy + 1, z: lm.sz - 1, kind: "temple" });
+        out.push({ x: lm.sx + 1, y: lm.gy + 1, z: lm.sz - 1, kind: "temple" });
+      } else {
+        out.push({ x: lm.sx + 1, y: lm.gy + 1, z: lm.sz, kind: "shrine" });
+      }
+    }
+  }
+  return out;
+}
+
+// ---------- deterministic loot ----------
+
+export interface LootStack { id: number; n: number }
+
+const S_LOOT = 0x10f7;
+
+function pickN(salt: number, i: number, lo: number, hi: number): number {
+  return lo + Math.floor(hash2(salt, i, S_LOOT ^ 0x0dd) * (hi - lo + 1));
+}
+
+/**
+ * Deterministic chest contents for a worldgen chest kind. salt should derive
+ * from the chest position (main.ts hashes x/z) so every chest differs but
+ * every server with the same seed deals the same loot.
+ */
+export function lootFor(kind: string, salt: number): LootStack[] {
+  const out: LootStack[] = [];
+  const bonus = hash2(salt, 999, S_LOOT);
+  switch (kind) {
+    case "dungeon":
+      out.push({ id: I.IRON_INGOT, n: pickN(salt, 1, 2, 4) });
+      out.push({ id: I.COAL, n: pickN(salt, 2, 4, 7) });
+      out.push({ id: B.TORCH, n: pickN(salt, 3, 4, 8) });
+      out.push({ id: I.APPLE, n: pickN(salt, 4, 2, 3) });
+      out.push({ id: I.ARROW, n: pickN(salt, 5, 3, 6) });
+      if (bonus > 0.75) out.push({ id: I.DIAMOND, n: 1 });
+      else if (bonus > 0.55) out.push({ id: I.IRON_PICK, n: 1 });
+      break;
+    case "tower":
+      out.push({ id: I.ARROW, n: pickN(salt, 1, 4, 8) });
+      out.push({ id: I.APPLE, n: pickN(salt, 2, 2, 3) });
+      out.push({ id: B.TORCH, n: pickN(salt, 3, 2, 4) });
+      if (bonus > 0.7) out.push({ id: I.IRON_SWORD, n: 1 });
+      else if (bonus > 0.4) out.push({ id: I.BOW, n: 1 });
+      break;
+    case "ruin":
+      out.push({ id: I.COAL, n: pickN(salt, 1, 2, 5) });
+      out.push({ id: I.STICK, n: pickN(salt, 2, 3, 6) });
+      out.push({ id: I.APPLE, n: pickN(salt, 3, 1, 2) });
+      if (bonus > 0.75) out.push({ id: I.GOLD_INGOT, n: pickN(salt, 4, 1, 2) });
+      break;
+    case "hut":
+      out.push({ id: B.REEDS, n: pickN(salt, 1, 2, 4) });
+      out.push({ id: I.APPLE, n: pickN(salt, 2, 1, 3) });
+      out.push({ id: I.COAL, n: pickN(salt, 3, 1, 3) });
+      if (bonus > 0.8) out.push({ id: I.SLIMEBALL, n: pickN(salt, 4, 1, 2) });
+      break;
+    case "temple":
+      out.push({ id: I.GOLD_INGOT, n: pickN(salt, 1, 1, 2) });
+      out.push({ id: B.TORCH, n: pickN(salt, 2, 4, 6) });
+      out.push({ id: I.BONE, n: pickN(salt, 3, 1, 3) });
+      if (bonus > 0.6) out.push({ id: I.DIAMOND, n: 1 });
+      if (hash2(salt, 1000, S_LOOT) > 0.75) out.push({ id: I.IRON_PICK, n: 1 });
+      break;
+    case "shrine":
+      out.push({ id: I.EMERALD, n: pickN(salt, 1, 1, 2) });
+      out.push({ id: I.COOKED_PORK, n: pickN(salt, 2, 2, 3) });
+      out.push({ id: I.COAL, n: pickN(salt, 3, 2, 4) });
+      if (bonus > 0.7) out.push({ id: I.GOLDEN_APPLE, n: 1 });
+      break;
+    default:
+      out.push({ id: I.APPLE, n: 2 });
+      break;
+  }
+  return out;
 }

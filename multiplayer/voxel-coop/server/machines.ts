@@ -39,6 +39,7 @@ export class Machines {
   quarries = new Map<string, QuarryState>();
   tanks = new Map<string, TankState>();
   pumps = new Set<string>(); // positions of PUMP blocks (stateless, validated vs world)
+  lootFilled = new Set<string>(); // worldgen chest positions already dealt loot (persisted)
   savePath: string;
   private pipeT = 0;
   private quarryT = 0;
@@ -84,6 +85,9 @@ export class Machines {
       for (const k of (d.pumps ?? []) as string[]) {
         if (typeof k === "string") m.pumps.add(k);
       }
+      for (const k of (d.loot ?? []) as string[]) {
+        if (typeof k === "string") m.lootFilled.add(k);
+      }
       console.log(`[machines] loaded ${m.chests.size} chests, ${m.engines.size} engines, ${m.quarries.size} quarries, ${m.tanks.size} tanks, ${m.pumps.size} pumps`);
     } catch { /* first run */ }
     return m;
@@ -98,6 +102,7 @@ export class Machines {
         quarries: Object.fromEntries(this.quarries),
         tanks: Object.fromEntries(this.tanks),
         pumps: [...this.pumps],
+        loot: [...this.lootFilled],
       };
       await Deno.writeTextFile(this.savePath, JSON.stringify(d));
     } catch (e) { console.error("[machines] save failed:", e); }
@@ -109,7 +114,21 @@ export class Machines {
     this.quarries.clear();
     this.tanks.clear();
     this.pumps.clear();
+    this.lootFilled.clear();
     void this.save();
+  }
+
+  /**
+   * Claim the one-time worldgen loot deal for a chest position. Returns true
+   * on the first call per position (caller should fill the chest), false
+   * after — so looted chests stay looted and player rebuilds never refill.
+   */
+  claimLoot(x: number, y: number, z: number): boolean {
+    const k = mkey(x, y, z);
+    if (this.lootFilled.has(k)) return false;
+    this.lootFilled.add(k);
+    void this.save();
+    return true;
   }
 
   ensureChest(x: number, y: number, z: number): ChestState {

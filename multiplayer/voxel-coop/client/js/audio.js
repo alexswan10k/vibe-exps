@@ -3,6 +3,7 @@ export class AudioSys {
   constructor() {
     this.ctx = null; this.master = null;
     this.muted = false;
+    this.volume = 0.8;
   }
   ensure() {
     if (this.ctx) {
@@ -14,7 +15,7 @@ export class AudioSys {
       if (!AC) return null;
       this.ctx = new AC();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.25;
+      this.master.gain.value = this.volume;
       this.master.connect(this.ctx.destination);
     } catch { /* no audio */ }
     return this.ctx;
@@ -55,6 +56,12 @@ export class AudioSys {
     setTimeout(() => this.noise(0.4, 0.4, 900), 120);
   }
   rain() { this.noise(0.4, 0.12, 4000); }
+  setVolume(value) {
+    const n = Number(value);
+    if (Number.isFinite(n)) this.volume = Math.max(0, Math.min(1, n));
+    if (this.master && this.ctx) this.master.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+    return this.volume;
+  }
   toggleMute() {
     this.muted = !this.muted;
     const b = document.getElementById("mute-btn");

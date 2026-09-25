@@ -2,6 +2,7 @@
 export const CHUNK = 16;
 export const WORLD_H = 48;
 export const SEA_LEVEL = 15;
+export const PLAYER_EYE = 1.62;
 
 export const B = {
   AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, LOG: 5, LEAVES: 6,
@@ -38,7 +39,7 @@ export const BLOCK_NAME = {
   148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
   152: "firebrand", 153: "oil", 154: "wrench",
   155: "bucket", 156: "water bucket", 157: "lava bucket",
-  158: "boat", 159: "minecart",
+  158: "boat", 159: "minecart", 160: "steam locomotive",
   101: "stick", 102: "coal", 103: "iron ingot", 104: "pork",
   105: "wool", 106: "feather", 107: "cooked pork", 108: "wood pick", 109: "stone pick",
   110: "iron pick", 111: "wood sword", 113: "stone sword", 114: "iron sword",
@@ -62,6 +63,7 @@ export const HARDNESS = {
   37: 0.5, 38: 14.0, 39: 0.4,
   40: Infinity, 41: 5.5, 42: 4.0,
   43: 1.5, 44: 1.2, 45: 3.5, 46: 4.5, 47: 5.0, 48: 4.5,
+  49: 1.2, 50: 1.5, 51: 3.0, 52: 0.5,
 };
 
 // Walk-through vegetation (mirrors server/protocol.ts).
