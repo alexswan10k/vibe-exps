@@ -188,7 +188,34 @@ export class Entities {
       if (!e) {
         const group = new THREE.Group();
         const lam = (c) => new THREE.MeshLambertMaterial({ color: c });
-        if (v.kind === "boat") {
+        if (v.kind === "locomotive") {
+          const boiler = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 1.5), lam(0x2f3640));
+          boiler.position.set(0, 0.85, -0.2);
+          boiler.castShadow = true;
+          const cab = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.9, 0.8), lam(0x8c3f2e));
+          cab.position.set(0, 0.85, 0.65);
+          cab.castShadow = true;
+          const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.75, 0.28), lam(0x20252b));
+          chimney.position.set(0, 1.55, -0.45);
+          const cowcatcher = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.35), lam(0xd8d8dc));
+          cowcatcher.position.set(0, 0.35, -1.05);
+          group.add(boiler, cab, chimney, cowcatcher);
+          const wheelGeo = new THREE.BoxGeometry(0.22, 0.42, 0.42);
+          const wheelMat = lam(0x111318);
+          for (const [sx, sz] of [[-0.52, -0.55], [0.52, -0.55], [-0.52, 0.25], [0.52, 0.25], [-0.52, 0.85], [0.52, 0.85]]) {
+            const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+            wheel.position.set(sx, 0.28, sz);
+            group.add(wheel);
+          }
+          const smoke = new THREE.Mesh(
+            new THREE.SphereGeometry(0.22, 8, 6),
+            new THREE.MeshBasicMaterial({ color: 0xd8d8dc, transparent: true, opacity: 0.35, depthWrite: false }),
+          );
+          smoke.position.set(0, 2.05, -0.45);
+          smoke.visible = false;
+          group.add(smoke);
+          e = { kind: v.kind, group, target: null, yaw: 0, rider: 0, smoke, fuel: 0, speed: 0 };
+        } else if (v.kind === "boat") {
           const hull = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.35, 2.1), lam(0x8a5f30));
           hull.position.y = 0.18;
           hull.castShadow = true;
@@ -197,6 +224,7 @@ export class Entities {
           const bench = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.12, 0.3), lam(0x6b4423));
           bench.position.set(0, 0.35, -0.3);
           group.add(hull, inner, bench);
+          e = { kind: v.kind, group, target: null, yaw: 0, rider: 0, smoke: null, fuel: 0, speed: 0 };
         } else {
           const tub = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 1.2), lam(0x3a3a3f));
           tub.position.y = 0.5;
@@ -211,15 +239,17 @@ export class Entities {
             w.position.set(sx, 0.15, sz);
             group.add(w);
           }
+          e = { kind: v.kind, group, target: null, yaw: 0, rider: 0, smoke: null, fuel: 0, speed: 0 };
         }
         this.scene.add(group);
-        e = { kind: v.kind, group, target: null, yaw: 0, rider: 0 };
         this.vehicles.set(v.id, e);
       }
       e.kind = v.kind;
       e.target = new THREE.Vector3(v.p[0], v.p[1], v.p[2]);
       e.yaw = v.yaw;
       e.rider = v.rider ?? 0;
+      e.fuel = v.fuel ?? 0;
+      e.speed = v.speed ?? 0;
     }
     for (const [id, e] of this.vehicles) {
       if (!seen.has(id)) {
@@ -267,6 +297,15 @@ export class Entities {
       if (!e.target) continue;
       e.group.position.lerp(e.target, Math.min(1, dt * 12));
       e.group.rotation.y = e.yaw;
+      if (e.kind === "locomotive" && e.smoke) {
+        const active = e.fuel > 0 && Math.abs(e.speed) > 0.1;
+        e.smoke.visible = active;
+        if (active) {
+          e.smoke.position.y = 2.05 + Math.sin(now / 180) * 0.12;
+          e.smoke.scale.setScalar(1 + Math.sin(now / 150) * 0.18);
+          e.smoke.material.opacity = 0.2 + Math.min(0.35, Math.abs(e.speed) / 12);
+        }
+      }
     }
     for (const [, e] of this.mobs) {
       if (!e.target) continue;

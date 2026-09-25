@@ -102,9 +102,9 @@
       <li>🔧 <b>BuildCraft</b>: craft a <b>chest</b> (F/RMB to open, 27 slots), <b>engine</b> (F/RMB panel → add coal/oil/lava, auto-sucks from tanks/chests), <b>pipes</b> (chest→chest, needs engine burning nearby), <b>quarry</b> (9×9 auto-mine next to a fueled engine). Oil ore glows in deserts.</li>
       <li>🧪 <b>Fluids</b>: <b>bucket</b> (3 iron) scoops water/lava with <b>F</b>, <b>tank</b> holds 16 buckets (F with bucket to fill/draw), <b>pump</b> taps adjacent water/lava (needs engine), <b>fluid pipes</b> balance tanks. Lava buckets burn 120s in engines.</li>
       <li>⚔️ <b>Weapons</b>: <b>bow + arrows</b> (X to shoot), <b>warhammer</b> (12 dmg launcher), <b>dagger</b>, <b>firebrand</b>. <b>C</b> stocks creative blocks.</li>
-      <li>✨ <b>Creative</b>: <b>/creative</b> (or /gamemode creative) → fly (double-Space or F), infinite blocks, no damage. <b>/kit buildcraft|fluids|weapons|creative</b>, <b>/give &lt;id&gt; [n]</b>, <b>/survival</b> to go back.</li>
+      <li>✨ <b>Creative</b>: <b>/creative</b> (or /gamemode creative) → fly (double-Space or F), infinite blocks, no damage. <b>B</b> opens the searchable item browser. <b>/kit buildcraft|fluids|weapons|creative</b>, <b>/give &lt;id&gt; [n]</b>, <b>/survival</b> to go back.</li>
       <li><b>wheel / 1-9</b> cycle hotbar · <b>double-click food</b> in inventory to eat · <b>ESC</b> closes inventory/panels</li>
-      <li>🚣 <b>Vehicles</b>: <b>boat</b> (planks, RMB on water) sails fast — WASD + shift, <b>F</b> hops in/out, LMB breaks a free one. <b>rails</b> (iron + sticks) + <b>minecart</b> (RMB on rails, face along the track, W/S throttle, F hops out).</li>
+      <li>🚂 <b>Vehicles</b>: <b>boat</b> (RMB on water) sails fast — WASD + shift · <b>minecart</b> (RMB on rails) and <b>steam locomotive</b> (W/S throttle, /fuel nearby, pulls carts). F hops in/out, LMB breaks a free one.</li>
       <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
     </ol>
     <button id="help-close">play (H)</button>
@@ -121,7 +121,7 @@
     <div class="help">
       <b>WASD</b> move · <b>space</b> jump · <b>mouse</b> look<br>
       <b>hold LMB</b> mine · <b>RMB</b> place · <b>RMB villager</b> trade · <b>click mob</b> attack<br>
-      <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>G</b> eat pork<br>
+      <b>1-9</b> hotbar · <b>E</b> inventory/crafting · <b>B</b> creative browser · <b>G</b> eat pork<br>
       <b>F</b> use furnace / light TNT / tame wolf (look at it) · <b>R</b> fish (rod needed) · <b>T</b> chat · <b>N</b> minimap · <b>Q</b> team ping · <b>shift</b> sprint<br>
       old iPad with no websocket? open this page with <b>?transport=poll</b>
     </div>
@@ -130,6 +130,21 @@
 </div>
 
 <button id="menu-gear" title="settings (O)">⚙</button>
+<button id="creative-browser-btn" title="Creative item browser (B)">🧰</button>
+<div id="creative-browser" style="display:none">
+  <div class="creative-panel">
+    <h2>✨ Creative item browser <button id="creative-browser-close" title="close (ESC)">✕</button></h2>
+    <div class="creative-toolbar">
+      <input id="creative-search" placeholder="Search blocks, tools, vehicles, or item ID…" autocomplete="off">
+      <label>stack <select id="creative-stack"><option value="1">1</option><option value="16">16</option><option value="64">64</option></select></label>
+    </div>
+    <div id="creative-filters">
+      <button data-cat="all" class="on">all</button><button data-cat="blocks">blocks</button><button data-cat="materials">materials</button><button data-cat="tools">tools</button><button data-cat="food">food</button><button data-cat="machines">machines</button><button data-cat="vehicles">vehicles</button>
+    </div>
+    <div id="creative-grid"></div>
+    <div id="creative-status">Click an item to give it to yourself · B or ESC closes</div>
+  </div>
+</div>
 <div id="screen-title">
   <div class="screen-panel">
     <h1>🧱 voxel-coop</h1>

@@ -39,7 +39,7 @@ export const BLOCK_NAME = {
   148: "bow", 149: "arrow", 150: "warhammer", 151: "dagger",
   152: "firebrand", 153: "oil", 154: "wrench",
   155: "bucket", 156: "water bucket", 157: "lava bucket",
-  158: "boat", 159: "minecart",
+  158: "boat", 159: "minecart", 160: "steam locomotive",
   101: "stick", 102: "coal", 103: "iron ingot", 104: "pork",
   105: "wool", 106: "feather", 107: "cooked pork", 108: "wood pick", 109: "stone pick",
   110: "iron pick", 111: "wood sword", 113: "stone sword", 114: "iron sword",

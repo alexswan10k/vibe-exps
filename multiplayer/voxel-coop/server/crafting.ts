@@ -79,6 +79,7 @@ export const SHAPED: ShapedRecipe[] = [
   { id: "rail", name: "Rails ×8", needsTable: true, pat: [G, S, G, G, S, G, G, S, G], out: { id: B.RAIL, n: 8 } },
   { id: "boat", name: "Boat", needsTable: true, pat: [P, 0, P, P, P, P, 0, 0, 0], out: { id: I.BOAT, n: 1 } },
   { id: "minecart", name: "Minecart", needsTable: true, pat: [G, 0, G, G, G, G, 0, 0, 0], out: { id: I.MINECART, n: 1 } },
+  { id: "locomotive", name: "Steam Locomotive", needsTable: true, pat: [G, G, G, G, K, G, G, S, G], out: { id: I.LOCOMOTIVE, n: 1 } },
 ];
 
 interface Trimmed { w: number; h: number; cells: number[]; }
@@ -131,7 +132,7 @@ export function matchGrid(cells: number[], smallOnly: boolean): ShapedRecipe | n
 
 // --- inventory helpers (slots array, id 0 = empty, max stack 64, tools don't stack) ---
 export const MAX_STACK = 64;
-const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS, I.BOW, I.WARHAMMER, I.DAGGER, I.FIREBRAND, I.WRENCH, I.BOAT, I.MINECART]);
+const UNSTACKABLE: Set<number> = new Set([I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_PICK, I.GOLD_SWORD, I.DIAMOND_PICK, I.DIAMOND_SWORD, I.GOLD_AXE, I.DIAMOND_AXE, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL, I.FISHING_ROD, I.COMPASS, I.BOW, I.WARHAMMER, I.DAGGER, I.FIREBRAND, I.WRENCH, I.BOAT, I.MINECART, I.LOCOMOTIVE]);
 
 export function isStackable(id: number): boolean {
   return !UNSTACKABLE.has(id);

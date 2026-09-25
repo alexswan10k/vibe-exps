@@ -29,6 +29,7 @@ export class Player {
     this.flying = false; // creative flight (double-Space toggles, server gamemode gates damage)
     this.sailing = false; // riding a boat (server ride msg drives this)
     this.ridingCart = false; // riding a minecart (glides along rails)
+    this.ridingLocomotive = false;
     this.cartAxis = null; // 'x' | 'z' while on connected rails
     this.cartDir = 1; // travel sign along the axis
     this._lastSpace = -10;
@@ -136,6 +137,12 @@ export class Player {
     this.euler.set(this.pitch, this.yaw, 0);
     this.cam.quaternion.setFromEuler(this.euler);
     this.cam.position.copy(this.eye());
+    if (this.ridingLocomotive) {
+      this.sprinting = false;
+      this.onGround = false;
+      this.fallStart = null;
+      return;
+    }
 
     const f = (this.keys.KeyW ? 1 : 0) - (this.keys.KeyS ? 1 : 0);
     const s = (this.keys.KeyD ? 1 : 0) - (this.keys.KeyA ? 1 : 0);

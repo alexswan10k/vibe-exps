@@ -318,7 +318,7 @@ function settingsOpen() { const el = $("screen-settings"); return !!el && el.sty
 function anyGuiOpen() {
   return dead || ui.invOpen || ui.helpOpen() || ui.tradeOpen() ||
     ui.chatFocused() || menuVisible() || screenTitleVisible() ||
-    chestOpen() || engineOpen() || settingsOpen();
+    chestOpen() || engineOpen() || settingsOpen() || ui.creativeBrowserOpen();
 }
 function syncLock() {
   if (!net?.connected || myId < 0) return;
@@ -343,6 +343,7 @@ let dead = false;
 let pendingChunks = new Map();
 let lastStream = 0;
 let lastMoveSend = 0;
+let lastVehicleControl = 0;
 let breaking = null; // {x,y,z,block,prog,need}
 function clearBreak() {
   breaking = null;
@@ -591,7 +592,7 @@ function tryAttack() {
   const hitMob = entities.pickMob(player.eye(), player.lookDir());
   if (hitMob === null) {
     // no mob: LMB on a free vehicle breaks it back into an item
-    if (!player.sailing && !player.ridingCart) {
+    if (!player.sailing && !player.ridingCart && !player.ridingLocomotive) {
       const hitVeh = entities.pickVehicle(player.eye(), player.lookDir(), 5);
       if (hitVeh !== null) {
         lastSwing = nowSwing;
@@ -632,7 +633,7 @@ function findFluidAim() {
 function sendTeamPing() {
   if (!net?.connected || myId < 0 || dead || ui.invOpen || ui.helpOpen() || ui.tradeOpen() ||
       ui.chatFocused() || menuVisible() || chestOpen() || engineOpen() ||
-      $("screen-settings").style.display !== "none") return;
+      $("screen-settings").style.display !== "none" || ui.creativeBrowserOpen()) return;
   if (document.activeElement?.matches("input, textarea, select, [contenteditable='true']")) return;
   const hit = world.raycast(player.eye(), player.lookDir(), 46);
   if (!hit) { ui.hint("Aim at a block within 46m to ping your team (Q)"); return; }
@@ -722,6 +723,15 @@ function doPlace() {
     hand.swing();
     return;
   }
+  if (ui.heldItem()?.id === 160) {
+    if (hit.block === B.RAIL) {
+      net.vehiclePlace("locomotive", hit.x, hit.y, hit.z);
+      hand.swing();
+    } else {
+      ui.hint("🚂 locomotives need rails — aim at rails");
+    }
+    return;
+  }
   if (ui.heldItem()?.id === 159) {
     if (hit.block === B.RAIL) {
       net.vehiclePlace("cart", hit.x, hit.y, hit.z);
@@ -809,7 +819,7 @@ addEventListener("keydown", (e) => {
   if (e.code === "KeyF" && !ui.chatFocused()) {
     if (!net?.connected) return;
     // riding: F always hops out first
-    if (player.sailing || player.ridingCart) {
+    if (player.sailing || player.ridingCart || player.ridingLocomotive) {
       net.vehicleExit();
       hand.swing();
       return;
@@ -948,12 +958,14 @@ net.on("welcome", (m) => {
   const feet = applyServerPosition(m.spawn);
   spawnPos = feet;
   window.voxCreative = !!m.creative;
+  ui.setCreativeMode(window.voxCreative);
   player.flying = false;
   player.sailing = false;
   player.ridingCart = false;
+  player.ridingLocomotive = false;
   player.cartAxis = null;
   if (window.voxCreative) {
-    ui.hint("✨ CREATIVE: F fly · C blocks · X bow · infinite place");
+    ui.hint("✨ CREATIVE: F fly · B browser · C blocks · X bow · infinite place");
   } else {
     ui.hint("survival mode");
   }
@@ -1097,21 +1109,30 @@ net.on("ride", (m) => {
   if (m.id) {
     player.sailing = m.kind === "boat";
     player.ridingCart = m.kind === "cart";
+    player.ridingLocomotive = m.kind === "locomotive";
     player.cartAxis = null;
     player.cartDir = 1;
     player.vel.set(0, 0, 0);
     player.flying = false;
+    if (Array.isArray(m.p) && m.p.length === 3 && m.p.every(Number.isFinite)) {
+      player.pos.set(m.p[0], m.p[1], m.p[2]);
+    }
+    if (Number.isFinite(m.yaw)) player.yaw = m.yaw;
     ui.hint(m.kind === "boat"
       ? "🚣 sailing! WASD + shift for speed · F to hop out"
-      : "🛒 riding! face along the track, W/S throttle · F to hop out");
-    audio.splash();
+      : m.kind === "locomotive"
+        ? "🚂 locomotive! W/S throttle · /fuel nearby · pulls carts · F to hop out"
+        : "🛒 riding! face along the track, W/S throttle · F to hop out");
+    if (m.kind !== "locomotive") audio.splash();
   } else {
     player.sailing = false;
     player.ridingCart = false;
+    player.ridingLocomotive = false;
   }
 });
 net.on("gamemode", (m) => {
   window.voxCreative = !!m.creative;
+  ui.setCreativeMode(window.voxCreative);
   if (!m.creative) player.flying = false;
   ui.hint(m.creative ? "✨ CREATIVE: F fly · C blocks · X bow · infinite place" : "survival mode");
 });
@@ -1193,6 +1214,7 @@ ui.onEat = (slot) => { hand.eat(); net.eat(slot); };
 ui.onMoveItem = (from, to) => net.moveItem(from, to);
 ui.onChestTake = (cs) => { if (window.voxChest) net.chestTake(window.voxChest.x, window.voxChest.y, window.voxChest.z, cs); };
 ui.onChestPut = (slot, cs, all) => { if (window.voxChest) net.chestPut(window.voxChest.x, window.voxChest.y, window.voxChest.z, slot, cs, all); };
+ui.onCreativeGive = (id, n) => net.give(id, n);
 ui.onTrade = (id, slot) => net.trade(id, slot);
 // chest open: inventory clicks store into the chest instead of swapping
 {
@@ -1300,7 +1322,7 @@ function frame() {
         player.vel.set(0, 0, 0);
       }
     }
-    if (now - lastMoveSend > 66) {
+    if (!player.ridingLocomotive && now - lastMoveSend > 66) {
       lastMoveSend = now;
       const eye = player.eye();
       net.move(
@@ -1308,6 +1330,11 @@ function frame() {
         Math.round(player.yaw * 100) / 100,
         Math.round(player.pitch * 100) / 100,
       );
+    }
+    if (player.ridingLocomotive && now - lastVehicleControl > 100) {
+      lastVehicleControl = now;
+      const throttle = (player.keys.KeyW ? 1 : 0) - (player.keys.KeyS ? 1 : 0);
+      net.vehicleControl(throttle);
     }
     // contextual hint: lava warning > compass > furnace / TNT.
     // Throttled to ~7Hz: the raycast + DOM write ran every frame (60Hz).
@@ -1317,7 +1344,11 @@ function frame() {
       const feetB = world.get(Math.floor(player.pos.x), Math.floor(player.pos.y + 0.3), Math.floor(player.pos.z));
       const held = ui.heldItem();
       const hit = world.raycast(player.eye(), player.lookDir(), 6);
-      if (feetB === B.LAVA) ui.hint("🔥 LAVA!");
+      if (player.ridingLocomotive) {
+        const train = (window.voxVehicles ?? []).find((v) => v.rider === myId);
+        ui.hint(train ? `🚂 locomotive · ${Math.ceil(train.fuel ?? 0)}s fuel · ${Math.abs(train.speed ?? 0).toFixed(1)} blocks/s` : "🚂 locomotive · /fuel nearby · W/S throttle");
+      }
+      else if (feetB === B.LAVA) ui.hint("🔥 LAVA!");
       else if (held?.id === 145) {
         // compass: 8-way arrow + distance to home (if set) else spawn
         const home = Array.isArray(mapMarkers?.home) ? mapMarkers.home : null;
@@ -1347,9 +1378,9 @@ function frame() {
         ui.hint(tk?.fluid ? `🧪 tank: ${tk.amount}/16000 mB ${tk.fluid} (F with bucket)` : "🧪 empty tank — scoop water/lava with a bucket (F), then F here");
       }
       else if (hit?.block === B.PUMP) ui.hint("⛽ pump: taps adjacent water/lava — needs a fueled engine next door");
-      else if (hit?.block === B.RAIL) ui.hint("🛤 rails — RMB with a minecart to launch it (F in/out, W/S throttle)");
+      else if (hit?.block === B.RAIL) ui.hint("🛤 rails — RMB with a minecart or steam locomotive (F in/out, W/S throttle)");
       else if (hit?.block === B.OIL_ORE) ui.hint("🛢 oil ore — 2× coal burn time in engines");
-      else if (!player.sailing && !player.ridingCart && entities.pickVehicle(player.eye(), player.lookDir(), 5) !== null) ui.hint("F: hop in · LMB: break it down");
+      else if (!player.sailing && !player.ridingCart && !player.ridingLocomotive && entities.pickVehicle(player.eye(), player.lookDir(), 5) !== null) ui.hint("F: hop in · LMB: break it down");
       else if (window.voxCreative && !hit) ui.hint("✨ creative: F fly · C blocks · X bow");
       else if (hit) {
         const t = ui.el("hint").textContent;

@@ -69,6 +69,7 @@ export const SHAPED_CLIENT = [
   { id: "rail", name: "Rails ×8", needsTable: true, cat: "blocks", desc: "lay tracks for minecarts", out: { id: 52, n: 8 }, pat: [G, S, G, G, S, G, G, S, G] },
   { id: "boat", name: "Boat", needsTable: true, cat: "blocks", desc: "fast water travel (RMB on water, F in/out)", out: { id: 158, n: 1 }, pat: [P, 0, P, P, P, P, 0, 0, 0] },
   { id: "minecart", name: "Minecart", needsTable: true, cat: "blocks", desc: "rides rails, W/S throttle (F in/out)", out: { id: 159, n: 1 }, pat: [G, 0, G, G, G, G, 0, 0, 0] },
+  { id: "locomotive", name: "Steam Locomotive", needsTable: true, cat: "blocks", desc: "W/S throttle · /fuel · pulls connected carts", out: { id: 160, n: 1 }, pat: [G, G, G, G, K, G, G, S, G] },
 ];
 
 /** Furnace cheat-sheet for the picker (mirrors server SMELT_RECIPES). */

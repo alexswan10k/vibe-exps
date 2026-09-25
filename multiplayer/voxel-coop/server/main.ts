@@ -9,7 +9,7 @@ import { MobSim, mobDrops } from "./mobs.ts";
 import { dungeonSpawns, structureChests, lootFor, structureCenters, villageCenters } from "./structures.ts";
 import { dropFor, giveItems, removeItems, countOf, matchGrid, canFit, isStackable, craftDirect, smeltTick, smeltInputFor, smeltOutput, SMELT_TIME, FurnaceState, VILLAGER_TRADES, ENGINE_FUEL } from "./crafting.ts";
 import { Machines, mkey, LAVA_BURN_S, BUCKET_MB, TANK_CAP } from "./machines.ts";
-import { VehicleSim } from "./vehicles.ts";
+import { VehicleSim, LOCOMOTIVE_FUEL } from "./vehicles.ts";
 import { lanIps, serveClientFile, withCors } from "../../shared.ts";
 
 const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
@@ -168,6 +168,7 @@ function freeRide(pl: Player): void {
   const v = vehicles.byRider(pl.id);
   if (v) {
     v.rider = 0;
+    v.control = 0;
     sendTo(pl, { t: "ride", id: 0 });
   }
 }
@@ -750,6 +751,21 @@ function refuelEngine(pl: Player, pos: { x: number; y: number; z: number }): boo
   return false;
 }
 
+function refuelLocomotive(pl: Player, v: { id: number; fuel: number }): boolean {
+  if (v.fuel >= LOCOMOTIVE_FUEL) return false;
+  const priority = [48, 153, 102, 5, 29, 7, 101];
+  for (const id of priority) {
+    const seconds = ENGINE_FUEL[id];
+    if (!seconds || countOf(pl.slots, id) < 1) continue;
+    if (!pl.creative) removeItems(pl.slots, { [id]: 1 });
+    const fuel = vehicles.refuel(v.id, seconds);
+    sendInv(pl);
+    sendTo(pl, { t: "chat", from: "server", msg: `🚂 locomotive fueled +${seconds}s (${idName(id)}) · ${Math.ceil(fuel)}s left` });
+    return true;
+  }
+  return false;
+}
+
 /** Returns true if msg was a slash command (handled, not broadcast). */
 function handleChatCommand(pl: Player, msg: string): boolean {
   if (!msg.startsWith("/")) return false;
@@ -760,7 +776,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
     case "help":
       sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /locate <tower|ruin|cabin|hut|temple|shrine|village|dungeon> /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
       sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (F open) + engine (F panel/RMB, burns coal/oil/lava) + pipe + quarry (9x9). fluids: pump (taps water/lava) + fluid pipe + tank (16 buckets) + bucket (F scoop/deposit)." });
-      sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water, sail fast) + rails + minecart (W/S throttle on rails). F hops in/out, LMB breaks a free one." });
+      sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water) + rails + minecart + steam locomotive. Locomotive uses W/S throttle, /fuel nearby, and pulls connected carts." });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -883,7 +899,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
         buildcraft: [[43, 2], [44, 16], [45, 2], [46, 1], [102, 16], [153, 8]],
         weapons: [[148, 1], [149, 32], [150, 1], [151, 1], [152, 1], [136, 2]],
         fluids: [[49, 16], [50, 2], [51, 1], [155, 4], [102, 8]],
-        vehicles: [[158, 1], [159, 1], [52, 32]],
+        vehicles: [[158, 1], [159, 1], [160, 1], [52, 32]],
         creative: [[43, 4], [44, 64], [45, 4], [46, 2], [126, 1], [127, 1], [148, 1], [149, 64]],
       };
       const kit = kits[which];
@@ -897,10 +913,16 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       return true;
     }
     case "fuel": {
-      // refuel nearest burning-capable engine within 6 blocks from inventory
+      const locomotive = vehicles.nearestLocomotive(pl.p, 6);
+      if (locomotive) {
+        if (!refuelLocomotive(pl, locomotive)) {
+          sendTo(pl, { t: "chat", from: "server", msg: locomotive.fuel >= LOCOMOTIVE_FUEL ? "locomotive tank is full" : "need coal/oil/coal block/logs in inventory" });
+        }
+        return true;
+      }
       const e = nearestEngine(pl, 6);
       if (!e) {
-        sendTo(pl, { t: "chat", from: "server", msg: "no engine nearby — place one next to your quarry/pipes" });
+        sendTo(pl, { t: "chat", from: "server", msg: "no engine or locomotive nearby" });
         return true;
       }
       if (refuelEngine(pl, e)) return true;
@@ -1026,7 +1048,7 @@ function onMessage(pl: Player, raw: string): void {
       pl.lastMove = Date.now();
       // rider-driven vehicles follow their rider
       const rv = vehicles.byRider(pl.id);
-      if (rv) {
+      if (rv && rv.kind !== "locomotive" && rv.attachedTo === 0) {
         rv.p = [nx, ny - PLAYER_EYE, nz];
         rv.yaw = m.yaw;
       }
@@ -1643,7 +1665,7 @@ function onMessage(pl: Player, raw: string): void {
     }
     case "vehiclePlace": {
       if (pl.dead) break;
-      const kind = m.kind === "cart" ? "cart" : m.kind === "boat" ? "boat" : null;
+      const kind = m.kind === "locomotive" ? "locomotive" : m.kind === "cart" ? "cart" : m.kind === "boat" ? "boat" : null;
       if (!kind) break;
       const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
       if (![x, y, z].every(Number.isFinite) || y < 0 || y >= 48) break;
@@ -1651,9 +1673,9 @@ function onMessage(pl: Player, raw: string): void {
         sendTo(pl, { t: "denied", reason: "too far" });
         break;
       }
-      const needId = kind === "boat" ? 158 : 159;
+      const needId = kind === "boat" ? 158 : kind === "locomotive" ? 160 : 159;
       if (!pl.creative && countOf(pl.slots, needId) < 1) {
-        sendTo(pl, { t: "denied", reason: kind === "boat" ? "need a boat" : "need a minecart" });
+        sendTo(pl, { t: "denied", reason: kind === "boat" ? "need a boat" : kind === "locomotive" ? "need a steam locomotive" : "need a minecart" });
         break;
       }
       if (kind === "boat") {
@@ -1678,11 +1700,20 @@ function onMessage(pl: Player, raw: string): void {
       broadcast({ t: "vehicles", list: vehicles.wire() });
       break;
     }
+    case "vehicleControl": {
+      if (pl.dead || ![-1, 0, 1].includes(m.throttle)) break;
+      if (!vehicles.setControl(pl.id, m.throttle)) sendTo(pl, { t: "denied", reason: "only a locomotive has a throttle" });
+      break;
+    }
     case "vehicleEnter": {
       if (pl.dead) break;
       const v = vehicles.vehicles.get(m.id);
       if (!v) {
         sendTo(pl, { t: "denied", reason: "no such vehicle" });
+        break;
+      }
+      if (v.attachedTo !== 0) {
+        sendTo(pl, { t: "denied", reason: "that cart is coupled to a locomotive" });
         break;
       }
       if (v.rider !== 0) {
@@ -1695,7 +1726,7 @@ function onMessage(pl: Player, raw: string): void {
       }
       freeRide(pl);
       v.rider = pl.id;
-      sendTo(pl, { t: "ride", id: v.id, kind: v.kind });
+      sendTo(pl, { t: "ride", id: v.id, kind: v.kind, p: [...v.p] as Vec3, yaw: v.yaw, fuel: v.fuel, speed: v.speed });
       broadcast({ t: "vehicles", list: vehicles.wire() });
       break;
     }
@@ -1709,6 +1740,10 @@ function onMessage(pl: Player, raw: string): void {
       if (pl.dead) break;
       const v = vehicles.vehicles.get(m.id);
       if (!v) break;
+      if (v.attachedTo !== 0) {
+        sendTo(pl, { t: "denied", reason: "that cart is coupled to a locomotive" });
+        break;
+      }
       if (v.rider !== 0) {
         sendTo(pl, { t: "denied", reason: v.rider === pl.id ? "hop out first (F)" : "occupied" });
         break;
@@ -1718,7 +1753,7 @@ function onMessage(pl: Player, raw: string): void {
         break;
       }
       vehicles.remove(m.id);
-      giveItems(pl.slots, v.kind === "boat" ? 158 : 159, 1);
+      giveItems(pl.slots, v.kind === "boat" ? 158 : v.kind === "locomotive" ? 160 : 159, 1);
       sendInv(pl);
       broadcast({ t: "vehicles", list: vehicles.wire() });
       break;
@@ -1829,6 +1864,14 @@ setInterval(() => {
   if (tickRain(dt)) mobs.rain = rain; else mobs.rain = rain;
   tickStorm(dt);
   tickFuses();
+  vehicles.tick(dt, world, (v) => {
+    const rider = players.all.get(v.rider);
+    if (rider) {
+      rider.p = [v.p[0], v.p[1] + PLAYER_EYE, v.p[2]];
+      rider.lastMove = Date.now();
+      sendTo(rider, { t: "ride", id: v.id, kind: v.kind, p: [...v.p] as Vec3, yaw: v.yaw, fuel: v.fuel, speed: v.speed });
+    }
+  });
   // mob damage callback routes to vitals (name included so tamed wolves can
   // follow owners — mobs side reads (pl as {name?:string}).name defensively)
   const wrappers = [...players.all.values()].map((pl) => ({
@@ -2031,6 +2074,7 @@ setInterval(() => {
       broadcast({ t: "time", time: world.time, rain, storm });
       void persistPlayers();
       void machines.save(); // chests/engines/quarries persist alongside players
+      void vehicles.save();
       // evict legacy poll clients that stopped polling
       const now = Date.now();
       for (const pl of [...players.all.values()]) {

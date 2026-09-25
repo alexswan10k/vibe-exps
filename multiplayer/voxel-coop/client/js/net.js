@@ -122,6 +122,7 @@ export class Net {
   bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
   tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
   vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleControl(throttle) { this.send({ t: "vehicleControl", throttle }); }
   vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
   vehicleExit() { this.send({ t: "vehicleExit" }); }
   vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }
@@ -290,6 +291,7 @@ export class PollNet {
   bucketFill(x, y, z) { this.send({ t: "bucketFill", x, y, z }); }
   tankUse(x, y, z, held) { this.send({ t: "tankUse", x, y, z, held }); }
   vehiclePlace(kind, x, y, z) { this.send({ t: "vehiclePlace", kind, x, y, z }); }
+  vehicleControl(throttle) { this.send({ t: "vehicleControl", throttle }); }
   vehicleEnter(id) { this.send({ t: "vehicleEnter", id }); }
   vehicleExit() { this.send({ t: "vehicleExit" }); }
   vehicleBreak(id) { this.send({ t: "vehicleBreak", id }); }

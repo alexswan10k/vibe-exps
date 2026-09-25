@@ -5,6 +5,6 @@
     "creative": "deno run --allow-net --allow-read --allow-write --allow-env --allow-sys server/main.ts -- --creative",
     "reset": "rm -f data/world.json data/players.json data/machines.json && echo 'saves wiped — next start generates a fresh world'",
     "check": "deno check server/main.ts",
-    "test": "deno check server/main.ts && node tests/pings.test.mjs"
+    "test": "deno check server/main.ts && node tests/pings.test.mjs && deno test --allow-read --allow-write tests/vehicles.test.ts"
   }
 }

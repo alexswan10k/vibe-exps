@@ -221,6 +221,16 @@ function paintCart(g) {
   R(g, 3, 11, 3, 3, "#1e1e22"); R(g, 10, 11, 3, 3, "#1e1e22"); // wheels
   R(g, 3, 11, 3, 1, "#8a8a92"); R(g, 10, 11, 3, 1, "#8a8a92"); // hubs
 }
+function paintLocomotive(g) {
+  R(g, 2, 7, 12, 5, "#2f3640");
+  R(g, 2, 7, 12, 1, "#8c3f2e");
+  R(g, 3, 4, 7, 4, "#59636e");
+  R(g, 4, 5, 5, 2, "#20252b");
+  R(g, 10, 3, 3, 4, "#20252b");
+  R(g, 11, 2, 1, 2, "#8c3f2e");
+  R(g, 2, 12, 3, 2, "#111318"); R(g, 11, 12, 3, 2, "#111318");
+  R(g, 3, 12, 1, 1, "#d8d8dc"); R(g, 12, 12, 1, 1, "#d8d8dc");
+}
 
 const PAINTERS = {
   101: paintStick, 102: paintCoal, 103: paintIngot, 104: paintPork,
@@ -248,7 +258,7 @@ const PAINTERS = {
   152: paintFirebrand, 153: paintOil, 154: paintWrench,
   155: (g) => paintBucket(g, null), 156: (g) => paintBucket(g, "#3f88d8"),
   157: (g) => paintBucket(g, "#ff7a1a"),
-  158: paintBoat, 159: paintCart,
+  158: paintBoat, 159: paintCart, 160: paintLocomotive,
 };
 
 export function itemIconURL(id) {

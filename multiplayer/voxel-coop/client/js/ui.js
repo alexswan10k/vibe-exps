@@ -9,6 +9,24 @@ export function iconFor(id) {
   return { img: itemIconURL(id), name };
 }
 
+const CREATIVE_IDS = [...new Set([
+  ...Array.from({ length: 52 }, (_, i) => i + 1),
+  ...Array.from({ length: 60 }, (_, i) => 101 + i),
+])].filter((id) => BLOCK_NAME[id] && id !== 8 && id !== 10 && id !== 40).sort((a, b) => a - b);
+const CREATIVE_FOOD = new Set([104, 107, 115, 132, 133, 134, 135, 136, 142, 143]);
+const CREATIVE_MACHINES = new Set([43, 44, 45, 46, 47, 48, 49, 50, 51]);
+const CREATIVE_VEHICLES = new Set([52, 158, 159, 160]);
+const CREATIVE_TOOLS = new Set([108, 109, 110, 111, 113, 114, 116, 117, 118, 119, 120, 121, 124, 125, 126, 127, 128, 129, 130, 131, 137, 138, 141, 145, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157]);
+
+function creativeCategory(id) {
+  if (CREATIVE_FOOD.has(id)) return "food";
+  if (CREATIVE_MACHINES.has(id)) return "machines";
+  if (CREATIVE_VEHICLES.has(id)) return "vehicles";
+  if (CREATIVE_TOOLS.has(id)) return "tools";
+  if (id <= 52) return "blocks";
+  return "materials";
+}
+
 export class UI {
   constructor() {
     this.el = (id) => document.getElementById(id);
@@ -17,6 +35,10 @@ export class UI {
     this.gridCells = Array.from({ length: 9 }, () => ({ id: 0, n: 0 }));
     this.gridResult = { id: 0, n: 0 };
     this.invOpen = false;
+    this.creativeOpen = false;
+    this.creativeQuery = "";
+    this.creativeFilter = "all";
+    this.onCreativeGive = null;
     this.swapIdx = null;
     // pointer drag-and-drop state (see slotDragStart/dragMove/dragUp below)
     this.drag = null; // {kind:'inv'|'grid'|'chest'|'result', idx, x0, y0, active, srcEl}
@@ -55,6 +77,7 @@ export class UI {
     this.bindKeys();
     this.bindWheel();
     this.initMenus();
+    this.buildCreativeBrowser();
     // drag ghost + drop live at document level (slots come and go on re-render)
     document.addEventListener("pointermove", (e) => this.dragMove(e));
     document.addEventListener("pointerup", (e) => this.dragUp(e));
@@ -161,6 +184,98 @@ export class UI {
       this.bookPage++; this.applyPage();
     });
     addEventListener("resize", () => { if (this.invOpen) this.fitLayout(); });
+  }
+
+  buildCreativeBrowser() {
+    this.el("creative-browser-btn")?.addEventListener("click", () => this.toggleCreativeBrowser());
+    this.el("creative-browser-close")?.addEventListener("click", () => this.toggleCreativeBrowser(false));
+    this.el("creative-search")?.addEventListener("input", (e) => {
+      this.creativeQuery = e.target.value.trim().toLowerCase();
+      this.renderCreativeBrowser();
+    });
+    this.el("creative-filters")?.addEventListener("click", (e) => {
+      const button = e.target.closest("button[data-cat]");
+      if (!button) return;
+      this.creativeFilter = button.dataset.cat;
+      for (const child of this.el("creative-filters").children) child.classList.toggle("on", child === button);
+      this.renderCreativeBrowser();
+    });
+    this.renderCreativeBrowser();
+  }
+
+  creativeBrowserOpen() {
+    return this.creativeOpen;
+  }
+
+  setCreativeMode(creative) {
+    const button = this.el("creative-browser-btn");
+    if (button) button.style.display = creative ? "block" : "none";
+    if (!creative && this.creativeOpen) this.toggleCreativeBrowser(false);
+  }
+
+  toggleCreativeBrowser(force) {
+    const show = force ?? !this.creativeOpen;
+    if (show && !window.voxCreative) {
+      this.hint("creative mode only — use /creative first");
+      return;
+    }
+    this.creativeOpen = show;
+    const browser = this.el("creative-browser");
+    if (browser) browser.style.display = show ? "flex" : "none";
+    if (show) {
+      this.renderCreativeBrowser();
+      this.releaseLock?.();
+    } else {
+      this.requestLock?.();
+    }
+  }
+
+  renderCreativeBrowser() {
+    const grid = this.el("creative-grid");
+    if (!grid) return;
+    const query = this.creativeQuery;
+    const stack = Math.max(1, Number(this.el("creative-stack")?.value) || 1);
+    const matches = CREATIVE_IDS.filter((id) => {
+      const category = creativeCategory(id);
+      if (this.creativeFilter !== "all" && category !== this.creativeFilter) return false;
+      if (!query) return true;
+      return `${BLOCK_NAME[id]} ${id} ${category}`.toLowerCase().includes(query);
+    });
+    grid.innerHTML = "";
+    for (const id of matches) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "creative-item";
+      item.title = `${BLOCK_NAME[id]} · ID ${id} · ${creativeCategory(id)}`;
+      const icon = document.createElement("span");
+      icon.className = "icon";
+      icon.style.backgroundImage = `url(${itemIconURL(id)})`;
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = BLOCK_NAME[id];
+      const idText = document.createElement("span");
+      idText.className = "id";
+      idText.textContent = `#${id} · ${creativeCategory(id)}`;
+      meta.append(name, idText);
+      item.append(icon, meta);
+      item.addEventListener("click", () => {
+        if (!this.onCreativeGive) return;
+        this.onCreativeGive(id, stack);
+        this.hint(`✨ gave ${BLOCK_NAME[id]} ×${stack}`);
+      });
+      grid.appendChild(item);
+    }
+    if (!matches.length) {
+      const empty = document.createElement("div");
+      empty.textContent = "No creative items match your search.";
+      empty.style.color = "#9eb5a1";
+      empty.style.padding = "16px";
+      grid.appendChild(empty);
+    }
+    const status = this.el("creative-status");
+    if (status) status.textContent = `${matches.length} item${matches.length === 1 ? "" : "s"} · click to give · B or ESC closes`;
   }
 
   bookCost(r) {
@@ -434,8 +549,10 @@ export class UI {
         if (n >= 1 && n <= 9) { this.hotbarSel = n - 1; this.renderHotbar(); }
       }
       if (e.code === "KeyE") this.toggleInv();
+      if (e.code === "KeyB" && !e.repeat) this.toggleCreativeBrowser();
       if (e.code === "Escape" || e.key === "Escape") {
         if (this.invOpen) this.toggleInv(false);
+        if (this.creativeOpen) this.toggleCreativeBrowser(false);
         if (this.el("trade-modal")?.style.display !== "none") this.hideTrades(false);
         if (this.el("screen-settings")?.style.display !== "none") this.toggleSettings(false);
       }
@@ -474,6 +591,7 @@ export class UI {
   }
 
   toggleInv(force) {
+    if (this.creativeOpen && force !== false) this.toggleCreativeBrowser(false);
     this.invOpen = force ?? !this.invOpen;
     this.el("inventory").style.display = this.invOpen ? "flex" : "none";
     // minecraft rules: opening a GUI frees the mouse, closing re-engages look
