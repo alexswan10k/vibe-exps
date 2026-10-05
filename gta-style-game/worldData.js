@@ -55,10 +55,13 @@ function generateCity() {
     hRoads.push(...FORCED_H);
     hRoads.sort((a, b) => a - b);
 
-    const hwyCandidates = hRoads.filter(r => Math.abs(r - 36) > 4 && r < 52);
-    const hwyPool = hwyCandidates.length ? hwyCandidates : hRoads;
-    const hwyRow = hwyPool.reduce((best, r) => Math.abs(r - 44) < Math.abs(best - 44) ? r : best, hwyPool[0]);
-    const hwyCol = vRoads.reduce((best, c) => Math.abs(c - 56) < Math.abs(best - 56) ? c : best, vRoads[0]);
+    // Limited-access highway picks a peripheral row/col, well clear of the
+    // downtown core (col ~73, row ~17). Previously the highway ran straight
+    // through the middle of the financial district.
+    const hwyRow = hRoads.reduce((best, r) =>
+        Math.abs(r - 66) < Math.abs(best - 66) ? r : best, hRoads[0]);
+    const hwyCol = vRoads.reduce((best, c) =>
+        Math.abs(c - 52) < Math.abs(best - 52) ? c : best, vRoads[0]);
 
     for (let r of hRoads) for (let x = 1; x < cols - 1; x++) { mask[r][x] = 1; if (r === hwyRow) hwyMask[r][x] = 1; }
     for (let c of vRoads) for (let y = 1; y < rows - 1; y++) { mask[y][c] = 1; if (c === hwyCol) hwyMask[y][c] = 1; }
@@ -491,17 +494,31 @@ function generateCity() {
         }
         splits.push(pts.length - 1);
         const uniq = [...new Set(splits)].sort((a, b) => a - b);
+        // Resolve each split point to a node. Reuse a real orth junction when
+        // the point sits on one; otherwise mint a curve-local node, keyed by
+        // position so consecutive segments share it (keeping the curve
+        // continuous) and a closed loop closes on itself.
+        // Reusing merely "nearby" nodes instead would attach a curve to an
+        // unrelated junction and leave stubs hanging off it.
+        const curveNodes = new Map();
+        const nodeAt = (x, y) => {
+            const cell = Math.floor(x / CELL) + ',' + Math.floor(y / CELL);
+            if (nodeIdByCell.has(cell)) return nodes[nodeIdByCell.get(cell)];
+            const key = Math.round(x / 4) + ',' + Math.round(y / 4);
+            if (curveNodes.has(key)) return curveNodes.get(key);
+            const n = { id: nodes.length, x, y, deg: 0 };
+            nodes.push(n);
+            curveNodes.set(key, n);
+            return n;
+        };
         for (let s = 0; s < uniq.length - 1; s++) {
             const i0 = uniq[s], i1 = uniq[s + 1];
             if (i1 - i0 < 3) continue;
             const sub = pts.slice(i0, i1 + 1);
             const [sx, sy] = sub[0], [ex, ey] = sub[sub.length - 1];
-            const findNear = (x, y) => nodes.find(n => Math.hypot(n.x - x, n.y - y) < 60);
-            let A = findNear(sx, sy);
-            if (!A) { A = { id: nodes.length, x: sx, y: sy, deg: 0 }; nodes.push(A); }
-            let B = findNear(ex, ey);
-            if (!B) { B = { id: nodes.length, x: ex, y: ey, deg: 0 }; nodes.push(B); }
-            if (A.id === B.id) continue;
+            const A = nodeAt(sx, sy);
+            const B = nodeAt(ex, ey);
+            if (A.id === B.id) continue;   // degenerate sub-segment
             addEdge(A, B, sub.map(p => [p[0], p[1]]), w, kind);
         }
     };
@@ -545,24 +562,55 @@ function generateCity() {
     addPOI("Columbus Plaza", 44.5 * CELL, 41 * CELL);
     addPOI("Downtown Heart", 70 * CELL, 14 * CELL);
 
-    // Curved avenue builder between two nodes
+    // Arterial builder between two nodes. Real arterials run along the street
+    // axes and turn at intersections rather than cutting straight across the
+    // city, so this lays an axis-aligned dogleg and rounds the corners. The old
+    // single quadratic Bezier produced 40-block diagonals that read as
+    // spaghetti rather than roads.
     const linkAvenue = (A, B) => {
         if (!A || !B || A.id === B.id) return null;
         if (edges.some(e => (e.a === A.id && e.b === B.id) || (e.a === B.id && e.b === A.id))) return null;
         const d = Math.hypot(A.x - B.x, A.y - B.y);
         if (d < 140) return null;
-        const pxn = -(B.y - A.y) / d, pyn = (B.x - A.x) / d;
-        const off = (rand() - 0.5) * d * 0.34;   // gentle intentional bend
-        const cxp = (A.x + B.x) / 2 + pxn * off;
-        const cyp = (A.y + B.y) / 2 + pyn * off;
-        const pts = [];
-        const segs = Math.max(8, Math.ceil(d / 44));
-        for (let s = 0; s <= segs; s++) {
-            const t = s / segs, it = 1 - t;
-            pts.push([it * it * A.x + 2 * it * t * cxp + t * t * B.x,
-                      it * it * A.y + 2 * it * t * cyp + t * t * B.y]);
+
+        // Choose the elbow position, alternating so parallel avenues don't all
+        // kink at the same place.
+        const cornerX = A.x + (B.x - A.x) * (0.35 + rand() * 0.3);
+        const cornerY = A.y + (B.y - A.y) * (0.35 + rand() * 0.3);
+        const dogleg = rand() < 0.5
+            ? [[A.x, A.y], [cornerX, A.y], [cornerX, B.y], [B.x, B.y]]
+            : [[A.x, A.y], [A.x, cornerY], [B.x, cornerY], [B.x, B.y]];
+
+        // Round each interior corner with a quadratic fillet.
+        const R = Math.min(190, d * 0.22);
+        const rounded = [dogleg[0]];
+        for (let i = 1; i < dogleg.length - 1; i++) {
+            const p = dogleg[i], a = dogleg[i - 1], b = dogleg[i + 1];
+            const v1 = [a[0] - p[0], a[1] - p[1]], v2 = [b[0] - p[0], b[1] - p[1]];
+            const l1 = Math.hypot(v1[0], v1[1]) || 1, l2 = Math.hypot(v2[0], v2[1]) || 1;
+            const r = Math.min(R, l1 * 0.45, l2 * 0.45);
+            const s = [p[0] + v1[0] / l1 * r, p[1] + v1[1] / l1 * r];
+            const e = [p[0] + v2[0] / l2 * r, p[1] + v2[1] / l2 * r];
+            rounded.push(s);
+            for (let t = 1; t < 6; t++) {          // quadratic Bezier fillet
+                const u = t / 6, iu = 1 - u;
+                rounded.push([iu * iu * s[0] + 2 * iu * u * p[0] + u * u * e[0],
+                              iu * iu * s[1] + 2 * iu * u * p[1] + u * u * e[1]]);
+            }
+            rounded.push(e);
         }
-        const e = addEdge(A, B, pts, 92, 'boulevard');
+        rounded.push(dogleg[dogleg.length - 1]);
+
+        // Densify so the road renders smoothly and length maths stays accurate.
+        const pts = [];
+        for (let i = 0; i < rounded.length - 1; i++) {
+            const [x1, y1] = rounded[i], [x2, y2] = rounded[i + 1];
+            const seg = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 44));
+            for (let s = 0; s < seg; s++) {
+                pts.push([x1 + (x2 - x1) * s / seg, y1 + (y2 - y1) * s / seg]);
+            }
+        }
+        pts.push(rounded[rounded.length - 1]);        const e = addEdge(A, B, pts, 92, 'boulevard');
         if (e) e.poi = true;
         return e;
     };
@@ -622,7 +670,8 @@ function generateCity() {
             }
             cid++;
         }
-        // connect component groups sequentially with straight links
+        // Connect component groups with an axis-aligned avenue rather than a
+        // straight chord, so a repair link never reads as a stray diagonal.
         const byComp = new Map();
         for (const n of nodes) {
             if (n.deg === 0) continue;
@@ -637,8 +686,259 @@ function generateCity() {
                 const d = Math.hypot(na.x - nb.x, na.y - nb.y);
                 if (d < bd) { bd = d; bestA = na; bestB = nb; }
             }
-            if (bestA && bestB) addEdge(bestA, bestB, [[bestA.x, bestA.y], [bestB.x, bestB.y]], 88, 'street');
+            if (bestA && bestB) {
+                // Reuse the dogleg avenue path so this repair road matches the
+                // rest of the network instead of cutting a bare diagonal.
+                if (!linkAvenue(bestA, bestB)) {
+                    addEdge(bestA, bestB, [[bestA.x, bestA.y], [bestB.x, bestB.y]], 88, 'street');
+                }
+            }
         }
+    }
+
+        // ============ 6b. MERGE COINCIDENT JUNCTIONS ============
+    // Curve splitting mints curve-local nodes next to grid junctions, leaving
+    // near-duplicate junctions a few dozen px apart. Each one gets its own
+    // signal, so they stack lights on top of each other, and each carries its
+    // own edges, so roads end up drawn on top of each other. Collapse any
+    // cluster of nodes closer than MERGE_DIST into a single junction.
+    const MERGE_DIST = 150;
+    {
+        const byId = new Map(nodes.map(n => [n.id, n]));
+        // Count incidences so we keep the best-connected node as the survivor.
+        const inc = new Map();
+        for (const e of edges) {
+            inc.set(e.a, (inc.get(e.a) || 0) + 1);
+            inc.set(e.b, (inc.get(e.b) || 0) + 1);
+        }
+        const CELL_M = MERGE_DIST;
+        const grid = new Map();
+        const key = (x, y) => Math.floor(x / CELL_M) + ',' + Math.floor(y / CELL_M);
+        // Union-find over node ids.
+        const parent = new Map(nodes.map(n => [n.id, n.id]));
+        const find = (i) => { while (parent.get(i) !== i) { parent.set(i, parent.get(parent.get(i))); i = parent.get(i); } return i; };
+        const union = (i, j) => { const a = find(i), b = find(j); if (a !== b) parent.set(a, b); };
+        for (const n of nodes) {
+            const kx = Math.floor(n.x / CELL_M), ky = Math.floor(n.y / CELL_M);
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                const arr = grid.get((kx + dx) + ',' + (ky + dy));
+                if (!arr) continue;
+                for (const o of arr) if (Math.hypot(o.x - n.x, o.y - n.y) < MERGE_DIST) union(o.id, n.id);
+            }
+            const k = key(n.x, n.y);
+            if (!grid.has(k)) grid.set(k, []);
+            grid.get(k).push(n);
+        }
+        // Choose a survivor per cluster: most incidences wins, ties by id.
+        const survivor = new Map();
+        for (const n of nodes) {
+            const r = find(n.id);
+            const cur = survivor.get(r);
+            if (!cur) { survivor.set(r, n); continue; }
+            const ci = inc.get(cur.id) || 0, ni = inc.get(n.id) || 0;
+            if (ni > ci || (ni === ci && n.id < cur.id)) survivor.set(r, n);
+        }
+        const remap = new Map();
+        for (const n of nodes) remap.set(n.id, survivor.get(find(n.id)).id);
+        let merged = 0;
+        for (const n of nodes) if (remap.get(n.id) !== n.id) merged++;
+        if (merged > 0) {
+            const seenPair = new Set();
+            const out = [];
+            for (const e of edges) {
+                const a = remap.get(e.a), b = remap.get(e.b);
+                if (a === b) continue;                       // became a self-loop
+                const pk = a < b ? a + ':' + b : b + ':' + a;
+                if (seenPair.has(pk)) continue;              // duplicate road
+                seenPair.add(pk);
+                e.a = a; e.b = b;
+                out.push(e);
+            }
+            edges.length = 0;
+            for (const e of out) edges.push(e);
+        }
+    }
+
+    // ============ 6c. DROP ROADS DRAWN ON TOP OF EACH OTHER ============
+    // Two near-parallel roads covering the same ground read as a rendering
+    // glitch and confuse traffic. Keep the higher-class road, drop the other.
+    {
+        const CLASS = { highway: 3, beltway: 3, boulevard: 2, street: 1 };
+        const segDist = (p1, p2, p3, p4) => {
+            const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+            const l2 = dx * dx + dy * dy;
+            if (l2 < 1e-9) return Math.hypot(p3[0] - p1[0], p3[1] - p1[1]);
+            let t = ((p3[0] - p1[0]) * dx + (p3[1] - p1[1]) * dy) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.hypot(p1[0] + t * dx - p3[0], p1[1] + t * dy - p3[1]);
+        };
+        // Local point-at-distance along an edge (World.pointAtDist isn't in
+        // scope inside generateCity).
+        const ptAt = (e, d) => {
+            const dd = Math.max(0, Math.min(e.len, d));
+            let i = 1;
+            while (i < e.cum.length - 1 && e.cum[i] < dd) i++;
+            const t = (dd - e.cum[i - 1]) / Math.max(1e-6, e.cum[i] - e.cum[i - 1]);
+            return [e.pts[i - 1][0] + (e.pts[i][0] - e.pts[i - 1][0]) * t,
+                    e.pts[i - 1][1] + (e.pts[i][1] - e.pts[i - 1][1]) * t];
+        };
+        // Fraction of A's length that lies within the carriageway of B.
+        const overlapFrac = (A, B) => {
+            const tol = (A.w + B.w) / 2 * 0.6;
+            let n = 0, hit = 0;
+            const steps = Math.max(6, Math.min(60, Math.round(A.len / 60)));
+            for (let s = 0; s < steps; s++) {
+                const d = s / steps * A.len;
+                const p = ptAt(A, d);
+                n++;
+                for (let i = 0; i < B.pts.length - 1; i++) {
+                    if (segDist(B.pts[i], B.pts[i + 1], p, [p[0] + 0.01, p[1]]) < tol) { hit++; break; }
+                }
+            }
+            return n ? hit / n : 0;
+        };
+        const drop = new Set();
+        // Bboxes are computed later by World.prepGraph, so build a local copy
+        // for the cheap broad-phase reject.
+        for (const e of edges) {
+            if (e.bbox) continue;
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            for (const p of e.pts) {
+                if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+                if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+            }
+            e.bbox = { x0, y0, x1, y1 };
+        }
+        for (let i = 0; i < edges.length; i++) {
+            if (drop.has(i)) continue;
+            const A = edges[i];
+            for (let j = i + 1; j < edges.length; j++) {
+                if (drop.has(j)) continue;
+                const B = edges[j];
+                // Cheap reject: bboxes must touch.
+                if (B.bbox.x1 < A.bbox.x0 || B.bbox.x0 > A.bbox.x1 ||
+                    B.bbox.y1 < A.bbox.y0 || B.bbox.y0 > A.bbox.y1) continue;
+                const fAB = overlapFrac(A, B);
+                if (fAB < 0.5) continue;
+                const fBA = overlapFrac(B, A);
+                if (fBA < 0.5) continue;
+                // Genuinely duplicated: keep the more important road.
+                const ca = CLASS[A.kind] || 0, cb = CLASS[B.kind] || 0;
+                const keepA = ca > cb || (ca === cb && A.len >= B.len);
+                drop.add(keepA ? j : i);
+            }
+        }
+        if (drop.size) {
+            const backup = [...drop].map(i => edges[i]);
+            for (let i = edges.length - 1; i >= 0; i--) if (drop.has(i)) edges.splice(i, 1);
+            drop.clear();
+            // Never sever the city: check what we just built.
+            const adj = new Map();
+            for (const e of edges) {
+                if (!adj.has(e.a)) adj.set(e.a, []);
+                if (!adj.has(e.b)) adj.set(e.b, []);
+                adj.get(e.a).push(e.b);
+                adj.get(e.b).push(e.a);
+            }
+            const touched = new Set();
+            for (const e of edges) { touched.add(e.a); touched.add(e.b); }
+            let ok = touched.size > 0;
+            if (ok) {
+                const start = edges[0].a;
+                const seen = new Set([start]);
+                const q = [start];
+                while (q.length) {
+                    const c = q.pop();
+                    for (const nb of (adj.get(c) || [])) if (!seen.has(nb)) { seen.add(nb); q.push(nb); }
+                }
+                ok = seen.size === touched.size;
+            }
+            if (!ok) for (const e of backup) edges.push(e);   // restore
+        }
+    }
+
+    // ============ 6d. PRUNE GRAPH-LEVEL DEAD-END STUBS ============
+    // The mask-level prune can't see stubs introduced by curve edges, POI
+    // links or dead-end cuts. This runs on the finished graph: any edge ending
+    // at a degree-1 node is a cul-de-sac that forces traffic to reverse, so
+    // short ones are dropped. Arterials and POI links are kept -- they are
+    // supposed to reach somewhere.
+    {
+        const deg = new Map();
+        for (const e of edges) {
+            deg.set(e.a, (deg.get(e.a) || 0) + 1);
+            deg.set(e.b, (deg.get(e.b) || 0) + 1);
+        }
+        const nodeById = new Map(nodes.map(n => [n.id, n]));
+        const keep = e => e.kind === 'highway' || e.kind === 'beltway' || e.kind === 'boulevard' || e.poi;
+        // A road that simply runs off the edge of the map is not a cul-de-sac,
+        // so never count its end node as a dead end.
+        const atMapEdge = (n) => n.x <= 2 * CELL || n.y <= 2 * CELL ||
+            n.x >= W - 2 * CELL || n.y >= H - 2 * CELL;
+        // Collect candidates ONCE from the original degrees. Re-measuring after
+        // each removal lets the prune cascade: trimming one stub makes its
+        // neighbour degree-1, which then gets trimmed too, eating whole streets
+        // and punching holes in the grid.
+        const deg2 = new Map();
+        for (const e of edges) {
+            deg2.set(e.a, (deg2.get(e.a) || 0) + 1);
+            deg2.set(e.b, (deg2.get(e.b) || 0) + 1);
+        }
+        const doomed = [];
+        for (const e of edges) {
+            if (keep(e)) continue;
+            const da = deg2.get(e.a) || 0, db = deg2.get(e.b) || 0;
+            const aLeaf = da === 1, bLeaf = db === 1;
+            if (!(aLeaf || bLeaf)) continue;
+            if (e.len > 620) continue;              // long lone road = deliberate spur
+            const leaf = nodeById.get(aLeaf ? e.a : e.b);
+            const farId = aLeaf ? e.b : e.a;
+            if (leaf && atMapEdge(leaf)) continue; // runs off the map, not a stub
+            if ((deg2.get(farId) || 0) < 2) continue;
+            doomed.push(e);
+        }
+        if (doomed.length > 0) {
+            // Only accept a prune that leaves the network fully connected.
+            const isConnected = () => {
+                if (edges.length === 0) return false;
+                const adj = new Map();
+                for (const e of edges) {
+                    if (!adj.has(e.a)) adj.set(e.a, []);
+                    if (!adj.has(e.b)) adj.set(e.b, []);
+                    adj.get(e.a).push(e.b);
+                    adj.get(e.b).push(e.a);
+                }
+                const start = edges[0].a;
+                const seen = new Set([start]);
+                const q = [start];
+                while (q.length) {
+                    const c = q.pop();
+                    for (const nb of (adj.get(c) || [])) if (!seen.has(nb)) { seen.add(nb); q.push(nb); }
+                }
+                const touched = new Set();
+                for (const e of edges) { touched.add(e.a); touched.add(e.b); }
+                return seen.size === touched.size;
+            };
+            const doomedSet = new Set(doomed);
+            for (let i = edges.length - 1; i >= 0; i--) {
+                if (doomedSet.has(edges[i])) edges.splice(i, 1);
+            }
+            // Roll back wholesale rather than risk severing the city.
+            if (!isConnected()) for (const e of doomed) edges.push(e);
+        }
+    }
+
+    // Recompute degrees from the surviving edges. The prune splices edges out
+    // of `edges`, so the counters maintained by addEdge are stale -- without
+    // this, nodes whose only edge was removed are still exported as isolated
+    // and the network looks shattered.
+    {
+        const finalDeg = new Map();
+        for (const e of edges) {
+            finalDeg.set(e.a, (finalDeg.get(e.a) || 0) + 1);
+            finalDeg.set(e.b, (finalDeg.get(e.b) || 0) + 1);
+        }
+        for (const n of nodes) n.deg = finalDeg.get(n.id) || 0;
     }
 
     // Drop degree-0 nodes
