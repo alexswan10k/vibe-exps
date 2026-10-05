@@ -32,3 +32,14 @@ A top-down 2D open-world crime sandbox, built with HTML5 Canvas and vanilla Java
 - Airport (terminal, hangars, airliner, runway ramp), Liberty Bowl Stadium, Pink Palace Casino, 3 fuel stations, 2 Pay 'n' Sprays
 - **14 building styles**: glass skyscrapers & office towers downtown, pagoda-roofed Chinatown blocks, brownstones, Little Italy shopfronts with striped awnings, industrial warehouses & container stacks, suburbia with victorian painted-ladies, ranch houses, gardens, pools and white-steepled churches
 - Merged superblocks, courtyards & alley yards, parking lots, construction sites
+
+### The City Block
+- Leftover lots from road clearance are **infilled** rather than left as bare lawn, so the
+  street wall stays continuous. Each infill building shrinks-to-fit until it clears the
+  carriageway, and is styled to its district (offices downtown, brownstones in Little Italy,
+  ranch houses in the suburbs)
+- Road-adjacent gaps that can't fit a building become paved **verges** so kerbs read correctly
+
+### Day/Night
+- One in-game day per **10 real minutes**, starting mid-morning. Street lamps, traffic
+  signals and window lights come on as it darkens

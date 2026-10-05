@@ -111,6 +111,19 @@ class Player {
 
     draw(ctx, cameraX, cameraY) {
         if (!this.inCar) {
+            // Contrast ring so the player is always findable against busy
+            // asphalt and dark building roofs. Drawn unrotated so it stays a
+            // clean circle.
+            const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.004);
+            ctx.save();
+            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+            ctx.strokeStyle = `rgba(255, 235, 120, ${0.30 + 0.22 * pulse})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, 15 + pulse * 1.5, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
             ctx.save();
             ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
 

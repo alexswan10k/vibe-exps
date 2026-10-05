@@ -15,15 +15,20 @@ let pedestrians = [];
 let cars = [];
 let lastTime = 0;
 let fps = 0, frameCount = 0, lastFpsUpdate = 0;
-let gameTime = 0;
+// 10 real minutes per in-game day. The old 70s cycle strobed the whole city
+// between daylight and darkness several times a minute.
+const DAY_LENGTH = 600000;
+// Start mid-morning rather than midnight, so the city is legible on boot.
+const START_TIME_OF_DAY = 0.38;
+// Seeded so the first frame is mid-morning, not midnight.
+let gameTime = START_TIME_OF_DAY * DAY_LENGTH;
 let score = 0;
 let distanceTraveled = 0;
 let lastPlayerPos = { x: 0, y: 0 };
 
 // UI & Minimap Variables
 let minimapCanvas, minimapCtx;
-const DAY_LENGTH = 70000;
-let timeOfDay = 0.5;
+let timeOfDay = START_TIME_OF_DAY;
 let lightLevel = 1.0;
 
 let playerHealth = 100;
@@ -300,7 +305,7 @@ function gameLoop(currentTime = 0) {
     gameTime += deltaTime;
 
     // Day/Night Cycle (0 = midnight, 0.5 = noon, 1.0 = midnight)
-    timeOfDay = Math.abs((gameTime % DAY_LENGTH) / DAY_LENGTH);
+    timeOfDay = ((gameTime / DAY_LENGTH) % 1 + 1) % 1;
     lightLevel = 0.25 + 0.75 * Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
     ambient = lightLevel * (1 - 0.30 * weatherIntensity);
 
@@ -887,7 +892,9 @@ function drawMinimap() {
     if (world.openTiles) {
         for (let o of world.openTiles) {
             if (!inView(o.x, o.y, o.width, o.height)) continue;
-            minimapCtx.fillStyle = o.kind === 'LOT' ? '#3E3E3E' : '#8D6E63';
+            minimapCtx.fillStyle = o.kind === 'LOT' ? '#3E3E3E'
+                : o.kind === 'VERGE' ? '#5A5A52'
+                    : '#8D6E63';
             minimapCtx.fillRect(o.x, o.y, o.width, o.height);
         }
     }

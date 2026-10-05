@@ -661,9 +661,10 @@ function generateCity() {
                 t = Math.max(0, Math.min(1, t));
                 const qx = x1 + dx * t, qy = y1 + dy * t;
                 const d2 = (px - qx) ** 2 + (py - qy) ** 2;
-                // Wide clearance: building corners can reach ~60px past their
-                // cell center, so clear well beyond the carriageway edge.
-                if (d2 < (halfW + 96) ** 2) {
+                // Clearance: a building is inset 6px in a 96px cell, so its corners
+                // reach 42px past the cell center. Clearing to halfW + 62
+                // leaves a ~20px pavement between kerb and facade.
+                if (d2 < (halfW + 62) ** 2) {
                     const tok = grid[cy][cx];
                     if (tok === 'B' || REPLACEABLE.indexOf(tok) !== -1) grid[cy][cx] = 'YARD';
                 }

@@ -26,6 +26,7 @@ class World {
         this.roundabouts = graph ? graph.roundabouts : [];
         this.rampProps = graph ? graph.ramps : [];
 
+        this.roadGrid = this.buildRoadGrid();
         this.convertToObjects();
         this.mergeBuildings();
         this.prepGraph();
@@ -162,6 +163,150 @@ class World {
     // True when the position sits on a bridge deck spanning water
     onBridge(x, y) {
         return this.bridgeCells.has(Math.floor(x / 48) + ',' + Math.floor(y / 48));
+    }
+
+    // Rasterize road corridors into a coarse grid so placement queries are O(1).
+    // For each cell we store the tightest gap between the cell centre and the
+    // nearest carriageway edge (Infinity where no road is near).
+    buildRoadGrid() {
+        const CELL = 96;
+        const cols = Math.ceil(9600 / CELL) + 2;
+        const rows = Math.ceil(7200 / CELL) + 2;
+        const data = new Float64Array(cols * rows).fill(Infinity);
+        const stamp = (x, y, clearance) => {
+            const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+            if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) return;
+            const i = cy * cols + cx;
+            if (data[i] > clearance) data[i] = clearance;
+        };
+        for (const e of this.edges) {
+            const hw = e.w / 2;
+            for (let i = 0; i < e.pts.length - 1; i++) {
+                const [x1, y1] = e.pts[i], [x2, y2] = e.pts[i + 1];
+                const minX = Math.min(x1, x2) - hw - CELL, maxX = Math.max(x1, x2) + hw + CELL;
+                const minY = Math.min(y1, y2) - hw - CELL, maxY = Math.max(y1, y2) + hw + CELL;
+                const cx0 = Math.max(0, Math.floor(minX / CELL)), cx1 = Math.min(cols - 1, Math.floor(maxX / CELL));
+                const cy0 = Math.max(0, Math.floor(minY / CELL)), cy1 = Math.min(rows - 1, Math.floor(maxY / CELL));
+                const dx = x2 - x1, dy = y2 - y1;
+                const segLen2 = dx * dx + dy * dy || 1;
+                for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+                    const px = cx * CELL + CELL / 2, py = cy * CELL + CELL / 2;
+                    let t = ((px - x1) * dx + (py - y1) * dy) / segLen2;
+                    t = Math.max(0, Math.min(1, t));
+                    const qx = x1 + dx * t, qy = y1 + dy * t;
+                    const gap = Math.hypot(px - qx, py - qy) - hw;
+                    if (gap < CELL) stamp(px, py, gap);
+                }
+            }
+        }
+        return { cell: CELL, cols, rows, data };
+    }
+
+    // True when an axis-aligned box would sit on a road corridor. We sample the
+    // box's corners and edge midpoints so diagonal carriageways are caught, and
+    // require each sample to clear the carriageway by a sidewalk margin.
+    boxHitsRoad(x, y, w, h, margin = 16) {
+        const pts = [
+            [x, y], [x + w, y], [x, y + h], [x + w, y + h],
+            [x + w / 2, y], [x + w / 2, y + h],
+            [x, y + h / 2], [x + w, y + h / 2],
+        ];
+        for (const [px, py] of pts) {
+            // Clearance is measured from the cell centre; correct for the
+            // sample's offset within its cell.
+            const g = this.roadGrid;
+            const cx = Math.floor(px / g.cell), cy = Math.floor(py / g.cell);
+            if (cx < 0 || cy < 0 || cx >= g.cols || cy >= g.rows) continue;
+            const ccx = cx * g.cell + g.cell / 2, ccy = cy * g.cell + g.cell / 2;
+            const clearance = g.data[cy * g.cols + cx] - Math.hypot(px - ccx, py - ccy);
+            if (clearance < margin) return true;
+        }
+        return false;
+    }
+
+    // Deterministic hash -> [0,1), so world generation is stable per tile and
+    // a tile always regenerates the same structure (no shimmer between loads).
+    tileRand(x, y, salt) {
+        let h = (x * 374761393 + y * 668265263 + salt * 2246822519) | 0;
+        h = (h ^ (h >>> 13)) * 1274126177;
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+
+    // Pick an infill style for a leftover lot by sampling the district name,
+    // so back-alleys in Chinatown don't sprout suburban ranch houses.
+    yardStyleFor(x, y) {
+        let district = '';
+        if (typeof getDistrictNameAt === 'function') {
+            district = getDistrictNameAt(x * 96 + 48, y * 96 + 48) || '';
+        }
+        if (district.indexOf('Downtown') !== -1) return ['office', 'downtown', 'standard'];
+        if (district.indexOf('Chinatown') !== -1) return ['chinatown', 'standard', 'shop'];
+        if (district.indexOf('Little Italy') !== -1) return ['brownstone', 'shop', 'standard'];
+        if (district.indexOf('Brownstone') !== -1) return ['brownstone', 'standard'];
+        if (district.indexOf('Docks') !== -1) return ['industrial', 'standard'];
+        if (district.indexOf('Suburbs') !== -1) return ['suburb', 'ranch', 'victorian'];
+        return ['standard', 'office', 'shop'];
+    }
+
+    // Fill one leftover lot. Some yards become parking, some stay open, and the
+    // rest get a shrunken infill building that leaves a walkable margin so the
+    // gap still reads as an alley rather than a solid wall.
+    fillYardTile(x, y, gameX, gameY, cellSize) {
+        const r = this.tileRand(x, y, 7);
+
+        // ~7% become a construction site.
+        if (r < 0.07) {
+            this.openTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, kind: 'DIRT' });
+            return;
+        }
+        // ~8% become a small parking lot.
+        if (r < 0.15) {
+            this.openTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, kind: 'LOT' });
+            return;
+        }
+
+        const styles = this.yardStyleFor(x, y);
+        const style = styles[Math.floor(this.tileRand(x, y, 13) * styles.length) % styles.length];
+        // Nudge off-centre for a less mechanical feel.
+        const offX = (this.tileRand(x, y, 31) - 0.5) * 10;
+        const offY = (this.tileRand(x, y, 37) - 0.5) * 10;
+
+        // Shrink-to-fit: start with a comfortable footprint and pull it in until
+        // it clears the carriageway by a sidewalk margin. Road-adjacent lots
+        // therefore get slimmer buildings instead of being erased, which keeps
+        // the street wall intact while leaving the pavement clear.
+        let inset = 14;
+        let w = 0, h = 0, bx = 0, by = 0;
+        let fitted = false;
+        for (; inset <= 34; inset += 4) {
+            w = cellSize - inset * 2;
+            h = cellSize - inset * 2;
+            bx = gameX + inset + offX;
+            by = gameY + inset + offY;
+            if (!this.boxHitsRoad(bx, by, w, h, 16)) { fitted = true; break; }
+        }
+
+        if (!fitted) {
+            // No room for a building: leave a paved verge so the kerb reads.
+            this.openTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, kind: 'VERGE' });
+            return;
+        }
+
+        this.buildings.push({
+            x: bx,
+            y: by,
+            width: w,
+            height: h,
+            style: style,
+            tileX: x,
+            tileY: y,
+            spanX: 1,
+            spanY: 1,
+            infill: true,
+            // Infill is deliberately excluded from merging: it must keep its
+            // margins so alleys survive.
+            mergeable: false
+        });
     }
 
     convertToObjects() {
@@ -333,6 +478,12 @@ class World {
                     if (tile === 'RAMP_N') angle = -Math.PI / 2;
 
                     this.stuntRamps.push({ x: gameX + cellSize / 2, y: gameY + cellSize / 2, angle: angle });
+                } else if (tile === 'YARD') {
+                    // Leftover lot left over by road clearance. Left bare it
+                    // reads as a hole in the city, so fill it with a small
+                    // infill structure (or a parking lot) chosen to match the
+                    // surrounding district.
+                    this.fillYardTile(x, y, gameX, gameY, cellSize);
                 } else if (tile.startsWith('B')) {
                     // Building with distinct style
                     let style = 'standard';
@@ -691,6 +842,24 @@ class World {
                     ctx.lineTo(o.x + i, o.y + 38);
                     ctx.moveTo(o.x + i, o.y + o.height - 38);
                     ctx.lineTo(o.x + i, o.y + o.height - 10);
+                }
+                ctx.stroke();
+            } else if (o.kind === 'VERGE') {
+                // Paved service strip beside the carriageway. Deliberately a
+                // light concrete tone so it reads as pavement, not more road.
+                ctx.fillStyle = '#8C8880';
+                ctx.fillRect(o.x, o.y, o.width, o.height);
+                // Slab joints for a bit of texture
+                ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = 24; i < o.width; i += 24) {
+                    ctx.moveTo(o.x + i, o.y);
+                    ctx.lineTo(o.x + i, o.y + o.height);
+                }
+                for (let i = 24; i < o.height; i += 24) {
+                    ctx.moveTo(o.x, o.y + i);
+                    ctx.lineTo(o.x + o.width, o.y + i);
                 }
                 ctx.stroke();
             } else {
