@@ -111,6 +111,29 @@ export class MobSim {
     return m;
   }
 
+  /**
+   * Nearest hostile mob to `from` within `range`, for pet combat. Tamed wolves
+   * are excluded (they never fight their own pack), as are villagers/wild
+   * wolves so pets don't start a war with the wildlife you might be farming.
+   */
+  private nearestHostile(from: Mob, range: number): Mob | null {
+    // mirrors the tick loop's hostility set (mobs.ts:319) plus the night/dark
+    // wanderers that also attack players: wisp, wraith, golem
+    const hostile = new Set(["zombie", "skeleton", "spider", "ogre", "wisp", "wraith", "golem"]);
+    let best: Mob | null = null;
+    let bestD = range * range;
+    for (const o of this.mobs.values()) {
+      if (o.id === from.id) continue;
+      if (o.owner !== undefined) continue;
+      if (o.kind === "villager" || o.kind === "wolf") continue;
+      if (!hostile.has(o.kind)) continue;
+      const dx = o.p[0] - from.p[0], dy = o.p[1] - from.p[1], dz = o.p[2] - from.p[2];
+      const d = dx * dx + dy * dy + dz * dz;
+      if (d < bestD) { bestD = d; best = o; }
+    }
+    return best;
+  }
+
   hurt(id: number, dmg: number): Mob | undefined {
     const m = this.mobs.get(id);
     if (!m) return undefined;
@@ -320,8 +343,11 @@ export class MobSim {
         }
       }
       const hostileNow = HOSTILE.has(m.kind) && (night || m.kind === "ogre" || m.hp < m.maxHp);
-      // wolf: neutral by day — hostile (chase like zombie, range 16) only at night or when provoked
-      const wolfHostile = m.kind === "wolf" && (night || m.hp < m.maxHp);
+      // wolf: neutral by day — hostile (chase like zombie, range 16) only at night or when provoked.
+      // Tamed wolves (m.owner set) are NEVER hostile: they used to chase and
+      // bite their own owner every night, and mobDrops("wolf") is [] so killing
+      // your own pet was the only escape.
+      const wolfHostile = m.kind === "wolf" && m.owner === undefined && (night || m.hp < m.maxHp);
       // wisp: hostile at night + in darkness (caves/under cover) — chase range 20; by day wanders
       const wispHostile = m.kind === "wisp" && (night || !this.exposed(world, m));
       // wraith: same darkness test as the wisp — night or under cover/caves;
@@ -393,6 +419,26 @@ export class MobSim {
             const sp = st.speed * 1.2;
             m.dir = Math.atan2(-dx, -dz);
             this.step(m, (dx / len) * sp * dt, (dz / len) * sp * dt, world, 2);
+          }
+          // pet combat: tamed wolves hunt hostile mobs near their owner. This is
+          // the first mob-vs-mob code in the game — the README claims "tamed
+          // wolves fight for you" but previously they only ever followed.
+          if (m.atkCd <= 0) {
+            const foe = this.nearestHostile(m, 8);
+            if (foe) {
+              const fdx = foe.p[0] - m.p[0], fdz = foe.p[2] - m.p[2];
+              const flen = Math.hypot(fdx, fdz) || 1;
+              m.dir = Math.atan2(-fdx, -fdz);
+              if (flen > 1.8) {
+                const csp = st.speed * 1.3;
+                this.step(m, (fdx / flen) * csp * dt, (fdz / flen) * csp * dt, world, 2);
+              }
+              if (flen < 2.4 && Math.abs(foe.p[1] - m.p[1]) < 2.5 &&
+                  this.losClear(world, m.p[0], m.p[1] + 0.9, m.p[2], foe.p[0], foe.p[1], foe.p[2])) {
+                m.atkCd = 1.0;
+                this.hurt(foe.id, 4);
+              }
+            }
           }
         } else {
           this.wander(m, dt, world, st.speed * 0.5);

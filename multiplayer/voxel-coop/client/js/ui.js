@@ -548,7 +548,10 @@ export class UI {
         const n = Number(e.code.slice(5));
         if (n >= 1 && n <= 9) { this.hotbarSel = n - 1; this.renderHotbar(); }
       }
-      if (e.code === "KeyE") this.toggleInv();
+      // e.repeat guards: holding E/H/O re-toggled the panel at the OS key-repeat
+      // rate (~30Hz), re-running renderInv()+renderBook() and thrashing
+      // pointer lock on every repeat
+      if (e.code === "KeyE" && !e.repeat) this.toggleInv();
       if (e.code === "KeyB" && !e.repeat) this.toggleCreativeBrowser();
       if (e.code === "Escape" || e.key === "Escape") {
         if (this.invOpen) this.toggleInv(false);
@@ -556,8 +559,8 @@ export class UI {
         if (this.el("trade-modal")?.style.display !== "none") this.hideTrades(false);
         if (this.el("screen-settings")?.style.display !== "none") this.toggleSettings(false);
       }
-      if (e.code === "KeyH") this.toggleHelp();
-      if (e.code === "KeyO") this.toggleSettings();
+      if (e.code === "KeyH" && !e.repeat) this.toggleHelp();
+      if (e.code === "KeyO" && !e.repeat) this.toggleSettings();
       if (e.code === "Tab") {
         e.preventDefault();
         if (!e.repeat) this.showPlayers(true);
@@ -625,7 +628,10 @@ export class UI {
   }
 
   setSlots(slots) {
-    this.slots = slots;
+    // guard: a malformed/older-server `inv` used to set this.slots = undefined,
+    // after which heldItem(), renderHotbar and the KeyX/R/G scans all threw
+    // silently (net.emit swallows handler throws)
+    this.slots = Array.isArray(slots) ? slots : [];
     this.renderHotbar();
     if (this.invOpen) { this.renderInv(); this.renderBook(); }
   }
@@ -712,6 +718,27 @@ export class UI {
     log.appendChild(d);
     while (log.children.length > 60) log.removeChild(log.firstChild);
     log.scrollTop = log.scrollHeight;
+  }
+
+  /**
+   * Kill feed: recent kills/deaths as transient chips top-right. Previously
+   * these only appeared in the chat log (and scrolled away), so a kill during
+   * a fight was invisible while it mattered.
+   */
+  killFeed(lines) {
+    const root = this.el("killfeed");
+    if (!root) return;
+    root.innerHTML = "";
+    for (const line of (lines ?? []).slice(0, 6)) {
+      const d = document.createElement("div");
+      d.className = "kf-row";
+      d.textContent = line; // textContent: names come off the wire
+      root.appendChild(d);
+    }
+    // restart the fade timer rather than stacking one per message
+    if (this._kfTimer) clearTimeout(this._kfTimer);
+    root.classList.remove("fade");
+    this._kfTimer = setTimeout(() => root.classList.add("fade"), 9000);
   }
 
   status(t) { this.el("status").textContent = t; }
@@ -932,6 +959,12 @@ export class UI {
     if (show) this.renderPlayers();
   }
 
+  /**
+   * TAB screen: who is alive and where, plus a kill/death scoreboard below.
+   * The score rows come from the server's `score` message (persisted stats,
+   * including players who are currently offline) rather than the live player
+   * list, so progress survives a reconnect.
+   */
   renderPlayers() {
     const list = this.el("screen-players-list");
     if (!list) return;
@@ -962,6 +995,33 @@ export class UI {
       }
       list.appendChild(d);
     }
+    this.renderScores(list);
+  }
+
+  /** Scoreboard rows appended under the live player list. */
+  renderScores(list) {
+    if (!this._scores?.length) return;
+    const h = document.createElement("div");
+    h.className = "score-h";
+    h.textContent = "scoreboard";
+    list.appendChild(h);
+    for (const r of this._scores) {
+      const d = document.createElement("div");
+      d.className = "screen-prow score" + (r.online ? "" : " offline");
+      const nm = document.createElement("span");
+      nm.className = "nm";
+      nm.textContent = r.name;
+      const k = document.createElement("span");
+      k.className = "st";
+      k.textContent = `☠ ${r.kills} kills · ${r.deaths} deaths`;
+      d.append(nm, k);
+      list.appendChild(d);
+    }
+  }
+
+  setScores(rows) {
+    this._scores = Array.isArray(rows) ? rows : [];
+    if (this.el("screen-players")?.style.display !== "none") this.renderPlayers();
   }
 
   /** Death stats: players msg carries no kills, so show online/alive counts. */

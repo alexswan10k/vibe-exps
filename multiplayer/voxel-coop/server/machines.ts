@@ -93,19 +93,51 @@ export class Machines {
     return m;
   }
 
-  async save(): Promise<void> {
-    try {
-      await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
-      const d = {
-        chests: Object.fromEntries(this.chests),
-        engines: Object.fromEntries(this.engines),
-        quarries: Object.fromEntries(this.quarries),
-        tanks: Object.fromEntries(this.tanks),
-        pumps: [...this.pumps],
-        loot: [...this.lootFilled],
-      };
-      await Deno.writeTextFile(this.savePath, JSON.stringify(d));
-    } catch (e) { console.error("[machines] save failed:", e); }
+  /**
+   * Serialized, atomic save. claimLoot() calls save() once per worldgen
+   * chest (~150-250 of them at boot) and the chest/tank/quarry handlers call
+   * it per interaction, so unserialized writes used to pile up and truncate
+   * each other — a torn write makes loadOrCreate() swallow the parse error
+   * and silently lose the entire machine world.
+   *
+   * `pending` marks state mutated while a write was in flight so it gets
+   * written again rather than lost on the floor.
+   */
+  private saving: Promise<void> | null = null;
+  private pending = false;
+
+  save(): Promise<void> {
+    if (this.saving) {
+      this.pending = true;
+      return this.saving;
+    }
+    this.saving = (async () => {
+      try {
+        await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
+        const d = {
+          chests: Object.fromEntries(this.chests),
+          engines: Object.fromEntries(this.engines),
+          quarries: Object.fromEntries(this.quarries),
+          tanks: Object.fromEntries(this.tanks),
+          pumps: [...this.pumps],
+          loot: [...this.lootFilled],
+        };
+        // write-then-rename: rename is atomic on POSIX, so readers only ever
+        // see a complete file
+        const tmp = `${this.savePath}.tmp`;
+        await Deno.writeTextFile(tmp, JSON.stringify(d));
+        await Deno.rename(tmp, this.savePath);
+      } catch (e) { console.error("[machines] save failed:", e); }
+    })();
+    // clear the in-flight marker once this write lands, then re-run if state
+    // changed underneath it
+    return this.saving.then(() => {
+      this.saving = null;
+      if (this.pending) {
+        this.pending = false;
+        return this.save();
+      }
+    });
   }
 
   resetAll(): void {
@@ -469,7 +501,11 @@ export class Machines {
       const cur = world.get(bx, by, bz);
       if (cur === B.AIR || cur === B.WATER || cur === B.LAVA || cur === B.BEDROCK) continue;
       // never eat machine blocks themselves
-      if (cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE || cur === B.TANK || cur === B.FLUID_PIPE || cur === B.PUMP) continue;
+      // FURNACE matters as much as the machine blocks: the furnaces Map lives
+      // in main.ts, so a quarry tunnelling through one leaves an orphaned
+      // smelt entry (often `done` waiting for pickup) that can never be
+      // collected, and the Map grows without bound.
+      if (cur === B.CHEST || cur === B.ENGINE || cur === B.QUARRY || cur === B.PIPE || cur === B.TANK || cur === B.FLUID_PIPE || cur === B.PUMP || cur === B.FURNACE) continue;
       const drop = quarryDropFor(cur);
       world.set(bx, by, bz, B.AIR);
       hooks.onBlock(bx, by, bz, B.AIR);

@@ -1,5 +1,5 @@
 // voxel-coop client entry: scene, networking, chunk streaming, mining, day/night.
-import { B, CHUNK, WORLD_H, PLAYER_EYE, HARDNESS, PICK_MULT, toolMultFor, isPlaceable, WALK_THROUGH, resolveServerUrl, httpBase } from "./config.js";
+import { B, CHUNK, WORLD_H, PLAYER_EYE, HARDNESS, PICK_MULT, toolMultFor, miningSeconds, isPlaceable, WALK_THROUGH, resolveServerUrl, httpBase } from "./config.js";
 import { Net, PollNet } from "./net.js";
 import { WorldClient, makeMaterials } from "./world.js";
 import { Player } from "./player.js";
@@ -85,8 +85,16 @@ function setShadows(on) {
   renderer.shadowMap.enabled = on;
   sun.castShadow = on;
   try { localStorage.setItem("voxelcoop.shadows", on ? "1" : "0"); } catch { /* noop */ }
-  // toggling shadowMap at runtime needs a material refresh
-  scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+  // toggling shadowMap at runtime needs a material refresh. Multi-face blocks
+  // (grass, log, table, furnace, bed, cactus, pine) hold an ARRAY of materials,
+  // and writing needsUpdate onto the array object silently did nothing, so those
+  // seven kept rendering with the stale shadow defines after pressing P.
+  scene.traverse((o) => {
+    if (!o.material) return;
+    for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+      if (m) m.needsUpdate = true;
+    }
+  });
   ui.hint(on ? "shadows on" : "shadows off (faster)");
 }
 
@@ -110,6 +118,9 @@ function makeFlameTexture() {
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
   const t = new THREE.CanvasTexture(c);
+  // the renderer declares sRGB output encoding; an untagged canvas texture is
+  // sampled as linear and then re-encoded, so the flame rendered washed out
+  t.encoding = THREE.sRGBEncoding;
   return t;
 }
 const flameTex = makeFlameTexture();
@@ -154,11 +165,30 @@ function updateTorchLights(now) {
   // (Illumination is static — see the bake in world.js.)
   if (now - lastTorchSearch > 250) {
     lastTorchSearch = now;
-    cachedNear = world.nearestTorches(player.pos, TORCH_LIGHTS, 34);
+    // one slot is reserved for the held-torch lantern (see below), so only
+    // TORCH_LIGHTS - 1 placed torches compete for the pool
+    cachedNear = world.nearestTorches(player.pos, TORCH_LIGHTS - 1, 34);
   }
+  // Held-torch lantern: the README has always claimed "carrying a torch works
+  // as a lantern" but nothing implemented it — only placed torches/lights/lamps
+  // fed the bake. Give the last pool slot to the item in your hand so walking
+  // through a cave with a torch actually shows a glow.
+  const heldTorch = ui.heldItem()?.id === B.TORCH;
   for (let i = 0; i < TORCH_LIGHTS; i++) {
     const p = torchPool[i];
-    if (i < cachedNear.length) {
+    if (heldTorch && i === TORCH_LIGHTS - 1) {
+      const bob = Math.sin(now / 420) * 0.06;
+      p.sprite.position.set(
+        player.pos.x + Math.cos(player.yaw) * 0.35,
+        player.pos.y + PLAYER_EYE - 0.25 + bob,
+        player.pos.z - Math.sin(player.yaw) * 0.35,
+      );
+      const f2 = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
+      p.sprite.material.opacity = 0.8 + f2 * 0.6;
+      const s2 = 1.5 + f2 * 0.3;
+      p.sprite.scale.set(s2, s2, 1);
+      p.sprite.visible = true;
+    } else if (i < cachedNear.length) {
       p.sprite.position.set(cachedNear[i][0], cachedNear[i][1], cachedNear[i][2]);
       const f = Math.sin(now / 130 + i * 2.1) * 0.14 + Math.sin(now / 47 + i * 1.3) * 0.06;
       p.sprite.material.opacity = p.hold !== undefined ? p.hold : 0.75 + f * 0.9;
@@ -279,7 +309,14 @@ scene.add(camera); // the held-item viewmodel rides on the camera
 const hand = new Hand(camera, world.materials);
 window.voxHand = hand; // handy for screenshots/tests
 window.voxUI = ui;
-window.voxDbg = { renderer, sun, scene, setShadows };
+// Diagnostics handle: renderer/scene handles plus the live game objects, so the
+// browser-driven tests in tests/ can drive real gameplay (mine at a block, aim,
+// read the local position) instead of only poking at the DOM.
+window.voxDbg = {
+  renderer, sun, scene, setShadows, player, world, ui, entities, hand, camera,
+  // net is assigned later (WS or poll transport), so expose it lazily
+  get net() { return net; },
+};
 // damage vignette overlay (styled in style.css) + mute button; created here if missing
 if (!document.getElementById("dmg-vignette")) {
   const d = document.createElement("div");
@@ -384,7 +421,8 @@ function renderChest() {
   const list = document.getElementById("chest-list");
   if (!modal || !list || !window.voxChest) return;
   list.innerHTML = "";
-  window.voxChest.slots.forEach((s, cs) => {
+  const slots = Array.isArray(window.voxChest.slots) ? window.voxChest.slots : [];
+  slots.forEach((s, cs) => {
     const d = document.createElement("div");
     d.className = "slot chest-slot";
     d.dataset.cs = cs;
@@ -569,18 +607,15 @@ function streamChunks() {
 }
 
 // ---------- mining ----------
+// Delegates to config.miningSeconds(), which mirrors the server's
+// miningSeconds() exactly. The old local copy had its own hardcoded block
+// list that disagreed with the server (missing gold/diamond ore and obsidian
+// from the "slow by hand" set, and a pick list that included 18/19/21/38),
+// so the client's break bar completed early and the server rejected the
+// break with "keep mining" — those blocks were effectively unbreakable.
 function breakTime(block, heldId) {
   if (window.voxCreative) return 0.05; // creative: instant-ish, still shows a flicker
-  const base = HARDNESS[block];
-  if (base === undefined || base === Infinity) return Infinity;
-  const mult = toolMultFor(block, heldId);
-  const isStone = [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51].includes(block);
-  if (isStone) {
-    // stone-likes without any tool are brutally slow (mult 1 here = bare hands)
-    if (mult <= 1) return base * 3.3;
-    return base / mult;
-  }
-  return base / mult;
+  return miningSeconds(block, heldId, false);
 }
 
 const mouse = { left: false, right: false };
@@ -615,6 +650,25 @@ function tryAttack() {
 function mouseSafeRelease() {
   mouse.left = false;
   clearBreak();
+}
+
+/**
+ * Furnace interaction. The client only ever sent action "start", so the
+ * server's "take" branch was unreachable: a finished smelt whose output didn't
+ * fit (or whose owner was offline) stayed stuck at the furnace forever, with
+ * no way to collect it. Now: if the furnace is holding finished output, take
+ * it; otherwise start a new smelt.
+ */
+function interactFurnace(x, y, z) {
+  const st = (window.voxSmelt?.states ?? []).find((s) => s.x === x && s.y === y && s.z === z);
+  if (st?.ready) {
+    net.smelt("take", x, y, z);
+    ui.hint("⛏ collecting from the furnace");
+  } else if (st && st.progress > 0 && st.progress < 1) {
+    ui.hint(`smelting… ${Math.round(st.progress * 100)}%`);
+  } else {
+    net.smelt("start", x, y, z);
+  }
 }
 
 // Scan the look ray for a water/lava block (the voxel raycaster skips water).
@@ -708,7 +762,7 @@ function doPlace() {
   if (!hit) return;
   // interactables first (MC behaviour): table opens crafting, furnace smelts, bed sets spawn
   if (hit.block === B.CRAFT_TABLE) { ui.toggleInv(true); return; }
-  if (hit.block === B.FURNACE) { net.smelt("start", hit.x, hit.y, hit.z); return; }
+  if (hit.block === B.FURNACE) { interactFurnace(hit.x, hit.y, hit.z); return; }
   if (hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); return; }
   if (hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest…"); return; }
   if (hit.block === B.ENGINE) { openEnginePanel(hit.x, hit.y, hit.z); return; }
@@ -757,7 +811,10 @@ function doPlace() {
 
 function tickBreaking(dt) {
   // touch mode has no pointer lock; the MINE button is the gate instead
-  if (!mouse.left || (!player.locked && !touch.enabled) || ui.invOpen || dead) {
+  // anyGuiOpen, not just invOpen: mining/attacking used to continue behind the
+  // chest, engine, trade and creative-browser windows. In touch mode there is
+  // no pointer lock, so the modal was no gate at all.
+  if (!mouse.left || (!player.locked && !touch.enabled) || anyGuiOpen()) {
     if (breaking) clearBreak();
     return;
   }
@@ -843,7 +900,7 @@ addEventListener("keydown", (e) => {
     if (hit && hit.block === B.TNT) { net.ignite(hit.x, hit.y, hit.z); hand.swing(); }
     else if (hit && hit.block === B.CHEST) { net.chestOpen(hit.x, hit.y, hit.z); ui.hint("🧰 opening chest… (click chest slot = take, click inv slot = store)"); }
     else if (hit && hit.block === B.ENGINE) { openEnginePanel(hit.x, hit.y, hit.z); }
-    else if (hit && hit.block === B.FURNACE) net.smelt("start", hit.x, hit.y, hit.z);
+    else if (hit && hit.block === B.FURNACE) interactFurnace(hit.x, hit.y, hit.z);
     else if (hit && hit.block === B.BED) { net.setBed(hit.x, hit.y, hit.z); ui.hint("🛏 spawn set — you'll wake up here"); }
     else if (hit && hit.block === B.TANK) {
       const held = ui.heldItem();
@@ -979,10 +1036,14 @@ net.on("welcome", (m) => {
 net.on("chunk", (m) => {
   pendingChunks.delete(`${m.cx},${m.cz}`);
   world.setChunk(m.cx, m.cz, decodeRLE(m.rle));
+  minimap.invalidate(); // fresh chunk data can change column tops
 });
 
 net.on("block", (m) => {
-  if ([m.x, m.y, m.z, m.block].every(Number.isInteger)) world.setLocal(m.x, m.y, m.z, m.block);
+  if ([m.x, m.y, m.z, m.block].every(Number.isInteger)) {
+    world.setLocal(m.x, m.y, m.z, m.block);
+    minimap.invalidate(); // the cached column top just changed
+  }
 });
 net.on("players", (m) => { entities.setPlayers(m.list); if (ui.setPlayers) ui.setPlayers(m.list); });
 net.on("mobs", (m) => entities.setMobs(m.list));
@@ -1073,13 +1134,31 @@ net.on("reset", (m) => {
   ui.status(`fresh world — seed ${m.seed}`);
 });
 net.on("chat", (m) => ui.chatMsg(m.from, m.msg));
+// Kill feed + scoreboard. Kills/deaths were already tracked and persisted on
+// the server but only visible via the /stats chat command, so two players had
+// no way to compare progress without typing it out loud.
+net.on("killfeed", (m) => ui.killFeed(m.list ?? []));
+net.on("score", (m) => ui.setScores(m.list ?? []));
 net.on("ping", () => {
   // net.js auto-replies pong; lastPingMs drives a subtle status readout
   if (net.lastPingMs > 0) ui.status(`connected · ${Math.round(net.lastPingMs)}ms`);
 });
 net.on("smeltState", (m) => {
-  const s = m.states[0];
-  ui.hint(s ? `smelting… ${Math.round(s.progress * 100)}%` : "");
+  // keep all states (interactFurnace needs to match on x/y/z), and only surface
+  // the nearest one in the hint bar
+  window.voxSmelt = { states: m.states ?? [] };
+  const list = m.states ?? [];
+  let eye = null;
+  try { eye = window.player?.pos ?? null; } catch { /* noop */ }
+  let best = null, bestD = Infinity;
+  for (const s of list) {
+    if (!eye) { best = s; break; }
+    const d = Math.hypot(s.x - eye.x, s.y - eye.y, s.z - eye.z);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  ui.hint(best
+    ? (best.ready ? "⛏ furnace ready — F to collect" : `smelting… ${Math.round(best.progress * 100)}%`)
+    : "");
 });
 net.on("denied", (m) => ui.hint(m.reason));
 net.on("tp", (m) => {
@@ -1220,11 +1299,15 @@ ui.onTrade = (id, slot) => net.trade(id, slot);
 {
   const baseClickInv = ui.clickInv.bind(ui);
   ui.clickInv = (i) => {
+    // consumeDragClick first: this override shadows the base handler that
+    // normally clears the flag, so without it a drag-release onto an inventory
+    // slot both moved the stack AND deposited another one into the chest
+    if (ui.consumeDragClick()) return;
     if (chestOpen() && window.voxChest) {
       const s = ui.slots[i];
       if (!s?.id) return;
       // find first compatible chest slot (same id or empty)
-      const slots = window.voxChest.slots;
+      const slots = Array.isArray(window.voxChest.slots) ? window.voxChest.slots : [];
       let cs = slots.findIndex((c) => c.id === s.id && c.n < 64);
       if (cs < 0) cs = slots.findIndex((c) => !c.id);
       if (cs < 0) { ui.hint("chest is full"); return; }
@@ -1265,7 +1348,11 @@ function frame() {
   world.flushRemeshes();
 
   if (myId >= 0 && net?.connected) {
-    if (!ui.invOpen && !dead) player.update(dt, world);
+    // anyGuiOpen, not just invOpen: with the chest/engine/trade/recipe-book
+    // window open you used to keep walking (the 15Hz move stream is accepted
+    // server-side), so you drifted away from what you were reading, and in
+    // touch mode you also kept mining behind the modal.
+    if (!anyGuiOpen()) player.update(dt, world);
     // gravity-only update while dead/inv so camera stays sane
     player.euler.set(player.pitch, player.yaw, 0);
     camera.quaternion.setFromEuler(player.euler);

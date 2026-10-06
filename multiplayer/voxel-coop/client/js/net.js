@@ -62,6 +62,17 @@ export class Net {
       this.scheduleReconnect();
     };
     this.ws.onerror = () => { try { this.ws.close(); } catch { /* noop */ } };
+    // A late message from a socket belonging to a discarded Net instance would
+    // still run attachHandlers' closures (inv/tp/welcome -> applyServerPosition,
+    // ui.setSlots) and fight the live connection for state.
+    this._generation = (this._generation ?? 0) + 1;
+    const gen = this._generation;
+    const guard = () => { if (this.wantClose || gen !== this._generation) return false; return true; };
+    const ws = this.ws;
+    const wrap = (fn) => (ev) => { if (guard()) fn(ev); };
+    ws.onmessage = wrap(ws.onmessage);
+    ws.onclose = wrap(ws.onclose);
+    ws.onerror = wrap(ws.onerror);
   }
 
   scheduleReconnect() {
@@ -82,7 +93,13 @@ export class Net {
   disconnect() {
     this.wantClose = true;
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
-    try { this.ws?.close(); } catch { /* noop */ }
+    // detach first: onclose would otherwise schedule a reconnect and re-enter
+    // connect() with the handlers still attached
+    if (this.ws) {
+      this.ws.onmessage = this.ws.onclose = this.ws.onerror = null;
+      try { this.ws.close(); } catch { /* noop */ }
+    }
+    this.connected = false;
   }
 
   send(m) {
@@ -177,6 +194,11 @@ export class PollNet {
         body: JSON.stringify({ name }),
       });
       if (!r.ok) throw new Error(`join ${r.status}`);
+      // connect() is async, so the instance may have been disconnected while
+      // the join fetch was in flight. Without this check an abandoned PollNet
+      // started a 4Hz setInterval that nobody would ever clear, and its
+      // emit() handlers are the real UI handlers.
+      if (this.wantClose) return;
       const welcome = await r.json();
       this.id = welcome.id;
       this.connected = true;
@@ -223,6 +245,10 @@ export class PollNet {
       this.queue = this.queue.filter((q) => q.t !== "move");
     }
     this.queue.push(m);
+    // flush() early-returns while a request is in flight and there is no fetch
+    // timeout, so a stalled endpoint used to accumulate every message for the
+    // whole stall duration (only `move` was coalesced)
+    if (this.queue.length > 200) this.queue.splice(0, this.queue.length - 200);
   }
 
   async flush() {

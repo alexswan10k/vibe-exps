@@ -101,8 +101,13 @@ export class Entities {
         e = { id: m.id, node, mat, barBg, bar, topY: st.body[1] + st.head[1], target: null, flashUntil: 0, kind: m.kind, eyeMat: st.eyes ? eyeMat : null, eyeColorBase: st.eyeColor ?? null };
         this.mobs.set(m.id, e);
       }
-      e.target = new THREE.Vector3(m.p[0], m.p[1], m.p[2]);
-      const frac = Math.max(0, m.hp / m.maxHp);
+      // reuse the vector: mobs are broadcast at 2Hz and players/vehicles on every
+      // snapshot, so allocating per message churned hundreds of Vector3s/s
+      if (!e.target) e.target = new THREE.Vector3();
+      e.target.set(m.p[0], m.p[1], m.p[2]);
+      // a bad maxHp would make Math.max(0.001, NaN) === NaN, poisoning the whole
+      // instance matrix for that hp bar (bar vanishes or garbles)
+      const frac = m.maxHp > 0 ? Math.max(0, m.hp / m.maxHp) : 0;
       e.bar.scale.x = Math.max(0.001, frac);
       e.bar.position.x = -(1 - frac) / 2;
       e.bar.material.color.setHex(frac > 0.5 ? 0x44dd44 : frac > 0.25 ? 0xffaa22 : 0xff3333);
@@ -166,7 +171,8 @@ export class Entities {
         e = { group, target: null, yaw: 0, lastPos: null, bobT: 0 };
         this.remotes.set(p.id, e);
       }
-      e.target = new THREE.Vector3(p.p[0], p.p[1], p.p[2]);
+      if (!e.target) e.target = new THREE.Vector3();
+      e.target.set(p.p[0], p.p[1], p.p[2]);
       e.yaw = p.yaw;
       e.group.visible = !p.dead;
     }
@@ -245,7 +251,8 @@ export class Entities {
         this.vehicles.set(v.id, e);
       }
       e.kind = v.kind;
-      e.target = new THREE.Vector3(v.p[0], v.p[1], v.p[2]);
+      if (!e.target) e.target = new THREE.Vector3();
+      e.target.set(v.p[0], v.p[1], v.p[2]);
       e.yaw = v.yaw;
       e.rider = v.rider ?? 0;
       e.fuel = v.fuel ?? 0;

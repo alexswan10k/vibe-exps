@@ -711,11 +711,22 @@ export class WorldClient {
     if (this.dirtyChunks.size === 0) return;
     const keys = [...this.dirtyChunks];
     this.dirtyChunks.clear();
-    for (const key of keys.slice(0, 32)) {
+    // Time-sliced. A remesh walks 16*48*16 = 12 288 cells and runs the
+    // marched-torch raycast for every visible face, so the old fixed 32-chunk
+    // budget stalled for hundreds of ms on first join (289 chunks) and on any
+    // edit (5 chunks dirtied). Budget per frame instead: whatever is left is
+    // re-queued and finished next frame.
+    const budgetMs = 7;
+    const t0 = (typeof performance !== "undefined" ? performance.now() : Date.now());
+    let done = 0;
+    for (const key of keys) {
       const [cx, cz] = key.split(",").map(Number);
       if (this.chunks.has(key)) this.remesh(cx, cz);
+      done++;
+      const now = (typeof performance !== "undefined" ? performance.now() : Date.now());
+      if (done >= 1 && now - t0 > budgetMs) break;
     }
-    for (const key of keys.slice(32)) this.dirtyChunks.add(key);
+    for (const key of keys.slice(done)) this.dirtyChunks.add(key);
   }
 
   remesh(cx, cz) {

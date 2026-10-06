@@ -2,7 +2,7 @@
 // Run: deno task dev   ->   http://<lan-ip>:8000/
 
 import { B, BLOCK_NAME, HARDNESS, PICK_MULT, TOOL_CLASS, WALK_THROUGH, ClientMsg, FurnaceWire, InvSlot, SWORD_MULT, ServerMsg, Vec3, PLAYER_EYE, pickTier, requiredTier, toolMultFor } from "./protocol.ts";
-import { PORT, WORLD_H } from "./protocol.ts";
+import { PORT, WORLD_H, CHUNK } from "./protocol.ts";
 import { World } from "./world.ts";
 import { Players, Player, emptyGrid, emptyInv } from "./players.ts";
 import { MobSim, mobDrops } from "./mobs.ts";
@@ -16,6 +16,7 @@ const CLIENT_DIR = new URL("../client", import.meta.url).pathname;
 const SAVE_WORLD = new URL("../data/world.json", import.meta.url).pathname;
 const SAVE_PLAYERS = new URL("../data/players.json", import.meta.url).pathname;
 const SAVE_MACHINES = new URL("../data/machines.json", import.meta.url).pathname;
+const SAVE_FURNACES = new URL("../data/furnaces.json", import.meta.url).pathname;
 const SAVE_VEHICLES = new URL("../data/vehicles.json", import.meta.url).pathname;
 
 const world = await World.loadOrCreate(SAVE_WORLD);
@@ -25,8 +26,73 @@ const vehicles = await VehicleSim.loadOrCreate(SAVE_VEHICLES);
 const START_CREATIVE = Deno.args.includes("--creative");
 const mobs = new MobSim();
 mobs.peaceful = Deno.args.includes("--peaceful") || Deno.args.includes("--peace");
-const furnaces = new Map<string, FurnaceState & { owner: number }>();
+// `done` = smelt finished but uncollected (owner offline / inventory full).
+// The whole file casts to `any` on these because of it.
+type FurnaceEntry = FurnaceState & { owner: number; done?: boolean };
+const furnaces = new Map<string, FurnaceEntry>();
+
+/** Map key for furnace state. A hoisted declaration so loadFurnaces() can use it. */
+function fkey(x: number, y: number, z: number): string {
+  return `${x},${y},${z}`;
+}
+
+// Furnace state is NOT in world.json (it lives in main.ts, not world.ts), and
+// the input is already removed from the player's inventory when a smelt starts
+// — so a restart mid-smelt, or with a `done` result waiting for pickup, used to
+// delete the item outright. Persisted separately for that reason.
+let furnacesSaving: Promise<void> | null = null;
+let furnacesPending = false;
+async function loadFurnaces(): Promise<void> {
+  try {
+    const raw = JSON.parse(await Deno.readTextFile(SAVE_FURNACES));
+    for (const f of raw.list ?? []) {
+      if (![f.x, f.y, f.z, f.owner].every(Number.isFinite)) continue;
+      furnaces.set(fkey(f.x, f.y, f.z), {
+        x: f.x, y: f.y, z: f.z,
+        input: f.input, progress: Number(f.progress) || 0,
+        active: !!f.active, owner: f.owner, done: f.done === true,
+      });
+    }
+    if (furnaces.size > 0) console.log(`[furnaces] restored ${furnaces.size} in progress`);
+  } catch (e) {
+    // only a genuine "no save file" is benign; anything else must be visible
+    if (!(e instanceof Deno.errors.NotFound)) {
+      console.error("[furnaces] load failed:", e);
+    }
+  }
+}
+function persistFurnaces(): Promise<void> {
+  if (furnacesSaving) {
+    furnacesPending = true;
+    return furnacesSaving;
+  }
+  furnacesSaving = (async () => {
+    try {
+      await Deno.mkdir(SAVE_FURNACES.split("/").slice(0, -1).join("/"), { recursive: true });
+      const list = [...furnaces.values()].map((f) => ({
+        x: f.x, y: f.y, z: f.z, input: f.input ?? null,
+        progress: f.progress, active: f.active, owner: f.owner, done: f.done === true,
+      }));
+      const tmp = `${SAVE_FURNACES}.tmp`;
+      await Deno.writeTextFile(tmp, JSON.stringify({ list }));
+      await Deno.rename(tmp, SAVE_FURNACES);
+    } catch (e) { console.error("[furnaces] save failed:", e); }
+  })();
+  return furnacesSaving.then(() => {
+    furnacesSaving = null;
+    if (furnacesPending) {
+      furnacesPending = false;
+      return persistFurnaces();
+    }
+  });
+}
 let spawn = world.findSpawn();
+// Furnace state lives here, not in world.ts, so it gets its own save file.
+// `fkey` is hoisted as a function declaration (not a `const` arrow) precisely so
+// this call can use it — a const arrow below this line would be in the temporal
+// dead zone, and the resulting ReferenceError was swallowed by loadFurnaces'
+// try/catch, so the restore silently did nothing.
+await loadFurnaces();
 
 /**
  * Worldgen loot: structureChests() positions for this seed, kind by pos.
@@ -91,15 +157,35 @@ let savedPlayers: Record<string, SavedPlayer> = {};
 try {
   savedPlayers = JSON.parse(await Deno.readTextFile(SAVE_PLAYERS));
 } catch { /* first run */ }
-async function persistPlayers(): Promise<void> {
-  try {
-    const d: Record<string, SavedPlayer> = { ...savedPlayers };
-    for (const pl of players.all.values()) {
-      d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, positionVersion: 2, stats: { ...pl.stats } };
+// persistPlayers is `void`-called from leaveGame, /sethome, setBed and the 2s
+// tick, so overlapping writes used to truncate each other and the next boot
+// silently fell back to an empty save (the JSON.parse is wrapped in try/catch).
+let playersSaving: Promise<void> | null = null;
+let playersPending = false;
+function persistPlayers(): Promise<void> {
+  if (playersSaving) {
+    playersPending = true;
+    return playersSaving;
+  }
+  playersSaving = (async () => {
+    try {
+      const d: Record<string, SavedPlayer> = { ...savedPlayers };
+      for (const pl of players.all.values()) {
+        d[pl.name] = { name: pl.name, p: pl.p, slots: pl.slots, bed: pl.bedSpawn ?? undefined, home: pl.home ?? undefined, positionVersion: 2, stats: { ...pl.stats } };
+      }
+      await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
+      const tmp = `${SAVE_PLAYERS}.tmp`;
+      await Deno.writeTextFile(tmp, JSON.stringify(d));
+      await Deno.rename(tmp, SAVE_PLAYERS); // atomic
+    } catch (e) { console.error("[players] save failed:", e); }
+  })();
+  return playersSaving.then(() => {
+    playersSaving = null;
+    if (playersPending) {
+      playersPending = false;
+      return persistPlayers();
     }
-    await Deno.mkdir(SAVE_PLAYERS.split("/").slice(0, -1).join("/"), { recursive: true });
-    await Deno.writeTextFile(SAVE_PLAYERS, JSON.stringify(d));
-  } catch (e) { console.error("[players] save failed:", e); }
+  });
 }
 
 function send(sock: WebSocket, msg: ServerMsg): void {
@@ -160,6 +246,10 @@ function noteDeath(pl: Player, msg: string): void {
   miningSessions.delete(pl.id);
   pl.stats.deaths++;
   broadcast({ t: "chat", from: "server", msg });
+  // msg already reads "☠ <name> was slain by <src>" — reuse it as the kill feed
+  // entry so deaths show up in the same place kills do
+  killFeed(msg);
+  pushScoreboard();
   if (pl.stats.deaths === 5) toastAll(`☠ ${pl.name} has died 5 times!`);
 }
 
@@ -221,6 +311,9 @@ function joinGame(rawName: string, sock: WebSocket | null): Player {
   sendVitals(pl);
   sendMarkers(pl);
   broadcast({ t: "chat", from: "server", msg: `${name} joined` }, pl.id);
+  // push to everyone, not just the joiner: the online/offline column and the
+  // standings change when somebody joins or leaves
+  pushScoreboard();
   return pl;
 }
 
@@ -242,17 +335,22 @@ function leaveGame(pl: Player): void {
   console.log(`[leave] ${pl.name}`);
   freeRide(pl);
   players.remove(pl.id);
+  // every per-player map must be cleared or it leaks one entry per reconnect
+  // (nextId is monotonic, so ids are never reused)
   chatTimes.delete(pl.id);
   fishCd.delete(pl.id);
   pearlCd.delete(pl.id);
   worldPingCd.delete(pl.id);
   pendingReset.delete(pl.id);
   miningSessions.delete(pl.id);
+  lastEdit.delete(pl.id);
+  lastTpFix.delete(pl.id);
+  lastAttack.delete(pl.id);
+  lastChunkReq.delete(pl.id);
   broadcast({ t: "chat", from: "server", msg: `${pl.name} left` });
+  pushScoreboard(); // they drop to the offline column
   void persistPlayers();
 }
-
-const fkey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
 // ---- weather: rolling rain storms (clients read `rain` off the time tick) ----
 let rain = 0; // 0..1 intensity
@@ -438,6 +536,7 @@ const quarryLossWarn = new Map<string, number>();
 const lastAttack = new Map<number, number>();
 const pearlCd = new Map<number, number>();
 const worldPingCd = new Map<number, number>();
+const lastChunkReq = new Map<number, number>();
 function checkRate(id: number): boolean {
   const now = Date.now();
   const prev = lastEdit.get(id) ?? 0;
@@ -489,8 +588,24 @@ function finishMining(pl: Player, x: number, y: number, z: number): boolean {
   }
   const required = miningSeconds(session.block, session.heldItem, pl.creative);
   const tolerance = pl.isPoll ? 0.75 : 0.2;
-  if ((Date.now() - session.startedAt) / 1000 + tolerance < required) {
-    sendTo(pl, { t: "denied", reason: "keep mining" });
+  // Mining assist: if your partner started the SAME block within the last 2s,
+  // both sessions count from the earlier start and are halved. Mining a shared
+  // wall together is the single most common thing two players do, and until now
+  // it gave zero benefit over doing it alone.
+  let startedAt = session.startedAt;
+  let helpedBy = 0;
+  if (!pl.creative) {
+    for (const other of miningSessions.values()) {
+      if (other.x !== session.x || other.y !== session.y || other.z !== session.z) continue;
+      if (other.startedAt >= startedAt) continue;
+      startedAt = other.startedAt;
+      helpedBy++;
+    }
+  }
+  const need = required / (helpedBy > 0 ? 2 : 1);
+  if ((Date.now() - startedAt) / 1000 + tolerance < need) {
+    if (helpedBy > 0) sendTo(pl, { t: "denied", reason: "keep mining (⛏ assisted 2×)" });
+    else sendTo(pl, { t: "denied", reason: "keep mining" });
     return false;
   }
   miningSessions.delete(pl.id);
@@ -653,7 +768,11 @@ function doReset(requestedSeed: number | null, by: string): void {
   mobs.mobs.clear();
   spawn = world.findSpawn();
   savedPlayers = {};
-  void persistPlayers();
+  quarryLossWarn.clear();
+  lastTpFix.clear();
+  lastEdit.clear();
+  lastAttack.clear();
+  lastChunkReq.clear();
   for (const pl of players.all.values()) {
     pl.p = [...spawn] as Vec3;
     pl.slots = emptyInv();
@@ -673,6 +792,10 @@ function doReset(requestedSeed: number | null, by: string): void {
     sendVitals(pl);
     sendMarkers(pl);
   }
+  // after the loop: persisting first wrote the pre-reset positions and
+  // inventories of the old seed into the freshly wiped world file
+  void persistPlayers();
+  void persistFurnaces();
   sendPlayersSnapshot();
   broadcast({ t: "time", time: world.time, rain, storm });
   broadcast({ t: "chat", from: "server", msg: `🌍 ${by} reset the world (seed ${seed})` });
@@ -684,6 +807,48 @@ const pendingReset = new Map<number, { seed: number | null; at: number }>();
 
 function idName(id: number): string {
   return BLOCK_NAME[id] ?? `item ${id}`;
+}
+
+// ---- kill feed / scoreboard ----
+// Players tracked kills/deaths and persisted them (players.ts `stats`), but the
+// only place they showed was /stats, which the player had to type. There was
+// no way for two players to compare progress at all.
+const KILL_LOG_LIMIT = 8;
+const killLog: { text: string; at: number }[] = [];
+function killFeed(text: string): void {
+  const at = Date.now();
+  killLog.unshift({ text, at });
+  while (killLog.length > KILL_LOG_LIMIT) killLog.pop();
+  broadcast({ t: "killfeed", line: text, list: killLog.map((k) => k.text) });
+}
+const MOB_NAMES: Record<string, string> = {
+  zombie: "a zombie", skeleton: "a skeleton", spider: "a spider", ogre: "an OGRE",
+  wolf: "a wolf", wisp: "a wisp", wraith: "a wraith", golem: "a golem",
+  slime: "a slime", pig: "a pig", cow: "a cow", chicken: "a chicken", sheep: "a sheep",
+};
+function mobName(kind: string): string {
+  return MOB_NAMES[kind] ?? kind;
+}
+/** Leaderboard sorted by kills then deaths. Called on join and on every kill. */
+function scoreboard(): { name: string; kills: number; deaths: number; fished: number; online: boolean }[] {
+  const live = [...players.all.values()].map((p) => ({
+    name: p.name, kills: p.stats.kills, deaths: p.stats.deaths, fished: p.stats.fished, online: true,
+  }));
+  const offline = Object.values(savedPlayers)
+    .filter((s) => !!s?.stats)
+    .map((s) => ({
+      name: s.name,
+      kills: s.stats?.kills ?? 0,
+      deaths: s.stats?.deaths ?? 0,
+      fished: s.stats?.fished ?? 0,
+      online: false,
+    }))
+    .filter((s) => !live.some((l) => l.name === s.name));
+  return [...live, ...offline].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+}
+function pushScoreboard(): void {
+  const list = scoreboard();
+  for (const pl of players.all.values()) sendTo(pl, { t: "score", list });
 }
 
 function setCreative(pl: Player, creative: boolean): void {
@@ -777,6 +942,7 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       sendTo(pl, { t: "chat", from: "server", msg: "commands: /help /players /spawn /sethome /home /locate <tower|ruin|cabin|hut|temple|shrine|village|dungeon> /rain /stats /time <0..1|day|night|morning> /reset [seed] /storm /creative /survival /gamemode <c|s> /give <item> [n] /kit <starter|tools|buildcraft|weapons|fluids|vehicles> /fuel · Q team ping" });
       sendTo(pl, { t: "chat", from: "server", msg: "machines: chest (F open) + engine (F panel/RMB, burns coal/oil/lava) + pipe + quarry (9x9). fluids: pump (taps water/lava) + fluid pipe + tank (16 buckets) + bucket (F scoop/deposit)." });
       sendTo(pl, { t: "chat", from: "server", msg: "vehicles: boat (RMB on water) + rails + minecart + steam locomotive. Locomotive uses W/S throttle, /fuel nearby, and pulls connected carts." });
+      sendTo(pl, { t: "chat", from: "server", msg: "co-op: TAB shows players + scoreboard. Both mining the same block = 2x faster. Kills/deaths/fish show up in the kill feed. /give and /kit creative are creative-only." });
       return true;
     case "players": {
       const names = [...players.all.values()].map((p) => p.name);
@@ -873,6 +1039,13 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       setCreative(pl, false);
       return true;
     case "give": {
+      // The `give` MESSAGE checks creative (main.ts "case give" further down)
+      // but the /give COMMAND did not, so either player could hand themselves
+      // diamonds in survival and skip the whole tech tree.
+      if (!pl.creative) {
+        sendTo(pl, { t: "chat", from: "server", msg: "⛔ /give is creative-only — /creative first" });
+        return true;
+      }
       const id = Number(parts[1]);
       const n = Math.max(1, Math.min(64 * 4, Math.floor(Number(parts[2] ?? 1)) || 1));
       if (!Number.isInteger(id) || id <= 0 || id > 200 || !(BLOCK_NAME[id] ?? idName(id))) {
@@ -905,6 +1078,12 @@ function handleChatCommand(pl: Player, msg: string): boolean {
       const kit = kits[which];
       if (!kit) {
         sendTo(pl, { t: "chat", from: "server", msg: "usage: /kit <starter|tools|buildcraft|weapons|fluids|vehicles|creative>" });
+        return true;
+      }
+      // the creative kit ships a diamond pickaxe + diamond sword, so it used to
+      // hand out endgame gear to survival players
+      if (which === "creative" && !pl.creative) {
+        sendTo(pl, { t: "chat", from: "server", msg: "⛔ /kit creative is creative-only — /creative first" });
         return true;
       }
       for (const [id, cnt] of kit) giveItems(pl.slots, id, cnt);
@@ -992,7 +1171,18 @@ function onMessage(pl: Player, raw: string): void {
     switch (m.t) {
     case "reqChunk": {
       const { cx, cz } = m;
-      if (!Number.isInteger(cx) || !Number.isInteger(cz) || Math.abs(cx) > 64 || Math.abs(cz) > 64) return;
+      if (!Number.isInteger(cx) || !Number.isInteger(cz)) return;
+      // Each chunk is 16*48*16 = 12k world.get() calls (world.chunkRLE), so
+      // this is the most expensive handler in the server and it runs
+      // synchronously on the event loop. It previously allowed any chunk in
+      // ±64 (16 641 chunks) with no rate limit, which could stall the whole
+      // server for one player. Clamp to the view radius around the player
+      // (render distance tops out at 8) and throttle the request rate.
+      const pcx = Math.floor(pl.p[0] / CHUNK), pcz = Math.floor(pl.p[2] / CHUNK);
+      if (Math.abs(cx - pcx) > 10 || Math.abs(cz - pcz) > 10) return;
+      const nowC = Date.now();
+      if (nowC - (lastChunkReq.get(pl.id) ?? 0) < 120) return;
+      lastChunkReq.set(pl.id, nowC);
       sendTo(pl, { t: "chunk", cx, cz, rle: world.chunkRLE(cx, cz) });
       break;
     }
@@ -1124,13 +1314,21 @@ function onMessage(pl: Player, raw: string): void {
     }
     case "smelt": {
       const x = Math.round(m.x), y = Math.round(m.y), z = Math.round(m.z);
+      if (![x, y, z].every(Number.isFinite) || y < 1 || y >= WORLD_H) break;
       if (world.get(x, y, z) !== B.FURNACE) break;
+      // Every other position-based handler range-checks first. Without it a
+      // player could start smelting in — and collect finished output from — a
+      // furnace anywhere in the world, including one the partner owns, and a
+      // dead player could still collect.
+      if (pl.dead || dist(pl.p, x, y, z) > 7.5) break;
       const k = fkey(x, y, z);
       if (m.action === "start") {
         const ex = furnaces.get(k);
         if (ex?.active) break;
         // pick the first smeltable input the player can afford (pork > sand > iron)
-        const cands = [104, 134, 132, B.SAND, B.CLAY, B.IRON_ORE, B.GOLD_ORE];
+        // 142 (fish) was missing, so SMELT_RECIPES[142] -> cooked fish was
+        // unreachable even though the in-game furnace cheat-sheet advertises it
+        const cands = [104, 134, 132, 142, B.SAND, B.CLAY, B.IRON_ORE, B.GOLD_ORE];
         let input = -1;
         for (const c of cands) {
           const r = smeltInputFor(c);
@@ -1195,6 +1393,10 @@ function onMessage(pl: Player, raw: string): void {
         for (const d of mobDrops(mob.kind)) giveItems(pl.slots, d.id, d.n);
         sendInv(pl);
         pl.stats.kills++;
+        // kill feed: the only signal either player had about the other's
+        // progress, and it costs one broadcast on an existing code path
+        killFeed(`${pl.name} slain ${mobName(mob.kind)}`);
+        pushScoreboard(); // live TAB leaderboard after every kill
         if (mob.kind === "ogre") unlock(pl, "ogre", `👹 ${pl.name} slew an OGRE!`);
       }
       break;
@@ -1299,6 +1501,14 @@ function onMessage(pl: Player, raw: string): void {
         sendTo(pl, { t: "denied", reason: "need a bone" });
         break;
       }
+      // attacking someone's wolf is already blocked ("that's X's wolf!") but
+      // taming it was not, so one bone stole a partner's tamed wolf — and it
+      // then teleported to the thief (mobs.ts owner-follow).
+      const curOwner = (mob as { owner?: unknown }).owner;
+      if (typeof curOwner === "string" && curOwner && curOwner !== pl.name) {
+        sendTo(pl, { t: "denied", reason: `that's ${curOwner}'s wolf!` });
+        break;
+      }
       removeItems(pl.slots, { 137: 1 });
       (mob as { owner?: string }).owner = pl.name;
       sendInv(pl);
@@ -1384,6 +1594,10 @@ function onMessage(pl: Player, raw: string): void {
       pl.lastMove = Date.now();
       break;
     case "eat": {
+      // players.eat() heals without checking `dead`, so a dead player could
+      // eat a golden apple and sit at 20 HP with dead=true — a state nothing
+      // downstream expects. Every other action handler guards this.
+      if (pl.dead) break;
       if (!Number.isInteger(m.slot) || m.slot < 0 || m.slot >= 36) break;
       if (players.eat(pl, m.slot)) { sendInv(pl); sendVitals(pl); }
       break;
@@ -1403,6 +1617,7 @@ function onMessage(pl: Player, raw: string): void {
       break;
     }
     case "moveItem": {
+      if (pl.dead) break;
       const { from, to } = m;
       if (Number.isInteger(from) && Number.isInteger(to) &&
           from >= 0 && from < 36 && to >= 0 && to < 36 && from !== to) {
@@ -1488,6 +1703,7 @@ function onMessage(pl: Player, raw: string): void {
             for (const d of mobDrops(mob.kind)) giveItems(pl.slots, d.id, d.n);
             sendInv(pl);
             pl.stats.kills++;
+            killFeed(`🏹 ${pl.name} sniped ${mobName(mob.kind)}`);
             if (mob.kind === "ogre") unlock(pl, "ogre", `👹 ${pl.name} sniped an OGRE!`);
           }
         }
@@ -1659,8 +1875,13 @@ function onMessage(pl: Player, raw: string): void {
       break;
     }
     case "gamemode": {
-      const mode = String(m.mode ?? "").toLowerCase();
-      setCreative(pl, mode.startsWith("c"));
+      // Ignore an unrecognised mode instead of defaulting to survival: this
+      // handler used to do `mode.startsWith("c")`, so any message missing
+      // `mode` silently dropped the player out of creative (observed when a
+      // client echoed a server {t:"gamemode"} message back).
+      const mode = String(m.mode ?? "").trim().toLowerCase();
+      if (mode.startsWith("c")) setCreative(pl, true);
+      else if (mode.startsWith("s")) setCreative(pl, false);
       break;
     }
     case "vehiclePlace": {
@@ -2075,6 +2296,7 @@ setInterval(() => {
       void persistPlayers();
       void machines.save(); // chests/engines/quarries persist alongside players
       void vehicles.save();
+      void persistFurnaces();
       // evict legacy poll clients that stopped polling
       const now = Date.now();
       for (const pl of [...players.all.values()]) {
@@ -2098,10 +2320,17 @@ setInterval(() => {
   }
 }, 100);
 
-Deno.addSignalListener("SIGINT", () => {
+function shutdown(): void {
   console.log("\nsaving…");
-  void Promise.all([world.save(), persistPlayers(), machines.save(), vehicles.save()]).then(() => Deno.exit(0));
-});
+  void Promise.all([
+    world.save(), persistPlayers(), machines.save(), vehicles.save(), persistFurnaces(),
+  ]).then(() => Deno.exit(0));
+}
+Deno.addSignalListener("SIGINT", shutdown);
+// deno task / Docker / systemd / most editors stop the process with SIGTERM,
+// which previously skipped every save and lost the whole world.
+Deno.addSignalListener("SIGTERM", shutdown);
+Deno.addSignalListener("SIGHUP", shutdown);
 
 console.log(`\n  🧱 voxel-coop server on :${PORT}${mobs.peaceful ? "  [PEACEFUL — no hostiles, no hunger]" : ""}${START_CREATIVE ? "  [CREATIVE-FIRST — fly + infinite blocks]" : ""}`);
 console.log(`  local:  http://localhost:${PORT}/`);

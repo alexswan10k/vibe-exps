@@ -29,9 +29,9 @@ In-game chat (T): `/reset` → `/reset yes` (random seed), or
 world). Everyone is teleported to the new spawn with starter inventory;
 builds, edits, mobs and saved players are wiped.
 
-From the terminal (server stopped): `deno task reset` wipes
-`data/world.json` + `data/players.json` — the next start generates a
-fresh random world.
+From the terminal (server stopped): `deno task reset` wipes every save
+(`world`, `players`, `machines`, `vehicles`, `furnaces`) — the next start
+generates a fresh random world.
 
 Spawns are open-air surface only (no cave roofs, no entrance shafts next
 door). If you log out deep underground with no builds nearby you wake up
@@ -45,13 +45,80 @@ server/main.ts    HTTP + WS, edit validation, tick loops, persistence
 server/protocol.ts shared constants + wire message types (mirrored in client/js/config.js)
 server/world.ts   seeded terrain gen, block overrides, chunk RLE, save/load
 server/players.ts vitals, hunger, inventories, join/leave
-server/mobs.ts    passive wanderers + night zombies (server-simulated)
-server/crafting.ts recipes, mining drops, furnace smelting
+server/mobs.ts    passive wanderers + night zombies + pet combat (server-simulated)
+server/crafting.ts recipes, mining drops, furnace smelting, villager trades
+server/machines.ts chests, engines, pipes, quarries, tanks, pumps
+server/vehicles.ts boats, minecarts, locomotives on rails
+server/structures.ts villages, dungeons, landmarks, worldgen chests
 client/js/        config, net, world (meshing), player (physics),
                   entities (mobs + remote players), ui, main
 client/libs/three.min.js  vendored — works offline on LAN
-data/             world.json + players.json (gitignored saves)
+data/             world.json + players.json + machines.json + vehicles.json
+                  + furnaces.json (all gitignored saves)
+tests/            pings, mirror, validation, vehicles (deno) + two-players
+                  and persistence (node, browser/poll, need a live server)
 ```
+
+### protocol.ts ↔ config.js
+
+`client/js/config.js` mirrors `server/protocol.ts` **by hand** (no build step).
+`tests/mirror.test.ts` enforces it: block ids, hardness, tool multipliers,
+`miningSeconds()` across 53 blocks × 16 tools, the placeable whitelist and every
+message name. This is not ceremonial — the tables had drifted such that gold and
+diamond ore computed 0.55s on the client vs 3.67s on the server, so the break bar
+finished early, the server replied "keep mining", and those blocks were
+effectively unbreakable. Run `deno task test` after touching either file.
+
+### Tests
+
+`deno task test` (fast, no server needed) runs the type check, the world-ping
+cooldown boundaries, the protocol mirror, the vehicles integration test and the
+server-validation gates.
+
+Two further suites need a running server (`deno task dev`, then in another
+shell):
+
+```sh
+node tests/two-players.test.mjs   # 2 browsers, real co-op: mining assist,
+                                  # scoreboard, kill feed, pings, creative gates
+node tests/persistence.test.mjs   # phase 1: start a smelt
+#   ...restart the server (SIGTERM)...
+node tests/persistence.test.mjs --verify   # phase 2: it came back
+```
+
+The two-player suite launches one browser per client — two software-GL renderers
+in a single Chrome process starve each other and the run becomes flaky — and needs
+a real Chrome (`CHROME=/path/to/chrome` to override) or Playwright's bundled one.
+
+### Saves
+
+All five save files are written with write-to-temp + atomic rename, behind a
+single in-flight guard, so overlapping writes (the 2s tick plus per-edit
+handlers) can't truncate each other. `SIGINT`/`SIGTERM`/`SIGHUP` all save.
+
+## Co-op
+
+This is a **two-player** game, so the systems that reward playing together are
+the point:
+
+- **⛏ mining assist** — both players mining the *same block* get **2× speed**.
+  Server-authoritative: the required time is halved when another player's
+  mining session on that block started earlier.
+- **🏆 kill feed + scoreboard** — kills and deaths stream to a feed under the
+  minimap, and `TAB` shows a live leaderboard (kills, deaths, fish) that
+  includes players who are currently offline. Persisted per name.
+- **🤝 shared infrastructure** — chests, engines, pipes, quarries and tanks are
+  world-anchored, not inventory-anchored. One player builds and fuels the line,
+  the other spends the output. Quarry output routes to an adjacent chest, then
+  the pipe network, then the owner's inventory, then any online player.
+- **🐺 pets fight alongside you** — tamed wolves hunt hostile mobs near their
+  owner (they no longer turn on the player at night). They never attack other
+  tamed wolves, wild wolves, villagers or livestock.
+- **📍 team pings** (`Q`) — mark a block for your partner; it shows on their
+  minimap and in-world for 15s.
+
+`/give` and `/kit creative` are **creative-only**; in survival they are refused,
+so progression can't be skipped.
 
 ## Features
 
@@ -183,4 +250,5 @@ data/             world.json + players.json (gitignored saves)
 `engineFuel`, `bucketFill`, `tankUse`, `gamemode → gamemode`, `give`,
 `vehiclePlace/vehicleControl/vehicleEnter/vehicleExit/vehicleBreak → vehicles` + `ride`,
 `machines` (engines + quarries + tanks),
-`eat`, `moveItem`, `respawn`, `ping → pong`.
+`eat`, `moveItem`, `respawn`, `ping → pong`,
+`killfeed`, `score` (leaderboard for the TAB panel).

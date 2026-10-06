@@ -105,30 +105,50 @@ export class VehicleSim {
     return v;
   }
 
-  async save(): Promise<void> {
-    try {
-      await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
-      const d = {
-        vehicles: [...this.vehicles.values()].map((v) => ({
-          id: v.id,
-          kind: v.kind,
-          p: v.p,
-          yaw: v.yaw,
-          attachedTo: v.attachedTo,
-          fuel: v.fuel,
-          speed: v.speed,
-          cellX: v.cellX,
-          cellY: v.cellY,
-          cellZ: v.cellZ,
-          travelX: v.travelX,
-          travelZ: v.travelZ,
-          nextX: v.nextX,
-          nextY: v.nextY,
-          nextZ: v.nextZ,
-        })),
-      };
-      await Deno.writeTextFile(this.savePath, JSON.stringify(d));
-    } catch (e) { console.error("[vehicles] save failed:", e); }
+  // serialized + atomic, same reason as Machines.save / World.save: the 2s
+  // tick and vehiclePlace/place/removal all call this
+  private saving: Promise<void> | null = null;
+  private pendingSave = false;
+
+  save(): Promise<void> {
+    if (this.saving) {
+      this.pendingSave = true;
+      return this.saving;
+    }
+    this.saving = (async () => {
+      try {
+        await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
+        const d = {
+          vehicles: [...this.vehicles.values()].map((v) => ({
+            id: v.id,
+            kind: v.kind,
+            p: v.p,
+            yaw: v.yaw,
+            attachedTo: v.attachedTo,
+            fuel: v.fuel,
+            speed: v.speed,
+            cellX: v.cellX,
+            cellY: v.cellY,
+            cellZ: v.cellZ,
+            travelX: v.travelX,
+            travelZ: v.travelZ,
+            nextX: v.nextX,
+            nextY: v.nextY,
+            nextZ: v.nextZ,
+          })),
+        };
+        const tmp = `${this.savePath}.tmp`;
+        await Deno.writeTextFile(tmp, JSON.stringify(d));
+        await Deno.rename(tmp, this.savePath);
+      } catch (e) { console.error("[vehicles] save failed:", e); }
+    })();
+    return this.saving.then(() => {
+      this.saving = null;
+      if (this.pendingSave) {
+        this.pendingSave = false;
+        return this.save();
+      }
+    });
   }
 
   resetAll(): void {

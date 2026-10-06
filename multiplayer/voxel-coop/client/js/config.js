@@ -74,13 +74,40 @@ export const AXE_MULT = { 116: 2.2, 117: 4.2, 118: 6.5, 128: 8.0, 129: 10 };
 export const SHOVEL_MULT = { 119: 2.2, 120: 4.2, 121: 6.5, 130: 8.0, 131: 10 };
 const AXE_BLOCKS = new Set([5, 7, 13, 20, 22, 23, 29]);
 const SHOVEL_BLOCKS = new Set([1, 2, 4, 9, 26, 28]);
+// Blocks a pickaxe speeds up. Mirrors the server's TOOL_CLASS "pick" set in
+// protocol.ts:208 — previously this list drifted (it included 18/19/21/38
+// inconsistently against the server), so the client's break bar finished
+// early and the server rejected the break with "keep mining".
+const PICK_BLOCKS = new Set([
+  3, 11, 12, 14, 16, 24, 27, 38, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51,
+]);
+// Blocks that are brutally slow by hand (server: TOOL_CLASS === "pick" and
+// mult <= 1 → base * 3.3). Includes gold/diamond ore and obsidian, which the
+// client's old hardcoded list omitted.
+const PICK_SLOW = new Set([
+  3, 8, 11, 12, 14, 16, 18, 19, 21, 24, 27, 38, 41, 42, 44, 45, 46, 47, 48, 49, 50, 51,
+]);
+export { PICK_BLOCKS, PICK_SLOW };
 export function toolMultFor(block, heldId) {
   if (heldId === undefined) return 1;
-  if (PICK_MULT[heldId] && [3, 11, 12, 14, 16, 18, 19, 21, 24, 27, 38, 41, 42, 44, 45, 46, 47, 48].includes(block)) return PICK_MULT[heldId];
+  if (PICK_MULT[heldId] && PICK_BLOCKS.has(block)) return PICK_MULT[heldId];
   if (AXE_MULT[heldId] && AXE_BLOCKS.has(block)) return AXE_MULT[heldId];
   if (SHOVEL_MULT[heldId] && SHOVEL_BLOCKS.has(block)) return SHOVEL_MULT[heldId];
   if (PICK_MULT[heldId] || AXE_MULT[heldId] || SHOVEL_MULT[heldId]) return 1.5;
   return 1;
+}
+
+/**
+ * Seconds to break `block` with `heldId`. MUST stay identical to the server's
+ * miningSeconds() (main.ts) or the client finishes its break bar first, sends
+ * the break, and gets rejected — the block can never be mined.
+ */
+export function miningSeconds(block, heldId, creative) {
+  if (creative) return 0;
+  const base = HARDNESS[block];
+  if (base === undefined || base === Infinity) return Infinity;
+  const mult = toolMultFor(block, heldId);
+  return PICK_SLOW.has(block) && mult <= 1 ? base * 3.3 : base / mult;
 }
 
 export function isPlaceable(id) {

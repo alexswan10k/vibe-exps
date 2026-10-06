@@ -53,6 +53,12 @@ export class Player {
       if (["Space", "ArrowUp"].includes(e.code)) e.preventDefault();
     });
     document.addEventListener("keyup", (e) => { this.keys[e.code] = false; });
+    // Browsers do NOT deliver keyup for keys held when the window loses focus,
+    // so alt-tabbing mid-stride left keys.KeyW (and Space) stuck true and the
+    // player walked / re-jumped forever. Clear on both events.
+    const releaseAll = () => { this.keys = {}; };
+    addEventListener("blur", releaseAll);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) releaseAll(); });
     document.addEventListener("mousemove", (e) => {
       if (!this.locked) return;
       this.yaw -= e.movementX * 0.0022;

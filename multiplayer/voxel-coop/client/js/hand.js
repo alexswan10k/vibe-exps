@@ -71,6 +71,20 @@ export class Hand {
     this.heldId = id;
     if (this.item) {
       this.itemPivot.remove(this.item);
+      // buildItem() allocates a BoxGeometry per part plus a fresh material per
+      // part, none of which were disposed — cycling the hotbar leaked GPU
+      // buffers and materials unbounded over a session. Skip the shared world
+      // block material (this.materials), which is owned by world.js.
+      this.item.traverse((o) => {
+        o.geometry?.dispose();
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) {
+          if (!m) continue;
+          // world.js block materials are shared by every chunk InstancedMesh
+          if (m.userData?.shared || this.isSharedMaterial(m)) continue;
+          m.dispose();
+        }
+      });
       this.item = null;
     }
     if (!id) return;
@@ -80,6 +94,20 @@ export class Hand {
       this.itemPivot.add(this.item);
       this.switchT = 0; // pop-in
     }
+  }
+
+  /** True if `m` is one of the shared world block materials (owned by world.js). */
+  isSharedMaterial(m) {
+    if (!this._sharedSet) {
+      this._sharedSet = new Set();
+      for (const mat of Object.values(this.materials ?? {})) {
+        if (!mat) continue;
+        this._sharedSet.add(mat);
+        // multi-face blocks hold an array of materials
+        if (Array.isArray(mat)) for (const sub of mat) this._sharedSet.add(sub);
+      }
+    }
+    return this._sharedSet.has(m);
   }
 
   buildItem(id) {
@@ -209,6 +237,7 @@ export class Hand {
     t = new THREE.TextureLoader().load(url);
     t.magFilter = THREE.NearestFilter;
     t.minFilter = THREE.NearestFilter;
+    t.encoding = THREE.sRGBEncoding;
     this.iconTex.set(id, t);
     return t;
   }

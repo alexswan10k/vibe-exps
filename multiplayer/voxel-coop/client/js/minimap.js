@@ -22,7 +22,14 @@ export class Minimap {
       const saved = localStorage.getItem("vox-minimap") ?? localStorage.getItem("voxelcoop.minimap");
       if (saved === "0") this.on = false;
     } catch { /* noop */ }
+    // Topmost non-air block per world column, keyed by x*65536+z. Cleared on
+    // block edits, since the column top is exactly what a break/place changes.
+    this._colCache = new Map();
     this.applyVis();
+  }
+  /** Call after any block change so the cached column top is recomputed. */
+  invalidate() {
+    this._colCache?.clear();
   }
   toggle() {
     this.on = !this.on;
@@ -49,14 +56,39 @@ export class Minimap {
       for (let dz = -R; dz <= R; dz++) {
         const x = px + dx, z = pz + dz;
         let col = "#000";
-        for (let y = WORLD_H - 1; y >= 0; y--) {
-          const b = world.get(x, y, z);
-          if (b === undefined) { col = "#111"; break; } // unloaded
-          if (b === B.AIR) continue;
-          if (b === B.WATER) { col = COLOR[10]; break; }
-          col = COLOR[b] ?? "#888";
-          break;
+        // Cache the topmost non-air block per column. Without it this loop is
+        // 81*81*48 ~= 315k world.get() calls per redraw (each allocating a
+        // "cx,cz" key), and the redraw re-fires every 2 blocks walked — about
+        // 1M short-lived strings per second while sprinting.
+        let top;
+        if (this._colCache) {
+          top = this._colCache.get(x * 65536 + z);
+        } else {
+          top = null;
         }
+        if (top === undefined) {
+          this._colCache?.delete(x * 65536 + z);
+          top = null;
+        } else if (top === null) {
+          let found = false;
+          for (let y = WORLD_H - 1; y >= 0; y--) {
+            const b = world.get(x, y, z);
+            if (b === undefined) { top = -1; found = true; break; } // unloaded
+            if (b === B.AIR) continue;
+            top = b === B.WATER ? 10 : (COLOR[b] ? b : -2);
+            found = true;
+            break;
+          }
+          if (!found) top = 0;
+          if (this._colCache) {
+            if (this._colCache.size > 40000) this._colCache.clear();
+            this._colCache.set(x * 65536 + z, top);
+          }
+        }
+        if (top === -1) col = "#111";          // chunk not loaded
+        else if (top === 0) col = "#000";
+        else if (top === -2) col = "#888";     // unknown block id
+        else col = COLOR[top] ?? "#888";
         g.fillStyle = col;
         g.fillRect((dx + R) * cell, (dz + R) * cell, cell + 0.5, cell + 0.5);
       }
