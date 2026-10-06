@@ -318,6 +318,8 @@ export type ServerMsg =
   | { t: "reset"; seed: number; spawn: Vec3 }
   | { t: "tp"; p: Vec3 } // authoritative teleport: client must snap (respawn/spawn/home/correction)
   | { t: "chat"; from: string; msg: string }
+  | { t: "killfeed"; line: string; list: string[] }
+  | { t: "score"; list: ScoreRow[] }
   | { t: "worldPing"; id: number; name: string; x: number; y: number; z: number; ttl: 15000 }
   | { t: "smeltState"; states: FurnaceWire[] }
   | { t: "ping"; now: number }
@@ -329,6 +331,9 @@ export interface InvSlot {
 }
 export interface PublicPlayer {
   id: number; name: string; p: Vec3; yaw: number; hp: number; dead: boolean;
+}
+export interface ScoreRow {
+  name: string; kills: number; deaths: number; fished: number; online: boolean;
 }
 export interface MobWire {
   id: number; kind: string; p: Vec3; hp: number; maxHp: number;

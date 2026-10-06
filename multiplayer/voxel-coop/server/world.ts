@@ -407,14 +407,35 @@ export class World {
     }
   }
 
-  async save(): Promise<void> {
-    try {
-      await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
-      const d = { seed: this.seed, time: this.time, overrides: Object.fromEntries(this.overrides) };
-      await Deno.writeTextFile(this.savePath, JSON.stringify(d));
-    } catch (e) {
-      console.error("[world] save failed:", e);
+  // serialized + atomic: world.tick() saves every 30s while edits call it too,
+  // and two overlapping writeTextFile calls on the same path can interleave,
+  // leaving invalid JSON that loadOrCreate silently discards (whole world lost)
+  private saving: Promise<void> | null = null;
+  private pendingSave = false;
+
+  save(): Promise<void> {
+    if (this.saving) {
+      this.pendingSave = true;
+      return this.saving;
     }
+    this.saving = (async () => {
+      try {
+        await Deno.mkdir(this.savePath.split("/").slice(0, -1).join("/"), { recursive: true });
+        const d = { seed: this.seed, time: this.time, overrides: Object.fromEntries(this.overrides) };
+        const tmp = `${this.savePath}.tmp`;
+        await Deno.writeTextFile(tmp, JSON.stringify(d));
+        await Deno.rename(tmp, this.savePath);
+      } catch (e) {
+        console.error("[world] save failed:", e);
+      }
+    })();
+    return this.saving.then(() => {
+      this.saving = null;
+      if (this.pendingSave) {
+        this.pendingSave = false;
+        return this.save();
+      }
+    });
   }
 
   /** Wipe all player edits and reseed: a brand-new world on the same server. */

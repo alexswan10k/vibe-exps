@@ -15,6 +15,7 @@
 <div id="status">not connected</div>
 <div id="hint"></div>
 <div id="toast"></div>
+<div id="killfeed"></div>
 <div id="vitals"></div>
 <div id="hotbar"></div>
 <div id="breakbar"><div></div></div>
@@ -96,22 +97,46 @@
       <li>Mine <b>stone → coal → iron → gold → diamond</b> (deeper = richer). <b>F</b> smelts: iron, gold, pork, beef, chicken, <b>sand → glass</b>. Caves wind below — stair-hole entrances drop in, ores show on the walls, bring torches.</li>
       <li><b>Bed</b> (RMB or F): sets your spawn. <b>Ladders</b>: Space climbs. Cows → beef, chickens → drumsticks.</li>
       <li>Place <b>torches</b> (RMB) before dark. <b>Click animals/zombies</b> to attack. <b>TNT</b>: place, aim, <b>F</b> to light — obsidian survives blasts.</li>
-      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap (green spawn · orange home · purple bed) · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows · <b>Q</b> ping a block for your team (15s marker)</li>
-      <li><b>R</b> cast fishing rod (needs rod: sticks + string, wait for a bite) · <b>F</b> on a 🐺 wolf to tame · <b>RMB</b> on a 🧑‍🌾 villager to trade · hold a 🧭 compass to find home/spawn · beware ☠️ lava lakes deep down</li>
+      <li>🤝 <b>Co-op</b>: <b>TAB</b> shows players + a kill/death scoreboard · the <b>kill feed</b> sits under the minimap · both players mining the <b>same block</b> mine at <b>2× speed</b> · chests, engines, pipes and quarries are shared · <b>Q</b> pings a block for your partner (15s marker)</li>
+      <li><b>G</b> eats pork · <b>T</b> chat · <b>N</b> minimap (green spawn · orange home · purple bed) · <b>shift</b> sprint · <b>H</b> this panel · <b>P</b> toggle shadows</li>
+      <li><b>R</b> cast fishing rod (needs rod: sticks + string, wait for a bite, then <b>F</b> the furnace to cook it) · <b>F</b> on a 🐺 wolf to tame — it fights hostiles beside you · <b>RMB</b> on a 🧑‍🌾 villager to trade · holding a <b>torch</b> lights your way · beware ☠️ lava lakes deep down</li>
       <li><b>/sethome /home</b> fast-travel · <b>/rain</b> summon storms (storms shield undead from sun!) · beware the 👹 <b>ogre</b></li>
-      <li>🔧 <b>BuildCraft</b>: craft a <b>chest</b> (F/RMB to open, 27 slots), <b>engine</b> (F/RMB panel → add coal/oil/lava, auto-sucks from tanks/chests), <b>pipes</b> (chest→chest, needs engine burning nearby), <b>quarry</b> (9×9 auto-mine next to a fueled engine). Oil ore glows in deserts.</li>
-      <li>🧪 <b>Fluids</b>: <b>bucket</b> (3 iron) scoops water/lava with <b>F</b>, <b>tank</b> holds 16 buckets (F with bucket to fill/draw), <b>pump</b> taps adjacent water/lava (needs engine), <b>fluid pipes</b> balance tanks. Lava buckets burn 120s in engines.</li>
-      <li>⚔️ <b>Weapons</b>: <b>bow + arrows</b> (X to shoot), <b>warhammer</b> (12 dmg launcher), <b>dagger</b>, <b>firebrand</b>. <b>C</b> stocks creative blocks.</li>
-      <li>✨ <b>Creative</b>: <b>/creative</b> (or /gamemode creative) → fly (double-Space or F), infinite blocks, no damage. <b>B</b> opens the searchable item browser. <b>/kit buildcraft|fluids|weapons|creative</b>, <b>/give &lt;id&gt; [n]</b>, <b>/survival</b> to go back.</li>
       <li><b>wheel / 1-9</b> cycle hotbar · <b>double-click food</b> in inventory to eat · <b>ESC</b> closes inventory/panels</li>
-      <li>🚂 <b>Vehicles</b>: <b>boat</b> (RMB on water) sails fast — WASD + shift · <b>minecart</b> (RMB on rails) and <b>steam locomotive</b> (W/S throttle, /fuel nearby, pulls carts). F hops in/out, LMB breaks a free one.</li>
-      <li>iPad: tap 📱 for joystick + buttons (hold ⛏️ to mine).</li>
     </ol>
+
+    <details id="help-advanced">
+      <summary>▸ advanced systems — machines, fluids, weapons, vehicles, worlds</summary>
+      <dl>
+        <dt>🔧 BuildCraft</dt>
+        <dd><b>chest</b> (F/RMB, 27 slots) · <b>engine</b> (F/RMB panel → coal/oil/lava, auto-sucks from adjacent chests/tanks) · <b>pipes</b> move items chest→chest while an engine burns · <b>quarry</b> auto-mines a 9×9 under itself beside a fueled engine. Oil ore glows in deserts.</dd>
+        <dt>🧪 Fluids</dt>
+        <dd><b>bucket</b> (3 iron) scoops water/lava with <b>F</b> · <b>tank</b> holds 16 buckets · <b>pump</b> taps adjacent water/lava while powered · <b>fluid pipes</b> balance tanks. A lava bucket burns an engine for 120s.</dd>
+        <dt>⚔️ Weapons</dt>
+        <dd><b>bow + arrows</b> (<b>X</b> to shoot) · <b>warhammer</b> (12 dmg launcher) · <b>dagger</b> · <b>firebrand</b>. <b>C</b> stocks a creative block kit.</dd>
+        <dt>🚂 Vehicles</dt>
+        <dd><b>boat</b> (RMB on water) sails fast — WASD + shift · <b>minecart</b> + <b>steam locomotive</b> need <b>rails</b> (RMB), W/S throttle, <b>/fuel</b> nearby, locomotive pulls connected carts. <b>F</b> hops in/out.</dd>
+        <dt>🏘 Villages &amp; trading</dt>
+        <dd>3–5 villages with houses, well and farm. <b>RMB</b> a villager for trade offers, pay with emeralds from <b>emerald ore</b> deep down.</dd>
+        <dt>🏚 Dungeons &amp; 👹 bosses</dt>
+        <dd>Cobble rooms at y9–21 with furnaces and a skeleton guardian that respawns. The rare nightly <b>ogre</b> (90 HP) drops diamonds.</dd>
+        <dt>🐺 Tames &amp; 🎣 fishing</dt>
+        <dd><b>F</b> on a wolf tames it (it fights for you) · <b>R</b> casts a rod (sticks + string), cook the catch.</dd>
+        <dt>🌀 Travel</dt>
+        <dd><b>G</b> throws an ender pearl (12 blocks) · 🧭 compass points at home/spawn · <b>Q</b> pings a block for your partner (15s marker).</dd>
+        <dt>✨ Creative</dt>
+        <dd><b>/creative</b> → fly (double-Space or F), infinite blocks, no damage. <b>B</b> item browser, <b>/kit &lt;name&gt;</b>, <b>/give &lt;id&gt; [n]</b>, <b>/survival</b> to go back.</dd>
+        <dt>📱 iPad</dt>
+        <dd>Tap 📱 for joystick + buttons (hold ⛏️ to mine).</dd>
+      </dl>
+    </details>
     <button id="help-close">play (H)</button>
   </div>
 </div>
 
-<div id="menu">
+<!-- Legacy LAN-server join dialog. Hidden on load: the title screen
+     (#screen-title) is now the entry point, and this used to render
+     underneath it, so first-time players saw two stacked title panels. -->
+<div id="menu" style="display:none">
   <div class="menu-panel">
     <h1>🧱 voxel-coop</h1>
     <p>2-player LAN survival · no certs, plain http</p>

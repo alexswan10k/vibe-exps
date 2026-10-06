@@ -334,7 +334,11 @@ class Car {
         let hasObstacleAhead = this.detectObstacleAhead(buildings, cars);
         let maxCruise = this.maxSpeed * 0.62;
 
-        let targetAccel = this.acceleration * 0.1;
+        // Cruise acceleration. Cars pull away harder from a standstill and taper off
+        // as they approach cruise speed, rather than creeping up at one fixed
+        // trickle -- holding at a red light used to cost seconds of crawl.
+        const launchBoost = Math.abs(this.speed) < 0.7 ? 3.4 : 1;
+        let targetAccel = this.acceleration * 0.3 * launchBoost;
 
         // ---- Police: direct pursuit (unchanged) ----
         if (this.isPolice && !this.exploded && typeof player !== 'undefined') {
@@ -403,10 +407,26 @@ class Car {
             if (this.edge) {
                 const remain = this.dir > 0 ? this.edge.len - this.dist : this.dist;
                 const endNodeId = this.dir > 0 ? this.edge.b : this.edge.a;
-                const light = world.nodeLight ? world.nodeLight.get(endNodeId) : null;
-                const redAhead = light && light.state === 'red' && remain < 150 && remain > 26;
+                const aspect = world.signalFor ? world.signalFor(endNodeId, this.edge) : 'green';
+                // Amber is obeyed only when there is room to stop comfortably;
+                // otherwise it's safer to clear the junction.
+                const STOP_DIST = 26;
+                const brakeDist = (this.speed * this.speed) / (2 * 2.2);
+                const mustStop = aspect === 'red' || (aspect === 'amber' && remain > brakeDist + STOP_DIST);
+                // Start braking early enough to settle at the stop line.
+                const redAhead = mustStop && remain < brakeDist + 40;
 
-                if (remain < 28 && !redAhead) {
+                if (mustStop && remain <= STOP_DIST + 6) {
+                    // Hold at the stop line until the signal clears.
+                    // Arc position of the stop line depends on travel
+                    // direction: approaching node b means sitting back from
+                    // the end, approaching node a means sitting after the start.
+                    const stopPos = this.dir > 0 ? this.edge.len - STOP_DIST : STOP_DIST;
+                    const lp = world.pointAtDist(this.edge,
+                        Math.max(0, Math.min(this.edge.len, stopPos)));
+                    this.targetDirection = Math.atan2(lp.y - centerY, lp.x - centerX);
+                    maxCruise = 0;
+                } else if (remain < 28 && !redAhead) {
                     // Arrived at node: pick the next edge
                     this.pickNextEdge(endNodeId);
                 } else {
@@ -420,7 +440,9 @@ class Car {
                     this.targetDirection = Math.atan2(ty - centerY, tx - centerX);
 
                     if (redAhead) {
-                        maxCruise = remain < 70 ? 0 : this.maxSpeed * 0.12;
+                        // Creep to a standstill on the line, don't slam to it.
+                        const target = remain > STOP_DIST + 10 ? 1.1 : 0;
+                        maxCruise = Math.min(maxCruise, target);
                     }
                 }
             }
@@ -428,7 +450,10 @@ class Car {
             if (hasObstacleAhead) {
                 this.speed *= 0.82;
             } else {
-                this.speed = Math.min(this.speed + targetAccel, maxCruise);
+                // Taper the last of the acceleration so cars settle onto
+                // cruise speed instead of oscillating around it.
+                const headroom = Math.max(0, 1 - Math.abs(this.speed) / Math.max(0.5, maxCruise));
+                this.speed = Math.min(this.speed + targetAccel * (0.35 + 0.65 * headroom), maxCruise);
             }
         }
 

@@ -26,8 +26,10 @@ class World {
         this.roundabouts = graph ? graph.roundabouts : [];
         this.rampProps = graph ? graph.ramps : [];
 
+        this.roadGrid = this.buildRoadGrid();
         this.convertToObjects();
         this.mergeBuildings();
+        this.fixBuildingsOnRoads();
         this.prepGraph();
         this.populateWorldProps();
     }
@@ -60,6 +62,12 @@ class World {
                 if (p[1] < by0) by0 = p[1]; if (p[1] > by1) by1 = p[1];
             }
             e.bbox = { x0: bx0, y0: by0, x1: bx1, y1: by1 };
+            // Outward bearings at each end, used to group approaches into
+            // non-conflicting signal phases.
+            const a0 = e.pts[0], a1 = e.pts[Math.min(1, e.pts.length - 1)];
+            const b0 = e.pts[e.pts.length - 1], b1 = e.pts[Math.max(0, e.pts.length - 2)];
+            e.angEndA = Math.atan2(a1[1] - a0[1], a1[0] - a0[0]);
+            e.angEndB = Math.atan2(b1[1] - b0[1], b1[0] - b0[0]);
         }
         // Spatial buckets (288px cells) fed by dense sampling
         this.edgeBuckets = new Map();
@@ -88,16 +96,132 @@ class World {
                 }
             }
         }
-        // Traffic lights at real junctions (3+ arms), never on roundabouts
+        // Traffic signals at real junctions (3+ arms), never on roundabouts.
+        //
+        // A junction runs multiple phases rather than one shared bulb.
+        // Approaches are grouped by bearing so that each group holds only
+        // movements that are roughly parallel (i.e. opposing arms of the same
+        // street) -- perpendicular approaches are always held. Previously every
+        // approach shared one state, so a junction was either all-green (cross
+        // traffic collisions) or all-red (gridlock).
         const raIds = new Set(this.roundabouts.map(r => r.id));
-        this.nodeLight = new Map();
+        this.nodeSignals = new Map();
         this.trafficLights = [];
+
         for (const n of this.nodes) {
-            const deg = (this.nodeEdges.get(n.id) || []).length;
-            if (deg >= 3 && !raIds.has(n.id) && Math.random() < 0.6) {
-                const light = { x: n.x, y: n.y, state: Math.random() < 0.5 ? 'red' : 'green', timer: Math.random() * 300, node: n.id };
-                this.trafficLights.push(light);
-                this.nodeLight.set(n.id, light);
+            const arms = this.nodeEdges.get(n.id) || [];
+            // Only genuine crossroads get signals. Minor T-junctions use
+            // give-way instead -- signalling every arm in a dense grid means
+            // traffic spends most of its life queued at a stop line.
+            if (arms.length < 4 || raIds.has(n.id)) continue;
+
+            // Outward bearing of each arm, measured away from the junction.
+            const sorted = arms.map((e, i) => ({
+                key: i,
+                e,
+                ang: this.dirAtNodeEnd(e, n.id) === 'b' ? e.angEndB : e.angEndA,
+            })).sort((p, q) => p.ang - q.ang);
+
+            // Pair each arm with its most nearly-opposite partner. Arms far
+            // from a true opposite (odd junctions, sweeping curves) end up as
+            // their own single-arm phase, which is always safe.
+            const angDiff = (a, b) => {
+                let d = Math.abs(((a - b) * 180 / Math.PI) % 360);
+                if (d > 180) d = 360 - d;
+                return d;
+            };
+            const used = new Set();
+            const groups = [];
+            for (const arm of sorted) {
+                if (used.has(arm.key)) continue;
+                used.add(arm.key);
+                const group = [arm.key];
+                let best = null, bestDiff = 0;
+                for (const other of sorted) {
+                    if (used.has(other.key)) continue;
+                    const d = angDiff(arm.ang, other.ang);
+                    if (d > bestDiff) { bestDiff = d; best = other; }
+                }
+                // Only treat as one phase if genuinely opposed (>=150deg).
+                if (best && bestDiff >= 150) {
+                    used.add(best.key);
+                    group.push(best.key);
+                }
+                groups.push(group);
+            }
+
+            const signal = {
+                node: n.id,
+                x: n.x,
+                y: n.y,
+                // Which group is currently being served.
+                phase: 0,
+                aspect: 'green',
+                groupCount: groups.length,
+                timer: Math.floor(Math.random() * 120),
+                // A generous green keeps junction capacity high. With a short all-red
+                // clearance between phases, throughput stays close to the old
+                // (unsafe) shared-bulb model while cross traffic stays held.
+                greenFor: 420 + Math.floor(Math.random() * 120),
+                amberFor: 55,
+                // All-red clearance between phases. Kept brief: it is pure
+                // lost throughput, only long enough for the box to clear.
+                clearFor: 18,
+                // arm index -> group number
+                armPhase: new Map(),
+                // Per-arm aspect, keyed by index into nodeEdges.get(node).
+                arms: new Map(),
+                armsList: sorted,
+            };
+            groups.forEach((group, gi) => {
+                for (const key of group) signal.armPhase.set(key, gi);
+            });
+            for (const [key, gi] of signal.armPhase) {
+                signal.arms.set(key, gi === 0 ? 'green' : 'red');
+            }
+            this.nodeSignals.set(n.id, signal);
+            this.trafficLights.push(signal);
+        }
+    }
+
+    // Which end of edge `e` the given node sits on: 'a' or 'b'.
+    dirAtNodeEnd(e, nodeId) {
+        return e.a === nodeId ? 'a' : 'b';
+    }
+
+    // Signal aspect for a car approaching `nodeId` along edge `e`.
+    // Returns 'green' | 'amber' | 'red', or 'green' at unsignalled junctions.
+    signalFor(nodeId, e) {
+        const sig = this.nodeSignals.get(nodeId);
+        if (!sig) return 'green';
+        const key = this.nodeEdges.get(nodeId).indexOf(e);
+        return sig.arms.get(key) || 'red';
+    }
+
+    // Advance every junction signal through its GREEN -> AMBER -> RED cycle.
+    updateSignals() {
+        for (const sig of this.nodeSignals.values()) {
+            sig.timer++;
+
+            if (sig.timer < sig.greenFor) {
+                sig.aspect = 'green';
+            } else if (sig.timer < sig.greenFor + sig.amberFor) {
+                sig.aspect = 'amber';
+            } else if (sig.timer < sig.greenFor + sig.amberFor + sig.clearFor) {
+                // All-red clearance so the box can empty before the cross
+                // movement is released. Without it, cars are released into
+                // traffic still occupying the junction.
+                sig.aspect = 'red';
+            } else {
+                sig.timer = 0;
+                sig.phase = (sig.phase + 1) % sig.groupCount;
+                sig.aspect = 'green';
+            }
+
+            // Only the phase currently being served may show green/amber;
+            // every other approach stays red.
+            for (const [key, armPhase] of sig.armPhase) {
+                sig.arms.set(key, armPhase === sig.phase ? sig.aspect : 'red');
             }
         }
     }
@@ -162,6 +286,170 @@ class World {
     // True when the position sits on a bridge deck spanning water
     onBridge(x, y) {
         return this.bridgeCells.has(Math.floor(x / 48) + ',' + Math.floor(y / 48));
+    }
+
+    // Rasterize road corridors into a coarse grid so placement queries are O(1).
+    // For each cell we store the tightest gap between the cell centre and the
+    // nearest carriageway edge (Infinity where no road is near).
+    buildRoadGrid() {
+        const CELL = 96;
+        const cols = Math.ceil(9600 / CELL) + 2;
+        const rows = Math.ceil(7200 / CELL) + 2;
+        const data = new Float64Array(cols * rows).fill(Infinity);
+        const stamp = (x, y, clearance) => {
+            const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+            if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) return;
+            const i = cy * cols + cx;
+            if (data[i] > clearance) data[i] = clearance;
+        };
+        for (const e of this.edges) {
+            const hw = e.w / 2;
+            for (let i = 0; i < e.pts.length - 1; i++) {
+                const [x1, y1] = e.pts[i], [x2, y2] = e.pts[i + 1];
+                const minX = Math.min(x1, x2) - hw - CELL, maxX = Math.max(x1, x2) + hw + CELL;
+                const minY = Math.min(y1, y2) - hw - CELL, maxY = Math.max(y1, y2) + hw + CELL;
+                const cx0 = Math.max(0, Math.floor(minX / CELL)), cx1 = Math.min(cols - 1, Math.floor(maxX / CELL));
+                const cy0 = Math.max(0, Math.floor(minY / CELL)), cy1 = Math.min(rows - 1, Math.floor(maxY / CELL));
+                const dx = x2 - x1, dy = y2 - y1;
+                const segLen2 = dx * dx + dy * dy || 1;
+                for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+                    const px = cx * CELL + CELL / 2, py = cy * CELL + CELL / 2;
+                    let t = ((px - x1) * dx + (py - y1) * dy) / segLen2;
+                    t = Math.max(0, Math.min(1, t));
+                    const qx = x1 + dx * t, qy = y1 + dy * t;
+                    const gap = Math.hypot(px - qx, py - qy) - hw;
+                    if (gap < CELL) stamp(px, py, gap);
+                }
+            }
+        }
+        return { cell: CELL, cols, rows, data };
+    }
+
+    // True when an axis-aligned box would sit on a road corridor. We sample the
+    // box's corners and edge midpoints so diagonal carriageways are caught, and
+    // require each sample to clear the carriageway by a sidewalk margin.
+    boxHitsRoad(x, y, w, h, margin = 16) {
+        const pts = [
+            [x, y], [x + w, y], [x, y + h], [x + w, y + h],
+            [x + w / 2, y], [x + w / 2, y + h],
+            [x, y + h / 2], [x + w, y + h / 2],
+        ];
+        for (const [px, py] of pts) {
+            // Clearance is measured from the cell centre; correct for the
+            // sample's offset within its cell.
+            const g = this.roadGrid;
+            const cx = Math.floor(px / g.cell), cy = Math.floor(py / g.cell);
+            if (cx < 0 || cy < 0 || cx >= g.cols || cy >= g.rows) continue;
+            const ccx = cx * g.cell + g.cell / 2, ccy = cy * g.cell + g.cell / 2;
+            const clearance = g.data[cy * g.cols + cx] - Math.hypot(px - ccx, py - ccy);
+            if (clearance < margin) return true;
+        }
+        return false;
+    }
+
+    // Precise distance from a point to the nearest carriageway EDGE (negative if
+    // the point is on tarmac). boxHitsRoad() works per-building via a coarse
+    // cell grid and over-reports for a single point, so use this when placing
+    // small objects like signal heads.
+    roadClearanceAt(x, y) {
+        if (!this.edgeBuckets) return Infinity;
+        const bx = Math.floor(x / 288), by = Math.floor(y / 288);
+        let best = Infinity;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const arr = this.edgeBuckets.get((bx + dx) + ',' + (by + dy));
+            if (!arr) continue;
+            for (const e of arr) {
+                const p = this.projectOnEdge(e, x, y);
+                const d = p.off - e.w / 2;
+                if (d < best) best = d;
+            }
+        }
+        return best;
+    }
+
+    // Deterministic hash -> [0,1), so world generation is stable per tile and
+    // a tile always regenerates the same structure (no shimmer between loads).
+    tileRand(x, y, salt) {
+        let h = (x * 374761393 + y * 668265263 + salt * 2246822519) | 0;
+        h = (h ^ (h >>> 13)) * 1274126177;
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+
+    // Pick an infill style for a leftover lot by sampling the district name,
+    // so back-alleys in Chinatown don't sprout suburban ranch houses.
+    yardStyleFor(x, y) {
+        let district = '';
+        if (typeof getDistrictNameAt === 'function') {
+            district = getDistrictNameAt(x * 96 + 48, y * 96 + 48) || '';
+        }
+        if (district.indexOf('Downtown') !== -1) return ['office', 'downtown', 'standard'];
+        if (district.indexOf('Chinatown') !== -1) return ['chinatown', 'standard', 'shop'];
+        if (district.indexOf('Little Italy') !== -1) return ['brownstone', 'shop', 'standard'];
+        if (district.indexOf('Brownstone') !== -1) return ['brownstone', 'standard'];
+        if (district.indexOf('Docks') !== -1) return ['industrial', 'standard'];
+        if (district.indexOf('Suburbs') !== -1) return ['suburb', 'ranch', 'victorian'];
+        return ['standard', 'office', 'shop'];
+    }
+
+    // Fill one leftover lot. Some yards become parking, some stay open, and the
+    // rest get a shrunken infill building that leaves a walkable margin so the
+    // gap still reads as an alley rather than a solid wall.
+    fillYardTile(x, y, gameX, gameY, cellSize) {
+        const r = this.tileRand(x, y, 7);
+
+        // ~7% become a construction site.
+        if (r < 0.07) {
+            this.openTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, kind: 'DIRT' });
+            return;
+        }
+        // ~8% become a small parking lot.
+        if (r < 0.15) {
+            this.openTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, kind: 'LOT' });
+            return;
+        }
+
+        const styles = this.yardStyleFor(x, y);
+        const style = styles[Math.floor(this.tileRand(x, y, 13) * styles.length) % styles.length];
+        // Nudge off-centre for a less mechanical feel.
+        const offX = (this.tileRand(x, y, 31) - 0.5) * 10;
+        const offY = (this.tileRand(x, y, 37) - 0.5) * 10;
+
+        // Shrink-to-fit: start with a comfortable footprint and pull it in until
+        // it clears the carriageway by a sidewalk margin. Road-adjacent lots
+        // therefore get slimmer buildings instead of being erased, which keeps
+        // the street wall intact while leaving the pavement clear.
+        let inset = 14;
+        let w = 0, h = 0, bx = 0, by = 0;
+        let fitted = false;
+        for (; inset <= 34; inset += 4) {
+            w = cellSize - inset * 2;
+            h = cellSize - inset * 2;
+            bx = gameX + inset + offX;
+            by = gameY + inset + offY;
+            if (!this.boxHitsRoad(bx, by, w, h, 16)) { fitted = true; break; }
+        }
+
+        if (!fitted) {
+            // No room for a building: leave a paved verge so the kerb reads.
+            this.openTiles.push({ x: gameX, y: gameY, width: cellSize, height: cellSize, kind: 'VERGE' });
+            return;
+        }
+
+        this.buildings.push({
+            x: bx,
+            y: by,
+            width: w,
+            height: h,
+            style: style,
+            tileX: x,
+            tileY: y,
+            spanX: 1,
+            spanY: 1,
+            infill: true,
+            // Infill is deliberately excluded from merging: it must keep its
+            // margins so alleys survive.
+            mergeable: false
+        });
     }
 
     convertToObjects() {
@@ -333,6 +621,12 @@ class World {
                     if (tile === 'RAMP_N') angle = -Math.PI / 2;
 
                     this.stuntRamps.push({ x: gameX + cellSize / 2, y: gameY + cellSize / 2, angle: angle });
+                } else if (tile === 'YARD') {
+                    // Leftover lot left over by road clearance. Left bare it
+                    // reads as a hole in the city, so fill it with a small
+                    // infill structure (or a parking lot) chosen to match the
+                    // surrounding district.
+                    this.fillYardTile(x, y, gameX, gameY, cellSize);
                 } else if (tile.startsWith('B')) {
                     // Building with distinct style
                     let style = 'standard';
@@ -363,6 +657,52 @@ class World {
                 }
             }
         }
+    }
+
+    // Landmark tiles (gas, casino, hospital...) are placed at full cell size,
+    // so a landmark that landed on a road corridor ends up embedded in the
+    // carriageway. Shrink-then-shift them into the nearest clear spot; only
+    // drop one as a last resort, since landmarks drive interactions.
+    fixBuildingsOnRoads() {
+        const FIXABLE = new Set(['gas', 'casino', 'pns', 'ammu', 'diner', 'hospital', 'police', 'hangar', 'airport', 'stadium', 'terminal', 'container']);
+        const kept = [];
+        for (const b of this.buildings) {
+            if (b.style === 'invisible' || !this.boxHitsRoad(b.x, b.y, b.width, b.height, 4)) {
+                kept.push(b);
+                continue;
+            }
+            const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+            let placed = false;
+            // 1. Try shrinking about the centre.
+            for (const s of [0.85, 0.7, 0.58, 0.46, 0.36, 0.28]) {
+                const w = b.width * s, h = b.height * s;
+                const nx = cx - w / 2, ny = cy - h / 2;
+                if (!this.boxHitsRoad(nx, ny, w, h, 4)) {
+                    b.x = nx; b.y = ny; b.width = w; b.height = h;
+                    placed = true;
+                    break;
+                }
+            }
+            // 2. Still fouling: try nudging outward on each axis.
+            if (!placed) {
+                const step = 12;
+                for (let ring = 1; ring <= 5 && !placed; ring++) {
+                    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+                        const nx = b.x + dx * step * ring, ny = b.y + dy * step * ring;
+                        if (nx < 0 || ny < 0 || nx + b.width > 9600 || ny + b.height > 7200) continue;
+                        if (!this.boxHitsRoad(nx, ny, b.width, b.height, 4)) {
+                            b.x = nx; b.y = ny;
+                            placed = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (placed || !FIXABLE.has(b.style)) kept.push(b);
+            // else: a landmark we could not place -- drop it rather than sit
+            // in the road.
+        }
+        this.buildings = kept;
     }
 
     // Greedily merge adjacent same-style single-tile buildings into bigger
@@ -691,6 +1031,24 @@ class World {
                     ctx.lineTo(o.x + i, o.y + 38);
                     ctx.moveTo(o.x + i, o.y + o.height - 38);
                     ctx.lineTo(o.x + i, o.y + o.height - 10);
+                }
+                ctx.stroke();
+            } else if (o.kind === 'VERGE') {
+                // Paved service strip beside the carriageway. Deliberately a
+                // light concrete tone so it reads as pavement, not more road.
+                ctx.fillStyle = '#8C8880';
+                ctx.fillRect(o.x, o.y, o.width, o.height);
+                // Slab joints for a bit of texture
+                ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                for (let i = 24; i < o.width; i += 24) {
+                    ctx.moveTo(o.x + i, o.y);
+                    ctx.lineTo(o.x + i, o.y + o.height);
+                }
+                for (let i = 24; i < o.height; i += 24) {
+                    ctx.moveTo(o.x, o.y + i);
+                    ctx.lineTo(o.x + o.width, o.y + i);
                 }
                 ctx.stroke();
             } else {

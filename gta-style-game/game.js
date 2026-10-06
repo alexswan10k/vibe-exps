@@ -15,15 +15,20 @@ let pedestrians = [];
 let cars = [];
 let lastTime = 0;
 let fps = 0, frameCount = 0, lastFpsUpdate = 0;
-let gameTime = 0;
+// 10 real minutes per in-game day. The old 70s cycle strobed the whole city
+// between daylight and darkness several times a minute.
+const DAY_LENGTH = 600000;
+// Start mid-morning rather than midnight, so the city is legible on boot.
+const START_TIME_OF_DAY = 0.38;
+// Seeded so the first frame is mid-morning, not midnight.
+let gameTime = START_TIME_OF_DAY * DAY_LENGTH;
 let score = 0;
 let distanceTraveled = 0;
 let lastPlayerPos = { x: 0, y: 0 };
 
 // UI & Minimap Variables
 let minimapCanvas, minimapCtx;
-const DAY_LENGTH = 70000;
-let timeOfDay = 0.5;
+let timeOfDay = START_TIME_OF_DAY;
 let lightLevel = 1.0;
 
 let playerHealth = 100;
@@ -300,7 +305,7 @@ function gameLoop(currentTime = 0) {
     gameTime += deltaTime;
 
     // Day/Night Cycle (0 = midnight, 0.5 = noon, 1.0 = midnight)
-    timeOfDay = Math.abs((gameTime % DAY_LENGTH) / DAY_LENGTH);
+    timeOfDay = ((gameTime / DAY_LENGTH) % 1 + 1) % 1;
     lightLevel = 0.25 + 0.75 * Math.max(0, Math.sin((timeOfDay - 0.25) * Math.PI * 2));
     ambient = lightLevel * (1 - 0.30 * weatherIntensity);
 
@@ -574,14 +579,8 @@ function update(deltaTime) {
 
     updateUI();
 
-    // Traffic light timing
-    for (let light of world.trafficLights) {
-        light.timer++;
-        if (light.timer > 300) {
-            light.state = light.state === 'red' ? 'green' : 'red';
-            light.timer = 0;
-        }
-    }
+    // Traffic signal timing (per-junction phase cycling)
+    if (world.updateSignals) world.updateSignals();
 }
 
 function updateLandmarkInteractions(px, py) {
@@ -887,7 +886,9 @@ function drawMinimap() {
     if (world.openTiles) {
         for (let o of world.openTiles) {
             if (!inView(o.x, o.y, o.width, o.height)) continue;
-            minimapCtx.fillStyle = o.kind === 'LOT' ? '#3E3E3E' : '#8D6E63';
+            minimapCtx.fillStyle = o.kind === 'LOT' ? '#3E3E3E'
+                : o.kind === 'VERGE' ? '#5A5A52'
+                    : '#8D6E63';
             minimapCtx.fillRect(o.x, o.y, o.width, o.height);
         }
     }
@@ -1008,29 +1009,97 @@ function draw() {
     // 6. Draw 3D Parallax Buildings
     drawBuildings3D(ctx);
 
-    // 7. Draw Traffic Lights
-    for (let light of world.trafficLights) {
-        if (light.x < minX || light.x > maxX || light.y < minY || light.y > maxY) continue;
+    // 7. Draw Traffic Signals (one head per approach, on the near right kerb)
+    for (let sig of world.trafficLights) {
+        if (sig.x < minX || sig.x > maxX || sig.y < minY || sig.y > maxY) continue;
 
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(light.x, light.y);
-        ctx.lineTo(light.x, light.y - 35);
-        ctx.stroke();
+        const arms = world.nodeEdges.get(sig.node) || [];
+        for (const arm of sig.armsList) {
+            const e = arm.e;
+            const idx = arm.key;
+            const aspect = sig.arms.get(idx) || 'red';
+            const endIsB = world.dirAtNodeEnd(e, sig.node) === 'b';
 
-        ctx.fillStyle = '#222';
-        ctx.fillRect(light.x - 7, light.y - 32, 14, 26);
+            // Walk back from the junction along the arm to the stop line.
+            const backDist = Math.min(e.len, (e.w / 2) + 30);
+            const stopD = endIsB ? e.len - backDist : backDist;
+            const p = world.pointAtDist(e, stopD);
+            // Outward bearing from the junction: the head faces back up the arm.
+            const bearing = endIsB ? e.angEndB + Math.PI : e.angEndA;
+            // Place the head on the right-hand kerb of the approach. If another
+            // carriageway covers that spot (crossing road, curve nearby) step
+            // outward until the head is clear of all roads, otherwise signals
+            // appear to sit in the middle of the tarmac.
+            const off0 = e.w / 2 + 7;
+            let rx = p.x + Math.cos(bearing - Math.PI / 2) * off0;
+            let ry = p.y + Math.sin(bearing - Math.PI / 2) * off0;
+            if (typeof world.roadClearanceAt === 'function') {
+                const side = s => {
+                    const a = bearing + Math.PI / 2 * s;
+                    return { x: p.x + Math.cos(a) * (e.w / 2 + 7), y: p.y + Math.sin(a) * (e.w / 2 + 7) };
+                };
+                let best = { x: rx, y: ry, score: world.roadClearanceAt(rx, ry) };
+                // Walk outward from the kerb; if the right-hand side stays
+                // buried (tight junction) try the left-hand kerb instead.
+                for (const s of [1, -1]) {
+                    for (let step = 0; step < 12; step++) {
+                        const off = e.w / 2 + 7 + step * 11;
+                        const a = bearing + Math.PI / 2 * s;
+                        const q = { x: p.x + Math.cos(a) * off, y: p.y + Math.sin(a) * off };
+                        const score = world.roadClearanceAt(q.x, q.y);
+                        if (score > best.score) { best = { x: q.x, y: q.y, score }; }
+                        if (score >= 6) break;          // comfortably on the kerb
+                    }
+                }
+                rx = best.x; ry = best.y;
+            }
 
-        ctx.fillStyle = light.state === 'red' ? '#FF3333' : '#440000';
-        ctx.beginPath();
-        ctx.arc(light.x, light.y - 23, 4.5, 0, Math.PI * 2);
-        ctx.fill();
+            // Pole
+            ctx.strokeStyle = '#3A3A3A';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx, ry - 32);
+            ctx.stroke();
 
-        ctx.fillStyle = light.state === 'green' ? '#33FF33' : '#004400';
-        ctx.beginPath();
-        ctx.arc(light.x, light.y - 12, 4.5, 0, Math.PI * 2);
-        ctx.fill();
+            // Housing
+            ctx.fillStyle = '#1C1C1C';
+            ctx.fillRect(rx - 7, ry - 33, 14, 25);
+            ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(rx - 7, ry - 33, 14, 25);
+
+            const lit = aspect === 'green' ? '#33FF33'
+                : aspect === 'amber' ? '#FFB020' : '#FF3333';
+            const dark = aspect === 'green' ? '#0A2A0A'
+                : aspect === 'amber' ? '#2A1E00' : '#2A0A0A';
+            const lampY = aspect === 'red' ? -26 : (aspect === 'amber' ? -20.5 : -15);
+
+            // Soft glow on the lit aspect so it reads at gameplay zoom.
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            ctx.fillStyle = lit;
+            ctx.beginPath();
+            ctx.arc(rx, ry + lampY, 7.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Red lamp (top)
+            ctx.fillStyle = aspect === 'red' ? lit : dark;
+            ctx.beginPath();
+            ctx.arc(rx, ry - 26, 3.8, 0, Math.PI * 2);
+            ctx.fill();
+            // Amber lamp (middle)
+            ctx.fillStyle = aspect === 'amber' ? lit : dark;
+            ctx.beginPath();
+            ctx.arc(rx, ry - 20.5, 3.8, 0, Math.PI * 2);
+            ctx.fill();
+            // Green lamp (bottom)
+            ctx.fillStyle = aspect === 'green' ? lit : dark;
+            ctx.beginPath();
+            ctx.arc(rx, ry - 15, 3.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     // 8. Draw Props & World Pickups

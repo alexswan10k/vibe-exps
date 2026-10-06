@@ -31,6 +31,9 @@ function crackTexture(stage) {
   const t = new THREE.CanvasTexture(c);
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestFilter;
+  // match the renderer's declared output encoding, else the break overlay reads
+  // washed out against the blocks it sits on
+  t.encoding = THREE.sRGBEncoding;
   return t;
 }
 
@@ -85,7 +88,10 @@ export class TeamPings {
     const label = document.createElement("div");
     label.className = "team-ping";
     document.body.appendChild(label);
-    this.markers.set(m.id, { ...m, mesh, label, expires: now + Math.min(15000, m.ttl) });
+    // a missing/NaN ttl made expires NaN, and `now >= NaN` is always false, so the
+    // marker was immortal (mesh + DOM label leaked for the rest of the session)
+    const ttl = Number.isFinite(m.ttl) ? m.ttl : 15000;
+    this.markers.set(m.id, { ...m, mesh, label, expires: now + Math.min(15000, Math.max(0, ttl)) });
   }
 
   remove(id) {
