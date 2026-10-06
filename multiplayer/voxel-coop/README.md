@@ -75,12 +75,14 @@ effectively unbreakable. Run `deno task test` after touching either file.
 cooldown boundaries, the protocol mirror, the vehicles integration test and the
 server-validation gates.
 
-Two further suites need a running server (`deno task dev`, then in another
+Three further suites need a running server (`deno task dev`, then in another
 shell):
 
 ```sh
 node tests/two-players.test.mjs   # 2 browsers, real co-op: mining assist,
                                   # scoreboard, kill feed, pings, creative gates
+node tests/render-order.test.mjs  # chunk meshes stay on the block grid AND the
+                                  # transparent pass sorts back-to-front
 node tests/persistence.test.mjs   # phase 1: start a smelt
 #   ...restart the server (SIGTERM)...
 node tests/persistence.test.mjs --verify   # phase 2: it came back
@@ -89,6 +91,15 @@ node tests/persistence.test.mjs --verify   # phase 2: it came back
 The two-player suite launches one browser per client — two software-GL renderers
 in a single Chrome process starve each other and the run becomes flaky — and needs
 a real Chrome (`CHROME=/path/to/chrome` to override) or Playwright's bundled one.
+
+`render-order` builds a synthetic, fully-loaded 3x3 chunk grid in the page (no
+streaming, so it is deterministic) and pins the thing that is easy to break and
+invisible in a screenshot: each chunk group is anchored at the centre of its own
+volume, every instance still lands on a whole block cell, and water/glass draw
+back-to-front. The anchoring matters because three.js sorts the transparent list
+by `setFromMatrixPosition(matrixWorld)` — the object *origin*, not its bounds —
+so groups left at the world origin all tie, and transparent geometry then draws
+in chunk load order instead of by distance.
 
 ### Saves
 

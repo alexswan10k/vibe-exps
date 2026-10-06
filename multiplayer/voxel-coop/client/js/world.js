@@ -738,7 +738,28 @@ export class WorldClient {
       this.scene.remove(old);
       old.children.forEach((m) => { m.dispose?.(); if (m.userData.ownGeo) m.geometry.dispose?.(); });
     }
+    // Anchor the group at the centre of the chunk's volume, and emit instance
+    // matrices relative to that anchor (line: buildMesh below). World positions
+    // are unchanged — group transform × instance matrix cancels — so shadows,
+    // lighting and raycasts are all identical. What it buys is a real
+    // matrixWorld translation, which is what three.js feeds into the
+    // transparent render list's depth key: in projectObject the sort `z` is
+    // `setFromMatrixPosition(matrixWorld).applyMatrix4(projScreen)`, i.e. the
+    // object's ORIGIN, not its geometry or instance bounds.
+    //
+    // That is why the ocean looked wrong. Every chunk group used to sit at
+    // (0,0,0), so every water/glass/tank InstancedMesh in the whole view tied
+    // on z, and painterSortStable fell all the way through to object.id — the
+    // draw order was chunk *load* order, not back-to-front. Standing at a
+    // shore you would see a distant chunk's water surface blend over the near
+    // one, and a glass wall beside a lake would cut through it the wrong way.
+    // Sorting on the volume centre (not the min corner) is a better proxy for
+    // "how far away is this chunk's water" on a glancing view.
+    const ax = cx * CHUNK + CHUNK / 2;
+    const ay = WORLD_H / 2;
+    const az = cz * CHUNK + CHUNK / 2;
     const group = new THREE.Group();
+    group.position.set(ax, ay, az);
     const byType = new Map();
     const torchList = [];
     const getL = (x, y, z) => {
@@ -850,10 +871,10 @@ export class WorldClient {
       items.forEach(([wx, y, wz, torch, sky], i) => {
         if (isPlant) {
           // cross quads stand on the block floor, full height
-          this.dummy.position.set(wx + 0.5, y, wz + 0.5);
+          this.dummy.position.set(wx + 0.5 - ax, y - ay, wz + 0.5 - az);
           this.dummy.scale.set(1, 1, 1);
         } else {
-          this.dummy.position.set(wx + 0.5, y + 0.5, wz + 0.5);
+          this.dummy.position.set(wx + 0.5 - ax, y + 0.5 - ay, wz + 0.5 - az);
           if (b === B.TORCH) this.dummy.scale.set(0.25, 0.6, 0.25);
           else this.dummy.scale.set(1, 1, 1);
           if (b === B.WATER) this.dummy.position.y -= 0.12;
