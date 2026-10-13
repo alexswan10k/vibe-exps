@@ -21,6 +21,7 @@
         <b>Look:</b> Mouse (click to lock) &nbsp; <kbd>Esc</kbd> pause<br/>
         <b>Combat:</b> Left click fire &nbsp; <kbd>1</kbd>–<kbd>7</kbd> weapons &nbsp; scroll wheel cycle<br/>
         <b>Interact:</b> <kbd>F</kbd> use terminals / doors &nbsp; <kbd>M</kbd> motion tracker zoom<br/>
+        <b>Map:</b> <kbd>Tab</kbd> automap overlay<br/>
         <b>Objective:</b> Find the exit teleporter. Terminals carry the mission brief.
       </div>
       <button id="play-btn" class="click-play">CLICK TO PLAY</button>
@@ -71,6 +72,12 @@
       </div>
     </div>
 
+    <!-- Automap -->
+    <div id="automap" class="hidden">
+      <canvas id="map-canvas" width="480" height="480"></canvas>
+      <div class="map-hint">[TAB] close · white arrow = you · blue = exit · red = hostiles · yellow = weapons</div>
+    </div>
+
     <!-- Pause -->
     <div id="pause-menu" class="hidden">
       <h2 style="letter-spacing:4px;">PAUSED</h2>
@@ -84,6 +91,7 @@
       <div class="touch-btn" id="jump-btn">⬆</div>
       <div class="touch-btn" id="fire-btn">🎯</div>
       <div class="touch-btn" id="use-btn">F</div>
+      <div class="touch-btn" id="map-btn">🗺</div>
     </div>
   </div>
 
