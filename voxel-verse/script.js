@@ -104,51 +104,30 @@ const BLOCK_DEF = [
   {name:'Glow',    color:0xffd34d, opaque:true, light:true},
   {name:'Obsidian',color:0x2a1e4f, opaque:true},
 ];
-function makePixelTexture(hex, opts={}){
-  const c=document.createElement('canvas'); c.width=c.height=32; const g=c.getContext('2d');
-  const base='#'+hex.toString(16).padStart(6,'0'); g.fillStyle=base; g.fillRect(0,0,32,32);
-  // two-tone pixel noise for depth (dark + light speckles)
-  const n=opts.noise??110;
-  for(let i=0;i<n;i++){ g.fillStyle=`rgba(0,0,0,0.16)`; g.fillRect(randi(0,31),randi(0,31),randi(1,2),randi(1,2)); }
-  for(let i=0;i<n*0.5;i++){ g.fillStyle=`rgba(255,255,255,0.10)`; g.fillRect(randi(0,31),randi(0,31),1,1); }
-  for(let i=0;i<(opts.spark??0);i++){ g.fillStyle='rgba(255,255,255,0.55)'; g.fillRect(randi(0,31),randi(0,31),2,2); }
-  if(opts.top){ g.fillStyle=opts.top; g.fillRect(0,0,32,10);
-    g.fillStyle='rgba(0,0,0,0.25)'; for(let x=0;x<32;x+=4) g.fillRect(x,10,2,2); // jagged grass edge
-    g.fillStyle='rgba(255,255,255,0.12)'; g.fillRect(0,0,32,2); }
-  if(opts.rings){ g.strokeStyle='rgba(0,0,0,0.35)'; g.lineWidth=2;
-    g.strokeRect(4,4,24,24); g.strokeRect(9,9,14,14); g.fillStyle='rgba(255,255,255,0.08)'; g.fillRect(0,0,4,32); }
-  if(opts.mortar){ g.strokeStyle='rgba(255,255,255,0.55)'; g.lineWidth=2;
-    for(let y=8;y<32;y+=8){ g.beginPath(); g.moveTo(0,y); g.lineTo(32,y); g.stroke(); }
-    for(let y=0;y<32;y+=8){ const off=(y/8)%2?8:0; for(let x=off;x<32;x+=16){ g.beginPath(); g.moveTo(x,y); g.lineTo(x,y+8); g.stroke(); } } }
-  if(opts.frame){ g.strokeStyle='rgba(255,255,255,0.9)'; g.lineWidth=3; g.strokeRect(1,1,30,30);
-    g.fillStyle='rgba(255,255,255,0.18)'; g.beginPath(); g.moveTo(4,28); g.lineTo(12,4); g.lineTo(18,4); g.lineTo(10,28); g.fill(); }
-  if(opts.waves){ g.fillStyle='rgba(255,255,255,0.22)'; for(let y=4;y<32;y+=8) for(let x=0;x<32;x+=4) g.fillRect(x+((y/8)%2)*2,y,3,1); }
-  const t=new THREE.CanvasTexture(c); t.magFilter=THREE.NearestFilter; t.minFilter=THREE.NearestFilter; return t;
-}
-
 /* ---------- three globals ---------- */
 let camera, scene, renderer, controls, raycaster, sunLight, moonLight, hemi, ambLight, moonMesh, sunMesh, sunGlow, stars, cloudsMesh, cloudsMesh2, blockOutline, torchLight;
 let skyDome=null, skyU=null;
 let chunkMeshes, mobGroup, pickupGroup, particleGroup, remoteGroup;
 let waterMats=[]; // animated water/glass materials
-const CHUNK=16, SEA=4, MAXH=22;
+const {CHUNK, Y0, Y1, YS, AIR}=VoxelMesher;
+const SEA=4, MAXH=22;
 const chunks=new Map();
 const overrides=new Map(); // "wx,wy,wz" -> type|null
-const materials=[]; // per block type (single material w/ texture; grass uses side tex)
-const boxGeo=new THREE.BoxGeometry(1,1,1);
+const materials=[]; // per block type: the CanvasTexture for pickups / atlas tiles
 const pickupGeo=new THREE.BoxGeometry(0.35,0.35,0.35);
-/* Baked directional face shading — cheap "GI base": tops bright, sides mid, bottom dark.
+/* Baked directional face shading for the pickup cube — cheap "GI base": tops
+   bright, sides mid, bottom dark.
    BoxGeometry vertex order: +x(0-3), -x(4-7), +y(8-11), -y(12-15), +z(16-19), -z(20-23).
-   Multiplies with the texture (materials use vertexColors) at zero runtime cost. */
+   Multiplies with the texture (materials use vertexColors) at zero runtime cost.
+   Terrain no longer needs this — the mesher computes real skylight and ambient
+   occlusion per vertex. */
 function paintFaceShading(geo, shades){
   const n=geo.attributes.position.count, col=new Float32Array(n*3);
   for(let f=0;f<6;f++){ const s=shades[f];
     for(let v=0;v<4;v++){ const i=f*4+v; col[i*3]=s; col[i*3+1]=s; col[i*3+2]=s; } }
   geo.setAttribute('color', new THREE.BufferAttribute(col,3));
 }
-paintFaceShading(boxGeo, [0.82,0.82,1.0,0.5,0.7,0.7]);
 paintFaceShading(pickupGeo, [0.85,0.85,1.0,0.55,0.75,0.75]);
-const _aoCol=new THREE.Color(); // reused for per-instance AO tint
 const glowLights=[]; // pooled point lights for nearby glowstone
 const glowSet=new Set(); // "x,y,z" of placed glowstone blocks
 const cloudMats=[]; // cloud materials (tinted by time of day)
@@ -165,6 +144,19 @@ const GRAV=30, JUMP=12, SPEED=4.4, FLY_SPEED=9, RADIUS=0.42, HEIGHT=1.7, REACH=7
 
 /* ---------- persistence ---------- */
 const SAVE_KEY='voxel-verse-v2-save';
+/* The meshing ceiling must cover every saved build, or a tall tower would be
+   loaded into the world but never drawn. Called after overrides change wholesale
+   (loading a save, starting a new world). */
+function recalcTopY(){
+  let hi=MAXH+8;
+  for(const k of overrides.keys()){
+    // keys are "x,y,z" — y is the middle field. Reading the last field (z) here
+    // silently produced the wrong ceiling and made tall builds invisible.
+    const y=+k.slice(k.indexOf(',')+1, k.lastIndexOf(','));
+    if(y>hi) hi=y;
+  }
+  topYCached=Math.min(Y1,hi+1);
+}
 function saveGame(){
   try{
     const ov={}; overrides.forEach((v,k)=>{ ov[k]=v; });
@@ -181,46 +173,220 @@ function loadGame(){
     if(s.mode){ Settings.mode=s.mode; const om=$('opt-mode'); if(om) om.value=s.mode; }
     if(s.diff){ Settings.difficulty=s.diff; const od=$('opt-diff'); if(od) od.value=s.diff; }
     if(Array.isArray(s.hb)&&s.hb.length===9&&s.hb.every(b=>BLOCK_DEF[b])) State.hotbar=[...s.hb];
+    recalcTopY();
     return s;
   }catch(e){ return null; }
 }
 
 /* ---------- world gen ---------- */
+/* ---------- terrain & biomes ----------
+
+   Three low-frequency noise fields describe the climate; everything else derives
+   from them. They are sampled at very low frequency (one octave every ~250
+   blocks for temperature, ~180 for humidity) so a biome covers a region you can
+   walk across in a minute rather than flickering block to block.
+
+   temperature  cold (snow) .. hot (desert)
+   humidity     dry .. wet
+   elevation    the existing height field, reused
+
+   BIOMES is a table, not a chain of ifs: each entry says what the surface looks
+   like there, and the biome is picked by which cell of the temperature/humidity
+   grid the point falls in. Adding one means adding a row. */
+/* One row per biome. `t` and `h` are its centre in climate space (-1..1) and the
+   cell boundaries are the Voronoi diagram of those centres, so the spacing here
+   *is* the area each biome gets. Entries that sit close together get squeezed;
+   the seven below are spread so none is within ~0.5 of another.
+
+       h=-1        -0.5         0        +0.5        +1
+   t=+1                      badlands   desert
+   t=+0.5                              swamp
+   t= 0                plains             forest
+   t=-0.5        taiga
+   t=-1   snow
+
+   Adding a biome means adding a row here — nothing else in the generator needs
+   to know about it. */
+const BIOMES=[
+  {id:'snow',     t:-1.00,h:-0.10,top:BLOCK.SNOW,  fill:BLOCK.DIRT, trees:0.00},
+  {id:'taiga',    t:-0.55,h: 0.35,top:BLOCK.GRASS, fill:BLOCK.DIRT, trees:0.40},
+  {id:'plains',   t: 0.00,h:-0.20,top:BLOCK.GRASS, fill:BLOCK.DIRT, trees:0.04},
+  {id:'forest',   t: 0.10,h: 0.95,top:BLOCK.GRASS, fill:BLOCK.DIRT, trees:0.70},
+  {id:'swamp',    t: 0.85,h: 0.45,top:BLOCK.GRASS, fill:BLOCK.DIRT, trees:0.45},
+  {id:'desert',   t: 0.75,h:-0.85,top:BLOCK.SAND,  fill:BLOCK.SAND, trees:0.00},
+  {id:'badlands', t:-0.25,h: 0.95,top:BLOCK.SAND,  fill:BLOCK.STONE,trees:0.00},
+];
+/* Climate in -1..1 for both axes.
+
+   Two things this has to get right, both learned the hard way:
+
+   1. Perlin noise only spans roughly +/-0.5 in practice, so sampling it raw left
+      every table entry at |0.8| or beyond permanently unreachable and 80% of the
+      world came out as plains. CLIMATE_GAIN stretches the field to fill -1..1.
+   2. Frequencies matter, in both directions. At 0.0072 the biomes came out as
+      confetti — a dozen regions per 100 blocks, so you were never more than a few
+      steps inside one. Halving that roughly doubles the region size and the
+      result reads as actual geography you can walk across.
+
+   The two fields use different frequencies and a large offset so they are not
+   correlated — if temperature and humidity varied together you would only ever
+   see the diagonal pairs (snow-forest, desert-plains) and never the corners. */
+const CLIMATE_GAIN=2.4;
+/* Climate is memoised per column.
+
+   This is not a micro-optimisation. heightAt() needs the biome (to flatten
+   swamps) and the chunk generator calls biomeAt() again for the same column, and
+   the mesher samples every neighbouring cell of every face — so without a cache
+   the same two noise fields get evaluated several thousand times per chunk.
+   One-entry cache keyed on (x,z): terrain generation walks columns in order, so
+   the hit rate is very high, and a stale entry can never be observed because the
+   key includes both coordinates. */
+let _climX=NaN, _climZ=NaN, _clim=null;
+function climate(wx,wz){
+  if(wx===_climX && wz===_climZ) return _clim;
+  _climX=wx; _climZ=wz;
+  _clim={
+    t:perlin.noise(wx*0.0026, wz*0.0026, 0)*CLIMATE_GAIN,
+    h:perlin.noise(wx*0.0034+900, wz*0.0034+900, 0)*CLIMATE_GAIN,
+  };
+  return _clim;
+}
+let _bioX=NaN, _bioZ=NaN, _bio=null;
+/* Pick the biome whose climate cell this point is nearest to.
+
+   Nearest-neighbour in a 2D climate space gives soft, irregular borders for
+   free — the Voronoi cells of scattered points are polygons, not rectangles.
+   Cached per column for the same reason as climate() above. */
+function biomeAt(wx,wz){
+  if(wx===_bioX && wz===_bioZ) return _bio;
+  _bioX=wx; _bioZ=wz;
+  const {t,h}=climate(wx,wz);
+  let best=BIOMES[0], bestD=Infinity;
+  for(const b of BIOMES){
+    const dt=b.t-t, dh=b.h-h, d=dt*dt+dh*dh;
+    if(d<bestD){ bestD=d; best=b; }
+  }
+  _bio=best;
+  return best;
+}
+/* Height: the original two-octave field, plus a mountain mask. Kept exactly as
+   it was so existing terrain and saved worlds still line up — only the *surface*
+   changes with the biome. */
 function heightAt(wx,wz){
   const s1=perlin.noise(wx*0.028, wz*0.028, 0);
   const s2=perlin.noise(wx*0.09+100, wz*0.09+100, 0)*0.35;
   const m=perlin.noise(wx*0.008+500, wz*0.008+500, 0); // mountain mask
   let h=Math.floor((s1+1)*0.5*14 + (s2+1)*0.5*4 + Math.max(0,m)*10);
+  // swamps sit barely above the waterline so they read as marshy
+  if(biomeAt(wx,wz).id==='swamp') h=Math.max(SEA+1, Math.min(h, SEA+2));
   return clamp(h, 1, MAXH);
 }
 function worldKey(x,y,z){ return `${x},${y},${z}`; }
 function getOverride(x,y,z){ const k=worldKey(x,y,z); return overrides.has(k)?overrides.get(k):undefined; } // undefined = no override
 function rawBlock(x,y,z){
+  if(y<Y0||y>Y1) return null;
   const ov=getOverride(x,y,z); if(ov!==undefined) return ov; // may be null
   const h=heightAt(x,z);
   if(y===-5) return BLOCK.BEDROCK;
   if(y<-5) return null;
   if(y<=h){
-    if(y===h){ if(y<=SEA+1) return BLOCK.SAND; if(y>=16) return BLOCK.SNOW; return BLOCK.GRASS; }
-    if(y>h-4) return BLOCK.DIRT; return BLOCK.STONE;
+    const b=biomeAt(x,z);
+    if(y===h){
+      // beach where the land meets the sea, whatever the biome wants
+      if(y<=SEA+1) return BLOCK.SAND;
+      // bare rock on the peaks
+      if(y>=19) return BLOCK.STONE;
+      return b.top;
+    }
+    if(y>h-4) return b.fill;
+    return BLOCK.STONE;
   }
   if(y<=SEA) return BLOCK.WATER;
   return null;
 }
+/* Player edits live in one flat Uint8Array: 1-based block ids, 0 = air. Reading
+   a block is two array lookups instead of a Map lookup plus a string key build,
+   which matters because the mesher samples the neighbourhood of every face.
+
+   Generated terrain is *not* stored here — that stays in the per-chunk Maps, so
+   this array only has to be big enough to cover the buildable area the player
+   can actually reach. WX x WZ x YS bytes: 512 x 512 x 64 = 16 MB. */
+const WX=512, WZ=512, WXH=WX>>1, WZH=WZ>>1;
+const WORLD=new Uint8Array(WX*WZ*YS);
+const wIdx=(x,z,y)=>(x+WXH)*WZ*YS+(z+WZH)*YS+(y-Y0);
+function inWorld(x,y,z){ return x>=-WXH&&x<WXH&&z>=-WZH&&z<WZH&&y>=Y0&&y<=Y1; }
+
+/* ---------- the one coordinate convention ----------
+
+   A block occupies the unit cube [wx, wx+1] x [wy, wy+1] x [wz, wz+1]. Its
+   centre is at wx+0.5. This is what VoxelMesher emits and what
+   VoxelMesher.raycast returns, so it is the convention everything else must use.
+
+   It used to be the opposite: the old InstancedMesh renderer put a unit cube
+   centred on the integer, and getBlock/collide/outline all used Math.round to
+   match. Switching the mesher without switching them left every one of those
+   reading half a block off — the highlight box sat sunk into the terrain and the
+   player was not standing on the surface they looked like they were on.
+
+   So: use `cell()` to turn a world position into a block coordinate (floor), and
+   `cellCentre()` to turn a block coordinate into the position to draw or place
+   something. Math.round is wrong in both directions and must not appear in this
+   layer again. */
+const cell=(v)=>Math.floor(v);
+const cellCentre=(v)=>v+0.5;
+/* Deterministic 0..1 hash of a 2D integer coordinate. Used for feature placement
+   (trees, flowers) so that regenerating a chunk produces the same world — the
+   previous Math.random() roll meant walking away and back reshuffled the
+   scenery. */
+function hashCoord(x,z){
+  let h=(Math.imul(x,374761393)+Math.imul(z,668265263))|0;
+  h=Math.imul(h^(h>>>13),1274126177);
+  h^=h>>>16;
+  return (h>>>0)/4294967296;
+}
+/* Eye height for standing on top of the block whose topmost solid cell is `h`.
+   The body occupies [pos.y - HEIGHT, pos.y], so resting on block h means its
+   floor is exactly h+1 and the eye sits one body-height above that.
+
+   These spawn sites used to hardcode `h + 3`, which happened to clear a 1.7-tall
+   body under the old centred-cube convention (top face at h+0.5) and was always
+   a little too high. Under the corner convention the top face is at h+1, so the
+   correct value is h + 1 + HEIGHT. Deriving it means it stays right if HEIGHT
+   ever changes. */
+const eyeAbove=(h)=>h+1+HEIGHT;
+
+/* Returns the game's own 0-based block id, or null for air. Order matters: an
+   explicit player edit wins, then the live chunk, then fresh terrain. */
 function getBlock(x,y,z){
-  const ix=Math.round(x),iy=Math.round(y),iz=Math.round(z);
-  const cx=Math.floor(ix/CHUNK),cz=Math.floor(iz/CHUNK);
+  const ix=cell(x),iy=cell(y),iz=cell(z);
+  if(inWorld(ix,iy,iz)){
+    const v=WORLD[wIdx(ix,iz,iy)];
+    if(v) return v-1;
+  }
+  const cx=Math.floor(ix/CHUNK), cz=Math.floor(iz/CHUNK);
   const ch=chunks.get(`${cx},${cz}`);
-  if(ch){ const rx=ix-cx*CHUNK, rz=iz-cz*CHUNK; const v=ch.blocks.get(`${rx},${iy},${rz}`); if(v!==undefined||ch.generated) return v??null; }
+  if(ch&&ch.built){
+    const v=ch.blocks.get(`${ix-cx*CHUNK},${iy},${iz-cz*CHUNK}`);
+    if(v!==undefined) return v??null;
+  }
   return rawBlock(ix,iy,iz);
 }
 function setBlock(x,y,z,type,opts={}){
-  const ix=Math.round(x),iy=Math.round(y),iz=Math.round(z);
+  const ix=cell(x),iy=cell(y),iz=cell(z);
+  // Out-of-range edits are dropped rather than clamped. The mesher only stores
+  // y in [Y0,Y1], so writing outside it would leave an edit that reads back but
+  // can never be seen — and the packed world index would alias another cell.
+  if(!inWorld(ix,iy,iz)) return false;
+  // A build above the current meshing ceiling has to raise it, or the block
+  // would be stored and read back but never drawn.
+  if(iy>topYCached) topYCached=Math.min(Y1,iy+1);
   overrides.set(worldKey(ix,iy,iz), type);
   trackGlow(ix,iy,iz,type);
+  WORLD[wIdx(ix,iz,iy)] = type===null?0:type+1;
   const cx=Math.floor(ix/CHUNK),cz=Math.floor(iz/CHUNK);
   const ch=chunks.get(`${cx},${cz}`);
-  if(ch){ const rx=ix-cx*CHUNK, rz=iz-cz*CHUNK;
+  if(ch){
+    const rx=ix-cx*CHUNK, rz=iz-cz*CHUNK;
     if(type===null) ch.blocks.delete(`${rx},${iy},${rz}`); else ch.blocks.set(`${rx},${iy},${rz}`,type);
     ch.build();
     // rebuild neighbours at borders
@@ -232,30 +398,115 @@ function setBlock(x,y,z,type,opts={}){
   if(!opts.silent){ AudioSys.place(); spawnBreakParticles(ix,iy,iz,type??BLOCK.DIRT,6); }
   if(!opts.remote) Net.broadcastBlock(ix,iy,iz,type);
   saveTick=0.4; // debounce-ish
+  return true;
 }
 function isOpaque(t){ return t!==null&&t!==undefined&&BLOCK_DEF[t]?.opaque; }
 
-/* ---------- chunk ---------- */
+/* ---------- block property tables (fed to the mesher) ----------
+   The mesher works in 1-based block ids with 0 meaning air, but BLOCK.GRASS is
+   0 in the game's own table. Every table below is therefore indexed by
+   `blockId + 1`, via the B() helper. Getting this wrong makes grass invisible. */
+const NTYPES=BLOCK_DEF.length;
+const NB=NTYPES+1;                       // slot 0 is air
+const B=id=>id+1;
+const IS_OPAQUE=new Uint8Array(NB);
+const IS_LIQUID=new Uint8Array(NB);
+const ATTENUATION=new Uint8Array(NB);
+for(let i=0;i<NTYPES;i++){
+  IS_OPAQUE[B(i)]=BLOCK_DEF[i].opaque?1:0;
+  IS_LIQUID[B(i)]=BLOCK_DEF[i].liquid?1:0;
+  ATTENUATION[B(i)]=BLOCK_DEF[i].liquid?2:(BLOCK_DEF[i].name==='Leaves'?1:0);
+}
+/* Which material a block renders with. Grouping every block that can share a
+   material is what turns a chunk into one or two draw calls instead of one per
+   block type. */
+const MAT_SOLID=0, MAT_GLOW=1, MAT_GLASS=2, MAT_LEAVES=3, MAT_WATER=4, MAT_COUNT=5;
+const MAT_OF=new Uint8Array(NB);
+for(let i=0;i<NTYPES;i++){
+  MAT_OF[B(i)] = i===BLOCK.WATER?MAT_WATER
+    : i===BLOCK.GLASS?MAT_GLASS
+    : i===BLOCK.LEAVES?MAT_LEAVES
+    : i===BLOCK.GLOW?MAT_GLOW
+    : MAT_SOLID;
+}
+/* Texture atlas: VoxelTextures paints one 32px tile per material and hands back
+   the finished buffer. ATLAS_CELL[id*6 + face] says which tile a given face uses;
+   -1 means "use the raw 0..1 uv", which is what water needs since it scrolls its
+   own map offset.
+
+   Cells are per *face*, not per block: grass needs a grass top and a
+   dirt-with-fringe side, logs need rings on the ends and bark on the sides.
+   VoxelTextures.PER_FACE carries that table. */
+const ATLAS_COLS=VoxelTextures.COLS, ATLAS_ROWS=VoxelTextures.ROWS;
+const ATLAS_CELL=new Int8Array(NB*6).fill(-1);
+/* Block name -> the tile it uses on every face. Blocks with distinct top and
+   side art are handled by PER_FACE instead. Keyed by name, not by block id, so
+   reordering BLOCK can't silently paint the wrong material. */
+const TILE_FOR={Dirt:'dirt', Stone:'stone', Sand:'sand', Leaves:'leaves', Snow:'snow',
+  Bedrock:'bedrock', Planks:'planks', Glass:'glass', Brick:'brick', Glow:'glow',
+  Obsidian:'obsidian'};
+for(let i=0;i<NTYPES;i++){
+  const name=BLOCK_DEF[i].name;
+  const per=VoxelTextures.PER_FACE[name];
+  const base=TILE_FOR[name];
+  /* Liquids get cell -1: they own a standalone repeating texture whose uv
+     offset is scrolled every frame, and -1 is the mesher's signal to pass the
+     raw 0..1 uv through untouched. Pointing water at an atlas cell would look
+     fine right up until it started scrolling, at which point it would drag every
+     neighbouring tile along with it. */
+  if(BLOCK_DEF[i].liquid){ for(let f=0;f<6;f++) ATLAS_CELL[B(i)*6+f]=-1; continue; }
+  for(let f=0;f<6;f++){
+    /* A block with no entry at all is a bug — fall back to cell 0 rather than
+       throwing, but the smoke test asserts every block has a real tile so this
+       can never be the thing you actually see. */
+    const tileName=(per && per[f]) || base;
+    ATLAS_CELL[B(i)*6+f]= (tileName!==undefined && VoxelTextures.CELL[tileName]!==undefined)
+      ? VoxelTextures.CELL[tileName] : 0;
+  }
+}
+
+/* ---------- chunk ----------
+   A chunk owns a sparse Map of edited/generated blocks and, once built, up to
+   MAT_COUNT meshes — one per material, not one per block type. Faces are
+   culled and merged by VoxelMesher, so a chunk that used to push ~600 cube
+   instances now pushes a couple of thousand triangles in one or two draw calls. */
 class Chunk{
-  constructor(cx,cz){ this.cx=cx; this.cz=cz; this.blocks=new Map(); this.meshes=[]; this.mobs=[]; this.generated=false; this.generate(); this.generated=true; this.build(); }
+  constructor(cx,cz){ this.cx=cx; this.cz=cz; this.blocks=new Map(); this.meshes=[]; this.mobs=[]; this.generated=false; this.built=false; this.generate(); this.generated=true; }
   generate(){
     for(let x=0;x<CHUNK;x++) for(let z=0;z<CHUNK;z++){
       const wx=this.cx*CHUNK+x, wz=this.cz*CHUNK+z;
       const h=heightAt(wx,wz);
-      for(let y=-5;y<=Math.max(h,SEA);y++){
+      const biome=biomeAt(wx,wz);
+      // Scan to the terrain height *or* the meshing ceiling, whichever is
+      // higher. The old loop stopped at max(h, SEA), so any player edit above
+      // the terrain was silently dropped the moment the chunk was regenerated —
+      // a tower you built would vanish when you walked far enough away.
+      for(let y=-5;y<=Math.max(h,SEA,topY());y++){
         let t=null;
         if(y===-5) t=BLOCK.BEDROCK;
-        else if(y<=h){ if(y===h){ t = y<=SEA+1?BLOCK.SAND:(y>=16?BLOCK.SNOW:BLOCK.GRASS); } else if(y>h-4) t=BLOCK.DIRT; else t=BLOCK.STONE; }
+        else if(y<=h){
+          const b=biome;
+          if(y===h) t = y<=SEA+1?BLOCK.SAND:(y>=19?BLOCK.STONE:b.top);
+          else if(y>h-4) t=b.fill;
+          else t=BLOCK.STONE;
+        }
         else if(y<=SEA) t=BLOCK.WATER;
         const ov=getOverride(wx,y,wz); if(ov!==undefined) t=ov;
         if(t!==null&&t!==undefined) this.blocks.set(`${x},${y},${z}`,t);
       }
-      // trees + flowers
+      /* Trees. Density comes from the biome, so a forest is dense and a desert
+         has none. The roll is a hash of the world position rather than
+         Math.random: chunk generation has to be reproducible, or walking away
+         and back reshuffles every tree in view. */
       const surfH=h; const topOv=getOverride(wx,surfH,wz);
       const top=(topOv!==undefined?topOv:this.blocks.get(`${x},${surfH},${z}`));
-      if(top===BLOCK.GRASS && getOverride(wx,surfH+1,wz)===undefined){
-        const r=Math.random();
-        if(r>0.985 && Math.abs(wx)+Math.abs(wz)>6){ const th=3+randi(0,2);
+      if(top===BLOCK.GRASS && getOverride(wx,surfH+1,wz)===undefined
+         && biome.trees>0 && Math.abs(wx)+Math.abs(wz)>6){
+        // coarser cells than the terrain: one candidate per 4x4, so trees clump
+        const gx=Math.floor(wx/4), gz=Math.floor(wz/4);
+        const roll=hashCoord(gx,gz);
+        if(roll < biome.trees*0.25){
+          const th=3+Math.floor(hashCoord(gx+91,gz+17)*3);
           for(let i=1;i<=th;i++) this.blocks.set(`${x},${surfH+i},${z}`,BLOCK.WOOD);
           for(let dx=-2;dx<=2;dx++) for(let dz=-2;dz<=2;dz++) for(let dy=0;dy<=1;dy++){
             if(Math.abs(dx)===2&&Math.abs(dz)===2&&dy===1) continue;
@@ -268,37 +519,112 @@ class Chunk{
     }
   }
   build(){
-    this.meshes.forEach(m=>{ chunkMeshes.remove(m); m.dispose&&m.dispose(); }); this.meshes=[];
-    const byType=BLOCK_DEF.map(()=>[]);
-    for(const [key,t] of this.blocks){
-      const [sx,sy,sz]=key.split(',').map(Number);
-      const wx=this.cx*CHUNK+sx, wy=sy, wz=this.cz*CHUNK+sz;
-      let shade=1;
-      // cull fully-hidden opaque blocks (reuse neighbour samples for cheap AO)
-      if(isOpaque(t)){
-        const xp=isOpaque(rawBlock(wx+1,wy,wz)), xn=isOpaque(rawBlock(wx-1,wy,wz));
-        const yp=isOpaque(rawBlock(wx,wy+1,wz)), yn=isOpaque(rawBlock(wx,wy-1,wz));
-        const zp=isOpaque(rawBlock(wx,wy,wz+1)), zn=isOpaque(rawBlock(wx,wy,wz-1));
-        if(xp&&xn&&yp&&yn&&zp&&zn) continue;
-        // fake sky light + bounce: covered blocks go dark, crevices get graded
-        shade = yp ? 0.55 : 1.0;
-        shade -= ((xp?1:0)+(xn?1:0)+(zp?1:0)+(zn?1:0))*0.06;
-        if(wy<SEA) shade-=0.08; // underwater murk
-        shade=Math.max(0.35,shade);
-      }
-      byType[t].push([wx,wy,wz,shade]);
-    }
-    byType.forEach((list,ti)=>{
-      if(!list.length) return;
-      const mesh=new THREE.InstancedMesh(boxGeo, materials[ti], list.length);
-      list.forEach((p,i)=>{ dummy.position.set(p[0],p[1],p[2]); dummy.rotation.set(0,0,0); dummy.updateMatrix(); mesh.setMatrixAt(i,dummy.matrix);
-        if(mesh.setColorAt) mesh.setColorAt(i, _aoCol.setScalar(p[3])); });
-      if(mesh.instanceColor) mesh.instanceColor.needsUpdate=true; mesh.castShadow=ti!==BLOCK.WATER; mesh.receiveShadow=true;
-      mesh.userData.blockType=ti;
+    this.meshes.forEach(m=>{ chunkMeshes.remove(m); m.geometry.dispose(); }); this.meshes=[];
+    if(!this.blocks.size){ this.built=true; return; }
+    const ox=this.cx*CHUNK, oz=this.cz*CHUNK;
+    // Copy this chunk plus a 1-cell ring so ambient occlusion and skylight have
+    // neighbours to sample. We stop at `topY` rather than the top of the world:
+    // terrain tops out around MAXH and player builds only raise that when they
+    // actually happen, so the empty air above is skipped instead of costing a
+    // hash-map probe per cell.
+    const s=mesherScratch;
+    VoxelMesher.fillPadded(s, ox, oz, sampleBlock, topY());
+    VoxelMesher.computeLight(s, IS_OPAQUE, ATTENUATION);
+    const res=VoxelMesher.mesh(s, MESH_CFG);
+
+    for(let m=0;m<MAT_COUNT;m++){
+      const b=res.buckets[m];
+      if(!b.quads) continue;
+      const geo=new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(b.pos),3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(b.nrm),3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(b.col),3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(atlasUV(b.uv, b.cell),2));
+      geo.setIndex(b.quads*4>65535 ? new THREE.Uint32BufferAttribute(b.idx,1) : new THREE.Uint16BufferAttribute(b.idx,1));
+      geo.computeBoundingSphere();
+      const mesh=new THREE.Mesh(geo, bucketMaterials[m]);
+      mesh.castShadow = m!==MAT_WATER && m!==MAT_GLASS;
+      mesh.receiveShadow = true;
+      mesh.renderOrder = m===MAT_WATER ? 2 : m===MAT_GLASS ? 1 : 0;
       this.meshes.push(mesh); chunkMeshes.add(mesh);
-    });
+    }
+    this.tris=res.tris;
+    this.built=true;
   }
-  dispose(){ this.meshes.forEach(m=>{chunkMeshes.remove(m); m.dispose();}); this.meshes=[]; this.mobs.forEach(m=>m.dispose()); this.mobs=[]; this.blocks.clear(); }
+  dispose(){ this.meshes.forEach(m=>{chunkMeshes.remove(m); m.geometry.dispose();}); this.meshes=[]; this.mobs.forEach(m=>m.dispose()); this.mobs=[]; this.blocks.clear(); this.built=false; }
+}
+/* Meshing config handed to VoxelMesher — flat typed arrays indexed by block id
+   so the hot loop never touches an object or a string. */
+const MESH_CFG={ opaque:IS_OPAQUE, liquid:IS_LIQUID, bucket:MAT_OF, cell:ATLAS_CELL,
+  buckets:MAT_COUNT, water:B(BLOCK.WATER), floor:B(BLOCK.BEDROCK), sea:SEA,
+  lightMin:0.30, lightRange:0.70 };
+/* Pickups are single little cubes, so one shared geometry plus one material per
+   block type is enough — they never merge into a chunk buffer. */
+function buildPickupMaterials(){
+  BLOCK_DEF.forEach((d,i)=>{
+    const m=new THREE.MeshLambertMaterial({map:materials[i], vertexColors:true});
+    if(d.liquid) m.color.setHex(0xbcd8ff);
+    if(d.name==='Glow'){ m.emissive=new THREE.Color(0xcc8a1a); m.emissiveIntensity=0.9; }
+    pickupMats[i]=m;
+  });
+}
+const mesherScratch=VoxelMesher.createScratch();
+const bucketMaterials=[]; // one material per MAT_* bucket, filled in init()
+/* The atlas canvas and its texture are hoisted out of init() so a headless test
+   can read the actual painted pixels. Getting the atlas layout wrong makes every
+   solid face sample blank canvas and the world render black, which is invisible
+   to any assertion that only checks uvs are within 0..1. */
+let atlasCanvas=null, atlasTex=null;
+/* Highest world y worth copying into a padded meshing volume. Starts at the
+   tallest thing the generator can produce (MAXH plus a tree) and grows when the
+   player builds higher, so a normal world skips ~half its empty sky. */
+let topYCached=-1;
+function topY(){ return topYCached<0 ? (topYCached=MAXH+8) : topYCached; }
+/* Sample any world block for the mesher's padded copy: the world array first,
+   then the live chunk map (so freshly generated chunks win), then terrain.
+   Returns the 1-based mesher id (0 = air), matching WORLD's own convention. */
+function sampleBlock(x,y,z){
+  if(inWorld(x,y,z)){
+    const v=WORLD[wIdx(x,z,y)];
+    if(v) return v;
+  }
+  const cx=Math.floor(x/CHUNK), cz=Math.floor(z/CHUNK);
+  const ch=chunks.get(`${cx},${cz}`);
+  if(ch){
+    const rx=x-cx*CHUNK, rz=z-cz*CHUNK;
+    const v=ch.blocks.get(`${rx},${y},${rz}`);
+    if(v!==undefined&&v!==null) return B(v);
+  }
+  const t=rawBlock(x,y,z);
+  return t===null||t===undefined?AIR:B(t);
+}
+/* Expand cell-local 0..1 uvs into atlas coordinates. A cell at (col,row) starts
+   at (col/16, row/16) and is 1/16 wide; -1 cells keep the raw uv so water can
+   scroll its own map offset.
+
+   The V axis needs care. Tiles are painted into the canvas with row 0 at the
+   TOP, but `CanvasTexture` inherits `flipY = true` from `Texture`, which makes
+   WebGL flip the image on upload so that canvas row 0 ends up at v = 1. So the
+   painted row `r` lives at texture v in [1-(r+1)/ROWS, 1-r/ROWS], not [r/ROWS,
+   (r+1)/ROWS]. Without the flip every block samples the wrong strip of the
+   atlas and the whole world renders black. `atlasTex.flipY = false` in init()
+   is the alternative fix, but then each tile is individually upside down
+   (grass on the underside), so flipping the index here is correct.
+
+   If you ever change this, verify against a real GL upload — the smoke test's
+   stub texture is a no-op and cannot catch a sign error here. */
+let _uvOut=new Float32Array(0);
+function atlasUV(uv, cell){
+  if(_uvOut.length<uv.length) _uvOut=new Float32Array(uv.length);
+  const n=uv.length/2;
+  for(let i=0;i<n;i++){
+    const c=cell[i];
+    if(c<0){ _uvOut[i*2]=uv[i*2]; _uvOut[i*2+1]=uv[i*2+1]; continue; }
+    const cx=c%ATLAS_COLS, cy=(c/ATLAS_COLS)|0;
+    _uvOut[i*2]=(cx+uv[i*2])/ATLAS_COLS;
+    _uvOut[i*2+1]=(ATLAS_ROWS-1-cy+uv[i*2+1])/ATLAS_ROWS;
+  }
+  return _uvOut.slice(0, uv.length);
 }
 
 /* Line-of-sight through voxels: stepped sample, opaque blocks stop sight.
@@ -325,7 +651,14 @@ const MOBDEF={
 };
 const mobs=[];
 class Mob{
-  constructor(x,y,z,key){ this.key=key; this.def=MOBDEF[key];
+  constructor(x,y,z,key){
+    // An unknown species must not reach `this.def.hp` — that throws and takes the
+    // whole frame with it. Mark the mob invalid instead and let the spawner
+    // check `valid`; `return` from a constructor yields `this`, not undefined.
+    const def=MOBDEF[key];
+    this.valid=!!def;
+    if(!def){ this.key=key; this.dead=true; return; }
+    this.key=key; this.def=def;
     this.pos=new THREE.Vector3(x,y,z); this.vel=new THREE.Vector3();
     this.hp=this.def.hp; this.maxHp=this.def.hp;
     this.dir=new THREE.Vector3(rand(-1,1),0,rand(-1,1)).normalize();
@@ -399,10 +732,12 @@ class Mob{
     this.body.position.y=this.def.scale/2+Math.abs(Math.sin(performance.now()*0.01))*(this.moving?0.12:0.02);
     // blob shadow: snap to ground below, fade with height/distance
     if(this.blob){
-      const bx=Math.round(this.pos.x), bz=Math.round(this.pos.z);
+      const bx=cell(this.pos.x), bz=cell(this.pos.z);
       let gy=null;
-      for(let y=Math.floor(this.pos.y);y>this.pos.y-8;y--){ const b=getBlock(bx,y,bz);
-        if(b!==null&&b!==undefined&&!BLOCK_DEF[b].liquid){ gy=y+1.03; break; } }
+      for(let y=cell(this.pos.y);y>this.pos.y-8;y--){ const b=getBlock(bx,y,bz);
+        // block y occupies [y, y+1], so its top face is at y+1 (was y+0.5 under
+        // the old centred-cube convention, which floated the shadow in the air)
+        if(b!==null&&b!==undefined&&!BLOCK_DEF[b].liquid){ gy=y+1.02; break; } }
       const dCam=this.pos.distanceTo(camera.position);
       if(gy===null||dCam>48){ this.blob.visible=false; }
       else{
@@ -417,8 +752,9 @@ class Mob{
 
 /* ---------- pickups & particles ---------- */
 const pickups=[];
+const pickupMats=[]; // per block type, built in init()
 function spawnPickup(x,y,z,block,food){
-  const m=new THREE.Mesh(pickupGeo, materials[block]||materials[0]);
+  const m=new THREE.Mesh(pickupGeo, pickupMats[block]||pickupMats[0]);
   m.position.set(x,y,z); scene.add(m); pickupGroup.add(m);
   pickups.push({mesh:m,block,food,vel:new THREE.Vector3(rand(-2,2),5,rand(-2,2)),life:60});
 }
@@ -450,7 +786,9 @@ function spawnBreakParticles(x,y,z,block,n=10){
   const count = Settings.pixelRatio<1.2 ? Math.ceil(n*0.6) : n; // fewer particles on low quality
   for(let i=0;i<count;i++){
     const m=new THREE.Mesh(particleGeo, mat);
-    m.position.set(x+rand(-0.3,0.3),y+rand(-0.3,0.3),z+rand(-0.3,0.3));
+    // x,y,z are cell coordinates; scatter around the cell's CENTRE so debris
+    // comes off the middle of the block rather than from its corner
+    m.position.set(cellCentre(x)+rand(-0.3,0.3),cellCentre(y)+rand(-0.3,0.3),cellCentre(z)+rand(-0.3,0.3));
     scene.add(m); particleGroup.add(m);
     particles.push({mesh:m,vel:new THREE.Vector3(rand(-3,3),rand(2,6),rand(-3,3)),life:rand(0.4,0.9)});
   }
@@ -463,10 +801,23 @@ function updateParticles(dt){
 }
 
 /* ---------- collision ---------- */
+/* Sweep a body AABB against the blocks it overlaps.
+
+   `pos.y` is the FEET: the body occupies [pos.y - h, pos.y]. `legs` selects
+   whether the lower `step` of that box is solid — walking ignores the shins so
+   you can step over a one-block lip, while vertical motion does not.
+
+   Horizontal bounds are floored, not rounded: a body at x=8.5 with r=0.42 spans
+   8.08..8.92, entirely inside cell 8. Math.round(8.92)=9 would include cell 9 and
+   make the body collide with empty air, so a player walking past a wall would
+   stick to it, and one standing on a surface would be pushed off it.
+
+   The vertical top is treated as exclusive: a body whose feet rest exactly on the
+   top face of block n has maxY = n+1, and must not report a collision with n. */
 function collide(pos,r,h,legs){
   const step=0.5;
   const minY=(pos.y-h)+(legs?0:step), maxY=pos.y;
-  const x0=Math.round(pos.x-r),x1=Math.round(pos.x+r),y0=Math.round(minY),y1=Math.round(maxY),z0=Math.round(pos.z-r),z1=Math.round(pos.z+r);
+  const x0=cell(pos.x-r),x1=cell(pos.x+r),y0=cell(minY),y1=cell(maxY-1e-6),z0=cell(pos.z-r),z1=cell(pos.z+r);
   for(let x=x0;x<=x1;x++) for(let y=y0;y<=y1;y++) for(let z=z0;z<=z1;z++){ const b=getBlock(x,y,z); if(b!==null&&b!==undefined&&!BLOCK_DEF[b].liquid) return true; }
   return false;
 }
@@ -621,9 +972,13 @@ function updateSky(dt){
   // spawn hostiles at night (never in peaceful)
   if(Settings.difficulty!=='peaceful'&&night>0.7&&mobs.length<14&&Math.random()<dt*0.35){
     const a=rand(0,Math.PI*2), r=rand(14,22);
-    const x=Math.round(camera.position.x+Math.cos(a)*r), z=Math.round(camera.position.z+Math.sin(a)*r);
+    const x=cell(camera.position.x+Math.cos(a)*r), z=cell(camera.position.z+Math.sin(a)*r);
+    // y is a cell: the topmost solid cell is h, so the first air cell above it is h+1
     const y=heightAt(x,z)+1;
-    if(getBlock(x,y,z)===null){ mobs.push(new Mob(x+0.5,y,z+0.5, Math.random()<0.6?'zombie':'skeleton')); }
+    if(getBlock(x,y,z)===null){
+      const mob=new Mob(x+0.5,y,z+0.5, Math.random()<0.6?'zombie':'skeleton');
+      if(mob.valid) mobs.push(mob);
+    }
   }
   // despawn far mobs
   for(let i=mobs.length-1;i>=0;i--){ const m=mobs[i]; if(m.dead||m.pos.distanceTo(camera.position)>70){ m.dispose(); mobs.splice(i,1); } }
@@ -949,15 +1304,15 @@ function renderVitals(){
   $('hunger').innerHTML='🍖'.repeat(Math.ceil(State.hunger/2))+'▫️'.repeat(Math.floor((20-State.hunger)/2));
 }
 function drawMinimap(){
-  const c=$('minimap'), g=c.getContext('2d'); const R=8, px=Math.round(camera.position.x), pz=Math.round(camera.position.z);
-  const S=132, cell=S/(2*R+1);
+  const c=$('minimap'), g=c.getContext('2d'); const R=8, px=cell(camera.position.x), pz=cell(camera.position.z);
+  const S=132, cs=S/(2*R+1);
   g.fillStyle='#06121f'; g.fillRect(0,0,S,S);
   for(let dx=-R;dx<=R;dx++) for(let dz=-R;dz<=R;dz++){
     const x=px+dx, z=pz+dz; let col='#0a1520';
     // scan down from a clamped top: most columns resolve in 2-4 steps
     for(let y=Math.min(MAXH+6,Math.ceil(camera.position.y)+8);y>=-5;y--){ const b=getBlock(x,y,z); if(b===BLOCK.WATER){ col='#3b6df6'; break; } if(b!==null&&b!==undefined){ col='#'+BLOCK_DEF[b].color.toString(16).padStart(6,'0'); break; } }
     // shade by height for depth
-    g.fillStyle=col; g.fillRect((dx+R)*cell, (dz+R)*cell, cell+0.5, cell+0.5);
+    g.fillStyle=col; g.fillRect((dx+R)*cs, (dz+R)*cs, cs+0.5, cs+0.5);
   }
   // player arrow (rotates with yaw)
   g.save(); g.translate(66,66); g.rotate(-State.yaw||0);
@@ -967,11 +1322,15 @@ function drawMinimap(){
 }
 
 /* ---------- interaction ---------- */
+const _rayDir=new THREE.Vector3();
+/* Pick the block under the crosshair by walking the voxel grid (VoxelMesher.raycast)
+   rather than intersecting every triangle in view. Cost is a handful of array
+   reads instead of a full scene raycast, and it can never miss a block or pick
+   up a stale InstancedMesh matrix. */
 function raycastCenter(maxDist=REACH){
-  raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
-  const hits=raycaster.intersectObjects(chunkMeshes.children);
-  if(hits.length&&hits[0].distance<=maxDist) return hits[0];
-  return null;
+  camera.getWorldDirection(_rayDir);
+  return VoxelMesher.raycast(camera.position.x,camera.position.y,camera.position.z,
+    _rayDir.x,_rayDir.y,_rayDir.z, maxDist, sampleBlock);
 }
 function updateOutline(force=false){
   if(!force && outlineTick>0) return;
@@ -980,19 +1339,21 @@ function updateOutline(force=false){
   const e=new THREE.Euler().setFromQuaternion(camera.quaternion,'YXZ'); State.yaw=e.y;
   const hit=raycastCenter();
   if(hit){
-    const mesh=hit.object; mesh.getMatrixAt(hit.instanceId,dummy.matrix);
-    dummy.matrix.decompose(dummy.position,dummy.quaternion,dummy.scale);
-    blockOutline.visible=true; blockOutline.position.set(Math.round(dummy.position.x),Math.round(dummy.position.y),Math.round(dummy.position.z));
+    /* `hit` is a block *cell*, and the cell's cube spans [n, n+1] with its centre
+       at n+0.5. The old renderer put cubes on the integer, so it could position
+       the outline at hit.x directly; against the mesher that sank the box half a
+       block into the terrain. */
+    blockOutline.visible=true; blockOutline.position.set(cellCentre(hit.x),cellCentre(hit.y),cellCentre(hit.z));
     // subtle pulse on highlight
     const s=1.02+Math.sin(performance.now()*0.008)*0.015; blockOutline.scale.set(s,s,s);
-    const lbl=$('block-highlight-label'); lbl.style.display='block'; lbl.textContent=BLOCK_DEF[mesh.userData.blockType]?.name||'';
+    const lbl=$('block-highlight-label'); lbl.style.display='block'; lbl.textContent=BLOCK_DEF[hit.type-1]?.name||'';
   } else { blockOutline.visible=false; $('block-highlight-label').style.display='none'; }
 }
 function tryBreak(){
   // block raycast FIRST: a mob only wins the click if it's actually in front of the block
   // (old order let mobs steal clicks — and hits — through walls)
   const hit=raycastCenter();
-  const blockDist=hit?hit.distance:Infinity;
+  const blockDist=hit?hit.dist:Infinity;
   raycaster.setFromCamera(new THREE.Vector2(0,0),camera);
   const mh=raycaster.intersectObjects(mobGroup.children,true);
   if(mh.length&&mh[0].distance<blockDist){
@@ -1003,12 +1364,9 @@ function tryBreak(){
     if(target&&target.pos.distanceTo(camera.position)<4.5){ target.hurt(State.creative?100:4, camera.position); if(bot) bot.hurt(0,camera.position); return; }
   }
   if(!hit) return;
-  const mesh=hit.object; mesh.getMatrixAt(hit.instanceId,dummy.matrix);
-  dummy.matrix.decompose(dummy.position,dummy.quaternion,dummy.scale);
-  const bx=Math.round(dummy.position.x),by=Math.round(dummy.position.y),bz=Math.round(dummy.position.z);
-  const b=getBlock(bx,by,bz);
+  const bx=hit.x,by=hit.y,bz=hit.z;
+  const b=hit.type-1;   // raycast reports the 1-based mesher id
   if(b===BLOCK.BEDROCK&&!State.creative){ toast('🪨 Bedrock is unbreakable!'); return; }
-  if(b===null||b===undefined) return;
   AudioSys.break(); spawnBreakParticles(bx,by,bz,b,12);
   setBlock(bx,by,bz,null);
   if(!State.creative&&b!==BLOCK.WATER){ addItem(b,1); if(b===BLOCK.GRASS&&Math.random()<0.12){ heal(2); toast('🍎 You found an apple! +2 HP'); } }
@@ -1016,11 +1374,8 @@ function tryBreak(){
 }
 function tryPlace(){
   const hit=raycastCenter(); if(!hit) return;
-  const mesh=hit.object; mesh.getMatrixAt(hit.instanceId,dummy.matrix);
-  dummy.matrix.decompose(dummy.position,dummy.quaternion,dummy.scale);
-  const bx=Math.round(dummy.position.x),by=Math.round(dummy.position.y),bz=Math.round(dummy.position.z);
-  const n=hit.face?hit.face.normal:new THREE.Vector3(0,1,0);
-  const tx=bx+Math.round(n.x),ty=by+Math.round(n.y),tz=bz+Math.round(n.z);
+  const tx=hit.x+hit.nx, ty=hit.y+hit.ny, tz=hit.z+hit.nz;
+  if(ty<Y0||ty>Y1) return; // out of buildable range
   const p=camera.position;
   if(Math.abs(tx-p.x)<0.9&&Math.abs(tz-p.z)<0.9&&ty<Math.ceil(p.y)&&ty>Math.ceil(p.y)-2.2) return; // don't suffocate
   const block=State.hotbar[State.activeBlock];
@@ -1034,17 +1389,30 @@ function updateChunks(){
   const px=camera.position.x, pz=camera.position.z;
   const ccx=Math.floor(px/CHUNK), ccz=Math.floor(pz/CHUNK);
   const R=Settings.renderDist, active=new Set();
+  // Generate every new chunk first, then build. Meshing samples a 1-cell ring
+  // of neighbours for ambient occlusion and skylight, so building as we go would
+  // light the first chunks against an empty world and leave a bright seam.
+  const fresh=[];
   for(let x=-R;x<=R;x++) for(let z=-R;z<=R;z++){
     if(x*x+z*z>R*R+2) continue;
     const k=`${ccx+x},${ccz+z}`; active.add(k);
-    if(!chunks.has(k)) chunks.set(k,new Chunk(ccx+x,ccz+z));
+    if(!chunks.has(k)){ const c=new Chunk(ccx+x,ccz+z); chunks.set(k,c); fresh.push(c); }
   }
+  for(const c of fresh) c.build();
   for(const [k,c] of chunks){ if(!active.has(k)){ c.dispose(); chunks.delete(k); } }
   // passive mob trickle
   if(mobs.length<10&&Math.random()<0.06){
     const a=rand(0,Math.PI*2), r=rand(8,20);
-    const x=Math.round(px+Math.cos(a)*r), z=Math.round(pz+Math.sin(a)*r), h=heightAt(x,z);
-    if(getBlock(x,h,z)===BLOCK.GRASS&&getBlock(x,h+1,z)===null){ mobs.push(new Mob(x+0.5,h+1,z+0.5, pick(['pig','pig','cow','sheep','chicken'].filter(k=>MOBDEF[k]) .length?pick(['pig','cow','sheep']):'pig'))); }
+    const x=cell(px+Math.cos(a)*r), z=cell(pz+Math.sin(a)*r), h=heightAt(x,z);
+    // NB: pick the animal FIRST, then wrap it. This used to read
+    // `pick(cond ? pick([...]) : 'pig')`, which indexes into the chosen *string*
+    // and hands Mob a single letter — MOBDEF['g'] is undefined and the mob
+    // constructor throws on `this.def.hp`, killing the frame.
+    const animal = pick(['pig','pig','cow','sheep']);
+    if(getBlock(x,h,z)===BLOCK.GRASS && getBlock(x,h+1,z)===null) {
+      const mob=new Mob(x+0.5,h+1,z+0.5, animal);
+      if(mob.valid) mobs.push(mob);
+    }
   }
 }
 
@@ -1080,27 +1448,77 @@ function init(){
   chunkMeshes=new THREE.Group(); mobGroup=new THREE.Group(); pickupGroup=new THREE.Group(); particleGroup=new THREE.Group(); remoteGroup=new THREE.Group();
   scene.add(chunkMeshes); scene.add(mobGroup); scene.add(pickupGroup); scene.add(particleGroup); scene.add(remoteGroup);
 
-  // block materials with richer pixel textures
-  const texOpts=[{top:'#62d862',noise:130}, {noise:130}, {noise:130}, {waves:true,noise:60}, {noise:120}, {rings:true,noise:80}, {noise:140}, {noise:50}, {noise:150}, {noise:60},{frame:true,noise:20},{mortar:true,noise:90},{spark:70,noise:60}, {spark:30,noise:120}];
+  /* Block materials. Every block that can share a material shares one, and all
+     the solid ones share a single atlas texture, so a chunk is one draw call.
+     VoxelTextures paints the whole atlas into one RGBA buffer; we hand that to a
+     canvas purely so three.js can wrap it in a CanvasTexture. */
+  atlasCanvas=document.createElement('canvas');
+  atlasCanvas.width=ATLAS_COLS*VoxelTextures.TILE;
+  atlasCanvas.height=ATLAS_ROWS*VoxelTextures.TILE;
+  const actx=atlasCanvas.getContext('2d');
+  const atlas=VoxelTextures.buildAtlas();
+  actx.putImageData(new ImageData(atlas.data, atlas.size, atlas.size), 0, 0);
+
   BLOCK_DEF.forEach((d,i)=>{
-    const map=makePixelTexture(d.color,texOpts[i]||{});
-    map.wrapS=map.wrapT=THREE.RepeatWrapping;
-    map.encoding=THREE.sRGBEncoding;
-    let m;
-    if(d.name==='Water'){
+    if(d.liquid){
+      /* Water keeps a standalone texture rather than an atlas cell: it scrolls
+         its uv offset every frame, which an atlas cell cannot do without
+         dragging its neighbours along with it. */
+      const wc=document.createElement('canvas');
+      wc.width=wc.height=VoxelTextures.TILE;
+      const wt=VoxelTextures.buildTile('water');
+      wc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(wt.data), VoxelTextures.TILE, VoxelTextures.TILE), 0, 0);
+      const map=new THREE.CanvasTexture(wc);
+      map.wrapS=map.wrapT=THREE.RepeatWrapping;
+      map.magFilter=THREE.NearestFilter; map.minFilter=THREE.NearestFilter;
+      map.generateMipmaps=false;
+      map.encoding=THREE.sRGBEncoding;
       // phong water: sun glints + night visibility via slight emissive
-      m=new THREE.MeshPhongMaterial({map, vertexColors:true, transparent:true, opacity:0.66,
-        shininess:90, specular:new THREE.Color(0x88bbff),
-        emissive:new THREE.Color(0x0a2038), emissiveIntensity:0.35});
-      waterMats.push(m);
-    } else {
-      m=new THREE.MeshLambertMaterial({map, vertexColors:true});
-      if(d.name==='Glass'){ m.transparent=true; m.opacity=0.45; }
-      if(d.name==='Leaves'){ m.transparent=true; m.opacity=0.92; m.alphaTest=0.2; m.side=THREE.DoubleSide; }
-      if(d.name==='Glow'){ m.emissive=new THREE.Color(0xcc8a1a); m.emissiveIntensity=0.9; }
+      waterMats.push(new THREE.MeshPhongMaterial({map, vertexColors:true, transparent:true, opacity:0.66,
+        depthWrite:false, shininess:90, specular:new THREE.Color(0x88bbff),
+        emissive:new THREE.Color(0x0a2038), emissiveIntensity:0.35}));
+      materials.push(map);
+      return;
     }
-    materials.push(m);
+    /* Pickup cubes and the toolbar icons need a standalone texture per block.
+       Use the block's side face — for grass that's the dirt-with-fringe tile,
+       which reads correctly as "a grass block" far better than a flat top view. */
+    const sideCell=ATLAS_CELL[B(i)*6+2];          // face 2 is +X
+    const name=VoxelTextures.ATLAS_NAMES[sideCell];
+    const tc=document.createElement('canvas');
+    tc.width=tc.height=VoxelTextures.TILE;
+    const tt=VoxelTextures.buildTile(name);
+    tc.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(tt.data), VoxelTextures.TILE, VoxelTextures.TILE), 0, 0);
+    const map=new THREE.CanvasTexture(tc);
+    map.wrapS=map.wrapT=THREE.ClampToEdgeWrapping;
+    map.magFilter=THREE.NearestFilter; map.minFilter=THREE.NearestFilter;
+    map.generateMipmaps=false;
+    map.encoding=THREE.sRGBEncoding;
+    materials.push(map);
   });
+  buildPickupMaterials();
+  atlasTex=new THREE.CanvasTexture(atlasCanvas);
+  // No mipmaps. The atlas is a grid of 32px tiles with only the used cells
+  // painted, so a reduced mip level averages a tile together with empty
+  // (transparent black) canvas and distant terrain darkens toward black. If you
+  // ever want mipmaps back, the atlas needs gutter padding between tiles.
+  atlasTex.magFilter=THREE.NearestFilter;
+  atlasTex.minFilter=THREE.NearestFilter;
+  atlasTex.generateMipmaps=false;
+  atlasTex.encoding=THREE.sRGBEncoding;
+  bucketMaterials[MAT_SOLID]=new THREE.MeshLambertMaterial({map:atlasTex, vertexColors:true});
+  bucketMaterials[MAT_GLOW]=new THREE.MeshLambertMaterial({map:atlasTex, vertexColors:true,
+    emissive:new THREE.Color(0xcc8a1a), emissiveIntensity:0.9});
+  /* Glass and leaves carry real alpha now, so they render with alphaTest rather
+     than plain transparency. alphaTest discards fully transparent texels in the
+     shader, so the holes in the leaf texture actually become holes and leaves no
+     longer need to be sorted as a transparent surface — which also stops them
+     z-fighting with the water and the glass in front of them. */
+  bucketMaterials[MAT_GLASS]=new THREE.MeshLambertMaterial({map:atlasTex, vertexColors:true,
+    transparent:true, opacity:0.6, alphaTest:0.15, depthWrite:false, side:THREE.DoubleSide});
+  bucketMaterials[MAT_LEAVES]=new THREE.MeshLambertMaterial({map:atlasTex, vertexColors:true,
+    alphaTest:0.5, side:THREE.DoubleSide});
+  bucketMaterials[MAT_WATER]=waterMats[0];
 
   // sun/moon/glow/stars/clouds
   sunMesh=new THREE.Mesh(new THREE.SphereGeometry(14,12,12),new THREE.MeshBasicMaterial({color:0xffe14d,fog:false})); sunMesh.visible=false; scene.add(sunMesh); // hidden: sky-dome shader draws the sun
@@ -1134,7 +1552,7 @@ function init(){
   State.inventory={0:32,1:16,2:8,5:8,9:8,10:4,11:4,12:4,4:8};
   if(saved&&saved.inv) State.inventory={...State.inventory,...saved.inv};
   if(saved&&saved.pos&&saved.pos[1]>-10){ camera.position.set(saved.pos[0],saved.pos[1]+1,saved.pos[2]); }
-  else { const h=heightAt(8,8); camera.position.set(8.5,h+3,8.5); }
+  else { const h=heightAt(8,8); camera.position.set(cellCentre(8),eyeAbove(h),cellCentre(8)); }
   State.creative=Settings.mode==='creative';
   if(State.creative) State.fly=true;
   renderToolbar(); renderVitals(); updateChunks();
@@ -1161,7 +1579,7 @@ function bindInputs(){
       case 'KeyE': eatFood(); break;
       case 'KeyI': if(!State.started) break; setInventoryOpen(); break;
       case 'Escape': if(dragOp){ endItemDrag(true); break; } if(invOpen()){ setInventoryOpen(false); break; } break;
-      case 'KeyQ': setBlock(Math.round(camera.position.x),Math.round(camera.position.y-1),Math.round(camera.position.z),BLOCK.GLOW); break;
+      case 'KeyQ': setBlock(cell(camera.position.x),cell(camera.position.y-1),cell(camera.position.z),BLOCK.GLOW); break;
       case 'KeyT': openChat(); e.preventDefault(); break;
       case 'KeyC': $('coop-modal').classList.toggle('hidden'); break;
       case 'KeyM': drawMinimap(); toast('🗺️ You are here (yellow dot)'); break;
@@ -1189,13 +1607,13 @@ function bindInputs(){
   // menu buttons
   $('btn-play').onclick=startGame;
   $('btn-how').onclick=()=>$('howto').classList.toggle('hidden');
-  $('btn-new-world').onclick=()=>{ Settings.seed=randi(1,99999); $('world-seed').value=Settings.seed; perlin=new Perlin(Settings.seed); overrides.clear(); glowSet.clear(); State.hotbar=[...HOTBAR]; renderToolbar(); chunks.forEach(c=>c.dispose()); chunks.clear(); mobs.forEach(m=>m.dispose()); mobs.length=0; updateChunks(); const h=heightAt(8,8); camera.position.set(8.5,h+3,8.5); toast('🌍 New world! Seed '+Settings.seed); };
+  $('btn-new-world').onclick=()=>{ Settings.seed=randi(1,99999); $('world-seed').value=Settings.seed; perlin=new Perlin(Settings.seed); overrides.clear(); glowSet.clear(); State.hotbar=[...HOTBAR]; renderToolbar(); chunks.forEach(c=>c.dispose()); chunks.clear(); mobs.forEach(m=>m.dispose()); mobs.length=0; updateChunks(); const h=heightAt(8,8); camera.position.set(cellCentre(8),eyeAbove(h),cellCentre(8)); toast('🌍 New world! Seed '+Settings.seed); };
   $('btn-host').onclick=()=>{ const code=($('room-code').value||randCode()).toUpperCase(); $('room-code').value=code; Net.host(code); };
   $('btn-join').onclick=()=>{ const code=($('room-code').value||'').toUpperCase(); if(!code){ toast('Enter a room code first'); return; } Net.join(code); };
   $('btn-copy-link').onclick=()=>{ const code=$('room-code').value||'????'; const txt=`Join my Voxel Verse room! Code: ${code} — open Voxel Verse, press C, enter code, JOIN.`; navigator.clipboard&&navigator.clipboard.writeText(txt); toast('📋 Invite copied!'); };
   $('btn-spawn-bot').onclick=()=>{ spawnBot(); $('coop-modal').classList.add('hidden'); };
   $('btn-coop-close').onclick=()=>$('coop-modal').classList.add('hidden');
-  $('btn-respawn').onclick=()=>{ State.dead=false; State.health=State.maxHealth; State.hunger=20; renderVitals(); $('death-screen').classList.add('hidden'); const h=heightAt(Math.round(camera.position.x),Math.round(camera.position.z)); camera.position.y=h+3; velocity.set(0,0,0); const cleared=clearHostiles(24); State.prot=3; Dbg.log('RESPAWN',`cleared ${cleared} hostiles · PROT 3s · ${Dbg.ctx()}`); toast(cleared?`✨ Respawned! 🛡️ 3s protection · cleared ${cleared} hostile${cleared>1?'s':''}`:'✨ Respawned! 🛡️ 3s protection'); };
+  $('btn-respawn').onclick=()=>{ State.dead=false; State.health=State.maxHealth; State.hunger=20; renderVitals(); $('death-screen').classList.add('hidden'); const h=heightAt(cell(camera.position.x),cell(camera.position.z)); camera.position.y=eyeAbove(h); velocity.set(0,0,0); const cleared=clearHostiles(24); State.prot=3; Dbg.log('RESPAWN',`cleared ${cleared} hostiles · PROT 3s · ${Dbg.ctx()}`); toast(cleared?`✨ Respawned! 🛡️ 3s protection · cleared ${cleared} hostile${cleared>1?'s':''}`:'✨ Respawned! 🛡️ 3s protection'); };
   $('btn-copy-log').onclick=()=>{ const txt=Dbg.text(); const done=()=>toast('📋 Log copied — paste it to Matt');
     if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done,()=>fallbackCopy(txt,done));
     else fallbackCopy(txt,done); };
@@ -1257,7 +1675,9 @@ function startGame(){
   else if(qv==='low'){ Settings.pixelRatio=1; }
   else Settings.pixelRatio=Math.min(devicePixelRatio||1,1.5);
   if(renderer){ renderer.setPixelRatio(Settings.pixelRatio); setShadowSize(qv==='high'?2048:1024); setLowFx(qv==='low'); }
-  chunks.forEach(c=>c.dispose()); chunks.clear(); updateChunks();
+  chunks.forEach(c=>c.dispose()); chunks.clear(); WORLD.fill(0);
+  topYCached=-1; recalcTopY();   // re-derive the meshing ceiling for the new world
+  updateChunks();
   State.started=true; $('menu').classList.add('hidden'); $('hud').classList.remove('hidden');
   try{ controls.lock(); }catch(e){}
   AudioSys.ensure(); AudioSys.level();
@@ -1372,7 +1792,7 @@ function animate(){
         renderVitals();
       }
       if(bot&&!bot.dead){ const d=bot.pos.distanceTo(camera.position); if(d>3){ bot.dir.copy(camera.position).sub(bot.pos); bot.dir.y=0; bot.dir.normalize(); bot.moving=true; } else bot.moving=false; if(d>60){ bot.pos.copy(camera.position); } }
-      if(camera.position.y<-30){ camera.position.set(8.5,heightAt(8,8)+3,8.5); velocity.set(0,0,0); damagePlayer(4,'The void'); }
+      if(camera.position.y<-30){ camera.position.set(cellCentre(8),eyeAbove(heightAt(8,8)),cellCentre(8)); velocity.set(0,0,0); damagePlayer(4,'The void'); }
       updateOutline();
     }
     mobs.forEach(m=>m.update(dt));

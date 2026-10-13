@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lenia — Continuous Cellular Automaton (Artificial Life)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <div id="ui">
+    <header>
+      <h1>Lenia</h1>
+      <button class="toggle" id="toggleUi">◀</button>
+    </header>
+    <div class="body">
+      <div class="section">
+        <h2>Transport</h2>
+        <div class="row">
+          <button class="btn" id="playBtn">▶ Play</button>
+          <button class="btn" id="stepBtn">⏭ Step</button>
+          <button class="btn danger" id="clearBtn">🗑 Clear</button>
+        </div>
+        <div class="row">
+          <button class="btn" id="randomSoupBtn">🎲 Random soup</button>
+          <button class="btn" id="seedBlobBtn">● Seed blob</button>
+        </div>
+        <div class="ctrl">
+          <label>Speed (steps/frame) <span id="stepsVal">2</span></label>
+          <input type="range" id="stepsSlider" min="1" max="8" step="1" value="2" />
+        </div>
+        <div class="ctrl">
+          <label>Grid <span id="gridVal">128</span></label>
+          <select id="gridSelect">
+            <option value="64">64 × 64</option>
+            <option value="128" selected>128 × 128</option>
+            <option value="192">192 × 192</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Kernel (perception)</h2>
+        <div class="ctrl">
+          <label>Radius R <span id="RVal">9</span></label>
+          <input type="range" id="RSlider" min="5" max="16" step="1" value="9" />
+        </div>
+        <div class="ctrl">
+          <label>Peak μ <span id="muVal">0.50</span></label>
+          <input type="range" id="muSlider" min="0.1" max="0.9" step="0.01" value="0.50" />
+        </div>
+        <div class="ctrl">
+          <label>Width σ <span id="sigVal">0.15</span></label>
+          <input type="range" id="sigSlider" min="0.03" max="0.35" step="0.01" value="0.15" />
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Growth (update)</h2>
+        <div class="ctrl">
+          <label>Center m <span id="mVal">0.20</span></label>
+          <input type="range" id="mSlider" min="0.05" max="0.4" step="0.01" value="0.20" />
+        </div>
+        <div class="ctrl">
+          <label>Width s <span id="sVal">0.04</span></label>
+          <input type="range" id="sSlider" min="0.005" max="0.12" step="0.005" value="0.04" />
+        </div>
+        <div class="ctrl">
+          <label>dt <span id="dtVal">0.05</span></label>
+          <input type="range" id="dtSlider" min="0.01" max="0.2" step="0.01" value="0.05" />
+        </div>
+        <div class="ctrl">
+          <label>Mutate <span></span></label>
+          <div class="row">
+            <button class="btn" id="mutateBtn">🧬 Mutate params</button>
+            <button class="btn" id="presetsBtn">🎲 Random preset</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Brush</h2>
+        <div class="ctrl">
+          <label>Mode <span></span></label>
+          <select id="brushMode">
+            <option value="add">Paint (add life)</option>
+            <option value="erase">Erase</option>
+            <option value="nudge">Nudge / force</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label>Radius <span id="brushRVal">6</span></label>
+          <input type="range" id="brushRSlider" min="1" max="20" step="1" value="6" />
+        </div>
+        <div class="ctrl">
+          <label>Strength <span id="brushSVal">0.6</span></label>
+          <input type="range" id="brushSSlider" min="0.1" max="1" step="0.1" value="0.6" />
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Display</h2>
+        <div class="ctrl">
+          <label>Colormap <span></span></label>
+          <select id="cmapSelect">
+            <option value="bio">Bioluminescent</option>
+            <option value="magma">Magma</option>
+            <option value="viridis">Viridis</option>
+            <option value="ice">Ice</option>
+            <option value="mono">Monochrome</option>
+          </select>
+        </div>
+        <div class="ctrl">
+          <label>Glow <span id="glowVal">0.7</span></label>
+          <input type="range" id="glowSlider" min="0" max="1.5" step="0.1" value="0.7" />
+        </div>
+        <div class="ctrl">
+          <label>Trail decay <span id="trailVal">0.0</span></label>
+          <input type="range" id="trailSlider" min="0" max="0.4" step="0.02" value="0.0" />
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Time travel</h2>
+        <div class="ctrl">
+          <label>Scrub frames: <span id="scrubLabel">live</span></label>
+          <input type="range" id="scrubSlider" min="0" max="0" step="1" value="0" />
+        </div>
+        <div class="row">
+          <button class="btn" id="favBtn">⭐ Save favorite</button>
+          <button class="btn" id="exportBtn">💾 Export</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Curves</h2>
+        <canvas id="plot" width="264" height="90"></canvas>
+        <div style="font-size:.68rem;color:var(--muted);margin-top:4px;">
+          Grey = kernel profile K(r). White = growth G(u).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="hint">
+    <strong>Lenia</strong> — a continuous cellular automaton ("artificial life"). Paint life with the mouse, tune the kernel &amp; growth, and watch self-organizing <em>creatures</em> emerge. Right-drag erases. Try <strong>Mutate params</strong> to discover new life forms.
+  </div>
+
+  <div id="hud">
+    <div>FPS <span id="fps">0</span></div>
+    <div>step <span id="stepCount">0</span></div>
+    <div>cells <span id="cells">0</span></div>
+  </div>
+
+  <div id="legend">Drag to paint · Right-drag erase · Space pause</div>
+
+  <script src="script.js"></script>
+</body>
+</html>
+```
+
+Now script.js — big. Let me write carefully.<|end|><|start|> assistant to=write<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="path">
+/Users/alex/Repositories/vibe-exps/lenia/script.js
