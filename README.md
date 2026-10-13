@@ -42,6 +42,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Vector Visualization**: Interactive 2D and 3D vector operations with dot and cross products
 - **Virtual Pet Simulator**: A virtual pet simulation
 - **Volume Raycaster**: 3D volume rendering with raycasting
+- **Voxel Verse**: Co-op voxel survival with a face-culled chunk mesher, flood-filled skylight, smooth ambient occlusion and a texture atlas
 - **WebGPU Feature Detector**: A tool to detect WebGPU features
 
 ## Getting Started
