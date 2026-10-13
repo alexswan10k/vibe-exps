@@ -173,6 +173,15 @@ function grassTop(p) {
     const c = mix(C.grass.light, C.grass.base, hash2i(i, 4, 5));
     for (let k = 0; k < h; k++) p.set(x, (y + k) % TILE, c);
   }
+  // small wildflowers, placed deterministically, so a field of grass isn't one flat green
+  for (let i = 0; i < 6; i++) {
+    const fx = 2 + (hash2i(i, 9, 137) * (TILE - 4)) | 0, fy = (hash2i(i, 10, 137) * TILE) | 0;
+    const tint = hash2i(i, 11, 137);
+    const col = tint < 0.33 ? [0xff, 0xef, 0x7a] : tint < 0.66 ? [0xff, 0x9a, 0xc9] : [0xe8, 0xf7, 0xff];
+    p.set(fx, fy, col);
+    p.set(fx + 1, fy, col);
+    p.set(fx, (fy + 1) % TILE, mix(col, C.grass.light, 0.4));
+  }
 }
 
 /* Grass seen from the side: dirt, with a band of grass hanging over the top
@@ -213,6 +222,9 @@ function dirt(p) {
     let c = mix(C.dirt.dark, C.dirt.base, n);
     if (fbm(u, v, 8, 2, 31) > 0.66) c = mix(c, C.dirt.light, 0.6);
     if (fbm(u, v, 6, 2, 41) < 0.30) c = shade(c, 0.74);   // pebbles / shadowed clumps
+    // scattered stones and tiny roots
+    if (hash2i(x, y, 301) > 0.990) c = mix(c, C.stone.light, 0.45);
+    else if (hash2i(x, y, 302) > 0.994) c = shade(c, 0.5);
     p.set(x, y, c);
   }
 }
@@ -228,6 +240,9 @@ function stone(p) {
     const r = ridge(u, v, 4, 71);
     if (r > 0.88) c = shade(c, 0.80);
     else if (r < 0.10) c = mix(c, C.stone.light, 0.22);
+    // quartz flecks and dark pockmarks, so flat stone isn't one grey
+    if (hash2i(x, y, 401) > 0.984) c = mix(c, [0xc8, 0xc8, 0xd4], 0.85);
+    else if (hash2i(x, y, 402) > 0.991) c = shade(c, 0.45);
     p.set(x, y, c);
   }
 }
@@ -238,6 +253,9 @@ function sand(p) {
     const u = x / TILE, v = y / TILE;
     const n = fbm(u, v, 12, 2, 81);
     let c = mix(C.sand.dark, C.sand.base, n);
+    // wind ripples: faint diagonal bands
+    const ripple = fbm((u + v * 0.4) % 1, v, 4, 2, 83);
+    if (ripple > 0.62) c = mix(c, C.sand.light, 0.35);
     if (hash2i(x, y, 91) > 0.965) c = C.sand.light;
     else if (hash2i(x, y, 92) > 0.965) c = shade(c, 0.92);
     p.set(x, y, c);
@@ -267,6 +285,11 @@ function logSide(p) {
         if (Math.abs(dx) + Math.abs(dy) <= r) p.set((kx + dx + TILE) % TILE, (ky + dy + TILE) % TILE, c);
       }
     }
+  }
+  // vertical fissures, so the bark reads as aged
+  for (let i = 0; i < 2; i++) {
+    const x = (hash2i(i, 5, 131) * TILE) | 0;
+    for (let y = 0; y < TILE; y++) if (hash2i(x, y, 132) > 0.25) p.set(x, y, shade(C.log.dark, 0.55));
   }
 }
 
@@ -328,12 +351,16 @@ function leaves(p) {
 function snow(p) {
   for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
     const u = x / TILE, v = y / TILE;
-    const c = mix(C.snow.dark, C.snow.base, fbm(u, v, 3, 2, 161));
+    let c = mix(C.snow.dark, C.snow.base, fbm(u, v, 3, 2, 161));
+    // cold blue shadow in the hollows
+    if (fbm(u + 0.1, v, 4, 2, 163) < 0.32) c = mix(c, [0xc8, 0xd8, 0xff], 0.35);
     p.set(x, y, c);
   }
-  for (let i = 0; i < 12; i++) {
+  // sparkle clusters
+  for (let i = 0; i < 18; i++) {
     const x = (hash2i(i, 3, 171) * TILE) | 0, y = (hash2i(i, 4, 171) * TILE) | 0;
     p.set(x, y, C.snow.light);
+    if (x + 1 < TILE) p.set(x + 1, y, mix(C.snow.base, C.snow.light, 0.6));
   }
 }
 
@@ -418,8 +445,10 @@ function brick(p) {
       p.set(x, y, mix(0xd8cfc0, 0xbfb3a0, hash2i(x, y, 221) * 0.5));   // mortar
       continue;
     }
-    const n = fbm((x + offset) / TILE, y / TILE, 8, 3, 231 + course * 13);
+    const n = fbm((x + offset) / TILE, y / TILE, 8, 3, 231 + course * 13 + inBrick);
     let c = mix(C.brick.dark, C.brick.base, n);
+    if (hash2i((x + offset) | 0, (y) | 0, 229) > 0.92) c = mix(c, C.brick.light, 0.35);  // sun-bleached brick
+    else if (hash2i((x + offset) | 0, (y) | 0, 230) > 0.96) c = shade(c, 0.7);
     if (inBrick === MORTAR + 1) c = mix(c, C.brick.light, 0.45);       // top-lit bevel
     if (rowIn === COURSE - 1) c = shade(c, 0.80);                          // bottom shadow
     p.set(x, y, c);
@@ -455,6 +484,8 @@ function obsidian(p) {
     let c = mix(C.obsidian.dark, C.obsidian.base, fbm(u, v, 4, 3, 271));
     if (r > 0.9) c = mix(c, C.obsidian.light, 0.75);
     else if (r < 0.14) c = shade(c, 0.7);
+    // glossy chips
+    if (hash2i(x, y, 273) > 0.992) c = mix(c, C.obsidian.light, 0.9);
     p.set(x, y, c);
   }
 }
@@ -476,6 +507,7 @@ function water(p) {
     const wave = 0.5 + 0.5 * Math.sin(u * CYCLES * Math.PI * 2);
     let c = mix(C.water.dark, C.water.base, wave * 0.45 + swell * 0.35 + 0.1);
     if (wave > 0.86) c = mix(c, C.water.light, 0.55);
+    if (fbm(u, v, 7, 2, 283) > 0.72) c = mix(c, C.water.light, 0.25);  // lighter foam patches
     p.set(x, y, c);
   }
 }
