@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Quantum Wave Lab — 2D Schrödinger Equation</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<canvas id="stage"></canvas>
+
+<div id="ui">
+  <header>
+    <h1>Quantum Wave Lab</h1>
+    <button class="toggle" id="toggleUi">◀</button>
+  </header>
+  <div class="body">
+    <div class="section">
+      <h2>Transport</h2>
+      <div class="row">
+        <button class="btn" id="playBtn">▶ Play</button>
+        <button class="btn" id="stepBtn">⏭ Step</button>
+        <button class="btn danger" id="clearBtn">🗑 Clear</button>
+      </div>
+      <div class="row">
+        <button class="btn" id="dropBtn">● Drop packet</button>
+        <button class="btn" id="wallBtn">)._Barrier</button>
+      </div>
+      <div class="ctrl">
+        <label>Grid <span id="sizeVal">128</span></label>
+        <select id="sizeSelect">
+          <option value="64">64 × 64</option>
+          <option value="128" selected>128 × 128</option>
+          <option value="256">256 × 256</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Steps/frame <span id="stepsVal">1</span></label>
+        <input type="range" id="stepsSlider" min="1" max="8" step="1" value="1" />
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Potential (barriers)</h2>
+      <div class="ctrl">
+        <label>Brush mode <span></span></label>
+        <select id="brushMode">
+          <option value="wall">Paint potential (walls)</option>
+          <option value="erase">Erase potential</option>
+        </select>
+      </div>
+      <div class="ctrl">
+        <label>Brush radius <span id="brushRVal">4</span></label>
+        <input type="range" id="brushRSlider" min="1" max="16" step="1" value="4" />
+      </div>
+      <div class="ctrl">
+        <label>Wall height <span id="wallHVal">40</span></label>
+        <input type="range" id="wallHSlider" min="5" max="120" step="5" value="40" />
+      </div>
+      <div class="row">
+        <button class="btn" id="presetSlit">Double slit</button>
+        <button class="btn" id="presetBox">Ring cavity</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Physics</h2>
+      <div class="ctrl">
+        <label>ℏ (hbar) <span id="hbarVal">1.0</span></label>
+        <input type="range" id="hbarSlider" min="0.2" max="3" step="0.1" value="1.0" />
+      </div>
+      <div class="ctrl">
+        <label>Mass <span id="massVal">1.0</span></label>
+        <input type="range" id="massSlider" min="0.3" max="3" step="0.1" value="1.0" />
+      </div>
+      <div class="ctrl">
+        <label>dt <span id="dtVal">0.05</span></label>
+        <input type="range" id="dtSlider" min="0.01" max="0.2" step="0.01" value="0.05" />
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Wave packet</h2>
+      <div class="ctrl">
+        <label>Spread σ <span id="sigVal">4.0</span></label>
+        <input type="range" id="sigSlider" min="1.5" max="12" step="0.5" value="4.0" />
+      </div>
+      <div class="ctrl">
+        <label>Momentum kx <span id="kxVal">2.0</span></label>
+        <input type="range" id="kxSlider" min="-6" max="6" step="0.5" value="2.0" />
+      </div>
+      <div class="ctrl">
+        <label>Momentum ky <span id="kyVal">0.0</span></label>
+        <input type="range" id="kySlider" min="-6" max="6" step="0.5" value="0.0" />
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Display</h2>
+      <div class="ctrl">
+        <label>Density gain <span id="gainVal">1.0</span></label>
+        <input type="range" id="gainSlider" min="0.3" max="4" step="0.1" value="1.0" />
+      </div>
+      <div class="ctrl">
+        <label>Phase color <span id="phaseVal">1</span></label>
+        <input type="range" id="phaseSlider" min="0" max="1" step="1" value="1" />
+      </div>
+      <div class="ctrl">
+        <label>Potential fade <span id="potVal">0.6</span></label>
+        <input type="range" id="potSlider" min="0" max="1" step="0.1" value="0.6" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="hint">
+  <strong>Quantum Wave Lab</strong> — solve the 2D Schrödinger equation in real time (split-step Fourier). Left-drag paints potential walls, right-drag erases. Click drops a wave packet. Watch interference, diffraction through slits, and tunnelling. Space pauses.
+</div>
+
+<div id="hud">
+  <div>FPS <span id="fps">0</span></div>
+  <div>t <span id="t">0.00</span></div>
+  <div>norm <span id="norm">1.00</span></div>
+</div>
+
+<div id="legend">Click to drop packet · Drag paint walls · Space pause</div>
+
+<script src="script.js"></script>
+</body>
+</html>
+```
+
+Now script.js. Big. Need FFT, simulation. Let me write carefully.<|end|><|start|> assistant to=write<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="path">
+/Users/alex/Repositories/vibe-exps/quantum/script.js

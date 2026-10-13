@@ -1,0 +1,37 @@
+:root {
+  --bg:#02040a; --panel:rgba(8,12,26,0.86); --accent:#5cffb0; --accent2:#7afcff;
+  --text:#e8f3ff; --muted:#8aa0c8; --danger:#ff5a7a; --border:rgba(92,255,176,0.22);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;user-select:none;}
+#stage{display:block;width:100vw;height:100vh;cursor:crosshair;}
+#ui{position:fixed;top:16px;left:16px;width:300px;max-height:calc(100vh-32px);background:var(--panel);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.6);overflow:hidden;display:flex;flex-direction:column;z-index:10;transition:transform .25s;}
+#ui.collapsed{transform:translateX(-340px);}
+#ui header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(92,255,176,.08),rgba(122,252,255,.08));}
+#ui header h1{margin:0;font-size:1.05rem;letter-spacing:1px;color:var(--accent);text-transform:uppercase;}
+#ui header .toggle{background:none;border:1px solid var(--border);color:var(--text);border-radius:8px;padding:4px 8px;cursor:pointer;font-size:.8rem;}
+#ui .body{padding:12px 14px;overflow-y:auto;flex:1;}
+#ui .body::-webkit-scrollbar{width:6px;}
+#ui .body::-webkit-scrollbar-thumb{background:rgba(92,255,176,.25);border-radius:3px;}
+.section{margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(92,255,176,.08);}
+.section:last-child{border-bottom:none;}
+.section h2{margin:0 0 8px 0;font-size:.78rem;text-transform:uppercase;letter-spacing:1.2px;color:var(--accent2);}
+.row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+.btn{flex:1;min-width:0;padding:7px 8px;border:1px solid var(--border);background:rgba(255,255,255,.04);color:var(--text);border-radius:8px;cursor:pointer;font-size:.78rem;transition:all .15s;font-family:inherit;}
+.btn:hover{background:rgba(92,255,176,.12);border-color:var(--accent);}
+.btn.active{background:var(--accent);color:#03040a;border-color:var(--accent);font-weight:600;}
+.btn.danger{border-color:var(--danger);color:var(--danger);}
+.ctrl{margin-bottom:8px;}
+.ctrl label{display:flex;justify-content:space-between;font-size:.74rem;color:var(--muted);margin-bottom:3px;}
+.ctrl label span{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums;}
+.ctrl input[type="range"]{width:100%;accent-color:var(--accent);}
+.ctrl select{width:100%;padding:4px 6px;background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.78rem;}
+#hud{position:fixed;bottom:12px;right:12px;z-index:10;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:.72rem;color:var(--muted);backdrop-filter:blur(8px);display:flex;gap:14px;align-items:center;}
+#hud span{color:var(--accent);font-weight:600;}
+#legend{position:fixed;bottom:12px;left:16px;z-index:10;font-size:.72rem;color:var(--muted);background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px;backdrop-filter:blur(8px);}
+#hint{position:fixed;top:16px;right:16px;z-index:10;max-width:320px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:.74rem;color:var(--muted);backdrop-filter:blur(8px);line-height:1.45;}
+@media(max-width:720px){#ui{width:calc(100vw-32px);}#hint{display:none;}}
+```
+
+Now index.html.<|end|><|start|> assistant to=write<|channel|>analysis <|constrain|>xml<|message|><rfl:parameter name="path">
+/Users/alex/Repositories/vibe-exps/quantum/index.html

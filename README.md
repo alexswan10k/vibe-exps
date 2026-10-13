@@ -20,6 +20,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Image Editor**: An image editing tool
 - **Image Segmentation**: An image segmentation tool using RMBG-1.4
 - **Infinite Maze Explorer**: An infinite maze exploration game
+- **Quantum Wave Lab**: Real-time 2D Schrödinger equation solver with painting potential walls and wave packet drops
 - **Lenia**: Interactive continuous cellular automaton (artificial life) — paint life, tune evolution, discover self-organizing creatures
 - **LambdaSafe Sales Page**: Sales page for LambdaSafe
 - **Meal Planner**: A meal planning application
