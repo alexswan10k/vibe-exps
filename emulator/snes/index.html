@@ -383,6 +383,7 @@
                 <nav>
                     <a href="?game=hello-world" class="game-nav-item" id="nav-hello-world">Hello World Demo</a>
                     <a href="?game=mario-clone" class="game-nav-item" id="nav-mario-clone">Mario ASCII Clone</a>
+                    <a href="?game=void-serpent" class="game-nav-item" id="nav-void-serpent">Void Serpent (New!)</a>
                 </nav>
             </div>
 
@@ -462,6 +463,8 @@
             document.getElementById('nav-hello-world').classList.add('active');
         } else if (activeGame === 'mario-clone') {
             document.getElementById('nav-mario-clone').classList.add('active');
+        } else if (activeGame === 'void-serpent') {
+            document.getElementById('nav-void-serpent').classList.add('active');
         }
 
         // Initialize EmulatorJS bootloader
