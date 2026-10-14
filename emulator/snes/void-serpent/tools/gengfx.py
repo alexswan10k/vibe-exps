@@ -20,7 +20,7 @@ import os
 import sys
 
 TILE = 8          # 8x8 tiles
-TILE_BYTES = 16   # 4bpp: 8 rows * (low plane + high plane)
+TILE_BYTES = 32   # 4bpp: 8 rows * 4 bitplanes
 
 
 # ---------------------------------------------------------------------------
@@ -120,19 +120,42 @@ def brighten(rows, frm=('B', 'H'), to=('W', 'P')):
 
 
 def to_tile(rows, chars):
-    """Convert ASCII art into SNES 4bpp tile bytes (8 rows, 2 planes)."""
+    """Convert ASCII art into SNES 4bpp tile bytes.
+
+    4bpp is FOUR bitplanes per row (8 rows * 4 bytes = 32 bytes per tile), not
+    two. Emitting only two planes silently caps colours at 0-3, so index 4+ --
+    the head's eyes, the food's specular -- decode as colour 0 (transparent) and
+    the art vanishes. Mode 1 runs OBJ at 4bpp, so the data must match.
+    """
     assert len(rows) == TILE, "row count %d != %d" % (len(rows), TILE)
     out = []
     for row in rows:
         assert len(row) == TILE, "row %r is %d wide, expected %d" % (row, len(row), TILE)
-        lo = hi = 0
+        planes = [0, 0, 0, 0]
         for x, ch in enumerate(row):
             v = chars[ch]
-            lo |= (v & 1) << (7 - x)
-            hi |= ((v >> 1) & 1) << (7 - x)
-        out.append(lo)
-        out.append(hi)
+            assert 0 <= v < 16, "colour index %d does not fit in 4bpp" % v
+            for p in range(4):
+                planes[p] |= ((v >> p) & 1) << (7 - x)
+        out.extend(planes)
+    assert len(out) == TILE_BYTES
     return out
+
+
+def decode_tile(data, index):
+    """Inverse of to_tile() -- used to self-check the generated art."""
+    chars = {v: k for k, v in SPR_CHARS.items()}
+    base = index * TILE_BYTES
+    rows = []
+    for y in range(TILE):
+        p = data[base + y * 4: base + y * 4 + 4]
+        row = ''
+        for x in range(TILE):
+            bit = 7 - x
+            v = sum(((p[i] >> bit) & 1) << i for i in range(4))
+            row += chars[v]
+        rows.append(row)
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -331,13 +354,22 @@ def build():
     for t in spr_tiles:
         spr_data += to_tile(t, SPR_CHARS)
 
-    # Sprite tile numbers are expressed in 8-byte units, and a 4bpp 8x8 sprite
-    # consumes two of them. So tile index N (16 bytes) => unit offset N*2.
+    # Self-check: decode every tile back and compare with the source art.
+    # This is what catches a bitplane/stride mismatch -- the failure mode is
+    # silent (the ROM builds and sprites are simply wrong or invisible).
+    for i, src_rows in enumerate(spr_tiles):
+        got = decode_tile(spr_data, i)
+        assert got == src_rows, (
+            "tile %d does not round-trip:\n  expected %r\n  got      %r"
+            % (i, src_rows, got))
+
+    # Sprite tile numbers are in 8-byte units, and a 4bpp 8x8 sprite consumes
+    # FOUR of them (32 bytes). So tile index N => unit offset N*4.
     order = ['BODY', 'TAIL_D', 'TAIL_L', 'TAIL_U', 'TAIL_R',
              'HEAD_R', 'HEAD_D', 'HEAD_L', 'HEAD_U',
              'FOOD_A', 'FOOD_B', 'BONUS_A', 'BONUS_B', 'SHARD_A', 'SHARD_B',
              'FX_R1', 'FX_R2', 'FX_R3', 'FX_R4', 'GATE', 'GATE_CORE']
-    offs = {name: i * 2 for i, name in enumerate(order)}
+    offs = {name: i * 4 for i, name in enumerate(order)}
 
     return spr_data, offs
 

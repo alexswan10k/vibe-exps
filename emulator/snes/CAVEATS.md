@@ -113,6 +113,54 @@ This wla-dx build does **not** accept `.incbin "file", offset, length`. Emit one
 
 ---
 
+## 4. Sprite Art Must Be 4bpp (Four Bitplanes), Not 2bpp
+
+### The Symptom
+Sprites appear, but they look wrong and pieces of the art are simply missing —
+typically small detail (eyes, highlights) vanishing entirely. The build is
+clean and every asset is present in the ROM, so nothing signals a problem.
+
+### The Cause
+Video Mode 1 runs OBJ at **4bpp** — four bitplanes per row, so an 8x8 tile is
+**32 bytes**, not 16:
+
+```
+row = 4 bytes (bitplanes 0..3)     8 rows * 4 = 32 bytes per tile
+colour index = p0 | p1<<1 | p2<<2 | p3<<3
+```
+
+Generating only two bitplanes does not just halve the size, it caps the palette
+at colours 0-3. An encoder written as:
+
+```python
+lo |= (v & 1) << (7 - x)
+hi |= ((v >> 1) & 1) << (7 - x)     # WRONG: (v >> 1) & 1 is always 0 for v >= 4
+```
+
+silently encodes colour 4 as 0 and colour 5 as 1. Colour 0 is transparent for
+OBJ, so any art using index 4+ **disappears**. In Void Serpent this erased the
+serpent's eyes on every heading and the food orb's specular highlight.
+
+Two things must change together, or the art is garbage:
+
+| | Wrong | Right |
+|---|---|---|
+| bytes per 8x8 tile | 16 | 32 |
+| OAM tile offset | `index * 2` | `index * 4` |
+
+### Guarding It
+Never trust a successful build or a byte-level spot check. Round-trip the
+generated data back to something inspectable and compare it against the source
+art — `tools/gengfx.py` does this in `build()` via `decode_tile`, so a
+regression fails the generator instead of shipping.
+
+Also decode the art and *look at it* before shipping. The missing eyes were
+obvious the moment the tiles were printed as ASCII; they were invisible from
+byte counts, offsets, and a clean build.
+
+
+---
+
 ## References
 
 1. **PVSnesLib Documentation & Source (tcc-65816 Limitations):**

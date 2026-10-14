@@ -12,7 +12,8 @@ snesfont:
 ; zero-fill the graphics and leave every sprite invisible. ".rodata1" is a
 ; superfree section and survives linking, exactly like the console font above.
 ;
-; Tiles are 4bpp 8x8, 16 bytes each; palettes are 32 bytes (16 colours).
+; Tiles are 4bpp 8x8, 32 bytes each (four bitplanes per row); palettes are
+; 32 bytes (16 colours). Mode 1 runs OBJ at 4bpp.
 
 vsgfx_tiles:
 .incbin "gfx/vsgfx_tiles.bin"
