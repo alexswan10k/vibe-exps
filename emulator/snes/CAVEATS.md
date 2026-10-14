@@ -43,6 +43,76 @@ When you dereference a pointer to `level_template` in C, the compiler generates 
 
 ---
 
+## 3. Initialised C Arrays Are Silently Discarded At Link Time
+
+### The Symptom
+A sprite/tile/palette array declared with an initialiser compiles cleanly, the
+build reports success, and the ROM is produced — but the data is **not in it**:
+
+```
+DISCARD: main.obj: main.asm: Section ".data" was discarded.
+DISCARD: main.obj: main.asm: Section "ram.data" was discarded.
+```
+
+At runtime the array is zero-filled, so every sprite renders as a blank
+(fully transparent) tile. The game still runs; the artwork is just invisible.
+
+### Why
+The devkitsnes linker configuration discards `main.obj`'s `.data` /
+`ram.data` sections. This affects **every** game built with `build.sh`, and it
+is silent — nothing in the build output is an error, so it is easy to miss.
+
+Note this is a different failure from section 1 above: the data does not end up
+in the wrong bank, it is not in the ROM at all.
+
+### The Fix
+Put non-trivial graphics in assembly and `.incbin` them into `.rodata1`, the
+same superfree section that carries the console font (`data.asm`). The font
+works, which proves superfree sections in `data.obj` survive linking:
+
+```asm
+.section ".rodata1" superfree
+
+snesfont:
+.incbin "pvsneslibfont.pic"
+
+vsgfx_tiles:
+.incbin "gfx/vsgfx_tiles.bin"
+...
+.ends
+```
+
+Then reference them from C and upload with DMA (never dereference the pointer in
+C — pass it straight to the DMA helpers, exactly as `consoleInitText` does with
+`snesfont`):
+
+```c
+extern char vsgfx_tiles[];
+oamInitGfxSet(vsgfx_tiles, 336, vpal_snake, 32, 0, 0x2000, OBJ_SIZE8);
+```
+
+Plain zero-initialised globals are fine — they land in `.bss`, which is not
+discarded.
+
+### Verifying
+Do not trust a clean build as proof the art made it in. Grep the build log for
+`DISCARD`, and search the finished ROM for a distinctive byte run from the
+asset:
+
+```sh
+./build.sh <game> 2>&1 | grep -i discard
+python3 -c "rom=open('build/game.sfc','rb').read(); \
+  print(rom.find(open('src/gfx/vsgfx_tiles.bin','rb').read()))"
+```
+
+A result of `-1` means the asset is missing from the ROM.
+
+### `.incbin` Caveat
+This wla-dx build does **not** accept `.incbin "file", offset, length`. Emit one
+`.bin` per blob rather than slicing a single file.
+
+---
+
 ## References
 
 1. **PVSnesLib Documentation & Source (tcc-65816 Limitations):**

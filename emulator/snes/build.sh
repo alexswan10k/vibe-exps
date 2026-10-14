@@ -31,6 +31,21 @@ compile_game() {
     
     # Create build directory
     mkdir -p "$game_dir/build"
+
+    # Regenerate graphics from their source-of-truth scripts and lint the
+    # console layout. These outputs are gitignored, so a fresh clone has
+    # neither src/gfx/*.bin nor src/gfx.h until this runs.
+    if [ -f "$game_dir/tools/gengfx.py" ]; then
+        echo "-> Generating gfx from tools/gengfx.py..."
+        (cd "$game_dir" && python3 tools/gengfx.py)
+    fi
+    if [ -f "$game_dir/tools/checkstrings.py" ]; then
+        echo "-> Linting console layout..."
+        (cd "$game_dir" && python3 tools/checkstrings.py) || {
+            echo "-> Error: console layout check failed (see tools/checkstrings.py)"
+            exit 1
+        }
+    fi
     
     # Get absolute game dir for Docker volume mounting
     local abs_game_dir
@@ -41,6 +56,29 @@ compile_game() {
     
     if [ -f "$game_dir/build/game.sfc" ]; then
         echo "-> Success! ROM built at $game/build/game.sfc"
+
+        # Verify any .incbin'd gfx assets actually made it into the ROM.
+        # The linker silently discards initialised C arrays (CAVEATS.md
+        # section 3), so a clean build is NOT proof the art is present.
+        local gfx_dir="$game_dir/src/gfx"
+        if compgen -G "$gfx_dir/*.bin" > /dev/null 2>&1; then
+            echo "-> Verifying gfx assets are present in the ROM..."
+            for asset in "$gfx_dir"/*.bin; do
+                if ! node -e "
+                    const fs = require('fs');
+                    const rom = fs.readFileSync('$game_dir/build/game.sfc');
+                    const data = fs.readFileSync('$asset');
+                    process.exit(rom.indexOf(data) >= 0 ? 0 : 1);
+                " 2>/dev/null; then
+                    echo "-> Error: $(basename "$asset") is NOT in the ROM."
+                    echo "   data.asm may be missing its .incbin, or is being"
+                    echo "   bootstrapped from the common template. See CAVEATS.md section 3."
+                    exit 1
+                fi
+            done
+            echo "-> All gfx assets present."
+        fi
+
         echo "-> Generating base64 rom.js wrapper for standalone file:// support..."
         node -e "
             const fs = require('fs');
