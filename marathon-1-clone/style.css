@@ -298,7 +298,26 @@ html, body {
 #use-btn { bottom: 90px; right: 130px; }
 #joy { bottom: 30px; left: 30px; width: 90px; height: 90px; border-radius: 50%; border: 2px solid #4a7aff; position: absolute; pointer-events: auto; background: rgba(10,20,32,0.4); }
 #joy-knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 40px; height: 40px; border-radius: 50%; background: #4a7aff; opacity: 0.7; }
-`
+
+/* Automap */
+#automap {
+  position: absolute; inset: 0;
+  z-index: 15;
+  background: rgba(0,0,0,0.72);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+}
+#automap.hidden { display: none; }
+#map-canvas {
+  width: min(70vh, 80vw); height: min(70vh, 80vw);
+  image-rendering: pixelated;
+  border: 2px solid #4a7aff;
+  background: #05070d;
+}
+.map-hint { color: #6a8acc; font-size: 12px; text-align: center; padding: 0 12px; }
+#map-btn { bottom: 150px; right: 20px; }
 
 @media (max-width: 768px) {
   #hud-bl, #hud-br { font-size: 11px; }

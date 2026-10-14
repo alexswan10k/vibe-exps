@@ -25,6 +25,9 @@ let enemySpawns = [];
 let spawnPoint = { x: 10.5, z: 10.5, yaw: 0 };
 let exitPoint = { x: 10.5, z: 10.5 };
 let roomLights = [];
+const props = []; // rotated crate cover blocks {x,z,size,r,rot}
+let explored = new Uint8Array(MAPX*MAPY);
+let mapOpen = false;
 
 const doors = new Map();
 function doorOpen(x,z){ const d=doors.get(x+','+z); return d && d.open; }
@@ -64,6 +67,34 @@ function genLevel(seed){
     const style=['cave','tech','vault','armory'][Math.floor(rng()*4)];
     carve(x,y,w,h,style);
   }
+  // break the grid: circular + chamfered (diagonal-cut corner) rooms
+  let circles=0;
+  for (let i=1;i<rooms.length;i++){
+    const r=rooms[i];
+    if (circles<3 && r.w>=8 && r.h>=8 && rng()<0.4){
+      r.shape='circle';
+      const cr=Math.min(r.w,r.h)/2+0.5;
+      for (let j=Math.floor(r.y);j<r.y+r.h;j++) for (let i2=Math.floor(r.x);i2<r.x+r.w;i2++){
+        if (i2<1||j<1||i2>=MAPX-1||j>=MAPY-1) continue;
+        // rooms are still isolated here, so walling the corners is safe
+        world[j][i2] = Math.hypot(i2+0.5-r.cx, j+0.5-r.cy)<=cr ? 0 : WALL.STONE;
+      }
+      circles++;
+    } else if (rng()<0.55 && r.w>=7 && r.h>=7){
+      r.shape='chamfer';
+      const c=2;
+      const x0=Math.floor(r.x), y0=Math.floor(r.y);
+      const x1=Math.floor(r.x+r.w)-1, y1=Math.floor(r.y+r.h)-1;
+      for (let dy=0;dy<c;dy++) for (let dx=0;dx<c;dx++){
+        if (dx+dy>=c) continue; // keep -> diagonal cut edge
+        if (world[y0+dy]&&world[y0+dy][x0+dx]===0) world[y0+dy][x0+dx]=WALL.STONE;
+        if (world[y0+dy]&&world[y0+dy][x1-dx]===0) world[y0+dy][x1-dx]=WALL.STONE;
+        if (world[y1-dy]&&world[y1-dy][x0+dx]===0) world[y1-dy][x0+dx]=WALL.STONE;
+        if (world[y1-dy]&&world[y1-dy][x1-dx]===0) world[y1-dy][x1-dx]=WALL.STONE;
+      }
+    } else r.shape='rect';
+  }
+  rooms[0].shape='rect';
   // connect rooms with wide L corridors (3 wide, random elbow order)
   function carveDisc(cx,cy){
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
@@ -79,13 +110,23 @@ function genLevel(seed){
     carveDisc(x,y);
     if (hFirst){ walkX(); walkY(); } else { walkY(); walkX(); }
   }
-  for (let i=1;i<rooms.length;i++){
-    const a=rooms[i-1], b=rooms[i];
-    corridor(Math.floor(a.cx),Math.floor(a.cy),Math.floor(b.cx),Math.floor(b.cy));
+  function lineCorridor(x1,y1,x2,y2){
+    // diagonal hall: straight lerp between centres (stair-steps at cell
+    // level, but reads as a 45-degree passage instead of an L)
+    const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1))*2+2;
+    for (let i=0;i<=steps;i++){
+      const t=i/steps;
+      carveDisc(Math.round(x1+(x2-x1)*t), Math.round(y1+(y2-y1)*t));
+    }
   }
+  function link(a,b){
+    if (rng()<0.45) lineCorridor(Math.floor(a.cx),Math.floor(a.cy),Math.floor(b.cx),Math.floor(b.cy));
+    else corridor(Math.floor(a.cx),Math.floor(a.cy),Math.floor(b.cx),Math.floor(b.cy));
+  }
+  for (let i=1;i<rooms.length;i++) link(rooms[i-1], rooms[i]);
   for (let i=0;i<9;i++){
     const a=rooms[Math.floor(rng()*rooms.length)], b=rooms[Math.floor(rng()*rooms.length)];
-    if (a!==b) corridor(Math.floor(a.cx),Math.floor(a.cy),Math.floor(b.cx),Math.floor(b.cy));
+    if (a!==b) link(a,b);
   }
 
   // paint border walls per room style so zones look distinct
@@ -117,6 +158,42 @@ function genLevel(seed){
       world[y][x]=WALL.DOOR;
       doors.set(x+','+y,{open:false,timer:0});
       doorCount++;
+    }
+  }
+
+  // pillars (freestanding cover) + crates (rotated low cover) break up big rooms.
+  // placed after the door scan so pillar cells can never become doors.
+  for (const r of rooms){
+    const area=r.w*r.h;
+    if (area<70 || r.shape==='circle') continue;
+    const nP = area>120 ? 4 : 2;
+    let placed=0, guard=0;
+    while (placed<nP && guard++<50){
+      const px=Math.floor(r.x+2+rng()*(r.w-4));
+      const pz=Math.floor(r.y+2+rng()*(r.h-4));
+      if (px<1||pz<1||px>=MAPX-1||pz>=MAPY-1||world[pz][px]!==0) continue;
+      if (Math.hypot(px+0.5-r.cx,pz+0.5-r.cy)<3) continue; // keep centre clear
+      world[pz][px]=WALL.METAL;
+      placed++;
+    }
+  }
+  for (const r of rooms){
+    const area=r.w*r.h;
+    if (area<60) continue;
+    const nC=2+Math.floor(rng()*3);
+    let placed=0, guard=0;
+    while (placed<nC && guard++<50){
+      const px=r.x+2+rng()*(r.w-4), pz=r.y+2+rng()*(r.h-4);
+      if (isSolid(px,pz)) continue;
+      if (Math.hypot(px-r.cx,pz-r.cy)<2.6) continue;
+      // keep crates off walls so nothing gets squeezed into geometry
+      if (isSolid(px+0.9,pz)||isSolid(px-0.9,pz)||isSolid(px,pz+0.9)||isSolid(px,pz-0.9)) continue;
+      let ok=true;
+      for (const p of props){ if (Math.hypot(p.x-px,p.z-pz)<1.7){ ok=false; break; } }
+      if (!ok) continue;
+      const size=0.7+rng()*0.4;
+      props.push({x:px,z:pz,size,r:size*0.62,rot:0.3+rng()*0.9});
+      placed++;
     }
   }
 
@@ -186,8 +263,12 @@ function genLevel(seed){
     const area=r.w*r.h;
     const n=clamp(Math.floor(area/40),1,4);
     for (let k=0;k<n;k++){
-      const ex2=r.x+1+rng()*(r.w-2);
-      const ez2=r.y+1+rng()*(r.h-2);
+      // retry loop: circle-room corners are solid, so don't spawn in walls
+      let ex2=r.cx, ez2=r.cy;
+      for (let t=0;t<14;t++){
+        const cx2=r.x+1+rng()*(r.w-2), cz2=r.y+1+rng()*(r.h-2);
+        if (!isSolid(cx2,cz2)){ ex2=cx2; ez2=cz2; break; }
+      }
       const t = (r===exitRoom && k===0) ? 'hunter' : types[Math.floor(rng()*types.length)];
       enemySpawns.push({type:t,x:ex2,z:ez2,patrol:[[ex2,ez2],[r.cx,r.cy]]});
     }
@@ -353,6 +434,13 @@ const wallGroup = new THREE.Group(); scene.add(wallGroup);
     if (w===WALL.DOOR) doorMeshes.set(x+','+z,m);
   }
 })();
+// crates: rotated cover props (block movement, not sightlines)
+for (const p of props){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(p.size,p.size,p.size), new THREE.MeshLambertMaterial({map:WALL_TEX[5]}));
+  m.position.set(p.x,p.size/2,p.z);
+  m.rotation.y=p.rot;
+  scene.add(m);
+}
 // floor + ceiling
 {
   const floorGeo=new THREE.PlaneGeometry(MAPX,MAPY);
@@ -438,8 +526,65 @@ let muzzleT=0;
 
 /* ---------- entities ---------- */
 const enemies=[];
-function spawnEnemy(type,x,z,patrol){ enemies.push({type,x,z,y:0,health:typeHp(type),dead:false,flash:0,state:'patrol',patrol:patrol||[[x,z]],pi:0,attackCd:0,alert:0}) }
+function spawnEnemy(type,x,z,patrol){ enemies.push({type,x,z,y:0,health:typeHp(type),dead:false,flash:0,state:'patrol',patrol:patrol||[[x,z]],pi:0,attackCd:0,alert:0,path:null,pathI:0,repathT:Math.random()*0.6,lastX:x,lastZ:z,stuckT:0,strafeDir:Math.random()<0.5?-1:1,strafeT:1+Math.random()*2,stepBack:0,leashX:x,leashZ:z}) }
 function typeHp(t){ return t==='fighter'?16:t==='hunter'?34:22; }
+
+/* grid BFS pathfinding so enemies route around walls instead of jamming */
+function passableForPath(x,z){
+  if (x<0||z<0||x>=MAPX||z>=MAPY) return false;
+  const v=world[z][x];
+  return v===0||v===WALL.DOOR; // doors auto-open, treat as passable
+}
+function findPath(sx,sz,tx,tz){
+  sx=Math.floor(sx); sz=Math.floor(sz); tx=Math.floor(tx); tz=Math.floor(tz);
+  if (sx===tx&&sz===tz) return [];
+  if (!passableForPath(tx,tz)){
+    let found=false;
+    for (let r=1;r<3&&!found;r++) for (let dz=-r;dz<=r&&!found;dz++) for (let dx=-r;dx<=r;dx++){
+      if (passableForPath(tx+dx,tz+dz)){ tx+=dx; tz+=dz; found=true; break; }
+    }
+    if (!found) return [];
+  }
+  const W=MAPX,H=MAPY;
+  const prev=new Int32Array(W*H).fill(-1);
+  const seen=new Uint8Array(W*H);
+  const qx=[sx],qz=[sz];
+  seen[sz*W+sx]=1;
+  let qh=0, expand=0, ok=false;
+  while (qh<qx.length && expand<7000){
+    const x=qx[qh],z=qz[qh]; qh++; expand++;
+    if (x===tx&&z===tz){ ok=true; break; }
+    if (x+1<W){ const nx=x+1,k=z*W+nx; if(!seen[k]&&passableForPath(nx,z)){seen[k]=1;prev[k]=z*W+x;qx.push(nx);qz.push(z);} }
+    if (x-1>=0){ const nx=x-1,k=z*W+nx; if(!seen[k]&&passableForPath(nx,z)){seen[k]=1;prev[k]=z*W+x;qx.push(nx);qz.push(z);} }
+    if (z+1<H){ const nz=z+1,k=nz*W+x; if(!seen[k]&&passableForPath(x,nz)){seen[k]=1;prev[k]=z*W+x;qx.push(x);qz.push(nz);} }
+    if (z-1>=0){ const nz=z-1,k=nz*W+x; if(!seen[k]&&passableForPath(x,nz)){seen[k]=1;prev[k]=z*W+x;qx.push(x);qz.push(nz);} }
+  }
+  if (!ok) return [];
+  const cells=[]; let k=tz*W+tx; const start=sz*W+sx;
+  let guard=8000;
+  while (k!==start && k>=0 && guard-->0){ cells.push([k%W,Math.floor(k/W)]); k=prev[k]; }
+  cells.reverse();
+  return cells.map(([x,z])=>[x+0.5,z+0.5]);
+}
+function collideProps(x,z,r){
+  for (const p of props){
+    const dx=x-p.x, dz=z-p.z;
+    const d=Math.hypot(dx,dz), min=r+p.r;
+    if (d<min && d>0.0001){
+      // never resolve into a wall: a squeeze between crate and wall
+      // briefly overlaps the crate instead of clipping through geometry
+      const nx=p.x+dx/d*min, nz=p.z+dz/d*min;
+      if (!isSolid(nx,nz)){ x=nx; z=nz; }
+    }
+  }
+  return [x,z];
+}
+function moveEnemy(e,vx,vz,dt){
+  if (!isSolid(e.x+vx*dt,e.z)) e.x+=vx*dt;
+  if (!isSolid(e.x,e.z+vz*dt)) e.z+=vz*dt;
+  const c=collideProps(e.x,e.z,0.35);
+  e.x=c[0]; e.z=c[1];
+}
 
 const enemyMeshes=new Map();
 function ensureEnemyMesh(e){
@@ -509,8 +654,9 @@ let hitmarkT=0;
 
 window.addEventListener('keydown',(e)=>{
   keys[e.code]=true;
-  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code)) e.preventDefault();
   if (!started) return;
+  if (e.code==='Tab'){ toggleMap(); return; }
   if (e.code.startsWith('Digit')){ const n=parseInt(e.code.slice(5)); if (n>=1 && n<=ownedWeapons.length) { player.weapon=ownedWeapons[n-1]; blip(500,0.05,'square',0.07); } }
   if (e.code==='KeyF') interact();
   if (e.code==='KeyM'){ /* tracker zoom: widen range */ trackerZoom = trackerZoom===16?26:16; msg('Tracker '+(trackerZoom===26?'zoomed out':'zoomed in')); }
@@ -537,6 +683,7 @@ if (touchDevice){ $('touch-controls').style.display='block'; let jx=0,jy=0; cons
   $('jump-btn').addEventListener('touchstart',()=>{keys['Space']=true;});
   $('jump-btn').addEventListener('touchend',()=>{keys['Space']=false;});
   $('use-btn').addEventListener('touchstart',()=>interact());
+  $('map-btn').addEventListener('touchstart',()=>{ if(started) toggleMap(); });
   window._joy=()=>({x:jx,y:jy});
 }
 
@@ -604,6 +751,8 @@ function updatePlayer(dt){
   player.z=nz;
   player.x=clamp(player.x,0.4,MAPX-0.4);
   player.z=clamp(player.z,0.4,MAPY-0.4);
+  const cp=collideProps(player.x,player.z,0.32);
+  player.x=cp[0]; player.z=cp[1];
   // vertical
   player.vy -= 15*dt;
   if (player.vy<-20) player.vy=-20;
@@ -627,17 +776,26 @@ function updatePlayer(dt){
   updateEnemies(dt);
   updateProjectiles(dt);
   updateParticles(dt);
-  // doors: proximity auto-open + timer close
+  // doors: proximity auto-open (enemies open them too, or they jam) + timer close
   for (const [k,d] of doors){
     const [dx,dz]=k.split(',').map(Number);
     const dist=Math.hypot(dx+0.5-player.x, dz+0.5-player.z);
-    if (dist<2.3 && !d.open){ d.open=true; d.timer=5; blip(300,0.12,'sine',0.1,150); }
+    let enemyNear=false;
+    if (dist>2.3){
+      for (const e of enemies){
+        if (e.dead) continue;
+        if (Math.hypot(dx+0.5-e.x,dz+0.5-e.z)<1.9){ enemyNear=true; break; }
+      }
+    }
+    if ((dist<2.3||enemyNear) && !d.open){ d.open=true; d.timer=5; if (dist<2.3) blip(300,0.12,'sine',0.1,150); }
     if (d.open){ d.timer-=dt; if (d.timer<=0 && dist>1.4) d.open=false; }
     const mesh=doorMeshes.get(k);
     if (mesh) mesh.visible=!d.open;
   }
   if (player.shooting && weapons[player.weapon].auto) tryShoot();
   if (player.useCooldown>0) player.useCooldown-=dt;
+  exploreT-=dt;
+  if (exploreT<=0){ exploreT=0.25; markExplored(); }
   if (damageFlash>0) damageFlash-=dt;
   if (muzzleT>0){ muzzleT-=dt; if(muzzleT<=0){ muzzle.material.opacity=0; muzzleLight.intensity=0; } }
   if (hitmarkT>0){ hitmarkT-=dt; if(hitmarkT<=0) hitmarker.classList.remove('show'); }
@@ -667,35 +825,84 @@ function winGame(){
 
 /* ---------- enemies ---------- */
 function updateEnemies(dt){
+  // separation so enemies don't stack inside each other
+  for (let i=0;i<enemies.length;i++){
+    const a=enemies[i]; if (a.dead) continue;
+    for (let j=i+1;j<enemies.length;j++){
+      const b=enemies[j]; if (b.dead) continue;
+      const dx=b.x-a.x, dz=b.z-a.z;
+      const d=Math.hypot(dx,dz);
+      if (d<1.0 && d>0.0001){
+        const push=(1.0-d)*0.5;
+        const nx=dx/d, nz=dz/d;
+        if (!isSolid(a.x-nx*push,a.z-nz*push)){ a.x-=nx*push; a.z-=nz*push; }
+        if (!isSolid(b.x+nx*push,b.z+nz*push)){ b.x+=nx*push; b.z+=nz*push; }
+      }
+    }
+  }
   for (const e of enemies){
     if (e.dead) continue;
     e.flash=Math.max(0,e.flash-dt);
     const dx=player.x-e.x, dz=player.z-e.z, dist=Math.hypot(dx,dz);
-    if (dist<16 && hasLOS(e.x,e.z,player.x,player.z)){ e.alert=3; e.state='chase'; }
+    const los = dist<18 && hasLOS(e.x,e.z,player.x,player.z);
+    if (los){ e.alert=3; e.state='chase'; }
     e.alert=Math.max(0,e.alert-dt);
     if (e.state==='chase' && e.alert<=0) e.state='patrol';
+    // leash: give up far from home so the whole map doesn't pile onto you
+    if (e.state==='chase' && Math.hypot(e.leashX-player.x,e.leashZ-player.z)>30){ e.state='patrol'; e.alert=0; e.path=null; }
     if (e.state==='chase'){
-      const len=dist||1;
-      const sp=e.type==='fighter'?4.6:(e.type==='hunter'?2.9:2.3);
-      const mx=(dx/len)*sp*dt, mz=(dz/len)*sp*dt;
-      if (!isSolid(e.x+mx,e.z)) e.x+=mx;
-      if (!isSolid(e.x,e.z+mz)) e.z+=mz;
+      const sp0=e.type==='fighter'?4.2:(e.type==='hunter'?2.9:2.3);
+      const preferred=e.type==='fighter'?5.5:(e.type==='hunter'?4.2:1.4);
+      const minRange=e.type==='fighter'?3.2:(e.type==='hunter'?2.4:0.95);
+      e.repathT-=dt;
+      if (e.repathT<=0){ e.path=findPath(e.x,e.z,player.x,player.z); e.pathI=0; e.repathT=0.7+Math.random()*0.5; }
+      while (e.path && e.pathI<e.path.length && Math.hypot(e.path[e.pathI][0]-e.x,e.path[e.pathI][1]-e.z)<0.6) e.pathI++;
+      let mx=0,mz=0;
+      const nx=dist>0.001?dx/dist:0, nz=dist>0.001?dz/dist:0;
+      if (e.stepBack>0){
+        e.stepBack-=dt;
+        mx=-nx*sp0*0.7; mz=-nz*sp0*0.7;
+      } else if (los && dist<=minRange){
+        // personal space: back off instead of running into the player
+        mx=-nx*sp0*0.55; mz=-nz*sp0*0.55;
+      } else if (los && dist<=preferred && e.type!=='trooper'){
+        // ranged attackers strafe at preferred range instead of charging
+        e.strafeT-=dt;
+        if (e.strafeT<=0){ e.strafeDir*=-1; e.strafeT=1.2+Math.random()*1.8; }
+        mx=-nz*e.strafeDir*sp0*0.6+nx*sp0*0.12;
+        mz=nx*e.strafeDir*sp0*0.6+nz*sp0*0.12;
+      } else if (e.path && e.pathI<e.path.length){
+        const wp=e.path[e.pathI];
+        const wx=wp[0]-e.x, wz=wp[1]-e.z, wl=Math.hypot(wx,wz)||1;
+        mx=wx/wl*sp0; mz=wz/wl*sp0;
+      } else {
+        // no path (rare): steer with a sidestep bias so walls slide by
+        // instead of jamming head-on
+        mx=nx*sp0*0.8 + -nz*e.strafeDir*sp0*0.5;
+        mz=nz*sp0*0.8 + nx*e.strafeDir*sp0*0.5;
+      }
+      moveEnemy(e,mx,mz,dt);
+      // stuck detection: barely moved -> flip strafe + force repath
+      e.stuckT+=dt;
+      if (e.stuckT>0.8){
+        if (Math.hypot(e.x-e.lastX,e.z-e.lastZ)<0.3){ e.strafeDir*=-1; e.repathT=0; e.strafeT=0; }
+        e.lastX=e.x; e.lastZ=e.z; e.stuckT=0;
+      }
       e.attackCd-=dt;
       const range=e.type==='hunter'?6:(e.type==='fighter'?7:1.8);
-      if (dist<range && e.attackCd<=0){
-        e.attackCd=e.type==='hunter'?1.2:(e.type==='fighter'?1.0:0.9);
-        if (e.type==='hunter'){ if (hasLOS(e.x,e.z,player.x,player.z)){ damagePlayer(9,'hunter'); } noise(0.08,0.15,400); blip(180,0.1,'sawtooth',0.15); spawnParticle(player.x,player.z,0xff8844,4); }
+      if (dist<range && e.attackCd<=0 && hasLOS(e.x,e.z,player.x,player.z)){
+        e.attackCd=e.type==='hunter'?1.3:(e.type==='fighter'?1.1:1.0);
+        if (e.type==='hunter'){ damagePlayer(9,'hunter'); noise(0.08,0.15,400); blip(180,0.1,'sawtooth',0.15); spawnParticle(player.x,player.z,0xff8844,4); }
         else if (e.type==='fighter'){ projectiles.push(makeProj(e.x,e.z,player.x,player.z,8,true)); blip(240,0.08,'square',0.1); }
-        else if (e.type==='trooper'){ if (hasLOS(e.x,e.z,player.x,player.z)) damagePlayer(6,'trooper'); blip(260,0.06,'square',0.12); }
+        else if (e.type==='trooper'){ damagePlayer(6,'trooper'); e.stepBack=0.45; blip(260,0.06,'square',0.12); }
       }
     } else {
+      e.path=null;
       const wp=e.patrol[e.pi];
       if (Math.hypot(wp[0]-e.x,wp[1]-e.z)<0.6) e.pi=(e.pi+1)%e.patrol.length;
       const twp=e.patrol[e.pi];
       const pdx=twp[0]-e.x, pdz=twp[1]-e.z, plen=Math.hypot(pdx,pdz)||1;
-      const mx=(pdx/plen)*1.6*dt, mz=(pdz/plen)*1.6*dt;
-      if (!isSolid(e.x+mx,e.z)) e.x+=mx;
-      if (!isSolid(e.x,e.z+mz)) e.z+=mz;
+      moveEnemy(e,pdx/plen*1.6,pdz/plen*1.6,dt);
     }
   }
 }
@@ -878,6 +1085,71 @@ function renderTracker(){
   }
 }
 
+/* ---------- automap ---------- */
+const mapCanvas=$('map-canvas');
+const mapCtx=mapCanvas.getContext('2d');
+let exploreT=0;
+function toggleMap(){
+  if (!started) return;
+  mapOpen=!mapOpen;
+  $('automap').classList.toggle('hidden',!mapOpen);
+  blip(mapOpen?600:400,0.06,'square',0.08);
+  if (mapOpen) renderAutomap(performance.now());
+}
+function markExplored(){
+  const px=Math.floor(player.x), pz=Math.floor(player.z);
+  const R=9;
+  for (let z=pz-R;z<=pz+R;z++) for (let x=px-R;x<=px+R;x++){
+    if (x<0||z<0||x>=MAPX||z>=MAPY) continue;
+    if (Math.hypot(x+0.5-player.x,z+0.5-player.z)>R) continue;
+    if (hasLOS(player.x,player.z,x+0.5,z+0.5)) explored[z*MAPX+x]=1;
+  }
+  explored[pz*MAPX+px]=1;
+}
+function renderAutomap(now){
+  const W=mapCanvas.width,H=mapCanvas.height;
+  const s=Math.min(W/MAPX,H/MAPY);
+  const ox=(W-MAPX*s)/2, oy=(H-MAPY*s)/2;
+  mapCtx.fillStyle='#05070d'; mapCtx.fillRect(0,0,W,H);
+  for (let z=0;z<MAPY;z++) for (let x=0;x<MAPX;x++){
+    if (!explored[z*MAPX+x]) continue;
+    const w=world[z][x];
+    const fk=floorK[z][x];
+    if (w===WALL.DOOR) mapCtx.fillStyle='#ffaa33';
+    else if (w===WALL.TERM) mapCtx.fillStyle='#39ff6a';
+    else if (w!==0) mapCtx.fillStyle='#5a6f96';
+    else if (fk===FLOOR.TELE) mapCtx.fillStyle='#1a3a99';
+    else if (fk===FLOOR.RECHARGE) mapCtx.fillStyle='#144a22';
+    else if (fk===FLOOR.LAVA) mapCtx.fillStyle='#6a1a10';
+    else mapCtx.fillStyle='#141c30';
+    mapCtx.fillRect(ox+x*s,oy+z*s,Math.ceil(s),Math.ceil(s));
+  }
+  mapCtx.fillStyle='#ffe14a';
+  for (const it of items){
+    if (it.taken||it.type!=='weapon') continue;
+    const ix=Math.floor(it.x), iz=Math.floor(it.z);
+    if (ix<0||iz<0||ix>=MAPX||iz>=MAPY||!explored[iz*MAPX+ix]) continue;
+    mapCtx.fillRect(ox+it.x*s-2,oy+it.z*s-2,4,4);
+  }
+  mapCtx.fillStyle='#ff4444';
+  for (const e of enemies){
+    if (e.dead) continue;
+    const ix=Math.floor(e.x), iz=Math.floor(e.z);
+    if (ix<0||iz<0||ix>=MAPX||iz>=MAPY||!explored[iz*MAPX+ix]) continue;
+    mapCtx.fillRect(ox+e.x*s-2,oy+e.z*s-2,4,4);
+  }
+  const pulse=3+Math.sin(now/300)*1.5;
+  mapCtx.fillStyle='#4a8aff';
+  mapCtx.fillRect(ox+exitPoint.x*s-pulse,oy+exitPoint.z*s-pulse,pulse*2,pulse*2);
+  const px=ox+player.x*s, py=oy+player.z*s;
+  mapCtx.save();
+  mapCtx.translate(px,py);
+  mapCtx.rotate(Math.atan2(-Math.cos(player.yaw),-Math.sin(player.yaw)));
+  mapCtx.fillStyle='#ffffff';
+  mapCtx.beginPath(); mapCtx.moveTo(7,0); mapCtx.lineTo(-5,5); mapCtx.lineTo(-5,-5); mapCtx.closePath(); mapCtx.fill();
+  mapCtx.restore();
+}
+
 /* ---------- sync visuals ---------- */
 function syncEnemies(){
   for (const e of enemies){
@@ -933,6 +1205,7 @@ function frame(now){
   renderer.render(scene,camera);
   if (started){
     updateHud(); renderTracker();
+    if (mapOpen) renderAutomap(now);
     if (performance.now()/1000>msgUntil && !msgLog.classList.contains('hidden')) msgLog.classList.add('hidden');
   }
   requestAnimationFrame(frame);
@@ -950,6 +1223,14 @@ playBtn.addEventListener('click',()=>{
   player.yaw=spawnPoint.yaw; player.pitch=0;
   player.vx=0; player.vz=0; player.vy=0; player.bob=0;
   damageFlash=0;
+  explored.fill(0); mapOpen=false; $('automap').classList.add('hidden');
+  { // pre-reveal spawn area so the map isn't empty
+    const px=Math.floor(spawnPoint.x), pz=Math.floor(spawnPoint.z);
+    for (let z=pz-9;z<=pz+9;z++) for (let x=px-9;x<=px+9;x++){
+      if (x<0||z<0||x>=MAPX||z>=MAPY) continue;
+      if (Math.hypot(x+0.5-spawnPoint.x,z+0.5-spawnPoint.z)<9) explored[z*MAPX+x]=1;
+    }
+  }
   for (const it of items) it.taken=false;
   // remove drop-items spawned by kills (keep original layout: flag them)
   for (let i=items.length-1;i>=0;i--){ if (items[i].drop) { const m=itemMeshes.get(items[i]); if(m){scene.remove(m.isGroup?m:m); } itemMeshes.delete(items[i]); items.splice(i,1); } }

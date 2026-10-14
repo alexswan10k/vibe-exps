@@ -43,6 +43,124 @@ When you dereference a pointer to `level_template` in C, the compiler generates 
 
 ---
 
+## 3. Initialised C Arrays Are Silently Discarded At Link Time
+
+### The Symptom
+A sprite/tile/palette array declared with an initialiser compiles cleanly, the
+build reports success, and the ROM is produced — but the data is **not in it**:
+
+```
+DISCARD: main.obj: main.asm: Section ".data" was discarded.
+DISCARD: main.obj: main.asm: Section "ram.data" was discarded.
+```
+
+At runtime the array is zero-filled, so every sprite renders as a blank
+(fully transparent) tile. The game still runs; the artwork is just invisible.
+
+### Why
+The devkitsnes linker configuration discards `main.obj`'s `.data` /
+`ram.data` sections. This affects **every** game built with `build.sh`, and it
+is silent — nothing in the build output is an error, so it is easy to miss.
+
+Note this is a different failure from section 1 above: the data does not end up
+in the wrong bank, it is not in the ROM at all.
+
+### The Fix
+Put non-trivial graphics in assembly and `.incbin` them into `.rodata1`, the
+same superfree section that carries the console font (`data.asm`). The font
+works, which proves superfree sections in `data.obj` survive linking:
+
+```asm
+.section ".rodata1" superfree
+
+snesfont:
+.incbin "pvsneslibfont.pic"
+
+vsgfx_tiles:
+.incbin "gfx/vsgfx_tiles.bin"
+...
+.ends
+```
+
+Then reference them from C and upload with DMA (never dereference the pointer in
+C — pass it straight to the DMA helpers, exactly as `consoleInitText` does with
+`snesfont`):
+
+```c
+extern char vsgfx_tiles[];
+oamInitGfxSet(vsgfx_tiles, 336, vpal_snake, 32, 0, 0x2000, OBJ_SIZE8);
+```
+
+Plain zero-initialised globals are fine — they land in `.bss`, which is not
+discarded.
+
+### Verifying
+Do not trust a clean build as proof the art made it in. Grep the build log for
+`DISCARD`, and search the finished ROM for a distinctive byte run from the
+asset:
+
+```sh
+./build.sh <game> 2>&1 | grep -i discard
+python3 -c "rom=open('build/game.sfc','rb').read(); \
+  print(rom.find(open('src/gfx/vsgfx_tiles.bin','rb').read()))"
+```
+
+A result of `-1` means the asset is missing from the ROM.
+
+### `.incbin` Caveat
+This wla-dx build does **not** accept `.incbin "file", offset, length`. Emit one
+`.bin` per blob rather than slicing a single file.
+
+---
+
+## 4. Sprite Art Must Be 4bpp (Four Bitplanes), Not 2bpp
+
+### The Symptom
+Sprites appear, but they look wrong and pieces of the art are simply missing —
+typically small detail (eyes, highlights) vanishing entirely. The build is
+clean and every asset is present in the ROM, so nothing signals a problem.
+
+### The Cause
+Video Mode 1 runs OBJ at **4bpp** — four bitplanes per row, so an 8x8 tile is
+**32 bytes**, not 16:
+
+```
+row = 4 bytes (bitplanes 0..3)     8 rows * 4 = 32 bytes per tile
+colour index = p0 | p1<<1 | p2<<2 | p3<<3
+```
+
+Generating only two bitplanes does not just halve the size, it caps the palette
+at colours 0-3. An encoder written as:
+
+```python
+lo |= (v & 1) << (7 - x)
+hi |= ((v >> 1) & 1) << (7 - x)     # WRONG: (v >> 1) & 1 is always 0 for v >= 4
+```
+
+silently encodes colour 4 as 0 and colour 5 as 1. Colour 0 is transparent for
+OBJ, so any art using index 4+ **disappears**. In Void Serpent this erased the
+serpent's eyes on every heading and the food orb's specular highlight.
+
+Two things must change together, or the art is garbage:
+
+| | Wrong | Right |
+|---|---|---|
+| bytes per 8x8 tile | 16 | 32 |
+| OAM tile offset | `index * 2` | `index * 4` |
+
+### Guarding It
+Never trust a successful build or a byte-level spot check. Round-trip the
+generated data back to something inspectable and compare it against the source
+art — `tools/gengfx.py` does this in `build()` via `decode_tile`, so a
+regression fails the generator instead of shipping.
+
+Also decode the art and *look at it* before shipping. The missing eyes were
+obvious the moment the tiles were printed as ASCII; they were invisible from
+byte counts, offsets, and a clean build.
+
+
+---
+
 ## References
 
 1. **PVSnesLib Documentation & Source (tcc-65816 Limitations):**
