@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HYPERBOLIA — a walkable non-Euclidean world</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2302040a'/%3E%3Cg fill='none' stroke='%2376d0ff' stroke-width='1.4'%3E%3Crect x='4' y='4' width='24' height='24'/%3E%3Crect x='10' y='10' width='12' height='12'/%3E%3C/g%3E%3Crect x='14' y='14' width='4' height='4' fill='%23ffc45c'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <!-- ============================ reticle ============================ -->
+    <div class="reticle"><span></span><span></span><span></span><span></span></div>
+
+    <!-- ============================== HUD =============================== -->
+    <div id="hud">
+      <div class="hud-title">HYPERBOLIA</div>
+      <div class="hud-sub">an infinite architecture · hyperbolic 3-space</div>
+      <dl class="hud-grid">
+        <dt>fps</dt><dd id="hud-fps">—</dd>
+        <dt>walked</dt><dd id="hud-dist">0.0</dd>
+        <dt>pitch</dt><dd id="hud-tile">—</dd>
+        <dt>march</dt><dd id="hud-steps">—</dd>
+        <dt>render</dt><dd id="hud-res">—</dd>
+      </dl>
+      <p class="hud-note">
+        Every room is identical to every other, so the view never changes.
+        Keep walking — it never ends.
+      </p>
+    </div>
+
+    <!-- ============================= disk =============================== -->
+    <div id="disk-panel" class="panel">
+      <button class="panel-head" data-toggle="disk-panel">
+        <span>Poincaré disk</span><span class="chev">▾</span>
+      </button>
+      <div class="panel-body">
+        <canvas id="disk"></canvas>
+        <dl class="readout">
+          <dt>walked</dt><dd id="disk-hyper">0.00</dd>
+          <dt>disk radius</dt><dd id="disk-radius">0.00000</dd>
+          <dt>tile side</dt><dd id="disk-side">0.0000</dd>
+        </dl>
+        <div class="row">
+          <label for="tiling">tiling</label>
+          <select id="tiling">
+            <option value="0">{7,3} heptagonal</option>
+            <option value="1">{5,4} pentagonal</option>
+            <option value="2">{8,3} octagonal</option>
+            <option value="3">{6,4} hexagonal</option>
+            <option value="4">{4,6} square</option>
+          </select>
+        </div>
+        <p class="note">
+          The honest two-dimensional version. Every tile is provably identical
+          — same side length, same angle — yet seven of them meet at each
+          corner, where flat space allows only six. The orange line is a
+          geodesic: it never touches the rim, because the rim is infinitely
+          far away.
+        </p>
+      </div>
+    </div>
+
+    <!-- ============================ controls ============================ -->
+    <div id="ui" class="panel">
+      <button class="panel-head" data-toggle="ui">
+        <span>geometry</span><span class="chev">▾</span>
+      </button>
+      <div class="panel-body">
+        <div class="presets">
+          <button data-preset="hall" class="active">hall</button>
+          <button data-preset="infinite">infinite</button>
+          <button data-preset="flat">flat</button>
+          <button data-preset="neon">neon</button>
+        </div>
+
+        <div class="ctl">
+          <label>metric <output data-param="curv"></output></label>
+          <input type="range" data-param="curv" min="0" max="1" step="0.01" value="1" />
+          <p class="hint">
+            The rooms never move. This switches how <b>distance</b> is measured
+            — and so how the corridor fades. In hyperbolic space a step is
+            cheap: the same lattice distance costs less and less, so the walk
+            goes on long after flat space would have ground to a halt.
+          </p>
+        </div>
+
+        <div class="ctl">
+          <label>room size T <output data-param="room"></output></label>
+          <input type="range" data-param="room" min="0.35" max="2.6" step="0.01" value="1.15" />
+        </div>
+
+        <div class="ctl">
+          <label>doorway <output data-param="door"></output></label>
+          <input type="range" data-param="door" min="0.12" max="0.62" step="0.01" value="0.42" />
+        </div>
+
+        <div class="ctl">
+          <label>fog <output data-param="fog"></output></label>
+          <input type="range" data-param="fog" min="0" max="0.6" step="0.005" value="0.22" />
+        </div>
+
+        <div class="ctl">
+          <label>emissive <output data-param="glow"></output></label>
+          <input type="range" data-param="glow" min="0" max="3" step="0.05" value="1" />
+        </div>
+
+        <div class="ctl">
+          <label>spectral <output data-param="palette"></output></label>
+          <input type="range" data-param="palette" min="0" max="1" step="0.01" value="0" />
+        </div>
+
+        <div class="ctl">
+          <label>lantern <output data-param="head"></output></label>
+          <input type="range" data-param="head" min="0" max="3" step="0.05" value="0.9" />
+        </div>
+
+        <div class="ctl">
+          <label>shadows <output data-param="shadow"></output></label>
+          <input type="range" data-param="shadow" min="0" max="1" step="0.05" value="0.7" />
+        </div>
+
+        <div class="ctl">
+          <label>detail <output data-param="quality"></output></label>
+          <input type="range" data-param="quality" min="0" max="1" step="0.05" value="1" />
+        </div>
+
+        <div class="ctl">
+          <label>field of view <output data-param="fov"></output></label>
+          <input type="range" data-param="fov" min="45" max="110" step="1" value="72" />
+        </div>
+
+        <div class="ctl">
+          <label>walk speed <output data-param="speed"></output></label>
+          <input type="range" data-param="speed" min="0.5" max="12" step="0.1" value="3.2" />
+        </div>
+
+        <div class="ctl checks">
+          <label><input type="checkbox" data-param="aa" /> 2× supersampling</label>
+          <label
+            ><input type="checkbox" data-param="showDisk" checked /> disk panel</label
+          >
+        </div>
+
+        <div class="keys">
+          <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> walk</div>
+          <div><kbd>mouse</kbd> look · <kbd>Q</kbd><kbd>E</kbd><kbd>R</kbd><kbd>F</kbd> turn</div>
+          <div><kbd>shift</kbd> boost · <kbd>1</kbd> curvature · <kbd>G</kbd> reset walk</div>
+          <div><kbd>H</kbd> hide panels · <kbd>esc</kbd> release cursor</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================ overlay ============================= -->
+    <div id="overlay">
+      <div class="card">
+        <h1>HYPERBOLIA</h1>
+        <p class="tag">an infinite architecture, and the geometry behind it</p>
+        <div class="mathbox">
+          <div class="mrow"><span>Euclidean corner</span><code>α + β + γ = π</code></div>
+          <div class="mrow"><span>Hyperbolic corner</span><code>α + β + γ &lt; π</code></div>
+          <p class="mnote">
+            A corner holds <em>less</em> than a right angle. Six rooms can no
+            longer close up around you — six doorways open into six
+            <em>more</em> rooms, and those need six more again. A space with
+            corners like that can hold infinitely many rooms and still never
+            bring you back where you started.
+          </p>
+        </div>
+        <p class="lede">
+          You are standing in one. Through every doorway is another room
+          identical to this one, and through those, more — receding toward a
+          point you can approach but never reach. Walk for as long as you like:
+          the view will not change, and it will not end.
+        </p>
+        <button id="resume">enter</button>
+        <p class="fineprint">click to look around · esc to release the cursor</p>
+      </div>
+    </div>
+
+    <div id="fatal">
+      <div>
+        <h2>WebGL2 unavailable</h2>
+        <p id="fatal-msg"></p>
+      </div>
+    </div>
+
+    <script src="shaders.js"></script>
+    <script src="hyper.js"></script>
+    <script src="renderer.js"></script>
+    <script src="player.js"></script>
+    <script src="disk.js"></script>
+    <script src="main.js"></script>
+  </body>
+</html>
