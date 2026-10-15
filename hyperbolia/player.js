@@ -5,6 +5,10 @@
  * frame; the class never touches the DOM or the renderer.
  * ========================================================================== */
 
+/**
+ * Key code -> action. `this.keys` holds ACTION names, never key codes, so
+ * KeyW and ArrowUp feed the same action without needing a scan per query.
+ */
 const DEFAULT_KEYS = {
   KeyW: "forward",
   ArrowUp: "forward",
@@ -25,6 +29,7 @@ const DEFAULT_KEYS = {
 class HyperPlayer {
   constructor() {
     this.camera = new HyperCamera();
+    /** Actions currently held down, e.g. "forward". */
     this.keys = new Set();
     this.pointerLocked = false;
     this.look = { x: 0, y: 0 };
@@ -41,14 +46,17 @@ class HyperPlayer {
   }
 
   onKeyDown(e) {
-    if (DEFAULT_KEYS[e.code]) {
-      this.keys.add(DEFAULT_KEYS[e.code]);
+    const action = DEFAULT_KEYS[e.code];
+    if (action) {
+      this.keys.add(action);
+      // Arrows would otherwise scroll the page out from under the canvas.
       if (e.code.startsWith("Arrow")) e.preventDefault();
     }
   }
 
   onKeyUp(e) {
-    if (DEFAULT_KEYS[e.code]) this.keys.delete(DEFAULT_KEYS[e.code]);
+    const action = DEFAULT_KEYS[e.code];
+    if (action) this.keys.delete(action);
   }
 
   onMouseMove(dx, dy) {
@@ -57,11 +65,20 @@ class HyperPlayer {
     this.look.y += dy * this.sensitivity;
   }
 
+  /** True while the given action is held down by any of its keys. */
   held(action) {
-    for (const code in DEFAULT_KEYS) {
-      if (DEFAULT_KEYS[code] === action && this.keys.has(code)) return true;
-    }
-    return false;
+    return this.keys.has(action);
+  }
+
+  /** Release everything — call on window blur so keys do not stick. */
+  releaseAll() {
+    this.keys.clear();
+    this.velF = 0;
+    this.velS = 0;
+    this.angV.yaw = 0;
+    this.angV.pitch = 0;
+    this.look.x = 0;
+    this.look.y = 0;
   }
 
   update(dt) {
@@ -108,24 +125,62 @@ class HyperPlayer {
     this.velF += (targetF - this.velF) * accel;
     this.velS += (targetS - this.velS) * accel;
 
-    cam.moveForward(this.velF * dt);
-    cam.moveStrafe(this.velS * dt);
-    this.forwardOdometer += this.velF * dt;
+    /* --- stay inside a room ------------------------------------------------ */
+    // Collide in the cell's OWN frame. Cell-local coords run -D/2..D/2, with
+    // the floor at -D/2, so standing at eye height means y = -D/2 + eye*D.
+    //
+    // The cell offset has to be put back afterwards. Folding to the nearest
+    // cell centre and reseating from those folded coords would silently drop
+    // the offset, pinning the player inside whichever room they started in.
+    const { D, door, margin, eyeHeight } = this.world;
+    const lo = -D * 0.5 + eyeHeight * D;
+    const hi = D * 0.5 - eyeHeight * D;
+    const bob = Math.sin(this.bob) * D * 0.012;
+
+    // Does a (forward, strafe) step from the current pose stay legal?
+    const save = {
+      P: cam.P.slice(),
+      E: cam.E.map((e) => e.slice()),
+      odo: cam.odometer,
+    };
+    const restore = () => {
+      cam.P = save.P.slice();
+      cam.E = save.E.map((e) => e.slice());
+      cam.odometer = save.odo;
+    };
+    const legal = (f, s) => {
+      restore();
+      cam.moveForward(f);
+      cam.moveStrafe(s);
+      const local = cam.folded(D).k;
+      local[1] += bob;
+      return !confineToRoom(local, D, door, margin, lo, hi);
+    };
+
+    let df = this.velF * dt;
+    let ds = this.velS * dt;
+    if (!legal(df, ds)) {
+      // Blocked. Slide: try each axis alone so walls guide rather than stop.
+      const alongF = df !== 0 && legal(df, 0);
+      const alongS = ds !== 0 && legal(0, ds);
+      if (alongF) {
+        ds = 0;
+      } else if (alongS) {
+        df = 0;
+      } else {
+        df = 0;
+        ds = 0;
+      }
+    }
+
+    restore();
+    cam.moveForward(df);
+    cam.moveStrafe(ds);
+    this.forwardOdometer += df;
+    cam.rebaseIfNeeded(D);
 
     /* --- head bob ---------------------------------------------------------- */
-    const sp = Math.hypot(this.velF, this.velS);
+    const sp = Math.hypot(df, ds);
     this.bob += sp * dt * 4.2;
-
-    /* --- stay inside a room ------------------------------------------------ */
-    // In the folded cell the floor is at y = -D/2, so standing at eye height
-    // simply means y = -D/2 + eyeHeight*D. No offsetting needed.
-    const { D, door, margin, eyeHeight } = this.world;
-    const k = cam.kleinFolded(D).k;
-    k[1] += Math.sin(this.bob) * D * 0.012;
-    const eye = eyeHeight * D;
-    const lo = -D * 0.5 + eye;
-    const hi = D * 0.5 - eye;
-    if (confineToRoom(k, D, door, margin, lo, hi)) cam.reseatFromKlein(k);
-    cam.rebaseIfNeeded(D);
   }
 }

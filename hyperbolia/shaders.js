@@ -39,7 +39,7 @@ out vec4 outColor;
 
 uniform vec2  uRes;
 uniform float uTime;
-uniform vec3  uRo;        // camera position, Klein (folded near origin)
+uniform vec3  uRo;        // camera position, cell-LOCAL chart coords
 uniform mat3  uCam;       // columns: right, up, forward (Euclidean unit, Klein)
 uniform float uTanHalf;   // tan(fov/2)
 
@@ -204,6 +204,7 @@ float frameRing(vec2 v, float dr, float C) {
 
 vec3 shade(vec3 ro, vec3 rd, float t, vec3 cid, vec3 q, out float outDist) {
   vec3 p = ro + rd * t;
+
   outDist = coshD(p, ro);
   if (uCurv < 0.5) outDist = length(p - ro);
 

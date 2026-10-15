@@ -49,7 +49,6 @@
   const hud = {
     fps: document.getElementById("hud-fps"),
     dist: document.getElementById("hud-dist"),
-    cell: document.getElementById("hud-cell"),
     res: document.getElementById("hud-res"),
     steps: document.getElementById("hud-steps"),
     tile: document.getElementById("hud-tile"),
@@ -66,10 +65,8 @@
     const cam = player.camera;
     const k = cam.klein;
     const D = kleinD();
-    const cell = k.map((c) => Math.round(c / D));
     hud.fps.textContent = renderer.fps.toFixed(0);
     hud.dist.textContent = cam.odometer.toFixed(1);
-    hud.cell.textContent = cell.join(", ");
     hud.res.textContent =
       `${Math.round(renderer.scale * 100)}% · ${canvas.width}×${canvas.height}`;
     const steps = marchSteps();
@@ -127,7 +124,11 @@
   });
 
   window.addEventListener("keyup", (e) => player.onKeyUp(e));
-  window.addEventListener("blur", () => player.keys.clear());
+  // Losing focus mid-stride would otherwise leave the player walking forever.
+  window.addEventListener("blur", () => player.releaseAll());
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) player.releaseAll();
+  });
 
   /* ------------------------------------------------------------ controls */
 
@@ -250,7 +251,12 @@
     disk.update(dt, forwardDelta, yawDelta);
 
     renderer.resize();
-    const folded = player.camera.kleinFolded(D);
+
+    // Cell-LOCAL coordinates. The shader derives the cell index from each
+    // marching point, so the image depends only on where you stand and which
+    // way you face — which is what lets the camera be folded back by whole
+    // cells whenever its raw chart coordinates get large.
+    const folded = player.camera.folded(D);
 
     renderer.draw(
       {

@@ -71,7 +71,7 @@ class HyperCamera {
     this.odometer = 0;
     this.yaw = 0;
     this.pitch = 0;
-    this.rebaseCount = 0;
+    this.foldCount = 0;
   }
 
   /**
@@ -171,39 +171,44 @@ class HyperCamera {
   }
 
   /**
-   * Pull the camera back toward the origin so its chart coordinates stay small.
+   * Rewrite the camera at its cell-local position, for numeric hygiene only.
    *
-   * This is an isometry, so the lattice is untouched and the player sees
-   * exactly what they would have seen without it. Needed because the chart
-   * grows like sinh(distance), which overflows a float64 after a few hundred
-   * units of walking.
+   * The renderer is handed cell-LOCAL coordinates and recovers the cell index
+   * from each marching point, so the image depends on nothing but where you
+   * stand and which way you face. Relabelling the position is invisible.
    *
-   * Boosting inward along the tangent w by s reduces the distance to the
-   * origin from d to |d - s|, so one step does the job.
+   * Note this is NOT an isometry of the lattice, so no cell number is carried
+   * across it — a banked index would count nothing meaningful. There is no
+   * reason to track one: every room is identical.
+   */
+  foldIntoCell(D) {
+    const k = this.klein;
+    const offset = k.map((c) => Math.round(c / D));
+    if (offset[0] === 0 && offset[1] === 0 && offset[2] === 0) return false;
+    this.reseatFromKlein(k.map((c, i) => c - offset[i] * D));
+    this.foldCount++;
+    return true;
+  }
+
+  /**
+   * Keep the raw chart coordinates small enough to stay exact. They grow like
+   * sinh(distance), which overflows a float64 around 700 units out — some 500
+   * rooms of continuous walking — so this is insurance rather than something a
+   * player will normally see.
    */
   rebaseIfNeeded(D) {
+    if (Math.hypot(...this.klein) < 300) return false;
+    return this.foldIntoCell(D);
+  }
+
+  /**
+   * Cell-LOCAL coordinates — exactly what the renderer wants. The shader
+   * recovers the cell from each marching point, so the image is a function of
+   * `k` alone and stays well-conditioned however far you walk.
+   */
+  folded(D) {
     const k = this.klein;
-    const kn = Math.hypot(k[0], k[1], k[2]);
-    const d = Math.asinh(kn);
-    // Hysteresis: fold back to a comfortable radius rather than to the
-    // minimum, so this does not fire every single frame.
-    const target = Math.asinh(D * 0.5) * 1.7;
-    if (d <= target || kn === 0) return false;
-
-    // Unit spacelike tangent at P pointing at the origin: it must have
-    // spatial part -T * k/|k| and time part -|k|, which satisfies
-    // <P,w> = 0 and <w,w> = 1 exactly.
-    const T = this.P[0];
-    const w = [-kn, (-T * k[0]) / kn, (-T * k[1]) / kn, (-T * k[2]) / kn];
-
-    // The frame is an orthonormal basis of P's spacelike complement, so w
-    // decomposes as sum_i <w,E_i> E_i and that sum is already unit length.
-    const A = [0, 1, 2, 3].map((i) =>
-      this.E.reduce((s, e) => s + v4.dot(w, e) * e[i], 0)
-    );
-    this.boostAlong(A, d - target);
-    this.rebaseCount++;
-    return true;
+    return { k: k.map((c, i) => c - Math.round(c / D) * D) };
   }
 
   /**
@@ -276,7 +281,6 @@ class HyperCamera {
     const v2 = orth(vecs[1], [v1]);
     const v3 = orth(vecs[2], [v1, v2]);
     this.E = [v1, v2, v3];
-    this.rebaseCount++;
   }
 
   /** Reset the frame so the camera looks along an axis again. */
