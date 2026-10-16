@@ -32,6 +32,14 @@ function readSample(analyser, buffer) {
     return (buffer[buffer.length >> 1] - 128) / 128;
 }
 
+/** Mean of an analyser's buffer, for signals that hold a steady level. */
+function readLevel(analyser, buffer) {
+    analyser.getFloatTimeDomainData(buffer);
+    let sum = 0;
+    for (let i = 0; i < buffer.length; i++) sum += buffer[i];
+    return sum / buffer.length;
+}
+
 /**
  * CV/Gate source. CV is expressed in volts, where 1V is one octave;
  * destinations scale it to whatever they need (see VOICES.oscillator).
@@ -242,6 +250,154 @@ const VOICES = {
         };
     },
 
+    /**
+     * Noise source.
+     *
+     * One looping buffer holds all three flavours and the tone knob crossfades
+     * the gain between them, rather than rebuilding a buffer on every tweak —
+     * that would click and would allocate on the audio thread.
+     */
+    noise(ctx, owned) {
+        const LENGTH = 2;
+        const RATE = ctx.sampleRate || 48000;
+        const buffer = ctx.createBuffer(1, LENGTH * RATE, RATE);
+        fillNoiseBuffer(buffer.getChannelData(0), 0, Math.random);
+
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+
+        const white = ctx.createGain();
+        const pink = ctx.createGain();
+        const brown = ctx.createGain();
+        const level = ctx.createGain();
+        source.connect(white); white.connect(level);
+        source.connect(pink); pink.connect(level);
+        source.connect(brown); brown.connect(level);
+        level.gain.value = 0;
+        source.start();
+        owned.push(source, white, pink, brown, level);
+
+        // A slice of the buffer for the panel to draw. Kept short so the panel
+        // does not walk two seconds of audio every frame.
+        const PREVIEW = 512;
+        const preview = new Float32Array(PREVIEW);
+        const startSample = Math.floor((ctx.currentTime * RATE) % (LENGTH * RATE));
+
+        return {
+            inputs: {},
+            outputs: { out: level },
+            preview() {
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < PREVIEW; i++) {
+                    preview[i] = data[(startSample + i * 8) % data.length];
+                }
+                return preview;
+            },
+            setControl(id, v) {
+                const now = ctx.currentTime;
+                if (id === "tone") {
+                    // Same crossfade weights the buffer was built with, so the
+                    // three gain nodes always sum to one and the knob is
+                    // continuous.
+                    const weights = noiseWeights(v);
+                    smoothTo(white.gain, weights.white, now, 0.05);
+                    smoothTo(pink.gain, weights.pink, now, 0.05);
+                    smoothTo(brown.gain, weights.brown, now, 0.05);
+                } else if (id === "level") {
+                    level.gain.setTargetAtTime(v, now, 0.02);
+                }
+            },
+        };
+    },
+
+    /**
+     * Sample and hold.
+     *
+     * A ConstantSourceNode carries the stepped value, because that is what a
+     * downstream V/OCT input wants: a signal that does not move between
+     * clock edges. An analyser on the input watches for threshold crossings —
+     * a rising edge is the clock, and the level at that moment is captured.
+     *
+     * Glide is rescheduled onto the AudioParam rather than computed in a frame
+     * callback, so the portamento is sample accurate. Note that with glide on,
+     * the output is a ramp rather than a staircase, which is the point: an
+     * S&H fed from an LFO is a random melody instead of a rattle.
+     */
+    samplehold(ctx, owned) {
+        const out = ctx.createConstantSource();
+        out.offset.value = 0;
+        out.start();
+        const hold = new SampleHold();
+        const input = makeGateInput(ctx, owned, (open, now) => {
+            // Re-read the level rather than using the follower's own value:
+            // the follower reports 0 or 1, and we need the actual signal.
+            hold.sample(readLevel(input.analyser, input.buffer), now);
+        });
+        const level = ctx.createGain();
+        level.gain.value = 0.7;
+        out.connect(level);
+
+        owned.push(out, level);
+
+        return {
+            inputs: { in: input.input },
+            outputs: { out: level },
+            hold,
+            poll: (now) => {
+                input.poll(now);
+                if (!hold.started) return;
+                const next = hold.levelAt(now);
+                if (next !== out.offset.value) smoothTo(out.offset, next, now, 0.005);
+            },
+            setControl(id, v) {
+                if (id === "glide") {
+                    hold.glide = v * 0.4;
+                    // Re-anchor from wherever the glide has reached, so turning
+                    // the knob mid-glide does not jump.
+                    if (hold.started) hold.sample(hold.value, ctx.currentTime);
+                } else if (id === "level") {
+                    level.gain.setTargetAtTime(v, ctx.currentTime, 0.02);
+                }
+            },
+        };
+    },
+
+    /** Harmonic drive, for making a plain sawtooth sound like something else. */
+    waveshaper(ctx, owned) {
+        const input = ctx.createGain();
+        const shaper = ctx.createWaveShaper();
+        const wet = ctx.createGain();
+        const dry = ctx.createGain();
+        const out = ctx.createGain();
+        input.connect(shaper); shaper.connect(wet); wet.connect(out);
+        input.connect(dry); dry.connect(out);
+        owned.push(input, shaper, wet, dry, out);
+
+        let cachedKey = "";
+        return {
+            inputs: { in: input },
+            outputs: { out },
+            setControl(id, v) {
+                const now = ctx.currentTime;
+                if (id === "drive" || id === "sym") {
+                    const drive = id === "drive" ? v : this.controls.drive;
+                    const sym = id === "sym" ? Math.round(v) : this.controls.sym;
+                    // Rebuilt only when the curve would actually change.
+                    const key = Math.round(drive * 100) + ":" + sym;
+                    if (key !== cachedKey) {
+                        cachedKey = key;
+                        shaper.curve = waveshaperCurve(drive, sym, 2049);
+                    }
+                } else if (id === "mix") {
+                    wet.gain.setTargetAtTime(v, now, 0.02);
+                    dry.gain.setTargetAtTime(1 - v, now, 0.02);
+                }
+            },
+            controls: { drive: 0, sym: 0 },
+        };
+    },
+
     oscilloscope(ctx, owned) {
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 1024;
@@ -318,6 +474,35 @@ const VOICES = {
 /* ============================================================
    Engine
    ============================================================ */
+
+/** Meter ballistics, in seconds. Rise quickly, fall slowly. */
+const METER_ATTACK = 0.025;
+const METER_RELEASE = 0.32;
+
+/**
+ * Smooths one meter's value between frames.
+ *
+ * Sampling once per frame makes a steady tone flicker and drops anything
+ * shorter than a frame, which is most of what a synth does: an ADSR spike is
+ * a few tens of milliseconds. A meter that rises fast and falls slowly holds a
+ * transient long enough to actually read, which is why the cable glow works
+ * on gates and envelopes instead of strobing.
+ *
+ * If the audio clock has not moved since the last read there is no elapsed
+ * time to smooth over, so the value snaps. That keeps the first frame honest
+ * (a meter must not open from black) and keeps the function total.
+ */
+function meterBallistics(tap, raw, now) {
+    if (tap.at === null || now <= tap.at) {
+        tap.shown = raw;
+    } else {
+        const rising = Math.abs(raw) > Math.abs(tap.shown);
+        const tau = rising ? METER_ATTACK : METER_RELEASE;
+        tap.shown += (raw - tap.shown) * (1 - Math.exp(-(now - tap.at) / tau));
+    }
+    tap.at = now;
+    return tap.shown;
+}
 
 class AudioEngine {
     constructor() {
@@ -403,7 +588,9 @@ class AudioEngine {
         if (!voice) return;
         // The scheduler reads tempo/gateLen/octave straight off the voice,
         // so the snapshot has to be kept current.
-        voice.controls = { ...module.controls };
+        // `applyControls` reaches the engine's own getter, so this goes
+        // through the raw field rather than clobbering it.
+        voice.controls = Object.assign(voice.controls || {}, module.controls);
         if (!voice.setControl) return;
         for (const spec of MODULE_DEFS[module.type].controls) {
             voice.setControl(spec.id, module.controls[spec.id]);
@@ -536,7 +723,8 @@ class AudioEngine {
             const buffer = new Float32Array(analyser.fftSize);
             voice.owned.push(analyser);
             voice.outputs[portId].connect(analyser);
-            tap = { analyser, buffer };
+            // `shown` and `at` carry the meter ballistics between frames.
+            tap = { analyser, buffer, shown: 0, at: null };
             voice.taps.set(portId, tap);
         }
         return tap;
@@ -553,20 +741,28 @@ class AudioEngine {
         tap.analyser.getFloatTimeDomainData(tap.buffer);
 
         const buffer = tap.buffer;
+        let sum = 0;
         let sumSquares = 0;
         let peak = 0;
         for (let i = 0; i < buffer.length; i++) {
             const v = buffer[i];
+            sum += v;
             sumSquares += v * v;
             const magnitude = v < 0 ? -v : v;
             if (magnitude > peak) peak = magnitude;
         }
 
+        // A control voltage is a DC level, so its mean is the honest reading.
+        // The old code took a single sample, which jitters around a ramp and
+        // reads low whenever the value happens to be mid-transition.
+        const cv = isControlSource(voice.type, parsed.portId);
+        const signed = sum / buffer.length;
         return {
-            cv: isControlSource(voice.type, parsed.portId),
-            signed: buffer[buffer.length >> 1],
+            cv,
+            signed,
             rms: Math.sqrt(sumSquares / buffer.length),
             peak,
+            level: meterBallistics(tap, cv ? signed : peak, this.ctx.currentTime),
         };
     }
 

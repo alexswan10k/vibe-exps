@@ -131,6 +131,156 @@ class GateFollower {
 }
 
 /* ============================================================
+   Noise
+   ============================================================ */
+
+/**
+ * Which flavour a tone position calls for, ignoring the crossfade.
+ *
+ * White noise is flat and far too bright to be a useful source on its own.
+ * Pink has equal energy per octave, brown equal energy per frequency, which
+ * is what a one-pole integrating filter gives for free.
+ *
+ * This is the coarse answer. The synthesiser uses noiseWeights() below, which
+ * crossfades between the same three.
+ */
+function noiseToneCoefficients(tone) {
+    if (tone < 0.5) return { white: 1, pink: 0, brown: 0 };
+    if (tone < 0.8) return { white: 0, pink: 1, brown: 0 };
+    return { white: 0, pink: 0, brown: 1 };
+}
+
+/**
+ * Peak each raw noise flavour reaches, measured rather than guessed.
+ * These filters do not produce unit-peak output, so without this the pink
+ * tone clips and the brown tone is almost inaudible.
+ */
+const NOISE_PEAKS = { white: 1, pink: 3.4, brown: 0.26 };
+
+/**
+ * Crossfade weights for the three flavours at a given tone position.
+ * White fades to pink across the first half of the knob, pink to brown
+ * across the rest, and the weights always sum to one. audio-engine.js feeds
+ * the same numbers to three gain nodes so the knob cannot jump.
+ */
+function noiseWeights(tone) {
+    const t = Math.max(0, Math.min(1, tone));
+    if (t < 0.5) return { white: 1 - t / 0.5, pink: t / 0.5, brown: 0 };
+    return { white: 0, pink: 1 - (t - 0.5) / 0.3, brown: (t - 0.5) / 0.3 };
+}
+
+/**
+ * Fills a buffer with noise of the requested flavour.
+ *
+ * Each flavour is normalised to the same peak and crossfaded by weight, so
+ * the tone knob sweeps smoothly and the output level holds steady instead of
+ * jumping as the character changes.
+ *
+ * The filtered flavours also carry a small DC offset — an integrator with a
+ * feedback term is not perfectly unbiased — which would show up as a constant
+ * on every downstream meter, so the running mean is subtracted off the end.
+ */
+function fillNoiseBuffer(buffer, tone, random) {
+    const weights = noiseWeights(tone);
+
+    let last = 0;
+    let brownState = 0;
+    let sum = 0;
+    for (let i = 0; i < buffer.length; i++) {
+        const white = random() * 2 - 1;
+        // Paul Kellet's economy pink filter.
+        last = 0.99765 * last + white * 0.0990460;
+        // Normalisation is applied at the output only. Dividing inside the
+        // recursion would scale the accumulator's feedback term and send it
+        // to Infinity within a few hundred samples.
+        const pink = (last + white * 0.1848) / NOISE_PEAKS.pink;
+        brownState = (brownState + 0.02 * white) / 1.02;
+        const brown = brownState / NOISE_PEAKS.brown;
+        const v = white * weights.white + pink * weights.pink + brown * weights.brown;
+        buffer[i] = v;
+        sum += v;
+    }
+
+    const offset = sum / buffer.length;
+    for (let i = 0; i < buffer.length; i++) buffer[i] -= offset;
+    return buffer;
+}
+
+/* ============================================================
+   Sample and hold
+   ============================================================ */
+
+/**
+ * Sample-and-hold with optional portamento.
+ *
+ * Glide matters more than it sounds: an instant S&H fed from an LFO is a
+ * staircase, but a short glide makes it a random melody. Time is in seconds,
+ * 0 meaning track the input exactly.
+ */
+class SampleHold {
+    constructor() {
+        this.glide = 0;
+        this._value = 0;
+        this._held = 0;
+        this._at = null;
+    }
+
+    /**
+     * The value the output should be carrying at time `t`.
+     *
+     * The very first capture has nothing to glide from, so it is held at its
+     * target rather than starting from zero.
+     */
+    levelAt(t) {
+        // Not yet sampled, or no glide: the target is the output.
+        if (this._at === null || this.glide <= 0) return this._value;
+        const elapsed = t - this._at;
+        if (elapsed >= this.glide) return this._value;
+        return this._held + (this._value - this._held) * Math.max(0, elapsed / this.glide);
+    }
+
+    /** Capture `sample` as the new target and start gliding toward it. */
+    sample(sample, t) {
+        this._held = this.levelAt(t);
+        this._value = sample;
+        this._at = t;
+    }
+
+    /** The target the glide is heading for. */
+    get value() { return this._value; }
+
+    /** False until the first sample has been captured. */
+    get started() { return this._at !== null; }
+}
+
+/* ============================================================
+   Waveshaper
+   ============================================================ */
+
+/**
+ * Transfer curve for the drive stage.
+ *
+ * `sym` picks the odd harmonics (valve-ish, asymmetric) or the even ones
+ * (clarinet-ish, symmetric). An even-symmetric curve must pass through the
+ * origin or a direct-current offset appears at the output, which is why this
+ * is written as a sum of odd powers: it is zero at zero for free.
+ */
+function waveshaperCurve(drive, sym, size) {
+    const amount = drive * 100;
+    const curve = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+        const x = (i / (size - 1)) * 2 - 1;
+        // Normalised so the top of the drive range stays in range instead of
+        // tearing the bus apart.
+        const k = (sym === 0 ? 1 : 2) * amount;
+        curve[i] = sym === 0
+            ? Math.tanh(k * x) / Math.tanh(k || 1)
+            : ((1 + k) * x) / (1 + k * Math.abs(x));
+    }
+    return curve;
+}
+
+/* ============================================================
    Sequencer
    ============================================================ */
 

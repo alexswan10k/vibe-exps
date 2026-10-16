@@ -7,8 +7,17 @@
 /** Number of steps on every sequencer. Used everywhere; no more magic 8s. */
 const SEQUENCER_STEPS = 8;
 
-/** Rack canvas grid, in rack units. Modules snap to this when dropped. */
-const RACK_GRID = 10;
+/**
+ * Rack grid, in rack units. Modules snap to this when dropped.
+ *
+ * 20 rather than 10: at 10 a module seems to move when it lands, which reads
+ * as the drag being imprecise, and 20 still divides every module width below.
+ * All module widths are multiples of it, so neighbours tile without a gap.
+ */
+const RACK_GRID = 20;
+
+/** Every RACK_GRID_MAJOR cells a major line falls on. */
+const RACK_GRID_MAJOR = 5;
 
 const ZOOM_MIN = 0.35;
 const ZOOM_MAX = 2.2;
@@ -48,7 +57,8 @@ const MODULE_DEFS = {
     oscillator: {
         name: "Oscillator",
         abbr: "VCO",
-        width: 172,
+        group: "source",
+        width: 180,
         controls: [
             { id: "freq", name: "Freq", type: "knob", default: 0.3, curve: "hz", display: (v) => fmtHz(CURVES.hz(v)) + "Hz" },
             { id: "wave", name: "Wave", type: "select", default: 1, options: ["Sine", "Square", "Saw", "Tri"] },
@@ -64,7 +74,8 @@ const MODULE_DEFS = {
     lfo: {
         name: "LFO",
         abbr: "LFO",
-        width: 150,
+        group: "source",
+        width: 160,
         controls: [
             { id: "freq", name: "Rate", type: "knob", default: 0.35, curve: "lfoRate", display: (v) => CURVES.lfoRate(v).toFixed(2) + "Hz" },
             { id: "amt", name: "Amt", type: "knob", default: 0.4, display: (v) => (v * 1200).toFixed(0) + "¢" },
@@ -76,7 +87,8 @@ const MODULE_DEFS = {
     vcf: {
         name: "Filter",
         abbr: "VCF",
-        width: 168,
+        group: "process",
+        width: 160,
         controls: [
             { id: "cutoff", name: "Cutoff", type: "knob", default: 0.55, curve: "cutoff", display: (v) => fmtHz(CURVES.cutoff(v)) + "Hz" },
             { id: "res", name: "Res", type: "knob", default: 0.15, display: fmtPct },
@@ -91,7 +103,8 @@ const MODULE_DEFS = {
     vca: {
         name: "Amplifier",
         abbr: "VCA",
-        width: 148,
+        group: "process",
+        width: 140,
         controls: [
             // Sums with the CV input, so this is a manual offset, not a level.
             { id: "offset", name: "Offset", type: "knob", default: 0, display: fmtPct },
@@ -106,7 +119,8 @@ const MODULE_DEFS = {
     envelope: {
         name: "Envelope",
         abbr: "ADSR",
-        width: 186,
+        group: "process",
+        width: 180,
         panel: "envelope",
         controls: [
             { id: "a", name: "Attack", type: "knob", default: 0.25, curve: "ms", display: (v) => fmtMs(CURVES.ms(v)) },
@@ -121,7 +135,8 @@ const MODULE_DEFS = {
     delay: {
         name: "Delay",
         abbr: "DLY",
-        width: 168,
+        group: "process",
+        width: 160,
         controls: [
             { id: "time", name: "Time", type: "knob", default: 0.42, curve: "delayTime", display: (v) => CURVES.delayTime(v).toFixed(3) + "s" },
             { id: "fb", name: "Fback", type: "knob", default: 0.42, curve: "feedback", display: fmtPct },
@@ -134,7 +149,8 @@ const MODULE_DEFS = {
     mixer: {
         name: "Mixer",
         abbr: "MIX",
-        width: 178,
+        group: "io",
+        width: 180,
         controls: [
             { id: "lvl1", name: "Ch 1", type: "knob", default: 0.6, display: fmtPct },
             { id: "lvl2", name: "Ch 2", type: "knob", default: 0.6, display: fmtPct },
@@ -152,7 +168,8 @@ const MODULE_DEFS = {
     sequencer: {
         name: "Sequencer",
         abbr: "SEQ",
-        width: 346,
+        group: "source",
+        width: 340,
         panel: "sequencer",
         controls: [
             { id: "tempo", name: "Tempo", type: "knob", default: 0.42, display: (v) => tempoBpm(v).toFixed(0) + "BPM" },
@@ -172,7 +189,8 @@ const MODULE_DEFS = {
     keyboard: {
         name: "Keyboard",
         abbr: "KBD",
-        width: 268,
+        group: "source",
+        width: 260,
         panel: "keyboard",
         controls: [],
         inputs: [],
@@ -185,7 +203,8 @@ const MODULE_DEFS = {
     midi_in: {
         name: "MIDI In",
         abbr: "MIDI",
-        width: 156,
+        group: "source",
+        width: 160,
         panel: "midi",
         controls: [],
         inputs: [],
@@ -198,7 +217,8 @@ const MODULE_DEFS = {
     oscilloscope: {
         name: "Scope",
         abbr: "SCP",
-        width: 208,
+        group: "io",
+        width: 200,
         panel: "scope",
         controls: [
             { id: "zoom", name: "Time", type: "knob", default: 0.35, display: (v) => ((1 - v) * 40).toFixed(1) + "ms" },
@@ -210,12 +230,54 @@ const MODULE_DEFS = {
     output: {
         name: "Output",
         abbr: "OUT",
-        width: 156,
+        group: "io",
+        width: 160,
         controls: [
             { id: "vol", name: "Volume", type: "knob", default: 0.55, display: fmtPct },
         ],
         inputs: [{ id: "in", name: "L/Mono" }],
         outputs: [],
+    },
+
+    noise: {
+        name: "Noise",
+        abbr: "NOI",
+        group: "source",
+        width: 160,
+        panel: "noise",
+        controls: [
+            { id: "tone", name: "Tone", type: "knob", default: 0.35, display: (v) => v < 0.5 ? "White" : v < 0.8 ? "Pink" : "Brown" },
+            { id: "level", name: "Level", type: "knob", default: 0.45, display: fmtPct },
+        ],
+        inputs: [],
+        outputs: [{ id: "out", name: "Out" }],
+    },
+
+    samplehold: {
+        name: "Sample & Hold",
+        abbr: "S&H",
+        group: "process",
+        width: 180,
+        controls: [
+            { id: "glide", name: "Glide", type: "knob", default: 0, display: (v) => v < 0.01 ? "Off" : (v * 400).toFixed(0) + "ms" },
+            { id: "level", name: "Level", type: "knob", default: 0.7, display: fmtPct },
+        ],
+        inputs: [{ id: "in", name: "In" }],
+        outputs: [{ id: "out", name: "Out" }],
+    },
+
+    waveshaper: {
+        name: "Drive",
+        abbr: "SHP",
+        group: "process",
+        width: 160,
+        controls: [
+            { id: "drive", name: "Drive", type: "knob", default: 0.3, display: (v) => v < 0.02 ? "Clean" : (1 + v * 24).toFixed(1) + "x" },
+            { id: "sym", name: "Sym", type: "select", default: 0, options: ["Even", "Odd"] },
+            { id: "mix", name: "Mix", type: "knob", default: 1, display: fmtPct },
+        ],
+        inputs: [{ id: "in", name: "In" }],
+        outputs: [{ id: "out", name: "Out" }],
     },
 };
 
@@ -251,17 +313,22 @@ function formatCableValue(measure) {
 /**
  * Ramps for the cable itself.
  *
- * Control voltages run violet through cold blue at 0 V out to acid green,
- * so a patch that sits at zero volts goes dark and lights up as it moves.
+ * Control voltages are musical: 1 V is an octave, so the interesting span is
+ * about two octaves either side of 0 V. The ramp covers that whole range
+ * rather than a nominal +/-1 V, because the sequencer alone runs +1 to +1.9 V
+ * in the default patch, and on a +/-1 V ramp it sat pinned at full brightness
+ * for 98% of frames and looked like a dead wire.
+ *
  * Audio runs from near-black through green and yellow to red at full scale.
  */
 const CV_RAMP = [
-    [-1.0, [198, 92, 255]],
-    [-0.5, [126, 104, 255]],
+    [-2.0, [198, 92, 255]],
+    [-1.0, [140, 104, 255]],
+    [-0.5, [92, 100, 205]],
     [0.0, [56, 96, 150]],
-    [0.35, [62, 190, 190]],
-    [0.7, [124, 255, 107]],
-    [1.0, [226, 255, 120]],
+    [0.5, [62, 190, 190]],
+    [1.0, [124, 255, 107]],
+    [2.0, [226, 255, 120]],
 ];
 
 const AUDIO_RAMP = [
@@ -287,10 +354,17 @@ function rampColor(stops, t) {
     ];
 }
 
-/** Live colour for a cable, or null when there is nothing to show. */
+/**
+ * Live colour for a cable, or null when there is nothing to show.
+ *
+ * Painted from `level`, the ballistics-smoothed value, rather than the raw
+ * reading. A peak sampled once per frame flickers on a steady tone and misses
+ * anything shorter than a frame, so the raw number drives the readout and the
+ * smoothed one drives the cable.
+ */
 function cableColor(measure) {
     if (!measure) return null;
-    const rgb = measure.cv ? rampColor(CV_RAMP, measure.signed) : rampColor(AUDIO_RAMP, measure.peak);
+    const rgb = rampColor(measure.cv ? CV_RAMP : AUDIO_RAMP, measure.level);
     return "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
 }
 
@@ -300,7 +374,7 @@ const CABLE_IDLE = "rgb(124,255,107)";
 /** 0..1 drive, used for stroke width and glow. */
 function cableIntensity(measure) {
     if (!measure) return 0;
-    return Math.min(1, measure.cv ? Math.abs(measure.signed) : measure.peak);
+    return Math.min(1, measure.cv ? Math.abs(measure.level) : measure.level);
 }
 
 /* ---------- sequencer tuning ---------- */

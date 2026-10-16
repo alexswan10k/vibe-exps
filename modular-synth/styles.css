@@ -239,16 +239,39 @@ body {
 
 /* ---------- rack area ---------- */
 
+/* The grid is drawn in rack units, so it zooms with the canvas instead of
+   sitting still underneath it. A fixed 40px field looked like it belonged to
+   the viewport rather than the rack, and modules never lined up with it. */
 .rack-area {
     position: relative;
     flex: 1;
     overflow: hidden;
     background-color: var(--rack-bg);
-    background-image:
-        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-    background-size: 40px 40px;
     cursor: default;
+}
+
+.rack-grid {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    /* --grid-size is set from JS as RACK_GRID * zoom, so one line per cell. */
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+    background-size: var(--grid-size, 20px) var(--grid-size, 20px);
+    background-position: var(--grid-x, 0px) var(--grid-y, 0px);
+}
+
+/* Every fifth cell, so you can count distance across the rack. */
+.rack-grid-major {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+    background-size: var(--major-size, 100px) var(--major-size, 100px);
+    background-position: var(--grid-x, 0px) var(--grid-y, 0px);
 }
 
 .rack-canvas {
@@ -349,18 +372,59 @@ body {
 
 /* ---------- modules ---------- */
 
+/* ---------- module chrome ---------- */
+
+/* Corner screws. Drawn as a pseudo-element pair on the header rather than four
+   real nodes, so a rack full of modules stays cheap. */
+.module::before,
+.module::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #6e7278, #2a2c30 70%);
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+}
+
+.module::before { left: 6px; }
+.module::after { right: 6px; }
+
 .module {
     position: absolute;
     top: 0;
     left: 0;
     display: flex;
     flex-direction: column;
-    background: var(--module-bg);
+    /* Brushed panel: a fine vertical grain plus a top highlight reads as metal
+       without an image. */
+    background:
+        repeating-linear-gradient(90deg,
+            rgba(255, 255, 255, 0.014) 0 1px,
+            rgba(0, 0, 0, 0.014) 1px 2px),
+        linear-gradient(180deg, #2a2b2f 0%, var(--module-bg) 42%);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.05) inset,
+        0 6px 18px rgba(0, 0, 0, 0.45);
     user-select: none;
     z-index: 10;
+}
+
+/* Per-category accent, set from the module's `group`. Sources, processing and
+   outputs each read differently at a glance without relying on the label. */
+.module { --accent-hue: var(--accent); }
+
+.module-group-source { --accent-hue: #ffb454; }
+.module-group-process { --accent-hue: var(--accent); }
+.module-group-io { --accent-hue: #58b6ff; }
+
+.module-header {
+    border-bottom: 1px solid var(--line);
+    box-shadow: inset 0 -2px 0 -1px color-mix(in srgb, var(--accent-hue) 45%, transparent);
 }
 
 .module.dragging {
@@ -378,15 +442,16 @@ body {
     align-items: center;
     justify-content: center;
     position: relative;
-    padding: 7px 8px;
-    background: var(--module-head);
-    border-bottom: 1px solid var(--line);
+    padding: 7px 22px;
+    background: linear-gradient(180deg, #3c3e43, var(--module-head));
     border-radius: 5px 5px 0 0;
     cursor: grab;
     font-size: 0.7rem;
     font-weight: 700;
+    /* Engraved, rather than printed: a dark shadow below a light copy. */
     letter-spacing: 0.12em;
-    color: #d6d8da;
+    color: color-mix(in srgb, var(--accent-hue) 72%, #e8e8e6);
+    text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
 }
 
 .module-header:active { cursor: grabbing; }
@@ -707,7 +772,8 @@ body {
 }
 
 .scope-canvas,
-.env-canvas {
+.env-canvas,
+.noise-canvas {
     display: block;
     width: 100%;
     background: #0b0d0c;
@@ -717,6 +783,7 @@ body {
 
 .scope-canvas { height: 76px; }
 .env-canvas { height: 56px; }
+.noise-canvas { height: 48px; }
 
 /* ---------- footer ---------- */
 
