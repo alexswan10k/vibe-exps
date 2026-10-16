@@ -246,6 +246,63 @@ function formatCableValue(measure) {
     return (db > -0.05 ? "0.0" : db.toFixed(1)) + "dB";
 }
 
+/* ---------- cable colour ---------- */
+
+/**
+ * Ramps for the cable itself.
+ *
+ * Control voltages run violet through cold blue at 0 V out to acid green,
+ * so a patch that sits at zero volts goes dark and lights up as it moves.
+ * Audio runs from near-black through green and yellow to red at full scale.
+ */
+const CV_RAMP = [
+    [-1.0, [198, 92, 255]],
+    [-0.5, [126, 104, 255]],
+    [0.0, [56, 96, 150]],
+    [0.35, [62, 190, 190]],
+    [0.7, [124, 255, 107]],
+    [1.0, [226, 255, 120]],
+];
+
+const AUDIO_RAMP = [
+    [0.0, [52, 62, 58]],
+    [0.25, [124, 255, 107]],
+    [0.7, [206, 255, 92]],
+    [1.0, [255, 104, 80]],
+];
+
+/** Interpolates a ramp at position `t`, clamped to the ramp's range. */
+function rampColor(stops, t) {
+    const last = stops.length - 1;
+    const clamped = Math.max(stops[0][0], Math.min(stops[last][0], t));
+    let i = 0;
+    while (i < last - 1 && clamped > stops[i + 1][0]) i++;
+    const [t0, c0] = stops[i];
+    const [t1, c1] = stops[i + 1];
+    const f = t1 === t0 ? 0 : (clamped - t0) / (t1 - t0);
+    return [
+        Math.round(c0[0] + (c1[0] - c0[0]) * f),
+        Math.round(c0[1] + (c1[1] - c0[1]) * f),
+        Math.round(c0[2] + (c1[2] - c0[2]) * f),
+    ];
+}
+
+/** Live colour for a cable, or null when there is nothing to show. */
+function cableColor(measure) {
+    if (!measure) return null;
+    const rgb = measure.cv ? rampColor(CV_RAMP, measure.signed) : rampColor(AUDIO_RAMP, measure.peak);
+    return "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
+}
+
+/** Flat colour for a cable with the live display switched off. */
+const CABLE_IDLE = "rgb(124,255,107)";
+
+/** 0..1 drive, used for stroke width and glow. */
+function cableIntensity(measure) {
+    if (!measure) return 0;
+    return Math.min(1, measure.cv ? Math.abs(measure.signed) : measure.peak);
+}
+
 /* ---------- sequencer tuning ---------- */
 
 /** Tempo knob 0..1 -> 60..240 BPM. */

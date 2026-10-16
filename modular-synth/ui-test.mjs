@@ -614,8 +614,10 @@ await it("draws cables above modules but aims clicks below them", () => {
 await it("puts a readout on every cable, positioned at its midpoint", () => {
     for (const entry of ui().cables.values()) {
         assert(entry.readout, "a cable has no readout");
+        assert(entry.halo, "a cable has no glow layer");
         assert(entry.readout.getAttribute("x") !== null, "a readout has no position");
         assertEqual(entry.hit.getAttribute("d"), entry.line.getAttribute("d"), "hit target and line disagree");
+        assertEqual(entry.halo.getAttribute("d"), entry.line.getAttribute("d"), "glow and line disagree");
     }
 });
 
@@ -634,36 +636,108 @@ await it("shows a level in dB on an audio cable", () => {
     assert(cable, "default patch has no oscillator cable");
     meter("oscillator_1", "out", 0.5);
     ui().frame();
-    const entry = ui().cables.get(cable.id);
-    assertEqual(entry.readout.textContent, "-6.0dB", "wrong readout for a half-scale audio cable");
-    assert(!entry.readout.classList.contains("hot"), "a half-scale cable is flagged as clipping");
+    assertEqual(ui().cables.get(cable.id).readout.textContent, "-6.0dB", "wrong readout for a half-scale audio cable");
 });
 
-await it("flags a cable that reaches full scale", () => {
+/* ============================================================
+   Cable colour and glow
+   ============================================================ */
+
+const channelsOf = (colour) => colour.match(/[\d.]+/g).map(Number);
+
+await it("colours a cable from its signal", () => {
     const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
+    const entry = ui().cables.get(cable.id);
+
+    meter("oscillator_1", "out", 0);
+    ui().frame();
+    const dark = entry.line.style.stroke;
+
     meter("oscillator_1", "out", 1);
     ui().frame();
-    assert(ui().cables.get(cable.id).readout.classList.contains("hot"), "full scale not flagged");
+    const hot = entry.line.style.stroke;
+    assert(dark !== hot, "cable did not change colour with the signal");
+
+    // The ramp ends red at full scale, so clipping reads at a glance.
+    const rgb = channelsOf(hot);
+    assert(rgb[0] > rgb[2], "a clipping cable should read red: " + hot);
+    assert(channelsOf(dark)[1] < channelsOf(hot)[1], "a loud cable should be brighter");
 });
 
-await it("dims the readouts when they are switched off", () => {
+await it("swells the glow with the signal", () => {
     const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
+    const entry = ui().cables.get(cable.id);
+
+    meter("oscillator_1", "out", 0.05);
+    ui().frame();
+    const quietWidth = parseFloat(entry.halo.style.strokeWidth);
+    const quietOpacity = parseFloat(entry.halo.style.strokeOpacity);
+
+    meter("oscillator_1", "out", 0.95);
+    ui().frame();
+    assert(parseFloat(entry.halo.style.strokeWidth) > quietWidth, "glow did not widen");
+    assert(parseFloat(entry.halo.style.strokeOpacity) > quietOpacity, "glow did not brighten");
+    assert(parseFloat(entry.line.style.strokeWidth) > 2.4, "the core stroke did not thicken");
+});
+
+await it("runs a control cable from cold at zero volts to green when hot", () => {
+    const cable = cables().find((c) => c.from.indexOf("sequencer") === 0);
+    const entry = ui().cables.get(cable.id);
+
+    meter("sequencer_1", "cv", 0);
+    ui().frame();
+    const zero = channelsOf(entry.line.style.stroke);
+    meter("sequencer_1", "cv", 1);
+    ui().frame();
+    const hot = channelsOf(entry.line.style.stroke);
+
+    assert(zero[2] > zero[0], "0 V should read cold: " + zero.join(","));
+    assert(hot[1] > hot[0], "1 V should read green: " + hot.join(","));
+});
+
+await it("thickens a cable under the pointer", () => {
+    const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
+    const entry = ui().cables.get(cable.id);
     meter("oscillator_1", "out", 0.5);
     ui().frame();
-    const before = ui().cables.get(cable.id).readout.textContent;
+    const resting = parseFloat(entry.line.style.strokeWidth);
+
+    registry.get("cableHitLayer").dispatch("pointerover", { target: entry.hit });
+    assert(parseFloat(entry.line.style.strokeWidth) > resting, "hover did not thicken the cable");
+    registry.get("cableHitLayer").dispatch("pointerout", { target: entry.hit });
+    assertEqual(parseFloat(entry.line.style.strokeWidth), resting, "hover did not restore the cable");
+});
+
+await it("keeps the readout legible instead of tinting it", () => {
+    const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
+    const entry = ui().cables.get(cable.id);
+    meter("oscillator_1", "out", 0.02);
+    ui().frame();
+    // The readout's stroke is a dark outline for legibility over a module.
+    assert(!entry.readout.style.stroke, "readout outline was overwritten by the cable colour");
+});
+
+await it("dims the readouts and flattens the cables when switched off", () => {
+    const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
+    const entry = ui().cables.get(cable.id);
+    meter("oscillator_1", "out", 0.5);
+    ui().frame();
 
     registry.get("btnMeters").click();
     assertEqual(run("store").get().meters, false, "toggle did not update state");
     assert(registry.get("cableLayer").classList.contains("meters-off"), "readouts not hidden");
 
-    meter("oscillator_1", "out", 0.25);
+    meter("oscillator_1", "out", 0.9);
     ui().frame();
-    assertEqual(ui().cables.get(cable.id).readout.textContent, before, "readouts kept updating while hidden");
+    assertEqual(entry.readout.textContent, "", "readouts kept updating while hidden");
+    assertEqual(entry.line.style.stroke, run("CABLE_IDLE"), "cables did not go back to a flat colour");
 
     registry.get("btnMeters").click();
     ui().frame();
     assertEqual(run("store").get().meters, true, "toggle did not switch back on");
-    assertEqual(ui().cables.get(cable.id).readout.textContent, "-12.0dB", "readouts did not resume");
+    assertEqual(entry.readout.textContent, "-0.9dB", "readouts did not resume");
+    // 0.25 peak would sit exactly on the idle green, so use a level off it.
+    assert(entry.line.style.stroke !== run("CABLE_IDLE"), "cables did not light up again");
 });
 
 await it("removes the readout along with the cable", () => {

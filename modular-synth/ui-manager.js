@@ -631,11 +631,14 @@ class RackUI {
         // targets sit below them, so a cable crossing a module does not steal
         // clicks from the knobs underneath it.
         const group = svg("g", { class: "cable" });
+        // Two strokes: a wide, faint halo for the glow and a crisp core on
+        // top. Both are painted from the live signal every frame.
+        const halo = svg("path", { class: "cable-halo" });
         const line = svg("path", { class: "cable-line" });
         const readout = svg("text", { class: "cable-value" });
         readout.setAttribute("text-anchor", "middle");
         readout.setAttribute("dominant-baseline", "central");
-        group.append(line, readout);
+        group.append(halo, line, readout);
         this.cableLayer.appendChild(group);
 
         const hit = svg("path", { class: "cable-hit" });
@@ -647,7 +650,7 @@ class RackUI {
         const remove = () => { if (entry.cable) this.actions.removeCable(entry.cable.id); };
         hit.addEventListener("pointerdown", remove);
 
-        const entry = { group, line, readout, hit, cable: null };
+        const entry = { group, halo, line, readout, hit, cable: null, painted: null };
         return entry;
     }
 
@@ -669,6 +672,7 @@ class RackUI {
         entry.group.style.visibility = "visible";
         entry.hit.style.visibility = "visible";
         const path = cablePath(a.x, a.y, b.x, b.y);
+        entry.halo.setAttribute("d", path.d);
         entry.line.setAttribute("d", path.d);
         entry.hit.setAttribute("d", path.d);
         entry.readout.setAttribute("x", path.mid.x);
@@ -687,7 +691,10 @@ class RackUI {
         const set = (target, on) => {
             const id = target && target.dataset ? target.dataset.cable : "";
             const entry = id ? this.cables.get(id) : null;
-            if (entry) entry.group.classList.toggle("hover", on);
+            if (!entry) return;
+            entry.group.classList.toggle("hover", on);
+            const measure = this.meters === false || !entry.cable ? null : this.engine.measureOutput(entry.cable.from);
+            this._paintCable(entry, measure);
         };
         this.hitLayer.addEventListener("pointerover", (e) => set(e.target, true));
         this.hitLayer.addEventListener("pointerout", (e) => set(e.target, false));
@@ -759,27 +766,55 @@ class RackUI {
     }
 
     /**
-     * Refresh the voltage readouts.
-     * Every measurement is a cheap sum over a 32-sample buffer, and the
+     * Paint one cable from its live measurement.
+     * Quantising the drive keeps steady signals from writing styles on every
+     * single frame, and the CSS transition covers the difference.
+     */
+    _paintCable(entry, measure) {
+        const hover = entry.group.classList.contains("hover") ? 1.45 : 1;
+        const colour = cableColor(measure) || CABLE_IDLE;
+        const drive = Math.round(cableIntensity(measure) * 100) / 100;
+
+        const signature = colour + "|" + drive + "|" + hover + "|" + (measure ? formatCableValue(measure) : "");
+        if (signature === entry.painted) return;
+        entry.painted = signature;
+
+        entry.line.style.stroke = colour;
+        entry.line.style.strokeWidth = ((2.4 + drive * 1.7) * hover).toFixed(2) + "px";
+        entry.halo.style.stroke = colour;
+        entry.halo.style.strokeWidth = ((5 + drive * 12) * hover).toFixed(2) + "px";
+        entry.halo.style.strokeOpacity = (0.06 + drive * 0.3).toFixed(3);
+
+        // The readout keeps its own colours: its stroke is a dark outline for
+        // legibility, and a dim number next to a dark cable would be unreadable.
+        if (measure) {
+            entry.readout.textContent = formatCableValue(measure);
+            const live = measure.cv ? Math.abs(measure.signed) > 0.005 : measure.peak > 0.001;
+            entry.readout.classList.toggle("on", live);
+        } else {
+            entry.readout.textContent = "";
+        }
+    }
+
+    /**
+     * Refresh every cable's colour and glow.
+     * Each measurement is a cheap sum over a 32-sample buffer, and the
      * analyser feeding it hangs off the source as a side branch.
      */
     _updateReadouts() {
         if (this.meters === false) return;
         for (const entry of this.cables.values()) {
-            const cable = entry.cable;
-            if (!cable) continue;
-            const measure = this.engine.measureOutput(cable.from);
-            const text = formatCableValue(measure);
-            if (entry.readout.textContent !== text) entry.readout.textContent = text;
-            const live = !!measure && (measure.cv ? Math.abs(measure.signed) > 0.005 : measure.peak > 0.001);
-            entry.readout.classList.toggle("on", live);
-            entry.readout.classList.toggle("hot", !!measure && !measure.cv && measure.peak >= 0.99);
+            if (!entry.cable) continue;
+            this._paintCable(entry, this.engine.measureOutput(entry.cable.from));
         }
     }
 
     setMeters(on) {
         this.meters = on;
         this.cableLayer.classList.toggle("meters-off", !on);
+        if (on) return;
+        // Back to plain, uniform cables.
+        for (const entry of this.cables.values()) this._paintCable(entry, null);
     }
 
     /* ---------- interaction ---------- */

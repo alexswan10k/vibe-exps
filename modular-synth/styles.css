@@ -288,18 +288,32 @@ body {
     cursor: pointer;
 }
 
-.cable-line {
+.cable-line,
+.cable-halo {
     fill: none;
-    stroke: var(--cable);
-    stroke-width: 2.5;
     stroke-linecap: round;
     vector-effect: non-scaling-stroke;
-    opacity: 0.85;
+    /* The signal is repainted every frame; the transition keeps it from
+       looking like a strobe when the drive is steady. */
+    transition: stroke 90ms linear, stroke-width 90ms linear, stroke-opacity 90ms linear;
+}
+
+/* Width, colour and glow are all driven from the live signal in JS, so the
+   rules here only set the resting appearance. */
+.cable-line {
+    stroke: var(--cable);
+    stroke-width: 2.4;
+    opacity: 0.92;
+}
+
+.cable-halo {
+    stroke: var(--cable);
+    stroke-width: 5;
+    stroke-opacity: 0.08;
 }
 
 .cable:hover .cable-line,
 .cable.hover .cable-line {
-    stroke-width: 4;
     opacity: 1;
 }
 
@@ -319,8 +333,7 @@ body {
     transition: opacity 0.15s;
 }
 
-.cable-value.on { fill: #b6e5ad; opacity: 1; }
-.cable-value.hot { fill: var(--danger); }
+.cable-value.on { opacity: 1; }
 
 .cable-draw-layer.meters-off .cable-value { opacity: 0; }
 

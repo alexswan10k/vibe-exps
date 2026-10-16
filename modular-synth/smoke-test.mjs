@@ -130,6 +130,11 @@ function assertClose(actual, expected, tolerance, message) {
     }
 }
 
+/** Pulls the r, g and b out of a "rgb(r,g,b)" string. */
+function channels(colour) {
+    return String(colour).match(/[\d.]+/g).map(Number);
+}
+
 /* ---------- load the scripts ---------- */
 
 const context = vm.createContext({
@@ -179,6 +184,11 @@ const tempoBpm = run("tempoBpm");
 const cablePath = run("cablePath");
 const isControlSource = run("isControlSource");
 const formatCableValue = run("formatCableValue");
+const rampColor = run("rampColor");
+const cableColor = run("cableColor");
+const cableIntensity = run("cableIntensity");
+const CV_RAMP = run("CV_RAMP");
+const AUDIO_RAMP = run("AUDIO_RAMP");
 
 const moduleById = (modules) => {
     const index = {};
@@ -634,6 +644,56 @@ describe("tuning", () => {
         assertEqual(formatCableValue({ cv: false, peak: 1, signed: 0 }), "0.0dB");
         assertEqual(formatCableValue({ cv: false, peak: 0, signed: 0 }), "-inf");
         assertEqual(formatCableValue(null), "");
+    });
+
+    it("interpolates colour ramps and clamps outside them", () => {
+        const at = (stops, t) => rampColor(stops, t);
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        const first = CV_RAMP[0][0];
+        const last = CV_RAMP[CV_RAMP.length - 1][0];
+
+        assert(same(at(CV_RAMP, -5), at(CV_RAMP, first)), "did not clamp below the ramp");
+        assert(same(at(CV_RAMP, 5), at(CV_RAMP, last)), "did not clamp above the ramp");
+        assert(!same(at(CV_RAMP, first), at(CV_RAMP, last)), "the ramp is a single flat colour");
+
+        const mid = at(CV_RAMP, 0);
+        assert(Array.isArray(mid) && mid.length === 3, "ramp did not return rgb");
+        for (const channel of mid) {
+            assert(Number.isInteger(channel), "channel is not an integer: " + channel);
+            assert(channel >= 0 && channel <= 255, "channel out of range: " + channel);
+        }
+
+        // Halfway between two stops is the average of them.
+        const a = CV_RAMP[3][1];
+        const b = CV_RAMP[4][1];
+        const halfway = at(CV_RAMP, (CV_RAMP[3][0] + CV_RAMP[4][0]) / 2);
+        for (let i = 0; i < 3; i++) {
+            assertEqual(halfway[i], Math.round((a[i] + b[i]) / 2), "channel " + i + " is not linear");
+        }
+    });
+
+    it("runs control cables cold at zero volts and green when hot", () => {
+        const zero = channels(cableColor({ cv: true, signed: 0, peak: 0 }));
+        const hot = channels(cableColor({ cv: true, signed: 1, peak: 1 }));
+        assert(zero[2] > zero[0], "0 V should read cold: " + zero);
+        assert(hot[1] > hot[0], "1 V should read green: " + hot);
+        assert(hot[1] > zero[1], "1 V should be brighter than 0 V");
+    });
+
+    it("runs audio cables to red at full scale", () => {
+        const quiet = channels(cableColor({ cv: false, signed: 0, peak: 0 }));
+        const hot = channels(cableColor({ cv: false, signed: 0, peak: 1 }));
+        assert(hot[0] > hot[2], "full scale should read red: " + hot);
+        assert(quiet[1] < hot[1], "full scale should be brighter than silence");
+    });
+
+    it("reports drive as a 0..1 intensity for both kinds of signal", () => {
+        assertEqual(cableIntensity({ cv: true, signed: 0.5, peak: 0.5 }), 0.5);
+        assertEqual(cableIntensity({ cv: false, signed: 0, peak: 0.25 }), 0.25);
+        assertEqual(cableIntensity({ cv: true, signed: -0.5, peak: 0.5 }), 0.5, "a negative CV should still drive");
+        assertEqual(cableIntensity({ cv: false, signed: 0, peak: 4 }), 1, "drive is not clamped");
+        assertEqual(cableIntensity(null), 0);
+        assertEqual(cableColor(null), null);
     });
 });
 
