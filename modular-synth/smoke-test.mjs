@@ -15,18 +15,98 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 /* ---------- mock Web Audio ---------- */
 
+/**
+ * Resolves a param's value at audio-clock time `t`.
+ *
+ * The old mock applied every automation instantly, which made the whole
+ * sequencer untestable: a gate looked permanently open because
+ * linearRampToValueAtTime set `.value` straight away. Automation is a timed
+ * list here, so a step that is scheduled into the future stays in the future.
+ *
+ * Only the event types this codebase actually schedules are modelled. Ramping
+ * anchors on the preceding set/hold, which holds because smoothTo() always
+ * calls cancelAndHoldAtTime() immediately before it ramps.
+ */
+function paramValueAt(param, t) {
+    const events = param.automation.slice().sort((a, b) => a.t - b.t || a.seq - b.seq);
+    let value = param.baseValue;
+    let anchor = param.baseValue;
+    let anchorT = param.baseTime;
+    for (const e of events) {
+        if (e.t > t) break;
+        if (e.k === "hold" || e.k === "set") {
+            anchor = e.v;
+            anchorT = e.t;
+            value = e.v;
+        } else if (e.k === "ramp") {
+            const span = e.t - anchorT;
+            const f = span > 0 ? Math.min(1, Math.max(0, (t - anchorT) / span)) : 1;
+            value = anchor + (e.v - anchor) * f;
+        } else if (e.k === "target") {
+            const dt = Math.max(0, t - anchorT);
+            value = e.v + (anchor - e.v) * Math.exp(-dt / e.c);
+        }
+    }
+    return value;
+}
+
 function mockParam(ctx) {
-    return {
+    const param = {
+        isAudioParam: true,
+        owner: null,
         value: 0,
+        baseValue: 0,
+        baseTime: -Infinity,
         automation: [],
-        setValueAtTime(v, t) { this.value = v; this.automation.push(["set", v, t]); return this; },
-        linearRampToValueAtTime(v, t) { this.value = v; this.automation.push(["ramp", v, t]); return this; },
-        setTargetAtTime(v, t, c) { this.value = v; this.automation.push(["target", v, t, c]); return this; },
-        cancelScheduledValues(t) { this.automation.push(["cancel", t]); return this; },
-        cancelAndHoldAtTime(t) { this.automation.push(["hold", t]); return this; },
-        connect(dest) { ctx.log.push({ type: "connect", param: true, dest }); return dest; },
+        _seq: 0,
+        setValueAtTime(v, t) {
+            this.value = v;
+            // A set cancels everything after it.
+            this.automation = this.automation.filter((e) => e.t <= t);
+            this.automation.push({ k: "set", v, t, seq: this._seq++ });
+            return this;
+        },
+        linearRampToValueAtTime(v, t) {
+            this.value = v;
+            this.automation.push({ k: "ramp", v, t, seq: this._seq++ });
+            return this;
+        },
+        setTargetAtTime(v, t, c) {
+            this.value = v;
+            this.automation.push({ k: "target", v, t, c, seq: this._seq++ });
+            return this;
+        },
+        cancelScheduledValues(t) {
+            this.automation = this.automation.filter((e) => e.t < t);
+            return this;
+        },
+        cancelAndHoldAtTime(t) {
+            // Freeze wherever the param would have been at t, then drop the rest.
+            const held = paramValueAt(this, t);
+            this.automation = this.automation.filter((e) => e.t < t);
+            this.automation.push({ k: "hold", v: held, t, seq: this._seq++ });
+            return this;
+        },
+        valueAt(t) {
+            const intrinsic = paramValueAt(this, t);
+            if (!this.owner || !this.owner.paramInputs || !this.owner.paramInputs.length) return intrinsic;
+            // Real AudioParams sum whatever is patched into them, which is how
+            // an envelope into a VCA or an LFO into a cutoff works. Without this
+            // the mock cannot tell a working CV path from a dropped cable, and
+            // dropped CV cables is exactly the bug this suite exists to catch.
+            const seen = new Set([this.owner]);
+            let modulation = 0;
+            for (const src of this.owner.paramInputs) modulation += outputAt(src, t, seen);
+            return intrinsic + modulation;
+        },
+        connect(dest) {
+            ctx.log.push({ type: "connect", param: true, dest });
+            if (this.owner && this.owner.paramInputs) this.owner.paramInputs.push(this.owner);
+            return dest;
+        },
         disconnect() { return this; },
     };
+    return param;
 }
 
 function mockNode(ctx, kind) {
@@ -34,19 +114,38 @@ function mockNode(ctx, kind) {
         kind,
         sample: 0,
         connections: [],
+        inputs: [],
+        paramInputs: [],
         started: false,
         stopped: false,
         connect(dest) {
-            node.connections.push(dest);
+            if (dest && dest.isAudioParam) {
+                // Patched into an AudioParam. That is modulation, not audio,
+                // so it must not join the signal-sum.
+                if (dest.owner && dest.owner.paramInputs) dest.owner.paramInputs.push(node);
+            } else {
+                node.connections.push(dest);
+                if (dest && dest.inputs) dest.inputs.push(node);
+            }
             ctx.log.push({ type: "connect", from: node, to: dest });
             return dest;
         },
         disconnect(dest) {
-            if (dest === undefined) node.connections = [];
-            else {
+            if (dest && dest.isAudioParam) {
+                const i = dest.owner.paramInputs.indexOf(node);
+                if (i >= 0) dest.owner.paramInputs.splice(i, 1);
+            } else if (dest === undefined) {
+                for (const d of node.connections) {
+                    const i = d.inputs.indexOf(node);
+                    if (i >= 0) d.inputs.splice(i, 1);
+                }
+                node.connections = [];
+            } else {
                 const i = node.connections.indexOf(dest);
                 if (i >= 0) node.connections.splice(i, 1);
                 else ctx.log.push({ type: "disconnect-miss", from: node, to: dest });
+                const j = dest.inputs.indexOf(node);
+                if (j >= 0) dest.inputs.splice(j, 1);
             }
             ctx.log.push({ type: "disconnect", from: node, to: dest });
             return node;
@@ -58,10 +157,46 @@ function mockNode(ctx, kind) {
     };
     for (const name of ["frequency", "detune", "gain", "Q", "delayTime", "offset"]) {
         node[name] = mockParam(ctx);
+        node[name].owner = node;
+    }
+    // Real defaults matter here. GainNode.gain starts at 1, not 0; with a 0
+    // default every CV path silently multiplies to silence, which is exactly
+    // the failure this suite is meant to be able to see.
+    if (kind === "gain") {
+        node.gain.value = 1;
+        node.gain.baseValue = 1;
     }
     node.fftSize = 2048;
     node.smoothingTimeConstant = 0;
+    ctx.nodes.add(node);
     return node;
+}
+
+/**
+ * Signal value of a node at time `t`.
+ * `seen` terminates feedback loops, so the delay's recirculating path decays
+ * to nothing rather than recursing forever.
+ */
+function outputAt(node, t, seen) {
+    if (seen.has(node) || seen.size > 64) return 0;
+    seen.add(node);
+    let value = 0;
+    if (node.kind === "constant") {
+        value = node.offset.valueAt(t);
+    } else if (node.kind === "osc") {
+        value = Math.sin(2 * Math.PI * node.frequency.valueAt(t) * t);
+    } else if (node.kind === "bufferSource") {
+        // Play the looped buffer out at t, which is all the noise voice needs.
+        const data = node.buffer && node.buffer.getChannelData(0);
+        if (data && data.length) {
+            value = data[Math.floor(t * node.buffer.sampleRate) % data.length];
+        }
+    } else {
+        for (const src of node.inputs) value += outputAt(src, t, seen);
+    }
+    seen.delete(node);
+    if (node.kind === "gain") value *= node.gain.valueAt(t);
+    return value;
 }
 
 class MockAudioContext {
@@ -69,6 +204,7 @@ class MockAudioContext {
         this.state = "running";
         this.currentTime = 0;
         this.log = [];
+        this.nodes = new Set();
         this.destination = mockNode(this, "destination");
     }
     createOscillator() { return mockNode(this, "osc"); }
@@ -78,9 +214,36 @@ class MockAudioContext {
     createAnalyser() { return mockNode(this, "analyser"); }
     createConstantSource() { return mockNode(this, "constant"); }
     createWaveShaper() { return mockNode(this, "shaper"); }
+    createBufferSource() {
+        const node = mockNode(this, "bufferSource");
+        node.loop = false;
+        return node;
+    }
+    createBuffer(channels, length, rate) {
+        const data = [];
+        for (let c = 0; c < channels; c++) data.push(new Float32Array(length));
+        return {
+            numberOfChannels: channels,
+            length,
+            sampleRate: rate,
+            getChannelData(c) { return data[c]; },
+        };
+    }
     resume() { this.state = "running"; return Promise.resolve(); }
     close() { this.state = "closed"; return Promise.resolve(); }
     advance(seconds) { this.currentTime += seconds; }
+
+    /**
+     * Push the audio clock's value of every node into `.sample`, so the
+     * analysers report what the graph is actually carrying right now.
+     * Opt-in: tests that set `.sample` by hand keep working unchanged.
+     */
+    refresh() {
+        for (const node of this.nodes) {
+            const v = outputAt(node, this.currentTime, new Set());
+            node.sample = Math.max(-2, Math.min(2, v));
+        }
+    }
 }
 
 /* ---------- harness ---------- */
@@ -177,8 +340,15 @@ const Adsr = run("Adsr");
 const GateFollower = run("GateFollower");
 const SequencerRuntime = run("SequencerRuntime");
 const AudioEngine = run("AudioEngine");
+const SampleHold = run("SampleHold");
+const noiseToneCoefficients = run("noiseToneCoefficients");
+const noiseWeights = run("noiseWeights");
+const fillNoiseBuffer = run("fillNoiseBuffer");
+const waveshaperCurve = run("waveshaperCurve");
 const CURVES = run("CURVES");
 const buildPianoKeys = run("buildPianoKeys");
+const RACK_GRID = run("RACK_GRID");
+const RACK_GRID_MAJOR = run("RACK_GRID_MAJOR");
 const noteToVolts = run("noteToVolts");
 const tempoBpm = run("tempoBpm");
 const cablePath = run("cablePath");
@@ -248,6 +418,26 @@ describe("definitions", () => {
             }
         }
         assert(problems.length === 0, problems.join("; "));
+    });
+
+    it("every module width tiles on the rack grid", () => {
+        // If a width is not a multiple of the snap grid, two modules dropped
+        // side by side leave a gap that cannot be closed by moving either of
+        // them, because both snap.
+        const problems = [];
+        for (const [type, def] of Object.entries(MODULE_DEFS)) {
+            if (def.width % RACK_GRID !== 0) {
+                problems.push(type + " is " + def.width + "px, off the " + RACK_GRID + "px grid by " + (def.width % RACK_GRID));
+            }
+        }
+        assert(problems.length === 0, problems.join("; "));
+    });
+
+    it("every module declares a group for the panel accent", () => {
+        const allowed = ["source", "process", "io"];
+        for (const [type, def] of Object.entries(MODULE_DEFS)) {
+            assert(allowed.includes(def.group), type + " has group \"" + def.group + "\"");
+        }
     });
 
     it("every control has a display formatter and a sane default", () => {
@@ -484,6 +674,191 @@ describe("gate follower", () => {
    6. Sequencer timing
    ============================================================ */
 
+/* ============================================================
+   3b. Noise, sample and hold, waveshaping
+   ============================================================ */
+
+describe("noise", () => {
+    /** Deterministic 0..1 sequence, so these tests cannot flake. */
+    function seededRandom(seed) {
+        let state = seed >>> 0;
+        return () => {
+            state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+            return state / 4294967296;
+        };
+    }
+
+    it("picks a flavour across the tone range", () => {
+        assertEqual(noiseToneCoefficients(0).white, 1, "the bottom of the knob should be white");
+        assertEqual(noiseToneCoefficients(0.65).pink, 1, "the middle should be pink");
+        assertEqual(noiseToneCoefficients(0.9).brown, 1, "the top should be brown");
+    });
+
+    it("always sums its weights to one, with no dead spot", () => {
+        // audio-engine.js drives three gain nodes from these, so a gap in the
+        // weights is silence on the output, not just a quiet spot.
+        for (let t = 0; t <= 1.0001; t += 0.01) {
+            const w = noiseWeights(t);
+            const total = w.white + w.pink + w.brown;
+            assertClose(total, 1, 1e-9, "weights do not sum to 1 at tone " + t.toFixed(2));
+            assert(total > 0.5, "output collapses at tone " + t.toFixed(2) + ": " + total);
+        }
+    });
+
+    it("clamps a tone outside 0..1 instead of going silent", () => {
+        for (const tone of [-1, -0.2, 1.2, 5]) {
+            const w = noiseWeights(tone);
+            assertClose(w.white + w.pink + w.brown, 1, 1e-9, "lost the signal at tone " + tone);
+        }
+    });
+
+    it("never leaves the audio range", () => {
+        for (const tone of [0, 0.25, 0.5, 0.65, 0.79, 0.8, 1]) {
+            const buffer = fillNoiseBuffer(new Float32Array(4096), tone, seededRandom(7));
+            for (let i = 0; i < buffer.length; i++) {
+                assert(isFinite(buffer[i]), "produced a non-finite sample at tone " + tone);
+                assert(buffer[i] >= -1.01 && buffer[i] <= 1.01,
+                    "sample out of range at tone " + tone + ": " + buffer[i]);
+            }
+        }
+    });
+
+    it("is actually noise rather than a constant", () => {
+        // 64k samples: the DC trim needs a long buffer to have settled, and
+        // this is also the size the real voice builds.
+        for (const tone of [0, 0.65, 0.95]) {
+            const buffer = fillNoiseBuffer(new Float32Array(65536), tone, seededRandom(11));
+            let min = Infinity, max = -Infinity, sum = 0;
+            for (const v of buffer) { min = Math.min(min, v); max = Math.max(max, v); sum += v; }
+            assert(max - min > 0.2, "tone " + tone + " is nearly flat, it is not noise");
+            assert(Math.abs(sum / buffer.length) < 0.01,
+                "tone " + tone + " carries a DC offset of " + (sum / buffer.length).toFixed(4));
+        }
+    });
+
+    it("darkens monotonically as the tone knob rises", () => {
+        // Zero crossings per second is the honest measure of how bright a
+        // noise signal is. Mean sample-to-sample difference is not: peak-
+        // normalised brown noise still steps a fair amount between samples,
+        // so it reads as "bright" on that metric while being audibly dark.
+        const crossings = (tone) => {
+            const buffer = fillNoiseBuffer(new Float32Array(65536), tone, seededRandom(3));
+            let count = 0;
+            for (let i = 1; i < buffer.length; i++) {
+                if ((buffer[i - 1] < 0) !== (buffer[i] < 0)) count++;
+            }
+            return count;
+        };
+
+        const steps = [0, 0.25, 0.5, 0.65, 0.8, 1].map(crossings);
+        for (let i = 1; i < steps.length; i++) {
+            assert(steps[i] < steps[i - 1],
+                "tone knob got brighter past " + [0, 0.25, 0.5, 0.65, 0.8, 1][i] + ": " + steps.join(" "));
+        }
+        assert(steps[0] / steps[steps.length - 1] > 5,
+            "white and brown are not meaningfully different: " + steps.join(" "));
+    });
+});
+
+describe("sample and hold", () => {
+    it("is not started until it has captured something", () => {
+        const hold = new SampleHold();
+        assertEqual(hold.started, false, "a fresh S&H claims to be running");
+        hold.sample(0.5, 0);
+        assertEqual(hold.started, true, "still not started after a capture");
+    });
+
+    it("tracks its input exactly with no glide", () => {
+        const hold = new SampleHold();
+        hold.sample(0.2, 0);
+        assertEqual(hold.levelAt(0), 0.2, "did not hold the first sample");
+        hold.sample(0.8, 1);
+        assertEqual(hold.levelAt(1), 0.8, "a new sample did not take effect");
+        assertEqual(hold.levelAt(5), 0.8, "the held value drifted");
+    });
+
+    it("glides to a new value instead of stepping", () => {
+        const hold = new SampleHold();
+        hold.glide = 0.2;
+        hold.sample(0, 0);
+        hold.sample(1, 0);
+        const start = hold.levelAt(0);
+        const middle = hold.levelAt(0.1);
+        const end = hold.levelAt(0.2);
+        assertEqual(start, 0, "the glide did not start where it was");
+        assertClose(end, 1, 1e-9, "the glide did not arrive");
+        assert(middle > 0 && middle < 1, "the glide did not pass through the middle");
+        assert(hold.levelAt(0.15) > middle, "the glide is not monotonic");
+    });
+
+    it("holds after the glide has finished", () => {
+        const hold = new SampleHold();
+        hold.glide = 0.1;
+        hold.sample(0, 0);
+        hold.sample(1, 0);
+        assertClose(hold.levelAt(0.1), 1, 1e-9, "did not arrive at the end of the glide");
+        assertClose(hold.levelAt(99), 1, 1e-9, "kept moving after the glide ended");
+    });
+
+    it("re-anchors mid-glide without a jump", () => {
+        const hold = new SampleHold();
+        hold.glide = 0.4;
+        hold.sample(0, 0);
+        hold.sample(1, 0);
+        const before = hold.levelAt(0.2);
+        hold.sample(0, 0.2);
+        assertClose(hold.levelAt(0.2), before, 1e-9, "retargeting the glide jumped");
+    });
+});
+
+describe("waveshaper curve", () => {
+    it("passes through the origin, so it adds no DC offset", () => {
+        // A curve that is non-zero at x=0 puts a steady offset on every
+        // downstream stage, which is a nasty thing to debug in a mixer.
+        for (const sym of [0, 1]) {
+            const curve = waveshaperCurve(0.8, sym, 1025);
+            assertClose(curve[512], 0, 1e-6, "sym=" + sym + " curve is off centre");
+        }
+    });
+
+    it("stays inside the audio range at full drive", () => {
+        for (const sym of [0, 1]) {
+            const curve = waveshaperCurve(1, sym, 2049);
+            for (const v of curve) {
+                assert(v >= -1.001 && v <= 1.001, "sym=" + sym + " curve clips: " + v);
+            }
+        }
+    });
+
+    it("bends the signal rather than simply amplifying it", () => {
+        // Slope near zero is the small-signal gain. If that matched the slope
+        // at full scale the module would just be a volume knob.
+        const curve = waveshaperCurve(0.6, 1, 2049);
+        const slope = (i) => Math.abs(curve[i] - curve[i + 1]);
+        const smallSignal = slope(1024);
+        const largeSignal = slope(1400);
+        assert(smallSignal > largeSignal * 3,
+            "the curve is not compressing: " + smallSignal.toFixed(4) + " vs " + largeSignal.toFixed(4));
+    });
+
+    it("keeps even and odd curves mirror-symmetric", () => {
+        // Even symmetry means the waveform is rectified twice over, odd means
+        // it is not. Both must be exactly symmetric or the shaper adds DC.
+        for (const sym of [0, 1]) {
+            const curve = waveshaperCurve(0.5, sym, 2049);
+            for (const i of [200, 700, 1300, 1800]) {
+                assertClose(curve[i] + curve[2048 - i], 0, 1e-6,
+                    "sym=" + sym + " curve is asymmetric at " + i);
+            }
+        }
+    });
+
+    it("passes a signal through unchanged at zero drive", () => {
+        const curve = waveshaperCurve(0, 1, 2049);
+        assertClose(curve[1024 + 256], 256 / 1024, 1e-6, "zero drive is not transparent");
+    });
+});
+
 describe("sequencer timing", () => {
     it("lands steps on exact audio-clock times, not timer ticks", () => {
         const seq = new SequencerRuntime("s");
@@ -673,25 +1048,25 @@ describe("tuning", () => {
     });
 
     it("runs control cables cold at zero volts and green when hot", () => {
-        const zero = channels(cableColor({ cv: true, signed: 0, peak: 0 }));
-        const hot = channels(cableColor({ cv: true, signed: 1, peak: 1 }));
+        const zero = channels(cableColor({ cv: true, signed: 0, peak: 0, level: 0 }));
+        const hot = channels(cableColor({ cv: true, signed: 1, peak: 1, level: 1 }));
         assert(zero[2] > zero[0], "0 V should read cold: " + zero);
         assert(hot[1] > hot[0], "1 V should read green: " + hot);
         assert(hot[1] > zero[1], "1 V should be brighter than 0 V");
     });
 
     it("runs audio cables to red at full scale", () => {
-        const quiet = channels(cableColor({ cv: false, signed: 0, peak: 0 }));
-        const hot = channels(cableColor({ cv: false, signed: 0, peak: 1 }));
+        const quiet = channels(cableColor({ cv: false, signed: 0, peak: 0, level: 0 }));
+        const hot = channels(cableColor({ cv: false, signed: 0, peak: 1, level: 1 }));
         assert(hot[0] > hot[2], "full scale should read red: " + hot);
         assert(quiet[1] < hot[1], "full scale should be brighter than silence");
     });
 
     it("reports drive as a 0..1 intensity for both kinds of signal", () => {
-        assertEqual(cableIntensity({ cv: true, signed: 0.5, peak: 0.5 }), 0.5);
-        assertEqual(cableIntensity({ cv: false, signed: 0, peak: 0.25 }), 0.25);
-        assertEqual(cableIntensity({ cv: true, signed: -0.5, peak: 0.5 }), 0.5, "a negative CV should still drive");
-        assertEqual(cableIntensity({ cv: false, signed: 0, peak: 4 }), 1, "drive is not clamped");
+        assertEqual(cableIntensity({ cv: true, signed: 0.5, peak: 0.5, level: 0.5 }), 0.5);
+        assertEqual(cableIntensity({ cv: false, signed: 0, peak: 0.25, level: 0.25 }), 0.25);
+        assertEqual(cableIntensity({ cv: true, signed: -0.5, peak: 0.5, level: -0.5 }), 0.5, "a negative CV should still drive");
+        assertEqual(cableIntensity({ cv: false, signed: 0, peak: 4, level: 4 }), 1, "drive is not clamped");
         assertEqual(cableIntensity(null), 0);
         assertEqual(cableColor(null), null);
     });
@@ -798,7 +1173,8 @@ describe("engine graph", () => {
         const voice = engine.getVoice("env_1");
         const gateAnalyser = voice.inputs.gate;
         const out = voice.outputs.out.offset;
-        const scheduled = () => out.automation.map((e) => e[0] + " " + e[1]).join(", ");
+        const attack = CURVES.ms(0.5);
+        const decay = CURVES.ms(0.5);
         assertEqual(voice.adsr.stage, "idle");
         assertEqual(out.automation.length, 0, "automation ran before any gate");
 
@@ -806,13 +1182,13 @@ describe("engine graph", () => {
         voice.poll(0);
         // applyTo hands the attack ramp to the AudioParam, then moves to decay.
         assertEqual(voice.adsr.stage, "decay", "attack was not scheduled");
-        assert(/ramp 1(\.0+)?(,|$)/.test(scheduled()), "no ramp to full scale: " + scheduled());
-        assert(/ramp 0\.2(,|$)/.test(scheduled()), "no ramp down to sustain: " + scheduled());
+        assertClose(out.valueAt(attack), 1, 1e-6, "the envelope did not reach full scale");
+        assertClose(out.valueAt(attack + decay), 0.2, 1e-6, "the envelope did not fall to sustain");
 
         gateAnalyser.sample = 0;
         voice.poll(0.01);
         assertEqual(voice.adsr.stage, "release", "gate did not close the envelope");
-        assert(/ramp 0(\.0+)?$/.test(scheduled()), "no ramp to silence: " + scheduled());
+        assertClose(out.valueAt(0.01 + attack), 0, 1e-6, "the envelope did not return to silence");
     });
 
     itAsync("releases the gate when a CV source is removed", async () => {
@@ -843,6 +1219,106 @@ describe("engine graph", () => {
         // One tap per port, shared by every cable off that port.
         engine.measureOutput("seq_1-out-cv");
         assertEqual(source.connections.length, connectsBefore + 1, "a second tap was created for the same port");
+    });
+
+
+    itAsync("carries a running sequencer gate through to the cable meter", async () => {
+        // Nothing used to assert this. The mock applied automation instantly,
+        // so a gate looked permanently open and a gate that never opened were
+        // the same test. With real timing it is possible to tell the three
+        // candidate faults apart: the scheduler, the tap, and the colour ramp.
+        const engine = await newEngine();
+        const ctx = engine.ctx;
+        engine.addModule(makeModule("sequencer", "seq_1", 0, 0, { tempo: 0.5, run: 1, gateLen: 0.5, octave: 0 }));
+        const voice = engine.getVoice("seq_1");
+        engine.setSteps("seq_1", defaultSteps().map((s, i) => (i === 0 ? { cv: 0.5, gate: 1 } : s)));
+
+        const seen = [];
+        for (let i = 0; i < 150; i++) {
+            ctx.advance(1 / 60);
+            // requestAnimationFrame is inert in this mock, so the engine's
+            // frame is stepped by hand.
+            for (const ev of voice.runtime.tick(ctx.currentTime, voice.controls, voice.getSteps())) {
+                voice.scheduleStep(ev);
+            }
+            ctx.refresh();
+            seen.push(engine.measureOutput("seq_1-out-gate").signed);
+        }
+
+        const high = Math.max(...seen);
+        const low = Math.min(...seen);
+        assert(high > 0.9, "the gate never opened on the cable, peak " + high.toFixed(3));
+        assert(low < 0.1, "the gate never closed on the cable, floor " + low.toFixed(3));
+
+        const colourAt = (v) => cableColor({ cv: true, signed: v, peak: Math.abs(v), rms: Math.abs(v), level: v });
+        assert(colourAt(high) !== colourAt(low), "the gate swung but the cable colour never moved");
+    });
+
+    itAsync("resolves a control voltage from the mean, not one lucky sample", async () => {
+        // The buffer is 32 samples; a ramp inside it means no single sample is
+        // the value. Averaging is what makes a 0.4 V CV read 0.40 rather than
+        // whatever the tap happened to catch.
+        const engine = await newEngine();
+        const ctx = engine.ctx;
+        engine.addModule(makeModule("sequencer", "seq_1", 0, 0));
+        const voice = engine.getVoice("seq_1");
+        engine.measureOutput("seq_1-out-cv"); // creates the tap
+
+        ctx.advance(1);
+        voice.setCV(0.4, ctx.currentTime);
+        ctx.advance(0.02); // past setCV's 5 ms ramp
+        ctx.refresh();
+        assertClose(engine.measureOutput("seq_1-out-cv").signed, 0.4, 1e-6,
+            "a 0.4 V control voltage did not read 0.4");
+    });
+
+    itAsync("holds a short transient long enough to see it", async () => {
+        // An ADSR spike is tens of milliseconds. Without ballistics it lands
+        // between two frames and the cable never appears to move at all.
+        const engine = await newEngine();
+        const ctx = engine.ctx;
+        engine.addModule(makeModule("envelope", "env_1", 0, 0));
+        const voice = engine.getVoice("env_1");
+        engine.measureOutput("env_1-out-out"); // creates the tap
+
+        const out = voice.outputs.out.offset;
+        ctx.advance(1);
+        out.setValueAtTime(1, ctx.currentTime);
+        ctx.refresh();
+        assert(engine.measureOutput("env_1-out-out").level > 0.9, "the transient did not register");
+
+        // Signal is over, but the meter must still be visibly alight.
+        out.setValueAtTime(0, ctx.currentTime);
+        ctx.advance(1 / 60);
+        ctx.refresh();
+        assert(engine.measureOutput("env_1-out-out").level > 0.5,
+            "the transient vanished on the very next frame");
+
+        // And it has to actually come back down rather than latching on.
+        ctx.advance(2);
+        ctx.refresh();
+        assert(engine.measureOutput("env_1-out-out").level < 0.05,
+            "the meter never fell back to rest");
+    });
+
+    itAsync("spans the sequencer's real voltage range instead of pinning", async () => {
+        // The default patch runs the sequencer at +1 to +1.9 V. On the old
+        // +/-1 V ramp that cable was clamped at full brightness for 98% of
+        // frames and looked dead. The ramp now covers two octaves.
+        const engine = await newEngine();
+        const ctx = engine.ctx;
+        engine.addModule(makeModule("sequencer", "seq_1", 0, 0, { run: 1, octave: 0.4 }));
+        const voice = engine.getVoice("seq_1");
+        assertEqual(Math.round(voice.controls.octave * 2), 1, "the octave offset moved");
+
+        const seen = new Set();
+        for (const cv of [1.0, 1.25, 1.5833, 1.9167]) {
+            ctx.advance(0.1);
+            voice.setCV(cv, ctx.currentTime);
+            ctx.refresh();
+            seen.add(cableColor(engine.measureOutput("seq_1-out-cv")));
+        }
+        assertEqual(seen.size, 4, "the sequencer CV range still collapses to one colour: " + [...seen].join(" "));
     });
 
     itAsync("meters a silence and cannot meter an input", async () => {

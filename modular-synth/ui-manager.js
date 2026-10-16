@@ -24,6 +24,11 @@ function svg(tag, attrs) {
     return node;
 }
 
+/** Rounds a rack coordinate onto the snap grid. */
+function snapToGrid(value) {
+    return Math.round(value / RACK_GRID) * RACK_GRID;
+}
+
 /**
  * A cable hanging under its own weight.
  * Returns the path data plus the point halfway along it, which is where the
@@ -320,6 +325,54 @@ PANEL_DRAWERS.keyboard = function (host, moduleId, actions) {
     };
 };
 
+/** A live look at the noise flavour, drawn as a waveform. */
+PANEL_DRAWERS.noise = function (host, moduleId, actions) {
+    const canvas = el("canvas", "noise-canvas");
+    canvas.width = 300;
+    canvas.height = 64;
+    host.appendChild(canvas);
+    const ctx2d = canvas.getContext("2d");
+    let tone = -1;
+
+    return {
+        sync(module) { tone = module.controls.tone; },
+        frame(engine) {
+            const voice = engine.getVoice(moduleId);
+            const buffer = voice && voice.preview ? voice.preview() : null;
+            const w = canvas.width;
+            const h = canvas.height;
+
+            ctx2d.fillStyle = "#0b0d0c";
+            ctx2d.fillRect(0, 0, w, h);
+            ctx2d.strokeStyle = "rgba(255,255,255,0.08)";
+            ctx2d.beginPath();
+            ctx2d.moveTo(0, h / 2);
+            ctx2d.lineTo(w, h / 2);
+            ctx2d.stroke();
+
+            if (!buffer) return;
+            // One row per crossing, which is what actually distinguishes the
+            // three flavours: white is a solid block, brown is sparse arcs.
+            const rows = 22;
+            ctx2d.strokeStyle = "#7CFF6B";
+            ctx2d.lineWidth = 1;
+            for (let row = 0; row < rows; row++) {
+                ctx2d.beginPath();
+                let started = false;
+                for (let i = 0; i < buffer.length; i++) {
+                    const x = (i / buffer.length) * w;
+                    const y = 4 + ((row + 0.5) / rows) * (h - 8);
+                    if (!started) { ctx2d.moveTo(x, y); started = true; }
+                    else ctx2d.lineTo(x, y);
+                }
+                ctx2d.globalAlpha = 0.25 + 0.75 * (1 - row / rows);
+                ctx2d.stroke();
+            }
+            ctx2d.globalAlpha = 1;
+        },
+    };
+};
+
 /** MIDI status. */
 PANEL_DRAWERS.midi = function (host, moduleId, actions) {
     const status = el("div", "midi-status", "…");
@@ -434,6 +487,7 @@ class RackUI {
         this.canvas = options.canvas;
         this.cableLayer = options.cableLayer;
         this.hitLayer = options.hitLayer;
+        this.grid = options.grid || null;
 
         this.modules = new Map();
         this.cables = new Map();
@@ -460,9 +514,33 @@ class RackUI {
     setView(view) {
         this.view = view;
         this.canvas.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.k + ")";
+        this._paintGrid();
         // Readouts are counter-scaled to the zoom, so they need redrawing.
         this._redrawCables();
         this.actions.onViewChange(view);
+    }
+
+    /**
+     * Keep the drawn grid locked to the rack coordinates.
+     *
+     * The grid lives outside the transformed canvas, so it has to be told
+     * where the origin moved and how big a cell is in screen pixels. Offsetting
+     * the background by the pan and scaling it by the zoom keeps a module's
+     * edge sitting exactly on a line at every zoom level, which is the whole
+     * point of a snapping grid.
+     */
+    _paintGrid() {
+        if (!this.grid) return;
+        const size = RACK_GRID * this.view.k;
+        const major = size * RACK_GRID_MAJOR;
+        // Modulo rather than a raw multiply, so a large pan cannot drift the
+        // grid off by a rounding error over time.
+        const x = ((this.view.x % major) + major) % major;
+        const y = ((this.view.y % major) + major) % major;
+        this.grid.style.setProperty("--grid-size", size + "px");
+        this.grid.style.setProperty("--major-size", major + "px");
+        this.grid.style.setProperty("--grid-x", x + "px");
+        this.grid.style.setProperty("--grid-y", y + "px");
     }
 
     rackPoint(clientX, clientY) {
@@ -548,7 +626,8 @@ class RackUI {
 
     _createModule(module) {
         const def = MODULE_DEFS[module.type];
-        const root = el("div", "module module-" + module.type);
+        const classes = "module module-" + module.type;
+        const root = el("div", def.group ? classes + " module-group-" + def.group : classes);
         root.dataset.id = module.id;
         root.style.width = def.width + "px";
 
@@ -854,8 +933,8 @@ class RackUI {
                 const point = this.rackPoint(e.clientX, e.clientY);
                 this.actions.moveModule(
                     this._dragging.id,
-                    Math.round((point.x - this._dragging.dx) / RACK_GRID) * RACK_GRID,
-                    Math.round((point.y - this._dragging.dy) / RACK_GRID) * RACK_GRID
+                    snapToGrid(point.x - this._dragging.dx),
+                    snapToGrid(point.y - this._dragging.dy)
                 );
                 return;
             }

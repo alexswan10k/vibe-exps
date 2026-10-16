@@ -64,6 +64,8 @@ function makeModule(type, id, x, y, controls) {
     return {
         id,
         type,
+        // Snapped on creation as well as on drop, so a module added from the
+        // sidebar and one dropped onto the rack land identically.
         x: Math.round(x / RACK_GRID) * RACK_GRID,
         y: Math.round(y / RACK_GRID) * RACK_GRID,
         controls: controls || defaultControls(type),
@@ -178,8 +180,10 @@ function normalizePatch(raw) {
         patch.modules.push({
             id,
             type,
-            x: Number.isFinite(m.x) ? m.x : 40,
-            y: Number.isFinite(m.y) ? m.y : 40,
+            // Snapped on load too, so a hand-edited patch file cannot scatter
+            // modules off the grid.
+            x: Number.isFinite(m.x) ? Math.round(m.x / RACK_GRID) * RACK_GRID : 40,
+            y: Number.isFinite(m.y) ? Math.round(m.y / RACK_GRID) * RACK_GRID : 40,
             controls,
         });
     }

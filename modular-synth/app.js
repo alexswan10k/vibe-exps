@@ -44,6 +44,7 @@ const dom = {
     canvas: document.getElementById("rackCanvas"),
     cableLayer: document.getElementById("cableLayer"),
     hitLayer: document.getElementById("cableHitLayer"),
+    grid: document.querySelector(".rack-grid"),
     status: document.getElementById("status"),
     zoomLabel: document.getElementById("zoomLabel"),
     overlay: document.getElementById("overlay"),
@@ -90,7 +91,12 @@ const actions = {
 
     moveModule(id, x, y) {
         const state = store.get();
-        const modules = state.modules.map((m) => (m.id === id ? Object.assign({}, m, { x, y }) : m));
+        // Snapped here as well as in the UI, so a keyboard nudge or a future
+        // caller cannot leave a module off the grid.
+        const snapped = { x: snapToGrid(x), y: snapToGrid(y) };
+        const modules = state.modules.map((m) =>
+            m.id === id ? Object.assign({}, m, snapped) : m
+        );
         store.set({ modules });
     },
 
@@ -297,14 +303,16 @@ function applyPatch(patch) {
 }
 
 function defaultPatch() {
+    // Laid out on the grid so the rack reads as a rack. Sequencer top-left,
+    // voice across the middle row, output bottom-right.
     const modules = [
-        makeModule("sequencer", "sequencer_1", 30, 30, { tempo: 0.42, run: 1, gateLen: 0.5, octave: 0.4 }),
-        makeModule("oscillator", "oscillator_1", 30, 250, { freq: 0.28, wave: 1, level: 0.7 }),
-        makeModule("vcf", "vcf_1", 240, 250, { cutoff: 0.5, res: 0.22 }),
-        makeModule("envelope", "envelope_1", 450, 250, { a: 0.2, d: 0.5, s: 0.3, r: 0.45 }),
-        makeModule("vca", "vca_1", 450, 440, { offset: 0 }),
-        makeModule("output", "output_1", 640, 440, { vol: 0.55 }),
-        makeModule("oscilloscope", "oscilloscope_1", 240, 440, { zoom: 0.3 }),
+        makeModule("sequencer", "sequencer_1", 20, 20, { tempo: 0.42, run: 1, gateLen: 0.5, octave: 0.4 }),
+        makeModule("oscillator", "oscillator_1", 20, 260, { freq: 0.28, wave: 1, level: 0.7 }),
+        makeModule("vcf", "vcf_1", 220, 260, { cutoff: 0.5, res: 0.22 }),
+        makeModule("envelope", "envelope_1", 400, 260, { a: 0.2, d: 0.5, s: 0.3, r: 0.45 }),
+        makeModule("vca", "vca_1", 400, 540, { offset: 0 }),
+        makeModule("output", "output_1", 560, 540, { vol: 0.55 }),
+        makeModule("oscilloscope", "oscilloscope_1", 220, 540, { zoom: 0.3 }),
     ];
 
     const pattern = [0, 0.25, 0.583, 0, 0, 0.917, 0.25, 0];
@@ -335,6 +343,7 @@ const ui = new RackUI({
     canvas: dom.canvas,
     cableLayer: dom.cableLayer,
     hitLayer: dom.hitLayer,
+    grid: dom.grid,
     actions,
 });
 

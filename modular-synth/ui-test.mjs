@@ -148,10 +148,19 @@ class FakeNode {
 }
 
 function makeStyle() {
-    return {
-        setProperty(name, value) { this[name] = value; },
-        removeProperty(name) { delete this[name]; },
+    // Custom properties live in their own map: in a real CSSStyleDeclaration
+    // `style["--x"]` is not how you read a custom property back, so storing
+    // them as ordinary keys would let a test pass against a fake API.
+    const custom = new Map();
+    const style = {
+        setProperty(name, value) { custom.set(name, String(value)); },
+        getPropertyValue(name) { return custom.get(name) || ""; },
+        removeProperty(name) { custom.delete(name); },
     };
+    for (const name of ["transform", "width", "left", "top", "visibility", "zIndex"]) {
+        style[name] = "";
+    }
+    return style;
 }
 
 function make2DContext() {
@@ -199,11 +208,31 @@ function buildDocument() {
     register("patchFile", fileInput);
     fileInput.files = [];
 
+    // The rack grid and major grid, as children of the rack area, mirroring
+    // index.html. The UI reaches them by class, so this has to be real: a
+    // querySelector stub returning null would quietly skip grid wiring.
+    for (const className of ["rack-grid", "rack-grid-major"]) {
+        const layer = new FakeNode("div");
+        layer.className = className;
+        registry.get("rackArea").appendChild(layer);
+    }
+
     const document = {
         createElement(tag) { return new FakeNode(tag); },
         createElementNS(ns, tag) { return new FakeNode(tag, ns); },
         getElementById(id) { return registry.get(id) || null; },
-        querySelector() { return null; },
+        querySelector(selector) {
+            const wanted = selector.replace(/^\./, "");
+            const find = (node) => {
+                for (const child of node.childNodes || []) {
+                    if (child.className === wanted) return child;
+                    const hit = find(child);
+                    if (hit) return hit;
+                }
+                return null;
+            };
+            return find(registry.get("rackArea"));
+        },
     };
     return document;
 }
@@ -263,12 +292,24 @@ const context = vm.createContext({
             constructor() { this.state = "running"; this.currentTime = 0; this.destination = new FakeNode("node"); }
             resume() { return Promise.resolve(); }
             close() { return Promise.resolve(); }
-            createOscillator() { return node(); }
-            createGain() { return node(); }
-            createBiquadFilter() { return node(); }
-            createDelay() { return node(); }
-            createAnalyser() { return node(); }
-            createConstantSource() { return node(); }
+            createOscillator() { return node("osc"); }
+            createGain() { const n = node("gain"); n.gain.value = 1; n.gain.baseValue = 1; return n; }
+            createBiquadFilter() { return node("biquad"); }
+            createDelay() { return node("delay"); }
+            createAnalyser() { return node("analyser"); }
+            createConstantSource() { return node("constant"); }
+            createWaveShaper() { const n = node("shaper"); n.curve = null; return n; }
+            createBufferSource() { const n = node("bufferSource"); n.loop = false; n.buffer = null; return n; }
+            createBuffer(channels, length, rate) {
+                const data = [];
+                for (let c = 0; c < channels; c++) data.push(new Float32Array(length));
+                return {
+                    numberOfChannels: channels,
+                    length,
+                    sampleRate: rate,
+                    getChannelData(c) { return data[c]; },
+                };
+            }
         },
         addEventListener() {},
         confirm: () => true,
@@ -281,34 +322,182 @@ const context = vm.createContext({
     URL: { createObjectURL: () => "blob:x", revokeObjectURL: () => {} },
 });
 
-function node() {
-    const n = new FakeNode("node");
+/**
+ * A mock audio node. `kind` matters: the graph walker and the buffer-source
+ * lookup both need to tell a ConstantSourceNode from a GainNode, and every
+ * factory used to return an indistinguishable "node".
+ */
+function node(kind = "node") {
+    const n = new FakeNode(kind);
+    n.kind = kind;
     n.connections = [];
     n.start = () => { n.started = true; };
     n.stop = () => { n.stopped = true; };
-    n.connect = (dest) => { n.connections.push(dest); return dest; };
+    // Upstream/downstream edges, and modulation edges into AudioParams.
+    // Without these the harness cannot tell a wired module from an
+    // unconnected one, so a patch that silently failed looked correct.
+    n.inputs = [];
+    n.paramInputs = [];
+    n.connect = (dest) => {
+        if (dest && dest.isAudioParam) {
+            if (dest.owner && dest.owner.paramInputs) dest.owner.paramInputs.push(n);
+        } else {
+            n.connections.push(dest);
+            if (dest && dest.inputs) dest.inputs.push(n);
+        }
+        return dest;
+    };
     n.disconnect = (dest) => {
-        if (dest === undefined) n.connections = [];
-        else {
+        if (dest === undefined) {
+            for (const d of n.connections) {
+                if (d && d.inputs) {
+                    const i = d.inputs.indexOf(n);
+                    if (i >= 0) d.inputs.splice(i, 1);
+                }
+            }
+            n.connections = [];
+        } else if (dest && dest.isAudioParam) {
+            const i = dest.owner.paramInputs.indexOf(n);
+            if (i >= 0) dest.owner.paramInputs.splice(i, 1);
+        } else {
             const i = n.connections.indexOf(dest);
             if (i >= 0) n.connections.splice(i, 1);
+            if (dest && dest.inputs) {
+                const j = dest.inputs.indexOf(n);
+                if (j >= 0) dest.inputs.splice(j, 1);
+            }
         }
         return n;
     };
-    n.getByteTimeDomainData = (buffer) => buffer.fill(128);
+    // Byte data has to reflect `sample` too. It is hardcoded to the 128
+    // midpoint here, which silently pins every gate follower to "closed" —
+    // so any module clocked by a gate appeared dead.
+    n.getByteTimeDomainData = (buffer) => {
+        for (let i = 0; i < buffer.length; i++) buffer[i] = Math.round(128 + n.sample * 127);
+    };
     n.getFloatTimeDomainData = (buffer) => buffer.fill(n.sample);
     for (const name of ["frequency", "detune", "gain", "Q", "delayTime", "offset"]) {
-        const p = new FakeNode("param");
-        p.setValueAtTime = () => p;
-        p.linearRampToValueAtTime = () => p;
-        p.setTargetAtTime = () => p;
-        p.cancelScheduledValues = () => p;
-        p.cancelAndHoldAtTime = () => p;
-        p.connect = () => {};
-        p.disconnect = () => p;
+        const p = makeParam();
+        p.owner = n;
         n[name] = p;
     }
+    n.isAudioParam = false;
     return n;
+}
+
+/**
+ * An AudioParam that actually moves over time.
+ *
+ * The UI harness used no-op params, so `offset.value` never changed and any
+ * module that ramps an AudioParam over time — the sample and hold's glide, the
+ * envelope — was untestable here. This tracks the same event kinds as the
+ * engine harness so `valueAt(t)` resolves a real ramp.
+ */
+function makeParam() {
+    let seq = 0;
+    const events = [];
+    const param = {
+        isAudioParam: true,
+        owner: null,
+        value: 0,
+        baseValue: 0,
+        automation: events,
+        setValueAtTime(v, t) {
+            this.value = v;
+            for (let i = events.length - 1; i >= 0; i--) {
+                if (events[i].t > t) events.splice(i, 1);
+            }
+            events.push({ k: "set", v, t, seq: seq++ });
+            return this;
+        },
+        linearRampToValueAtTime(v, t) {
+            this.value = v;
+            events.push({ k: "ramp", v, t, seq: seq++ });
+            return this;
+        },
+        setTargetAtTime(v, t, c) {
+            this.value = v;
+            events.push({ k: "target", v, t, c, seq: seq++ });
+            return this;
+        },
+        cancelScheduledValues(t) {
+            for (let i = events.length - 1; i >= 0; i--) {
+                if (events[i].t >= t) events.splice(i, 1);
+            }
+            return this;
+        },
+        cancelAndHoldAtTime(t) {
+            const held = param.valueAt(t);
+            for (let i = events.length - 1; i >= 0; i--) {
+                if (events[i].t >= t) events.splice(i, 1);
+            }
+            events.push({ k: "hold", v: held, t, seq: seq++ });
+            return this;
+        },
+        connect() { return this; },
+        disconnect() { return this; },
+        valueAt(t) {
+            const sorted = events.slice().sort((a, b) => a.t - b.t || a.seq - b.seq);
+            let value = this.baseValue;
+            let anchor = this.baseValue;
+            let anchorT = -Infinity;
+            for (const e of sorted) {
+                if (e.t > t) break;
+                if (e.k === "set" || e.k === "hold") {
+                    anchor = e.v;
+                    anchorT = e.t;
+                    value = e.v;
+                } else if (e.k === "ramp") {
+                    const span = e.t - anchorT;
+                    const f = span > 0 ? Math.min(1, Math.max(0, (t - anchorT) / span)) : 1;
+                    value = anchor + (e.v - anchor) * f;
+                } else if (e.k === "target") {
+                    value = e.v + (anchor - e.v) * Math.exp(-Math.max(0, t - anchorT) / e.c);
+                }
+            }
+            return value;
+        },
+    };
+    return param;
+}
+
+/**
+ * Signal value of a node at time `t`.
+ * Mirrors the engine harness so a patch can be checked for actually carrying
+ * audio. `seen` terminates the delay's feedback loop.
+ */
+function outputAt(node, t, seen) {
+    if (!node || (seen.has(node) || seen.size > 64)) return 0;
+    seen.add(node);
+    let value = 0;
+    if (node.kind === "constant") {
+        value = node.offset.valueAt(t);
+    } else if (node.kind === "osc") {
+        value = Math.sin(2 * Math.PI * node.frequency.valueAt(t) * t);
+    } else if (node.kind === "bufferSource") {
+        const data = node.buffer && node.buffer.getChannelData(0);
+        if (data && data.length) value = data[Math.floor(t * node.buffer.sampleRate) % data.length];
+    } else {
+        for (const src of node.inputs) value += outputAt(src, t, seen);
+    }
+    seen.delete(node);
+    if (node.kind === "gain") value *= node.gain.valueAt(t);
+    return value;
+}
+
+/**
+ * Push the audio clock's value of every node a live voice owns into `.sample`,
+ * so analysers report what the graph is really carrying. Mirrors
+ * engine.ctx.refresh() in the engine harness; without it a test can only poke
+ * samples by hand and cannot prove a patch carries audio.
+ */
+function refreshGraph(engine) {
+    const now = engine.ctx.currentTime;
+    for (const voice of engine.voices.values()) {
+        for (const node of voice.owned || []) {
+            node.sample = Math.max(-2, Math.min(2, outputAt(node, now, new Set())));
+        }
+    }
 }
 
 const errors = [];
@@ -360,10 +549,85 @@ await it("builds the sidebar from the module table", () => {
     const defs = run("MODULE_DEFS");
     assertEqual(items.length, Object.keys(defs).length, "wrong number of sidebar items");
     assertEqual(items[0].childNodes[0].textContent, defs.oscillator.abbr, "first item is not the oscillator");
-    assertEqual(items[items.length - 1].childNodes[1].textContent, defs.output.name, "last item is not the output");
+    // Every type in the table has to reach the sidebar, or a module exists that
+    // cannot be added. Comparing counts alone would not catch a rename.
+    const listed = items.map((item) => item.childNodes[1].textContent);
+    for (const name of Object.values(defs).map((d) => d.name)) {
+        assert(listed.includes(name), "sidebar is missing " + name);
+    }
 });
 
-await it("powering on loads the default patch", async () => {
+/* ============================================================
+   Rack grid
+   ============================================================ */
+
+await it("snaps a dragged module onto the grid", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+
+    const target = modules()[0];
+    const grid = run("RACK_GRID");
+    actions().moveModule(target.id, 137, 213);
+    const moved = modules().find((m) => m.id === target.id);
+    assert(moved.x % grid === 0, "x landed off the grid: " + moved.x);
+    assert(moved.y % grid === 0, "y landed off the grid: " + moved.y);
+    assertEqual(moved.x, 140, "137 should snap to 140 at a grid of " + grid);
+    assertEqual(moved.y, 220, "213 should snap to 220 at a grid of " + grid);
+});
+
+await it("keeps every module on the grid in the default patch", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+    const grid = run("RACK_GRID");
+    for (const m of modules()) {
+        assert(m.x % grid === 0 && m.y % grid === 0,
+            m.type + " sits off the grid at " + m.x + "," + m.y);
+    }
+});
+
+await it("lets neighbours tile edge to edge without a gap", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+    const grid = run("RACK_GRID");
+    // Two modules at the same x, dropped side by side: the second should start
+    // exactly where the first ends.
+    const a = modules()[0];
+    const width = run("MODULE_DEFS")[a.type].width;
+    assert(width % grid === 0, a.type + " is " + width + "px wide, off the grid");
+    actions().moveModule(a.id, 100, 100);
+    const at = modules().find((m) => m.id === a.id);
+    assertEqual(at.x, 100, "100 is not on the grid");
+    assertEqual(at.x + width, 100 + width, "width and position disagree");
+});
+
+await it("draws the grid in rack units and follows the pan and zoom", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+
+    const gridEl = registry.get("rackArea").childNodes.find((n) => n.className === "rack-grid");
+    assert(gridEl, "no grid element in the rack area");
+    assert(ui().grid === gridEl, "the UI is not pointed at the grid element");
+
+    const grid = run("RACK_GRID");
+    ui().setView({ x: 0, y: 0, k: 1 });
+    assertEqual(gridEl.style.getPropertyValue("--grid-size"), grid + "px", "wrong cell size at 100%");
+
+    ui().setView({ x: 0, y: 0, k: 2 });
+    assertEqual(gridEl.style.getPropertyValue("--grid-size"), grid * 2 + "px", "the grid did not scale with zoom");
+
+    // The offset is applied modulo the major spacing, so a long pan cannot
+    // drift the grid away from the modules it is supposed to line up with.
+    ui().setView({ x: 100000, y: 0, k: 1 });
+    const offset = parseFloat(gridEl.style.getPropertyValue("--grid-x"));
+    assert(offset >= 0 && offset <= grid * run("RACK_GRID_MAJOR"),
+        "grid offset drifted out of range: " + offset);
+});
+
+await it("powers on loads the default patch", async () => {
     registry.get("power").click();
     await settle();
     assert(modules().length >= 6, "expected a default patch, got " + modules().length);
@@ -708,6 +972,24 @@ await it("thickens a cable under the pointer", () => {
     assertEqual(parseFloat(entry.line.style.strokeWidth), resting, "hover did not restore the cable");
 });
 
+await it("reads the raw level but paints the smoothed one", () => {
+    // The number has to be exact, or a -6.0 dB reading is a lie. The colour
+    // wants the opposite: smoothed, so a momentary dip does not strobe.
+    const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
+    const entry = ui().cables.get(cable.id);
+
+    meter("oscillator_1", "out", 0.5);
+    ui().frame();
+    assertEqual(entry.readout.textContent, "-6.0dB", "the readout should report the raw peak");
+
+    const measure = engine().measureOutput("oscillator_1-out-out");
+    assertEqual(measure.peak, 0.5, "the raw peak was altered by the meter ballistics");
+    assert(typeof measure.level === "number", "no smoothed level for the colour to use");
+    assertEqual(run("cableColor")(measure),
+        run("cableColor")({ cv: false, signed: 0, peak: 0.5, level: measure.level }),
+        "the cable is not painted from the smoothed level");
+});
+
 await it("keeps the readout legible instead of tinting it", () => {
     const cable = cables().find((c) => c.from.indexOf("oscillator") === 0);
     const entry = ui().cables.get(cable.id);
@@ -715,6 +997,97 @@ await it("keeps the readout legible instead of tinting it", () => {
     ui().frame();
     // The readout's stroke is a dark outline for legibility over a module.
     assert(!entry.readout.style.stroke, "readout outline was overwritten by the cable colour");
+});
+
+await it("adds every new module type and gives it a live voice", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+    const defs = run("MODULE_DEFS");
+    for (const type of ["noise", "samplehold", "waveshaper"]) {
+        actions().addModule(type);
+        const added = modules().filter((m) => m.type === type).pop();
+        const voice = engine().getVoice(added.id);
+        assert(voice, type + " was added but has no audio voice");
+        // Ports declared in the definition must exist on the voice, and jacks
+        // must have been drawn for them.
+        const entry = ui().modules.get(voice.moduleId);
+        for (const port of defs[type].inputs) assert(entry.jacks.some((j) => j.dataset.jack.endsWith("-in-" + port.id)), type + " is missing input jack " + port.id);
+        for (const port of defs[type].outputs) assert(entry.jacks.some((j) => j.dataset.jack.endsWith("-out-" + port.id)), type + " is missing output jack " + port.id);
+        ui().frame();
+    }
+});
+
+await it("carries a signal through the new modules", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+    // Noise produces audio, and the drive stage bends it without muting it.
+    actions().addModule("noise");
+    actions().addModule("waveshaper");
+    const noiseId = modules().filter((m) => m.type === "noise").pop().id;
+    const driveId = modules().filter((m) => m.type === "waveshaper").pop().id;
+    const from = noiseId + "-out-out";
+    const to = driveId + "-in-in";
+    actions().completePatch(from, to);
+    // completePatch mints its own id, so match on the endpoints.
+    assert(cables().some((c) => c.from === from && c.to === to),
+        "could not patch noise into drive: " + registry.get("status").textContent);
+
+    // Seed the buffer before refreshing, so there is something to read.
+    const bufferSource = engine().getVoice(noiseId).owned.find((n) => n.kind === "bufferSource");
+    assert(bufferSource, "no buffer source on the noise voice");
+    assert(bufferSource.buffer, "the noise buffer was never built");
+    const data = bufferSource.buffer.getChannelData(0);
+    let anySignal = 0;
+    for (let i = 0; i < data.length; i++) anySignal += Math.abs(data[i]);
+    assert(anySignal > 1, "the noise buffer is empty");
+
+    // Drive the analyser off the real graph rather than a hand-set sample.
+    engine().measureOutput(driveId + "-out-out");
+    refreshGraph(engine());
+    const dbg = [];
+    for (const [label, id] of [["noise", noiseId], ["drive", driveId]]) {
+        const vo = engine().getVoice(id);
+        dbg.push(label + " owned=" + vo.owned.map((n) => n.kind).join("|"));
+    }
+    dbg.push("noiseOutSample=" + engine().getVoice(noiseId).outputs.out.sample);
+    dbg.push("driveOutSample=" + engine().getVoice(driveId).outputs.out.sample);
+    const level = engine().measureOutput(driveId + "-out-out");
+    assert(level, "drive output cannot be metered");
+    assert(level.peak > 0.01, "nothing came out of the drive stage: peak " + level.peak + " :: " + dbg.join(" ; "));
+    assert(level.peak <= 1.001, "drive stage is clipping: " + level.peak);
+});
+
+await it("gives sample and hold a stepped output rather than a ramp", async () => {
+    await settle();
+    registry.get("power").click();
+    await settle();
+    actions().addModule("samplehold");
+    const shId = modules().filter((m) => m.type === "samplehold").pop().id;
+    const voice = engine().getVoice(shId);
+    assert(voice, "no voice for sample and hold");
+
+    // The tap has to exist before refreshGraph can find the analyser.
+    engine().measureOutput(shId + "-out-out");
+
+    const ctx = engine().ctx;
+    const seen = [];
+    const held = [];
+    for (let i = 0; i < 90; i++) {
+        ctx.currentTime += 1 / 60;
+        // Drive the input with a slow ramp; the follower clocks on each rise.
+        assert(voice.inputs.in, "S&H has no input node");
+        voice.inputs.in.sample = ctx.currentTime * 2;
+        voice.poll(ctx.currentTime);
+        held.push(voice.hold.value);
+        refreshGraph(engine());
+        seen.push(engine().measureOutput(shId + "-out-out").level);
+    }
+    assert(seen.length === 90, "no frames measured");
+    const distinct = new Set(seen.map((v) => Math.round(v * 20)));
+    assert(distinct.size > 1,
+        "sample and hold never changed value; held targets " + [...new Set(held.map((v) => v.toFixed(2)))].join(" "));
 });
 
 await it("dims the readouts and flattens the cables when switched off", () => {
