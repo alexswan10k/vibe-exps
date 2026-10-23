@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Event Horizon — a real-time black hole rendered by integrating photon geodesics through curved spacetime in a WebGL2 shader."
+    />
+    <title>Event Horizon — Schwarzschild Geodesic Raytracer</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='52%25' stop-color='%23000'/%3E%3Cstop offset='68%25' stop-color='%23ffb36b'/%3E%3Cstop offset='100%25' stop-color='%23ff7a2f' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='15' fill='url(%23g)'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23000'/%3E%3Cellipse cx='16' cy='16' rx='13' ry='3.2' fill='none' stroke='%23ffc48a' stroke-width='1.5'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <canvas
+      id="stage"
+      aria-label="Interactive black hole simulation. Drag to orbit, scroll to zoom."
+    ></canvas>
+
+    <!-- Boot / failure overlay -->
+    <div id="boot" class="boot">
+      <div class="boot-inner">
+        <div class="boot-ring" aria-hidden="true"></div>
+        <h1>EVENT HORIZON</h1>
+        <p id="bootMsg">Curving spacetime…</p>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <header class="brand" id="brand">
+      <div class="brand-glyph" aria-hidden="true">
+        <svg viewBox="0 0 64 64" width="42" height="42">
+          <defs>
+            <radialGradient id="bh" cx="50%" cy="50%" r="50%">
+              <stop offset="55%" stop-color="#000" />
+              <stop offset="72%" stop-color="#ffb36b" />
+              <stop offset="82%" stop-color="#ff7a2f" stop-opacity=".55" />
+              <stop offset="100%" stop-color="#ff7a2f" stop-opacity="0" />
+            </radialGradient>
+          </defs>
+          <circle cx="32" cy="32" r="31" fill="url(#bh)" />
+          <circle cx="32" cy="32" r="15.5" fill="#000" />
+          <ellipse
+            cx="32"
+            cy="32"
+            rx="27"
+            ry="6.5"
+            fill="none"
+            stroke="#ffc48a"
+            stroke-opacity=".85"
+            stroke-width="1.6"
+          />
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>EVENT HORIZON</h1>
+        <p>
+          Schwarzschild geodesic raytracer
+          <span class="sep">·</span>
+          <span class="mono">r<sub>s</sub> = 1</span>
+        </p>
+      </div>
+    </header>
+
+    <!-- Top actions -->
+    <div class="top-actions">
+      <button id="btnPanel" class="tool" title="Show or hide controls (P)">
+        Console
+      </button>
+      <button id="btnShot" class="tool" title="Save a PNG (S)">◉ Capture</button>
+      <button id="btnAbout" class="tool" title="The physics behind it">Physics</button>
+      <button id="btnHide" class="tool" title="Hide the interface (H)">
+        Hide UI
+      </button>
+    </div>
+
+    <!-- Control panel -->
+    <aside id="panel" class="panel" aria-label="Simulation controls">
+      <div class="panel-head">
+        <h2>Console</h2>
+        <button
+          id="panelToggle"
+          class="panel-toggle"
+          aria-label="Collapse controls"
+          aria-expanded="true"
+        >
+          −
+        </button>
+      </div>
+      <div class="panel-body">
+        <div class="presets" role="group" aria-label="Presets">
+          <button class="chip is-active" data-preset="interstellar">
+            Interstellar
+          </button>
+          <button class="chip" data-preset="gargantua">Gargantua</button>
+          <button class="chip" data-preset="photon">Photon ring</button>
+          <button class="chip" data-preset="inferno">Inferno</button>
+          <button class="chip" data-preset="void">Cold void</button>
+        </div>
+
+        <section class="group">
+          <h3>Spacetime</h3>
+          <div class="ctrl">
+            <label for="gravity"
+              >Gravity <output id="gravityOut">1.00×</output></label
+            >
+            <input
+              id="gravity"
+              type="range"
+              min="0"
+              max="2"
+              step="0.01"
+              value="1"
+            />
+          </div>
+          <div class="ctrl">
+            <label for="beaming"
+              >Doppler beaming <output id="beamingOut">1.00</output></label
+            >
+            <input
+              id="beaming"
+              type="range"
+              min="0"
+              max="1.5"
+              step="0.01"
+              value="1"
+            />
+          </div>
+          <div class="ctrl">
+            <label for="spin"
+              >Disk flow <output id="spinOut">1.00×</output></label
+            >
+            <input
+              id="spin"
+              type="range"
+              min="0"
+              max="3"
+              step="0.01"
+              value="1"
+            />
+          </div>
+        </section>
+
+        <section class="group">
+          <h3>Accretion disk</h3>
+          <div class="ctrl">
+            <label for="diskBright"
+              >Brightness <output id="diskBrightOut">1.15</output></label
+            >
+            <input
+              id="diskBright"
+              type="range"
+              min="0"
+              max="3"
+              step="0.01"
+              value="1.15"
+            />
+          </div>
+          <div class="ctrl">
+            <label for="temp"
+              >Temperature <output id="tempOut">6200 K</output></label
+            >
+            <input
+              id="temp"
+              type="range"
+              min="2500"
+              max="15000"
+              step="50"
+              value="6200"
+            />
+          </div>
+        </section>
+
+        <section class="group">
+          <h3>Optics</h3>
+          <div class="ctrl">
+            <label for="exposure"
+              >Exposure <output id="exposureOut">1.00</output></label
+            >
+            <input
+              id="exposure"
+              type="range"
+              min="0.2"
+              max="3"
+              step="0.01"
+              value="1"
+            />
+          </div>
+          <div class="ctrl">
+            <label for="bloom"
+              >Bloom <output id="bloomOut">0.60</output></label
+            >
+            <input
+              id="bloom"
+              type="range"
+              min="0"
+              max="2.5"
+              step="0.01"
+              value="0.6"
+            />
+          </div>
+          <div class="ctrl">
+            <label for="stars"
+              >Starfield <output id="starsOut">1.00</output></label
+            >
+            <input
+              id="stars"
+              type="range"
+              min="0"
+              max="2.5"
+              step="0.01"
+              value="1"
+            />
+          </div>
+        </section>
+
+        <section class="group">
+          <h3>Render</h3>
+          <div class="switch-row">
+            <label class="switch">
+              <input id="diskOn" type="checkbox" checked />
+              <span class="track"><span class="thumb"></span></span>
+              <span>Accretion disk</span>
+            </label>
+            <label class="switch">
+              <input id="autoOrbit" type="checkbox" checked />
+              <span class="track"><span class="thumb"></span></span>
+              <span>Auto orbit</span>
+            </label>
+            <label class="switch">
+              <input id="timeFlow" type="checkbox" checked />
+              <span class="track"><span class="thumb"></span></span>
+              <span>Time flow</span>
+            </label>
+          </div>
+          <div class="ctrl">
+            <label for="quality">Quality</label>
+            <select id="quality">
+              <option value="auto" selected>Auto (adaptive)</option>
+              <option value="low">Low — 120 steps</option>
+              <option value="medium">Medium — 200 steps</option>
+              <option value="high">High — 320 steps</option>
+              <option value="ultra">Ultra — 480 steps</option>
+            </select>
+          </div>
+          <div class="ctrl">
+            <label for="fov"
+              >Field of view <output id="fovOut">50°</output></label
+            >
+            <input
+              id="fov"
+              type="range"
+              min="25"
+              max="90"
+              step="1"
+              value="50"
+            />
+          </div>
+        </section>
+
+        <section class="group">
+          <h3>Camera</h3>
+          <div class="ctrl">
+            <label for="distance"
+              >Distance <output id="distanceOut">18.0 rₛ</output></label
+            >
+            <input
+              id="distance"
+              type="range"
+              min="4"
+              max="45"
+              step="0.1"
+              value="18"
+            />
+          </div>
+          <div class="ctrl">
+            <label for="inclination"
+              >Inclination <output id="inclinationOut">9°</output></label
+            >
+            <input
+              id="inclination"
+              type="range"
+              min="-80"
+              max="80"
+              step="1"
+              value="9"
+            />
+          </div>
+        </section>
+
+        <p class="panel-note">
+          Drag to orbit · scroll / pinch to zoom · <kbd>H</kbd> hides the UI ·
+          <kbd>Space</kbd> freezes time
+        </p>
+      </div>
+    </aside>
+
+    <!-- Telemetry -->
+    <div class="telemetry" id="telemetry">
+      <div class="stat">
+        <span>fps</span><b id="statFps">—</b>
+      </div>
+      <div class="stat">
+        <span>render</span><b id="statScale">—</b>
+      </div>
+      <div class="stat">
+        <span>r / rₛ</span><b id="statR">18.0</b>
+      </div>
+      <div class="stat">
+        <span>dτ/dt</span><b id="statDilation">0.972</b>
+      </div>
+      <div class="stat">
+        <span>steps</span><b id="statSteps">220</b>
+      </div>
+    </div>
+
+    <div class="hint" id="hint">
+      You are looking at a black hole. The light is bent, not faked.
+    </div>
+
+    <!-- Physics modal -->
+    <div id="about" class="modal" hidden>
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <button class="modal-close" data-close aria-label="Close">×</button>
+        <p class="eyebrow">Under the hood</p>
+        <h2 id="aboutTitle">The light is bent, not faked</h2>
+        <p>
+          Every pixel fires a photon from the camera and integrates its path
+          through the curved spacetime around a non-rotating black hole. Nothing
+          here is a sprite or a lens distortion — the shadow, the arcs over the
+          top, and the bright rim are all consequences of the same equation.
+        </p>
+        <div class="eq">
+          <div class="eq-math">d²u/dφ² + u = (3/2) · r<sub>s</sub> · u²</div>
+          <p>
+            The null geodesic equation in the Schwarzschild metric, with
+            <span class="mono">u = 1/r</span>. In Cartesian form the shader
+            integrates
+            <span class="mono">a = −(3/2) · h² · r / |r|⁵</span>, where
+            <span class="mono">h = |r × v|</span> is conserved.
+          </p>
+        </div>
+        <ul>
+          <li>
+            <strong>Event horizon</strong> at <span class="mono">r = r<sub>s</sub></span
+            >. Anything crossing it is gone; the shader simply stops the ray.
+          </li>
+          <li>
+            <strong>Photon sphere</strong> at <span class="mono">1.5 r<sub>s</sub></span
+            >. Light can orbit here, which is why the shadow has a radius of
+            about <span class="mono">2.6 r<sub>s</sub></span> — larger than the
+            horizon itself.
+          </li>
+          <li>
+            <strong>ISCO</strong> at <span class="mono">3 r<sub>s</sub></span
+            >. The disk starts here; closer in, stable orbits don't exist.
+          </li>
+          <li>
+            <strong>Doppler beaming</strong>: the side of the disk moving toward
+            you is brighter and bluer. Brightness scales roughly with
+            <span class="mono">g³</span>, and the observed temperature with
+            <span class="mono">g</span>.
+          </li>
+          <li>
+            <strong>Gravitational redshift</strong>: light climbing out of the
+            well loses energy, dimming and reddening the far side.
+          </li>
+        </ul>
+        <p class="fine">
+          Rendered in a single WebGL2 fragment shader with adaptive resolution,
+          a multi-pass bloom, and ACES tonemapping. ~200 integration steps per
+          pixel. Units: <span class="mono">G = c = r<sub>s</sub> = 1</span>.
+        </p>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="main.js"></script>
+  </body>
+</html>
