@@ -12,6 +12,7 @@ A collection of interactive web-based experiments, games, and tools built with H
 - **Circuit Lab**: Relational circuit-diagram DSL with dagre-style layered auto-layout and built-in DC + transient simulation
 - **Colony Simulator**: A modular colony management simulation game
 - **Dungeon Crawler**: A dungeon crawler game
+- **Event Horizon**: Real-time black hole raytracer — per-pixel Schwarzschild geodesics, accretion disk with Doppler beaming and gravitational redshift, photon ring, adaptive resolution and bloom (WebGL2, no dependencies)
 - **Expense Tracker**: A tool for tracking expenses
 - **Goal Setter**: A goal setting application
 - **GTA Style Game**: A GTA-style driving game
@@ -61,3 +62,4 @@ A collection of interactive web-based experiments, games, and tools built with H
 - CSS3
 - JavaScript (ES6+)
 - Canvas API for games and visualizations
+- WebGL2 / GLSL for real-time simulation and rendering
