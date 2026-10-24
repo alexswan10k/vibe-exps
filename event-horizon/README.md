@@ -57,21 +57,31 @@ Per frame:
 
 1. **Scene** — geodesic integration into an `RGBA16F` target (falls back to
    `RGBA8` if float color buffers are unavailable).
-2. **Bright pass** — half resolution, soft threshold.
-3. **Bloom** — four widening separable Gaussian pairs.
-4. **Composite** — exposure, ACES tonemapping, saturation, vignette and dither.
+2. **Accumulate** — when the frame is static, the scene pass is jittered by a
+   sub-pixel Halton offset and averaged into a ping-pong pair of float targets.
+   Sixty-four samples give 8× linear supersampling; the photon ring is a
+   sub-pixel feature, so this is what resolves it into a continuous curve
+   instead of a dotted line. Any change to the camera or a control restarts the
+   average, and a converged frame is only re-presented, so an idle tab is free.
+3. **Bright pass** — half resolution, soft threshold.
+4. **Bloom** — four widening separable Gaussian pairs.
+5. **Composite** — exposure, ACES tonemapping, saturation, vignette and dither.
 
 Resolution adapts between 45% and 100% of the device-pixel-capped size to hold
 roughly 60 fps. The step budget is selectable from 120 to 480; the default is
-220. `prefers-reduced-motion` disables the intro dolly and auto-orbit.
+220. `prefers-reduced-motion` disables the intro dolly and auto-orbit. Captures
+render one frame at full device resolution before reading the canvas, so the
+PNG is not limited by the adaptive scale.
 
 ## Controls
 
 - Drag to orbit, scroll or pinch to zoom, double-click to reset the view.
-- `Space` freezes time, `S` captures a PNG, `H` hides the UI, `P` toggles the
-  console.
-- Presets: Interstellar, Gargantua, Photon ring, Inferno, Cold void.
-- Deep links: `?preset=photon`, optionally with `&quality=high`.
+- `Space` freezes time, parks the auto-orbit, and lets the still frame
+  supersample. `S` captures a PNG, `H` hides the UI, `P` toggles the console.
+- Presets: Interstellar, Gargantua, Photon ring, Inferno, Cold void. *Photon
+  ring* loads frozen so the ring resolves.
+- Deep links: `?preset=photon`, `&quality=high`, `&frozen=1`. The address bar
+  tracks the active preset, quality and frozen state.
 
 ## Notes
 
@@ -79,5 +89,12 @@ roughly 60 fps. The step budget is selectable from 120 to 480; the default is
 - The shadow has a radius of about `2.6 rs` (`5.2 rs` across) — larger than the
   horizon at `1 rs` — because light grazing the photon sphere at `1.5 rs` is
   bent around the hole.
+- Rays within `0.45 rs` of the critical impact parameter
+  `b = 3√3/2 · rs` take finer steps. That band winds around the photon sphere,
+  and a coarse step puts its disk crossing on the wrong side of the caustic —
+  which shows up as a dashed ring.
+- Rays that exhaust the step budget are treated as captured. They are the ones
+  trapped in the strong field; letting them sample the sky instead peppers the
+  shadow with stars.
 - `uGravity` is an artistic multiplier on the geodesic acceleration, not a
   different metric; leave it at `1` for the physically faithful view.

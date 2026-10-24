@@ -10,8 +10,9 @@
  * The accretion disk is sampled whenever a ray crosses the equatorial
  * plane, with Doppler beaming and gravitational redshift applied.
  *
- * Rendering: HDR scene -> bright pass -> 4x separable blur -> ACES.
- * Resolution adapts to hold ~60fps. No dependencies, no build step.
+ * Rendering: HDR scene -> progressive supersampling (when still) -> bright
+ * pass -> 4x separable blur -> ACES. Resolution adapts to hold ~60fps.
+ * No dependencies, no build step.
  */
 (() => {
   "use strict";
@@ -49,6 +50,7 @@
   }
 
   const HDR = !!gl.getExtension("EXT_color_buffer_float");
+  const MAX_TEX_SIZE = gl.getParameter(gl.MAX_TEXTURE_SIZE);
 
   // ------------------------------------------------------------------ shaders
 
@@ -71,6 +73,7 @@
   uniform vec3  uCamUp;
   uniform vec3  uCamFwd;
   uniform float uTanHalfFov;
+  uniform vec2  uJitter;
 
   uniform int   uSteps;
   uniform float uGravity;
@@ -164,38 +167,47 @@
     // appears when the photon ring compresses the disk texture.
     float jitter = (hash13(vec3(gl_FragCoord.xy, 3.0)) - 0.5) * 0.05;
     float r = length(hit.xz) + jitter;
-    float edge = smoothstep(DISK_IN, DISK_IN * 1.16, r) *
-                 (1.0 - smoothstep(DISK_OUT * 0.62, DISK_OUT, r));
+    float edge = smoothstep(DISK_IN * 0.96, DISK_IN * 1.16, r) *
+                 (1.0 - smoothstep(DISK_OUT * 0.86, DISK_OUT, r));
     if (edge <= 0.001) {
       alpha = 0.0;
       return vec3(0.0);
     }
 
-    // Differential rotation shears the noise into spiral filaments.
+    // Differential rotation shears the pattern into spiral filaments.
     float omega = 0.7071 * uSpin * pow(max(r, 1.8), -1.5);
-    float a = omega * uTime;
-    mat2 rot = mat2(cos(a), -sin(a), sin(a), cos(a));
-    vec2 q = rot * hit.xz;
+    float ang = atan(hit.z, hit.x) + omega * uTime;
+    float ca = cos(ang);
+    float sa = sin(ang);
 
-    float n1 = fbm3(vec3(q * 0.55, 4.0));
-    float n2 = fbm3(vec3(q * 2.1, 9.0));
-    float n3 = fbm3(vec3(q * 6.5, 2.0));
+    // A slow angular warp keeps the rings from looking like perfect contours.
+    float warp = fbm3(vec3(ca * 1.6, sa * 1.6, 4.0));
+    float lr = log(max(r, 0.001)) + (warp - 0.5) * 0.55;
+
+    // Noise is sampled on a cylinder (angle, log radius): fine in radius and
+    // coarse around the orbit, so it reads as sheared filaments instead of
+    // isotropic cloud. cos/sin keep the pattern seamless across +/-pi.
+    float n1 = fbm3(vec3(ca * 2.5, sa * 2.5, lr * 8.0));
+    float n2 = fbm3(vec3(ca * 7.0, sa * 7.0, lr * 20.0));
+    float n3 = fbm3(vec3(ca * 18.0, sa * 18.0, lr * 42.0));
     float base = 0.45 * n1 + 0.35 * n2 + 0.20 * n3;
 
-    // Azimuthal streaks. Integer harmonics keep the pattern seamless at +/-pi.
-    float ang = atan(q.y, q.x);
-    float rr = length(q);
-    float streakA = 0.5 + 0.5 * sin(ang * 31.0 + rr * 1.3 + n1 * 9.0);
-    float streakB = 0.5 + 0.5 * sin(ang * 47.0 - rr * 0.7 + n2 * 6.0);
-    float filaments = 0.7 + 0.3 * (0.55 * streakA + 0.45 * streakB);
+    // Azimuthal streaks on top of the filaments.
+    float streakA = 0.5 + 0.5 * sin(ang * 31.0 + r * 1.3 + n1 * 9.0);
+    float streakB = 0.5 + 0.5 * sin(ang * 47.0 - r * 0.7 + n2 * 6.0);
+    float filaments = 0.6 + 0.4 * (0.55 * streakA + 0.45 * streakB);
 
-    float n = smoothstep(0.26, 0.78, base);
-    float dens = clamp(edge * (0.22 + 1.25 * n) * filaments, 0.0, 1.2);
+    // Higher contrast and a lower floor: dust lanes should be able to go thin
+    // enough that the far side of the disk shows through.
+    float n = smoothstep(0.32, 0.72, base);
+    float dens = clamp(edge * (0.14 + 1.42 * n) * filaments, 0.0, 1.2);
     // Keep the very inner edge smooth; it is where the photon ring is imaged.
-    dens = mix(edge * 0.85, dens, smoothstep(DISK_IN, DISK_IN * 1.6, r));
-    float rimX = (r - DISK_IN) / (DISK_IN * 0.17);
+    dens = mix(edge * 0.85, dens, smoothstep(DISK_IN, DISK_IN * 1.35, r));
+    // A soft inner rim: sharp enough to read as the ISCO, with a little width
+    // so the bright edge does not collapse into a single-pixel fringe.
+    float rimX = (r - DISK_IN) / (DISK_IN * 0.3);
     float rim = exp(-rimX * rimX);
-    dens = clamp(dens + rim * edge * 0.85, 0.0, 1.5);
+    dens = clamp(dens + rim * edge * 0.55, 0.0, 1.5);
 
     // Temperature falls off as r^-3/4; hotter, whiter inside.
     float T = uTemp * pow(DISK_IN / max(r, DISK_IN), 0.75);
@@ -215,10 +227,12 @@
     float Tobs = T * g;
     vec3 tint = blackbody(Tobs);
 
-    float lum = uDiskBright * dens * 0.62 * pow(g, 3.0);
-    lum *= 0.75 + 0.85 * pow(DISK_IN / max(r, DISK_IN), 0.5);
+    // Emissivity falls steeply with radius so the inner disk dominates and
+    // the outer disk fades into the bloom instead of fogging the frame.
+    float radial = 0.35 + 1.1 * pow(DISK_IN / max(r, DISK_IN), 1.1);
+    float lum = uDiskBright * dens * 0.52 * pow(g, 3.0) * radial;
 
-    alpha = clamp(dens * 0.85, 0.0, 0.95);
+    alpha = clamp(dens * 0.95, 0.0, 0.98);
     return tint * lum;
   }
 
@@ -270,7 +284,9 @@
   // ----------------------------------------------------------------- main
 
   void main() {
-    vec2 uv = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
+    // uJitter is a sub-pixel offset in pixels; accumulating several jittered
+    // frames supersamples the thin photon ring instead of leaving it dotted.
+    vec2 uv = (2.0 * gl_FragCoord.xy + 2.0 * uJitter - uRes) / uRes.y;
     vec3 rd = normalize(
       uCamFwd + uCamRight * uv.x * uTanHalfFov + uCamUp * uv.y * uTanHalfFov
     );
@@ -284,20 +300,29 @@
 
     vec3 col = vec3(0.0);
     float trans = 1.0;
-    bool captured = false;
+    bool escaped = false;
 
     for (int i = 0; i < MAX_STEPS; i++) {
       if (i >= uSteps) break;
 
       float r2 = dot(pos, pos);
-      if (r2 < RS * RS) {
-        captured = true;
+      // Crossing the horizon ends the ray: nothing behind it is visible.
+      if (r2 < RS * RS) break;
+      if (r2 > 70.0 * 70.0 && dot(pos, dir) > 0.0) {
+        escaped = true;
         break;
       }
-      if (r2 > 70.0 * 70.0 && dot(pos, dir) > 0.0) break;
 
       float r = sqrt(r2);
-      float dl = clamp(0.055 * r, 0.006, 0.55);
+      // Step proportional to the radius: fine near the horizon, coarse far
+      // away where the acceleration has died off. Without the growth, rays
+      // travelling outward would exhaust the step budget before reaching the
+      // escape radius and the sky would go black.
+      float dl = max(0.006, 0.05 * r);
+      // Rays near the critical impact parameter b = 3*sqrt(3)/2 wind around
+      // the photon sphere; they form the thin ring, and a coarse step puts
+      // the plane crossing on the wrong side of the caustic. Refine only them.
+      if (abs(sqrt(h2) - 2.5980762) < 0.45) dl *= 0.45;
 
       // Velocity Verlet on the photon geodesic.
       vec3 npos = pos + dir * dl + 0.5 * acc * dl * dl;
@@ -322,7 +347,10 @@
       pos = npos;
     }
 
-    if (!captured) {
+    // Rays that run out of steps are the ones trapped in the strong field.
+    // Treat them as captured: sampling the sky here would sprinkle stars
+    // through the shadow and dash up the photon ring.
+    if (escaped) {
       col += trans * background(normalize(dir)) * uStars;
     }
 
@@ -362,6 +390,22 @@
     c += texture(uSrc, uv + o * 3.2307692308).rgb * 0.0702702703;
     c += texture(uSrc, uv - o * 3.2307692308).rgb * 0.0702702703;
     fragColor = vec4(c, 1.0);
+  }`;
+
+  const ACCUM_FRAG = `#version 300 es
+  precision highp float;
+  out vec4 fragColor;
+
+  uniform sampler2D uPrev;
+  uniform sampler2D uCur;
+  uniform vec2  uTexel;
+  uniform float uWeight;
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy * uTexel;
+    vec3 prev = texture(uPrev, uv).rgb;
+    vec3 cur  = texture(uCur,  uv).rgb;
+    fragColor = vec4(mix(prev, cur, uWeight), 1.0);
   }`;
 
   const COMPOSITE_FRAG = `#version 300 es
@@ -452,13 +496,14 @@
     return map;
   }
 
-  let sceneProg, brightProg, blurProg, compositeProg;
-  let uScene, uBright, uBlur, uComposite;
+  let sceneProg, brightProg, blurProg, accumProg, compositeProg;
+  let uScene, uBright, uBlur, uAccum, uComposite;
 
   try {
     sceneProg = program(SCENE_FRAG, "scene");
     brightProg = program(BRIGHT_FRAG, "bright");
     blurProg = program(BLUR_FRAG, "blur");
+    accumProg = program(ACCUM_FRAG, "accum");
     compositeProg = program(COMPOSITE_FRAG, "composite");
   } catch (err) {
     fatal(err.message);
@@ -474,6 +519,7 @@
     "uCamUp",
     "uCamFwd",
     "uTanHalfFov",
+    "uJitter",
     "uSteps",
     "uGravity",
     "uDiskOn",
@@ -486,6 +532,7 @@
 
   uBright = uniformMap(brightProg, ["uSrc", "uTexel", "uThreshold"]);
   uBlur = uniformMap(blurProg, ["uSrc", "uTexel", "uDir"]);
+  uAccum = uniformMap(accumProg, ["uPrev", "uCur", "uTexel", "uWeight"]);
   uComposite = uniformMap(compositeProg, [
     "uScene",
     "uBloom",
@@ -553,6 +600,8 @@
   let sceneTarget = null;
   let bloomA = null;
   let bloomB = null;
+  let accumA = null;
+  let accumB = null;
   let targetW = 0;
   let targetH = 0;
 
@@ -561,6 +610,8 @@
     destroyTarget(sceneTarget);
     destroyTarget(bloomA);
     destroyTarget(bloomB);
+    destroyTarget(accumA);
+    destroyTarget(accumB);
     targetW = w;
     targetH = h;
     sceneTarget = createTarget(w, h);
@@ -568,6 +619,14 @@
     const bh = Math.max(1, Math.floor(h / 2));
     bloomA = createTarget(bw, bh);
     bloomB = createTarget(bw, bh);
+    // Ping-pong pair for progressive supersampling; only meaningful in HDR,
+    // where averaging many frames does not band.
+    if (hdr && sceneTarget) {
+      accumA = createTarget(w, h);
+      accumB = createTarget(w, h);
+    }
+    samples = 0;
+    accumSource = null;
   }
 
   function bindTexture(unit, tex, loc) {
@@ -599,7 +658,6 @@
     autoOrbit: true,
     timeFlow: true,
     quality: "auto",
-    fov: 50,
   };
 
   const cam = {
@@ -613,7 +671,6 @@
   let steps = QUALITY.auto.steps;
   let simTime = 0;
   let camTween = null;
-  let capturePending = false;
   let frameCount = 0;
   let lastFrame = performance.now();
   let avgMs = 16.7;
@@ -831,10 +888,16 @@
   let canvasW = 0;
   let canvasH = 0;
 
-  function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    const w = Math.max(2, Math.round(canvas.clientWidth * dpr * renderScale));
-    const h = Math.max(2, Math.round(canvas.clientHeight * dpr * renderScale));
+  function resize(dprCap = 1.5) {
+    const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+    const w = Math.min(
+      MAX_TEX_SIZE,
+      Math.max(2, Math.round(canvas.clientWidth * dpr * renderScale))
+    );
+    const h = Math.min(
+      MAX_TEX_SIZE,
+      Math.max(2, Math.round(canvas.clientHeight * dpr * renderScale))
+    );
     if (w === canvasW && h === canvasH) return;
     canvasW = w;
     canvasH = h;
@@ -849,17 +912,35 @@
 
   // ------------------------------------------------------------------ render
 
-  function render() {
-    if (!sceneTarget) return;
+  // Progressive supersampling: while the frame is static we jitter the camera
+  // ray by a sub-pixel offset and average. 64 samples is 8x the linear
+  // resolution — enough to turn the dotted photon ring into a clean curve.
+  const MAX_SAMPLES = 64;
 
-    const w = sceneTarget.w;
-    const h = sceneTarget.h;
+  let samples = 0;
+  let accumSource = null;
 
-    gl.disable(gl.BLEND);
-    gl.disable(gl.DEPTH_TEST);
+  function radicalInverse(i, base) {
+    let f = 1;
+    let r = 0;
+    while (i > 0) {
+      f /= base;
+      r += f * (i % base);
+      i = Math.floor(i / base);
+    }
+    return r;
+  }
 
-    // 1. Geodesic scene pass.
-    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneTarget.fbo);
+  function resetAccum() {
+    samples = 0;
+    accumSource = null;
+  }
+
+  function drawScene(target, jx, jy) {
+    const w = target.w;
+    const h = target.h;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, w, h);
     gl.useProgram(sceneProg);
     gl.bindVertexArray(vao);
@@ -874,6 +955,7 @@
       uScene.uTanHalfFov,
       Math.tan(((cam.fov * Math.PI) / 180) * 0.5)
     );
+    gl.uniform2f(uScene.uJitter, jx, jy);
     gl.uniform1i(uScene.uSteps, steps);
     gl.uniform1f(uScene.uGravity, state.gravity);
     gl.uniform1f(uScene.uDiskOn, state.diskOn ? 1 : 0);
@@ -883,17 +965,36 @@
     gl.uniform1f(uScene.uStars, state.stars);
     gl.uniform1f(uScene.uSpin, state.spin);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
 
-    // 2. Bright pass at half resolution.
+  function accumulateSample() {
+    const w = sceneTarget.w;
+    const h = sceneTarget.h;
+    const next = accumSource === accumA ? accumB : accumA;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, next.fbo);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(accumProg);
+    bindTexture(0, accumSource.tex, uAccum.uPrev);
+    bindTexture(1, sceneTarget.tex, uAccum.uCur);
+    gl.uniform2f(uAccum.uTexel, 1 / w, 1 / h);
+    gl.uniform1f(uAccum.uWeight, 1 / samples);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+    accumSource = next;
+  }
+
+  function renderBloom(source) {
+    // Bright pass at half resolution.
     gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fbo);
     gl.viewport(0, 0, bloomA.w, bloomA.h);
     gl.useProgram(brightProg);
-    bindTexture(0, sceneTarget.tex, uBright.uSrc);
+    bindTexture(0, source.tex, uBright.uSrc);
     gl.uniform2f(uBright.uTexel, 1 / bloomA.w, 1 / bloomA.h);
     gl.uniform1f(uBright.uThreshold, hdr ? 1.0 : 0.62);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // 3. Separable gaussian blur, widening each iteration.
+    // Separable gaussian blur, widening each iteration.
     gl.useProgram(blurProg);
     gl.uniform2f(uBlur.uTexel, 1 / bloomA.w, 1 / bloomA.h);
     const radii = [1.0, 2.0, 4.0, 8.0];
@@ -910,45 +1011,145 @@
       gl.uniform2f(uBlur.uDir, 0, radius);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
+  }
 
-    // 4. Composite to the canvas.
+  function composite(source) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, w, h);
+    gl.viewport(0, 0, canvasW, canvasH);
     gl.useProgram(compositeProg);
-    bindTexture(0, sceneTarget.tex, uComposite.uScene);
+    bindTexture(0, source.tex, uComposite.uScene);
     bindTexture(1, bloomA.tex, uComposite.uBloom);
-    gl.uniform2f(uComposite.uRes, w, h);
+    gl.uniform2f(uComposite.uRes, canvasW, canvasH);
     gl.uniform1f(uComposite.uExposure, state.exposure);
     gl.uniform1f(uComposite.uBloomStrength, state.bloom);
     gl.uniform1f(uComposite.uTime, simTime);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-    if (capturePending) {
-      capturePending = false;
-      requestCapture();
-    }
   }
 
-  function requestCapture() {
+  function renderFrame(accumulateNow) {
+    if (!sceneTarget) return;
+
+    gl.disable(gl.BLEND);
+    gl.disable(gl.DEPTH_TEST);
+
+    if (accumulateNow && accumA) {
+      samples = Math.min(MAX_SAMPLES, samples + 1);
+      const jx = radicalInverse(samples, 2) - 0.5;
+      const jy = radicalInverse(samples, 3) - 0.5;
+
+      if (samples === 1 || !accumSource) {
+        // Seed the average with a fully written target; never mix against an
+        // uninitialised texture.
+        drawScene(accumA, jx, jy);
+        accumSource = accumA;
+      } else {
+        drawScene(sceneTarget, jx, jy);
+        accumulateSample();
+      }
+
+      renderBloom(accumSource);
+      composite(accumSource);
+      return;
+    }
+
+    resetAccum();
+    drawScene(sceneTarget, 0, 0);
+    renderBloom(sceneTarget);
+    composite(sceneTarget);
+  }
+
+  function present() {
+    if (!accumSource) return;
+    composite(accumSource);
+  }
+
+  function downloadPng(url) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `event-horizon-${new Date()
+      .toISOString()
+      .slice(0, 19)
+      .replace(/[:T]/g, "-")}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  // Captures are rendered at full device resolution — the on-screen canvas is
+  // usually running at 45-100% of that, which would make the PNG soft.
+  function capture() {
+    if (!sceneTarget) return;
+
+    const savedScale = renderScale;
+    const savedSteps = steps;
+
     try {
-      const url = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `event-horizon-${new Date()
-        .toISOString()
-        .slice(0, 19)
-        .replace(/[:T]/g, "-")}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      toast("Frame captured → PNG");
+      renderScale = 1;
+      steps = Math.max(steps, 320);
+      canvasW = 0;
+      resize(2);
+      resetAccum();
+      drawScene(sceneTarget, 0, 0);
+      renderBloom(sceneTarget);
+      composite(sceneTarget);
+      downloadPng(canvas.toDataURL("image/png"));
+      toast(`Captured ${canvasW} × ${canvasH} → PNG`);
     } catch (err) {
       console.error(err);
       toast("Capture failed");
+    } finally {
+      renderScale = savedScale;
+      steps = savedSteps;
+      canvasW = 0;
+      canvasH = 0;
+      resize();
+      resetAccum();
     }
   }
 
   // ------------------------------------------------------------------ loop
+
+  function cameraSettled() {
+    return (
+      !dragging &&
+      pointers.size === 0 &&
+      !camTween &&
+      Math.abs(velTheta) < 1e-5 &&
+      Math.abs(velPhi) < 1e-5
+    );
+  }
+
+  // Every input that changes the integrated image. If any of them moves, the
+  // accumulated average no longer describes what is on screen.
+  let lastSignature = "";
+
+  function frameSignature() {
+    return [
+      state.gravity,
+      state.beaming,
+      state.spin,
+      state.diskBright,
+      state.temp,
+      state.stars,
+      state.diskOn ? 1 : 0,
+      state.timeFlow ? 1 : 0,
+      cam.theta,
+      cam.phi,
+      cam.radius,
+      cam.fov,
+      steps,
+      canvasW,
+      canvasH,
+    ].join(",");
+  }
+
+  // Only a frozen, motionless frame can be averaged: the disk pattern and the
+  // starfield must be identical from one sample to the next.
+  function shouldAccumulate() {
+    return (
+      !!accumA && !state.timeFlow && !state.autoOrbit && cameraSettled()
+    );
+  }
 
   function tick(now) {
     const raw = now - lastFrame;
@@ -965,10 +1166,25 @@
 
     updateCamera(dt);
     resize();
-    render();
+
+    const signature = frameSignature();
+    if (signature !== lastSignature) {
+      lastSignature = signature;
+      resetAccum();
+    }
+
+    // A still frame is supersampled over many jittered renders. Once it has
+    // converged we only re-present the result, so an idle tab costs almost
+    // nothing.
+    const still = shouldAccumulate();
+    if (still && accumSource && samples >= MAX_SAMPLES) {
+      present();
+    } else {
+      renderFrame(still);
+    }
 
     frameCount++;
-    if (state.quality === "auto") {
+    if (state.quality === "auto" && (!still || samples <= 1)) {
       if (frameCount > 50 && frameCount % 30 === 0) {
         if (avgMs > 23 && renderScale > QUALITY.auto.min) {
           renderScale = Math.max(QUALITY.auto.min, renderScale - 0.035);
@@ -988,6 +1204,9 @@
       const dilation = Math.sqrt(Math.max(0, 1 - 1 / cam.radius));
       $("statDilation").textContent = dilation.toFixed(3);
       $("statSteps").textContent = steps;
+      $("statSamples").textContent = accumSource
+        ? `${samples}/${MAX_SAMPLES}`
+        : "live";
     }
 
     requestAnimationFrame(tick);
@@ -1053,10 +1272,7 @@
     },
     fov: {
       get: () => cam.fov,
-      set: (v) => {
-        cam.fov = v;
-        state.fov = v;
-      },
+      set: (v) => (cam.fov = v),
       out: "fovOut",
       fmt: (v) => Math.round(v) + "°",
     },
@@ -1106,9 +1322,12 @@
   }
 
   function clearPresetHighlight() {
-    document
-      .querySelectorAll(".chip")
-      .forEach((c) => c.classList.remove("is-active"));
+    document.querySelectorAll(".chip").forEach((c) => {
+      c.classList.remove("is-active");
+      c.setAttribute("aria-pressed", "false");
+    });
+    activePreset = null;
+    updateUrl();
   }
 
   $("diskOn").addEventListener("change", (e) => {
@@ -1119,8 +1338,58 @@
     state.autoOrbit = e.target.checked;
   });
   $("timeFlow").addEventListener("change", (e) => {
-    state.timeFlow = e.target.checked;
+    setTimeFlow(e.target.checked);
   });
+
+  let orbitBeforeFreeze = false;
+  let activePreset = null;
+
+  // Keep the address bar shareable: preset, quality and the frozen flag.
+  // replaceState throws on some file:// origins, hence the guard.
+  function updateUrl() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (activePreset) params.set("preset", activePreset);
+      else params.delete("preset");
+      if (state.quality !== "auto") params.set("quality", state.quality);
+      else params.delete("quality");
+      if (!state.timeFlow) params.set("frozen", "1");
+      else params.delete("frozen");
+      const query = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + (query ? `?${query}` : "") + window.location.hash
+      );
+    } catch (_) {
+      /* file:// or a locked-down origin: deep links stay read-only. */
+    }
+  }
+
+  // Freezing time is the "give me a still" gesture, so it also parks the
+  // auto-orbit; a motionless camera is what lets frames be supersampled.
+  function setTimeFlow(on, announce = true) {
+    state.timeFlow = on;
+    $("timeFlow").checked = on;
+
+    if (!on) {
+      if (state.autoOrbit) {
+        orbitBeforeFreeze = true;
+        state.autoOrbit = false;
+        $("autoOrbit").checked = false;
+      }
+      resetAccum();
+    } else if (orbitBeforeFreeze) {
+      orbitBeforeFreeze = false;
+      state.autoOrbit = true;
+      $("autoOrbit").checked = true;
+    }
+
+    updateUrl();
+    if (announce) {
+      toast(on ? "Time flowing" : "Frozen — refining still image");
+    }
+  }
 
   $("quality").addEventListener("change", (e) => {
     setQuality(e.target.value);
@@ -1138,6 +1407,7 @@
       renderScale = q.scale;
     }
     canvasW = 0;
+    updateUrl();
   }
 
   // ------------------------------------------------------------------ presets
@@ -1186,7 +1456,10 @@
         bloom: 0.85,
         stars: 1.1,
         diskOn: true,
-        autoOrbit: true,
+        // A still lets the frame supersample, which is the only way the
+        // sub-pixel photon ring resolves into a continuous curve.
+        autoOrbit: false,
+        timeFlow: false,
       },
       cam: { theta: 1.45, phi: 0.52, radius: 17 },
       fov: 55,
@@ -1228,7 +1501,7 @@
   const PRESET_TOASTS = {
     interstellar: "Interstellar — the classic edge-on view",
     gargantua: "Gargantua — brighter, warmer, wider",
-    photon: "Photon ring — crank the lensing and get close",
+    photon: "Photon ring — a still, supersampled pass around the shadow",
     inferno: "Inferno — a fast, cool-red disk",
     void: "Cold void — stars only, shadow at the centre",
   };
@@ -1237,6 +1510,7 @@
     const preset = PRESETS[name];
     if (!preset) return;
     Object.assign(state, preset.state);
+    activePreset = name;
     cam.fov = preset.fov;
     if (instant) {
       cam.theta = preset.cam.theta;
@@ -1247,9 +1521,12 @@
       tweenCamera(preset.cam);
     }
     syncUI();
-    document
-      .querySelectorAll(".chip")
-      .forEach((c) => c.classList.toggle("is-active", c.dataset.preset === name));
+    document.querySelectorAll(".chip").forEach((c) => {
+      const active = c.dataset.preset === name;
+      c.classList.toggle("is-active", active);
+      c.setAttribute("aria-pressed", String(active));
+    });
+    updateUrl();
     hideHint();
     return PRESET_TOASTS[name];
   }
@@ -1268,18 +1545,36 @@
     const nextVisible = typeof visible === "boolean" ? visible : !isVisible;
     panel.classList.toggle("is-collapsed", !nextVisible);
     $("panelToggle").setAttribute("aria-expanded", String(nextVisible));
+    $("panelToggle").setAttribute(
+      "aria-label",
+      nextVisible ? "Collapse controls" : "Expand controls"
+    );
+    $("panelToggle").textContent = nextVisible ? "−" : "+";
   }
 
   $("panelToggle").addEventListener("click", () => togglePanel());
   $("btnPanel").addEventListener("click", () => togglePanel());
 
   const about = $("about");
+  let lastFocused = null;
+
+  function modalFocusables() {
+    return [
+      ...about.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      ),
+    ].filter((el) => !el.disabled && el.offsetParent !== null);
+  }
+
   function openAbout(open) {
     if (open) {
+      lastFocused = document.activeElement;
       about.hidden = false;
       about.querySelector(".modal-close").focus();
     } else {
       about.hidden = true;
+      if (lastFocused && lastFocused.focus) lastFocused.focus();
+      lastFocused = null;
     }
   }
   $("btnAbout").addEventListener("click", () => openAbout(true));
@@ -1287,9 +1582,25 @@
     el.addEventListener("click", () => openAbout(false));
   });
 
+  // Keep Tab inside the dialog while it is open.
+  about.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || about.hidden) return;
+    const items = modalFocusables();
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
   $("btnShot").addEventListener("click", () => {
-    capturePending = true;
     toast("Capturing…");
+    capture();
   });
 
   let uiHidden = false;
@@ -1316,13 +1627,11 @@
         break;
       case " ":
         e.preventDefault();
-        state.timeFlow = !state.timeFlow;
-        $("timeFlow").checked = state.timeFlow;
-        toast(state.timeFlow ? "Time flowing" : "Time frozen");
+        setTimeFlow(!state.timeFlow);
         break;
       case "s":
-        capturePending = true;
         toast("Capturing…");
+        capture();
         break;
       case "p":
         togglePanel();
@@ -1354,6 +1663,9 @@
     if (linkedQuality && QUALITY[linkedQuality]) {
       setQuality(linkedQuality);
     }
+    if (params.get("frozen") === "1") {
+      setTimeFlow(false, false);
+    }
 
     // A slow push-in on first load, unless the visitor asked for less motion
     // or arrived via a shared preset link.
@@ -1371,7 +1683,11 @@
     // Give the browser one frame to settle layout before the heavy first draw.
     requestAnimationFrame(() => {
       resize();
-      render();
+      if (!sceneTarget) {
+        fatal("WebGL2 is present but could not allocate a render target.");
+        return;
+      }
+      renderFrame(false);
       boot.classList.add("is-hidden");
       setTimeout(() => {
         boot.style.display = "none";
