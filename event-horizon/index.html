@@ -86,19 +86,17 @@
           class="panel-toggle"
           aria-label="Collapse controls"
           aria-expanded="true"
-        >
-          −
-        </button>
+        >−</button>
       </div>
       <div class="panel-body">
         <div class="presets" role="group" aria-label="Presets">
-          <button class="chip is-active" data-preset="interstellar">
+          <button class="chip is-active" data-preset="interstellar" aria-pressed="true">
             Interstellar
           </button>
-          <button class="chip" data-preset="gargantua">Gargantua</button>
-          <button class="chip" data-preset="photon">Photon ring</button>
-          <button class="chip" data-preset="inferno">Inferno</button>
-          <button class="chip" data-preset="void">Cold void</button>
+          <button class="chip" data-preset="gargantua" aria-pressed="false">Gargantua</button>
+          <button class="chip" data-preset="photon" aria-pressed="false">Photon ring</button>
+          <button class="chip" data-preset="inferno" aria-pressed="false">Inferno</button>
+          <button class="chip" data-preset="void" aria-pressed="false">Cold void</button>
         </div>
 
         <section class="group">
@@ -293,7 +291,7 @@
 
         <p class="panel-note">
           Drag to orbit · scroll / pinch to zoom · <kbd>H</kbd> hides the UI ·
-          <kbd>Space</kbd> freezes time
+          <kbd>Space</kbd> freezes time and refines a still frame
         </p>
       </div>
     </aside>
@@ -314,6 +312,9 @@
       </div>
       <div class="stat">
         <span>steps</span><b id="statSteps">220</b>
+      </div>
+      <div class="stat">
+        <span>samples</span><b id="statSamples">live</b>
       </div>
     </div>
 
@@ -372,8 +373,9 @@
         </ul>
         <p class="fine">
           Rendered in a single WebGL2 fragment shader with adaptive resolution,
-          a multi-pass bloom, and ACES tonemapping. ~200 integration steps per
-          pixel. Units: <span class="mono">G = c = r<sub>s</sub> = 1</span>.
+          progressive supersampling when the frame is still, a multi-pass
+          bloom, and ACES tonemapping. ~200 integration steps per pixel. Units:
+          <span class="mono">G = c = r<sub>s</sub> = 1</span>.
         </p>
       </div>
     </div>
